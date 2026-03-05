@@ -1,0 +1,111 @@
+# Auto normalize line endings
+*   text=auto encoding=UTF-8 eol=lf
+
+# Common configuration files
+*.editorconfig          text
+*.config                text
+.gitattributes          text export-ignore
+.gitignore              text export-ignore
+
+# Documentation
+*.md                    text diff=markdown
+*.txt                   text
+LICENSE                 text
+README                  text
+
+# Serialization
+*.json                  text
+*.yml                   text
+*.yaml                  text
+*.xml                   text
+*.toml                  text
+
+# .NET source files
+*.cs                    text diff=csharp
+*.csx                   text diff=csharp
+*.vb                    text
+*.fs                    text
+*.fsx                   text
+
+# .NET project files
+*.csproj                text
+*.vbproj                text
+*.fsproj                text
+*.dbproj                text
+*.sln                   text
+*.slnx                  text
+*.props                 text
+*.targets               text
+*.ruleset               text
+*.config                text
+*.nuspec                text
+*.resx                  text
+DotSettings             text
+
+# Web files
+*.html                  text diff=html
+*.css                   text diff=css
+*.scss                  text
+*.sass                  text
+*.js                    text
+*.jsx                   text
+*.ts                    text
+*.tsx                   text
+*.vue                   text
+*.map                   text -diff
+
+# Docker
+Dockerfile              text
+*.dockerfile            text
+.dockerignore           text export-ignore
+compose.yaml            text
+compose.yml             text
+
+# Shell scripts
+*.sh                    text eol=lf
+*.bash                  text eol=lf
+*.ps1                   text eol=crlf
+*.bat                   text eol=crlf
+*.cmd                   text eol=crlf
+
+# Package manager files
+package.json            text eol=lf
+package-lock.json       text eol=lf -diff
+yarn.lock               text -diff
+pnpm-lock.yaml          text eol=lf -diff
+
+# Binary files
+*.dll                   binary
+*.exe                   binary
+*.so                    binary
+*.dylib                 binary
+
+# Images
+*.png                   binary
+*.jpg                   binary
+*.jpeg                  binary
+*.gif                   binary
+*.ico                   binary
+*.svg                   text
+*.webp                  binary
+
+# Fonts
+*.woff                  binary
+*.woff2                 binary
+*.ttf                   binary
+*.eot                   binary
+*.otf                   binary
+
+# Archives
+*.zip                   binary
+*.tar                   binary
+*.gz                    binary
+*.7z                    binary
+*.rar                   binary
+
+# Documents
+*.pdf                   binary
+
+# Other special files
+CONTRIBUTORS.md         merge=union
+*.log                   text -diff
