@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DotnetTokenKiller.Cli</RootNamespace>
+    <AssemblyName>dtk</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>dtk</ToolCommandName>
+    <PackageId>DotnetTokenKiller</PackageId>
+    <Version>0.1.0</Version>
+    <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
+    <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj" />
+    <ProjectReference Include="../DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

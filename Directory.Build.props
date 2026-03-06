@@ -2,18 +2,18 @@
   <PropertyGroup>
     <!-- Build Settings -->
     <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
     <!-- Code Analysis & Quality -->
-    <AnalysisLevel>latest</AnalysisLevel>
-    <AnalysisMode>All</AnalysisMode>
+    <AnalysisLevel>latest-all</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);NU1901;NU1902;NU1903;NU1904</NoWarn>
+    <NoWarn>$(NoWarn);NU1901;NU1902;NU1903;NU1904;CA2007;CA1062;IDE0058;CS1591;VSTHRD200;T0043</NoWarn>
   </PropertyGroup>
 
   <!-- Code Analyzers -->

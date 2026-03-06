@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DotnetTokenKiller.Infrastructure</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj" />
+  </ItemGroup>
+</Project>

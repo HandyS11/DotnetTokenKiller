@@ -1,0 +1,85 @@
+# generated: 2026-03-06
+# project: DotnetTokenKiller
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-03-06
+project: DotnetTokenKiller
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: in-progress
+  1-1-scaffold-clean-architecture-solution: done
+  1-2-implement-core-domain-contracts-and-value-objects: backlog
+  1-3-implement-process-execution-and-cli-entry-point: backlog
+  1-4-implement-core-application-helpers-and-filteredrunusecase: backlog
+  1-5-implement-dotnet-build-filter-with-tests: backlog
+  1-6-set-up-minimal-ci-quality-gate: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-implement-dotnet-test-filter-with-tests: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-implement-dotnet-restore-filter-with-tests: backlog
+  3-2-implement-dotnet-publish-filter-with-tests: backlog
+  3-3-implement-dotnet-pack-filter-with-tests: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-implement-dotnet-clean-filter-with-tests: backlog
+  4-2-implement-dotnet-run-filter-with-tests: backlog
+  4-3-implement-dotnet-ef-filter-with-tests: backlog
+  4-4-implement-dotnet-format-filter-with-tests: backlog
+  4-5-implement-dotnet-nuget-filter-with-tests: backlog
+  4-6-implement-passthrough-for-unrecognized-subcommands: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-implement-sqlite-token-tracking: backlog
+  5-2-wire-token-tracking-into-filteredrunusecase: backlog
+  5-3-implement-dtk-gain-analytics-command: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-implement-json-configuration: backlog
+  6-2-implement-tee-output-recovery: backlog
+  epic-6-retrospective: optional
+
+  epic-7: backlog
+  7-1-package-and-validate-as-net-global-tool: backlog
+  7-2-expand-ci-cd-quality-gate-pipeline-to-full-quality-enforcement: backlog
+  epic-7-retrospective: optional
