@@ -11,7 +11,7 @@ if [ -n "$STAGED_CS_FILES" ]; then
   INCLUDE_LIST=$(echo "$STAGED_CS_FILES" | paste -sd ',' -)
 
   echo "Running dotnet format on staged C# files..."
-  dotnet format ProjGraph.slnx --no-restore --include "$INCLUDE_LIST"
+  dotnet format DotnetTokenKiller.slnx --no-restore --include "$INCLUDE_LIST"
 
   # Re-stage any files that dotnet format modified
   echo "$STAGED_CS_FILES" | while IFS= read -r file; do
@@ -21,7 +21,7 @@ if [ -n "$STAGED_CS_FILES" ]; then
   done
 
   # Verify formatting is clean
-  dotnet format ProjGraph.slnx --no-restore --verify-no-changes --include "$INCLUDE_LIST"
+  dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes --include "$INCLUDE_LIST"
   if [ $? -ne 0 ]; then
     echo "Error: dotnet format could not fully resolve formatting issues."
     echo "Please fix manually and try again."
