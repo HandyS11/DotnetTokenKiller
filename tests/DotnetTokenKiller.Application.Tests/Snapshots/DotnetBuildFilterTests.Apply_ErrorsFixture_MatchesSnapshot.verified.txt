@@ -1,4 +1,4 @@
-﻿dotnet build: 3 errors, 1 warning
+dotnet build: 3 errors, 1 warning
 ---
 ../../../../../src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 errors)
   (10,5) CS1002: ; expected

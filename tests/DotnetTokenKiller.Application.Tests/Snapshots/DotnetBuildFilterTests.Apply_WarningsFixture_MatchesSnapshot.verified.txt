@@ -1,4 +1,4 @@
-﻿dotnet build: 0 errors, 3 warnings (2 projects, 2.67s)
+dotnet build: 0 errors, 3 warnings (2 projects, 2.67s)
 ---
 CS0169 (1x)
   ../../../../../src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs:5 — The field '_unused' is never used

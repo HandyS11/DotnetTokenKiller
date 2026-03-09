@@ -1,1 +1,1 @@
-﻿✓ dotnet build (6 projects, 2.34s)
+✓ dotnet build (6 projects, 2.34s)
