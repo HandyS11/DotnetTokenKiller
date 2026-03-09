@@ -1,6 +1,6 @@
 # Story 3.1: Implement dotnet restore Filter with Tests
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,44 +29,44 @@ So that I save 90–95% of tokens while still seeing the project count, timing, 
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create fixture file as embedded resource (AC: #12)
-  - [ ] Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_restore_raw.txt` — see "Fixture File Content" section below
-  - [ ] Directory and `EmbeddedResource` glob already exist from story 1.5 — no `.csproj` changes needed
+- [x] Task 1: Create fixture file as embedded resource (AC: #12)
+  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_restore_raw.txt` — see "Fixture File Content" section below
+  - [x] Directory and `EmbeddedResource` glob already exist from story 1.5 — no `.csproj` changes needed
 
-- [ ] Task 2: Implement `DotnetRestoreFilter` (AC: #1, #2, #3, #4, #5, #6, #7, #8)
-  - [ ] Create `src/DotnetTokenKiller.Application/Filters/DotnetRestoreFilter.cs`
-  - [ ] `public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutputFilter`
-  - [ ] Implement `Apply(string rawOutput)` — see "Precise Implementation" section below
-  - [ ] All regex patterns via `[GeneratedRegex]` on `private static partial` methods
+- [x] Task 2: Implement `DotnetRestoreFilter` (AC: #1, #2, #3, #4, #5, #6, #7, #8)
+  - [x] Create `src/DotnetTokenKiller.Application/Filters/DotnetRestoreFilter.cs`
+  - [x] `public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutputFilter`
+  - [x] Implement `Apply(string rawOutput)` — see "Precise Implementation" section below
+  - [x] All regex patterns via `[GeneratedRegex]` on `private static partial` methods
 
-- [ ] Task 3: Register `DotnetRestoreFilter` in DI (AC: #10)
-  - [ ] Add `services.AddSingleton<DotnetRestoreFilter>(_ => new DotnetRestoreFilter())` to `src/DotnetTokenKiller.Application/DependencyInjection.cs`
+- [x] Task 3: Register `DotnetRestoreFilter` in DI (AC: #10)
+  - [x] Add `services.AddSingleton<DotnetRestoreFilter>(_ => new DotnetRestoreFilter())` to `src/DotnetTokenKiller.Application/DependencyInjection.cs`
 
-- [ ] Task 4: Wire `DotnetRestoreCommand` to use `FilteredRunUseCase` (AC: #9)
-  - [ ] Update `src/DotnetTokenKiller.Cli/Commands/DotnetRestoreCommand.cs`
-  - [ ] Inject `FilteredRunUseCase filteredRun` and `DotnetRestoreFilter filter` via primary constructor
-  - [ ] Replace `commandRunner.RunPassthroughAsync` call with `filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken)`
-  - [ ] Remove old `ICommandRunner commandRunner` injection
+- [x] Task 4: Wire `DotnetRestoreCommand` to use `FilteredRunUseCase` (AC: #9)
+  - [x] Update `src/DotnetTokenKiller.Cli/Commands/DotnetRestoreCommand.cs`
+  - [x] Inject `FilteredRunUseCase filteredRun` and `DotnetRestoreFilter filter` via primary constructor
+  - [x] Replace `commandRunner.RunPassthroughAsync` call with `filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken)`
+  - [x] Remove old `ICommandRunner commandRunner` injection
 
-- [ ] Task 5: Write filter tests (AC: #1, #4, #5, #6, #7, #11)
-  - [ ] Create `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetRestoreFilterTests.cs`
-  - [ ] Snapshot test for success scenario (Verify.Xunit — static `Verifier.Verify()`)
-  - [ ] Savings gate test: success ≥90%
-  - [ ] Noise line tests: verify none of the noise patterns appear in success output
-  - [ ] NuGet error test: error count header + code shown in output
-  - [ ] Edge case: `Apply(null!)` → no throw, returns non-null
-  - [ ] Edge case: `Apply("")` → no throw, returns non-null
+- [x] Task 5: Write filter tests (AC: #1, #4, #5, #6, #7, #11)
+  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetRestoreFilterTests.cs`
+  - [x] Snapshot test for success scenario (Verify.Xunit — static `Verifier.Verify()`)
+  - [x] Savings gate test: success ≥90%
+  - [x] Noise line tests: verify none of the noise patterns appear in success output
+  - [x] NuGet error test: error count header + code shown in output
+  - [x] Edge case: `Apply(null!)` → no throw, returns non-null
+  - [x] Edge case: `Apply("")` → no throw, returns non-null
 
-- [ ] Task 6: Accept Verify snapshots and commit `.verified.txt` files (AC: #11)
-  - [ ] Run `dotnet test --filter "FullyQualifiedName~DotnetRestoreFilterTests"` → first run fails (no `.verified.txt`)
-  - [ ] Inspect `.received.txt` in `tests/DotnetTokenKiller.Application.Tests/Snapshots/` for correctness
-  - [ ] Rename `.received.txt` → `.verified.txt`
-  - [ ] Re-run tests → all snapshot tests pass
+- [x] Task 6: Accept Verify snapshots and commit `.verified.txt` files (AC: #11)
+  - [x] Run `dotnet test --filter "FullyQualifiedName~DotnetRestoreFilterTests"` → first run fails (no `.verified.txt`)
+  - [x] Inspect `.received.txt` in `tests/DotnetTokenKiller.Application.Tests/Snapshots/` for correctness
+  - [x] Rename `.received.txt` → `.verified.txt`
+  - [x] Re-run tests → all snapshot tests pass
 
-- [ ] Task 7: Build and verify (AC: #13, #14)
-  - [ ] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
-  - [ ] `dotnet test DotnetTokenKiller.slnx` → all tests pass (existing 74 + new filter tests)
-  - [ ] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
+- [x] Task 7: Build and verify (AC: #13, #14)
+  - [x] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
+  - [x] `dotnet test DotnetTokenKiller.slnx` → all tests pass (existing 74 + new filter tests = 82 total)
+  - [x] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
 
 ## Dev Notes
 
@@ -512,6 +512,24 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+- Fixed RCS1134/S3626: removed redundant `continue` at end of `foreach` loop (last branch had no code after the `errors.Add` call)
+- Fixed IMPORTS: `dotnet format` reordered using directives (project usings before system usings per editorconfig)
+
 ### Completion Notes List
 
+- Implemented `DotnetRestoreFilter` as `sealed partial` class with 5 `[GeneratedRegex]` patterns
+- Handles: restored projects with timing, all-up-to-date, partial up-to-date, NuGet errors (both formats), noise removal
+- Rewired `DotnetRestoreCommand` from `ICommandRunner.RunPassthroughAsync` to `FilteredRunUseCase.RunAsync`
+- Registered `DotnetRestoreFilter` as singleton in `AddApplication()`
+- 8 new tests (1 snapshot, 1 savings gate, 3 noise, 1 NuGet error, 2 edge cases) — all pass
+- Total test count: 82 (74 baseline + 8 new)
+- Build: 0 errors, 0 warnings; format: clean
+
 ### File List
+
+- `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_restore_raw.txt` (new)
+- `src/DotnetTokenKiller.Application/Filters/DotnetRestoreFilter.cs` (new)
+- `src/DotnetTokenKiller.Application/DependencyInjection.cs` (modified)
+- `src/DotnetTokenKiller.Cli/Commands/DotnetRestoreCommand.cs` (modified)
+- `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetRestoreFilterTests.cs` (new)
+- `tests/DotnetTokenKiller.Application.Tests/Snapshots/DotnetRestoreFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt` (new)

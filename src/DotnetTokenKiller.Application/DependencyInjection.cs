@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<FilteredRunUseCase>();
         services.AddSingleton<DotnetBuildFilter>(_ => new DotnetBuildFilter());
         services.AddSingleton<DotnetTestFilter>(_ => new DotnetTestFilter());
+        services.AddSingleton<DotnetRestoreFilter>(_ => new DotnetRestoreFilter());
         return services;
     }
 }

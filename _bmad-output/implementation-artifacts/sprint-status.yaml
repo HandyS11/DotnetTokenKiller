@@ -54,7 +54,7 @@ development_status:
   epic-2-retrospective: done
 
   epic-3: in-progress
-  3-1-implement-dotnet-restore-filter-with-tests: ready-for-dev
+  3-1-implement-dotnet-restore-filter-with-tests: review
   3-2-implement-dotnet-publish-filter-with-tests: backlog
   3-3-implement-dotnet-pack-filter-with-tests: backlog
   epic-3-retrospective: optional
