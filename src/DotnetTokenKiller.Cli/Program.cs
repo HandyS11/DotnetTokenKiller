@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,6 +8,7 @@ using DtkTypeRegistrar = DotnetTokenKiller.Cli.Infrastructure.TypeRegistrar;
 
 var services = new ServiceCollection();
 services.AddInfrastructure();
+services.AddApplication();
 
 var registrar = new DtkTypeRegistrar(services);
 var app = new CommandApp(registrar);

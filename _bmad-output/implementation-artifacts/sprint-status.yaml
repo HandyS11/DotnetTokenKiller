@@ -44,7 +44,7 @@ development_status:
   1-1-scaffold-clean-architecture-solution: done
   1-2-implement-core-domain-contracts-and-value-objects: review
   1-3-implement-process-execution-and-cli-entry-point: review
-  1-4-implement-core-application-helpers-and-filteredrunusecase: ready-for-dev
+  1-4-implement-core-application-helpers-and-filteredrunusecase: review
   1-5-implement-dotnet-build-filter-with-tests: backlog
   1-6-set-up-minimal-ci-quality-gate: backlog
   epic-1-retrospective: optional

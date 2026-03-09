@@ -1,6 +1,6 @@
 # Story 1.4: Implement Core Application Helpers and FilteredRunUseCase
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,48 +29,48 @@ so that any filter can be plugged in and the full run→filter→print→track p
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add NSubstitute to central package management (AC: #13)
-  - [ ] Add `<PackageVersion Include="NSubstitute" Version="5.3.0"/>` to `Directory.Packages.props`
-  - [ ] Add `<PackageReference Include="NSubstitute"/>` to `tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj`
+- [x] Task 1: Add NSubstitute to central package management (AC: #13)
+  - [x] Add `<PackageVersion Include="NSubstitute" Version="5.3.0"/>` to `Directory.Packages.props`
+  - [x] Add `<PackageReference Include="NSubstitute"/>` to `tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj`
 
-- [ ] Task 2: Add Microsoft.Extensions.DependencyInjection to Application project (AC: #1)
-  - [ ] Add `<PackageReference Include="Microsoft.Extensions.DependencyInjection"/>` to `src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj`
-  - [ ] Create `src/DotnetTokenKiller.Application/DependencyInjection.cs` — `AddApplication(this IServiceCollection)` registering `FilteredRunUseCase` as transient
+- [x] Task 2: Add Microsoft.Extensions.DependencyInjection to Application project (AC: #1)
+  - [x] Add `<PackageReference Include="Microsoft.Extensions.DependencyInjection"/>` to `src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj`
+  - [x] Create `src/DotnetTokenKiller.Application/DependencyInjection.cs` — `AddApplication(this IServiceCollection)` registering `FilteredRunUseCase` as transient
 
-- [ ] Task 3: Create `AnsiStrip` helper (AC: #8, #12)
-  - [ ] File: `src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs`
-  - [ ] `public static partial class AnsiStrip` with `public static string Strip(string text)`
-  - [ ] Pattern covers all CSI sequences: `\x1b\[[0-9;]*[A-Za-z]` — use `[GeneratedRegex]` on a `private static partial` method
+- [x] Task 3: Create `AnsiStrip` helper (AC: #8, #12)
+  - [x] File: `src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs`
+  - [x] `public static partial class AnsiStrip` with `public static string Strip(string text)`
+  - [x] Pattern covers all CSI sequences: `\x1b\[[0-9;]*[A-Za-z]` — use `[GeneratedRegex]` on a `private static partial` method
 
-- [ ] Task 4: Create `TokenEstimator` helper (AC: #7, #12)
-  - [ ] File: `src/DotnetTokenKiller.Application/Helpers/TokenEstimator.cs`
-  - [ ] `public static class TokenEstimator` with `public static int Estimate(string text)`
-  - [ ] Returns `text.Length / 4`; handle null/empty safely (return 0)
+- [x] Task 4: Create `TokenEstimator` helper (AC: #7, #12)
+  - [x] File: `src/DotnetTokenKiller.Application/Helpers/TokenEstimator.cs`
+  - [x] `public static class TokenEstimator` with `public static int Estimate(string text)`
+  - [x] Returns `text.Length / 4`; handle null/empty safely (return 0)
 
-- [ ] Task 5: Create `TextHelpers` helper (AC: #9, #10, #11, #12)
-  - [ ] File: `src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs`
-  - [ ] `public static class TextHelpers` with `Truncate`, `FormatTokens`, `ShortenPath` static methods
+- [x] Task 5: Create `TextHelpers` helper (AC: #9, #10, #11, #12)
+  - [x] File: `src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs`
+  - [x] `public static class TextHelpers` with `Truncate`, `FormatTokens`, `ShortenPath` static methods
 
-- [ ] Task 6: Create `FilteredRunUseCase` (AC: #1, #2, #3, #4, #5, #6)
-  - [ ] File: `src/DotnetTokenKiller.Application/UseCases/FilteredRunUseCase.cs`
-  - [ ] Primary constructor injecting: `ICommandRunner`, `ITracker`, `ITeeService`
-  - [ ] `public async Task<int> RunAsync(IOutputFilter filter, string command, IReadOnlyList<string> args, int verbosityLevel, CancellationToken cancellationToken = default)`
-  - [ ] See "Precise Implementation Signatures" section for full implementation
+- [x] Task 6: Create `FilteredRunUseCase` (AC: #1, #2, #3, #4, #5, #6)
+  - [x] File: `src/DotnetTokenKiller.Application/UseCases/FilteredRunUseCase.cs`
+  - [x] Primary constructor injecting: `ICommandRunner`, `ITracker`, `ITeeService`
+  - [x] `public async Task<int> RunAsync(IOutputFilter filter, string command, IReadOnlyList<string> args, int verbosityLevel, CancellationToken cancellationToken = default)`
+  - [x] See "Precise Implementation Signatures" section for full implementation
 
-- [ ] Task 7: Wire `AddApplication()` into `Program.cs` (AC: #1)
-  - [ ] Add `services.AddApplication()` call in `src/DotnetTokenKiller.Cli/Program.cs` after `services.AddInfrastructure()`
-  - [ ] Add `using DotnetTokenKiller.Application;` (the DI extension namespace)
+- [x] Task 7: Wire `AddApplication()` into `Program.cs` (AC: #1)
+  - [x] Add `services.AddApplication()` call in `src/DotnetTokenKiller.Cli/Program.cs` after `services.AddInfrastructure()`
+  - [x] Add `using DotnetTokenKiller.Application;` (the DI extension namespace)
 
-- [ ] Task 8: Write unit tests (AC: #7, #8, #9, #10, #11, #13)
-  - [ ] `tests/DotnetTokenKiller.Application.Tests/Helpers/TokenEstimatorTests.cs`
-  - [ ] `tests/DotnetTokenKiller.Application.Tests/Helpers/AnsiStripTests.cs`
-  - [ ] `tests/DotnetTokenKiller.Application.Tests/Helpers/TextHelpersTests.cs`
-  - [ ] `tests/DotnetTokenKiller.Application.Tests/UseCases/FilteredRunUseCaseTests.cs`
+- [x] Task 8: Write unit tests (AC: #7, #8, #9, #10, #11, #13)
+  - [x] `tests/DotnetTokenKiller.Application.Tests/Helpers/TokenEstimatorTests.cs`
+  - [x] `tests/DotnetTokenKiller.Application.Tests/Helpers/AnsiStripTests.cs`
+  - [x] `tests/DotnetTokenKiller.Application.Tests/Helpers/TextHelpersTests.cs`
+  - [x] `tests/DotnetTokenKiller.Application.Tests/UseCases/FilteredRunUseCaseTests.cs`
 
-- [ ] Task 9: Build and verify (AC: #13, #14)
-  - [ ] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
-  - [ ] `dotnet test DotnetTokenKiller.slnx` → all tests pass (no regressions on 17 existing Domain tests)
-  - [ ] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
+- [x] Task 9: Build and verify (AC: #13, #14)
+  - [x] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
+  - [x] `dotnet test DotnetTokenKiller.slnx` → all tests pass (no regressions on 17 existing Domain tests)
+  - [x] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
 
 ## Dev Notes
 
@@ -720,6 +720,39 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+None — implementation completed without blocking issues.
+
 ### Completion Notes List
 
+- Implemented all 3 helpers (AnsiStrip, TokenEstimator, TextHelpers) as pure static classes with zero I/O and zero dependencies.
+- `AnsiStrip` uses `[GeneratedRegex]` on a `private static partial` method; class is `partial` as required.
+- `TextHelpers.Truncate` uses string interpolation with range indexer (`text[..maxLen]`) instead of `string.Concat`+`AsSpan` to satisfy RCS1267.
+- `TextHelpers.FormatTokens` uses `CultureInfo.InvariantCulture` for `int.ToString()` to satisfy CA1305.
+- `FilteredRunUseCase` is `sealed`, uses primary constructor, and has intentional empty `catch` blocks with explanatory comments (Option A from story guidance).
+- Added `CA1031` (broad catch) and `CA1303` (literal strings) suppressions to `.editorconfig` — both are intentional for fail-safe CLI resilience and non-localized tool output.
+- 29 new Application.Tests passing: 5 FilteredRunUseCase + 7 AnsiStrip + 5 TokenEstimator + 12 TextHelpers.
+- 17 existing Domain tests continue to pass — no regressions.
+- Build: 0 errors, 0 warnings. Format: clean.
+
 ### File List
+
+**New files:**
+
+- `Directory.Packages.props` (modified — NSubstitute 5.3.0 added)
+- `src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj` (modified — MSDI PackageReference added)
+- `src/DotnetTokenKiller.Application/DependencyInjection.cs`
+- `src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs`
+- `src/DotnetTokenKiller.Application/Helpers/TokenEstimator.cs`
+- `src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs`
+- `src/DotnetTokenKiller.Application/UseCases/FilteredRunUseCase.cs`
+- `src/DotnetTokenKiller.Cli/Program.cs` (modified — `using` + `services.AddApplication()` added)
+- `tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj` (modified — NSubstitute PackageReference added)
+- `tests/DotnetTokenKiller.Application.Tests/Helpers/TokenEstimatorTests.cs`
+- `tests/DotnetTokenKiller.Application.Tests/Helpers/AnsiStripTests.cs`
+- `tests/DotnetTokenKiller.Application.Tests/Helpers/TextHelpersTests.cs`
+- `tests/DotnetTokenKiller.Application.Tests/UseCases/FilteredRunUseCaseTests.cs`
+- `.editorconfig` (modified — CA1031, CA1303 suppressions added)
+
+### Change Log
+
+- 2026-03-09: Implemented Story 1.4 — core Application helpers (AnsiStrip, TokenEstimator, TextHelpers) and FilteredRunUseCase orchestrator; 29 new unit tests added; all ACs satisfied.

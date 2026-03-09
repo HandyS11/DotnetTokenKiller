@@ -398,6 +398,8 @@ dotnet_diagnostic.CA1716.severity = none # Identifiers should not match keywords
 dotnet_diagnostic.CA1806.severity = none # Ignore method results (not working properly on all cases)
 dotnet_diagnostic.CA1515.severity = none # Public types required for Spectre.Console.Cli reflection on command/settings types
 dotnet_diagnostic.CA1819.severity = none # bool[] required by Spectre.Console.Cli for multi-occurrence flag counting
+dotnet_diagnostic.CA1031.severity = none # Catch general exception — intentional for fail-safe CLI resilience
+dotnet_diagnostic.CA1303.severity = none # Literal strings in console output — CLI tool not localized
 dotnet_diagnostic.CA2007.severity = none # Consider calling ConfigureAwait on the awaited task
 
 dotnet_diagnostic.CS1574.severity = none # XML comment has cref attribute that could not be resolved (boring with {} generics)

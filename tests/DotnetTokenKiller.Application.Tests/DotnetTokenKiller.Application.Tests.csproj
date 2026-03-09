@@ -10,6 +10,7 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="NSubstitute" />
     <PackageReference Include="Spectre.Console.Testing" />
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
