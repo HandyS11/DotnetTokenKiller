@@ -9,5 +9,7 @@ public static class VerifyInit
     public static void Initialize()
     {
         Verifier.UseProjectRelativeDirectory("Snapshots");
+        VerifierSettings.IgnoreStackTrace();
+        VerifierSettings.ScrubLinesWithReplace(line => line.Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 }
