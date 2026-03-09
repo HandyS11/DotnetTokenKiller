@@ -20,7 +20,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         }
 
         var stripped = AnsiStrip.Strip(rawOutput);
-        var lines = stripped.Split('\n');
+        var lines = stripped.Split(["\r\n", "\n"], StringSplitOptions.None);
 
         var errors = new List<NuGetError>();
         var restoredCount = 0;
@@ -30,7 +30,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
 
         foreach (var rawLine in lines)
         {
-            var line = rawLine.TrimEnd('\r');
+            var line = rawLine.Trim();
 
             // "  Restored /path/Project.csproj (in 123 ms)."
             var restoredMatch = RestoredPattern().Match(line);
@@ -130,7 +130,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
     private sealed record NuGetError(string Code, string Message, string Project);
 
     // "  Restored /path/Project.csproj (in 123 ms)."
-    [GeneratedRegex(@"^\s+Restored .+\.csproj \(in (?<ms>[\d.]+) ms\)")]
+    [GeneratedRegex(@"^\s*Restored .+\.[a-z]+proj \(in (?<ms>[\d.]+) ms\)", RegexOptions.IgnoreCase)]
     private static partial Regex RestoredPattern();
 
     // "All projects are up-to-date for restore."
@@ -142,7 +142,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
     private static partial Regex PartialUpToDatePattern();
 
     // "/path/proj.csproj : error NU1101: message here"
-    [GeneratedRegex(@"^\s*(?<proj>\S+\.csproj)\s*:\s*error\s+(?<code>NU\d+):\s+(?<message>.+?)\s*$",
+    [GeneratedRegex(@"^\s*(?<proj>\S+\.[a-z]+proj)\s*:\s*error\s+(?<code>NU\d+):\s+(?<message>.+?)\s*$",
         RegexOptions.IgnoreCase)]
     private static partial Regex NuGetErrorProjectFirstPattern();
 

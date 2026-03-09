@@ -60,6 +60,26 @@ public class DotnetRestoreFilterTests
         _sut.Apply(string.Empty).Should().NotBeNull();
     }
 
+    [Fact]
+    public void Apply_MixedRestoredAndUpToDate_SumsCounts()
+    {
+        const string input = """
+            Restored C:\Code\Proj1.csproj (in 100 ms).
+            3 of 5 projects are up-to-date for restore.
+            """;
+        // totalProjects = 1 (restored) + 3 (up-to-date) = 4
+        var result = _sut.Apply(input);
+        result.Should().Be("✓ dotnet restore (4 projects, 0.10s)\n");
+    }
+
+    [Fact]
+    public void Apply_FSharpProject_IsDetected()
+    {
+        const string input = "  Restored /path/Proj.fsproj (in 50 ms).";
+        var result = _sut.Apply(input);
+        result.Should().Contain("(1 project, 0.05s)");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetRestoreFilterTests).Assembly;
