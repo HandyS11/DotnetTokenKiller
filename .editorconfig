@@ -11,7 +11,7 @@ max_line_length = 120
 tab_width = 4
 
 # Project and Configuration Files
-[*.{csproj,json,md,props,slnx,yaml,yml,xml,txt}]
+[*.{csproj,json,md,props,slnx,yaml,yml,xml}]
 
 indent_size = 2
 trim_trailing_whitespace = true
