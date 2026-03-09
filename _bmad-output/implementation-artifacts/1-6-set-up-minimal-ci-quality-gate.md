@@ -1,6 +1,6 @@
 # Story 1.6: Set Up Minimal CI Quality Gate
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -15,7 +15,7 @@ So that build failures and test regressions are caught automatically throughout 
 1. **Workflow file location**: `.github/workflows/quality-gate.yml` exists in the repository.
 2. **Trigger**: The workflow runs on every `push` (all branches) and every `pull_request`.
 3. **Runner**: The job runs on `ubuntu-latest`.
-4. **dotnet-version**: The `actions/setup-dotnet@v4` step uses `dotnet-version: '10.0.x'`. Because .NET 10 is pre-release at time of writing, `include-prerelease: true` must also be set on the setup step.
+4. **dotnet setup**: The `actions/setup-dotnet@v4` step is used without a `dotnet-version` input. The action automatically reads `global.json` (which pins `sdk.version: 10.0.103` with `allowPrerelease: true`) to resolve the correct SDK. `include-prerelease` is not a valid input for this action.
 5. **Build step**: Runs `dotnet build DotnetTokenKiller.slnx --no-restore -warnaserror`; pipeline fails if this step fails.
 6. **Test step**: Runs `dotnet test DotnetTokenKiller.slnx --no-build --logger trx`; pipeline fails if this step fails.
 7. **No format step**: `dotnet format --verify-no-changes` is NOT included in this story (deferred to Story 7.2).
@@ -25,24 +25,24 @@ So that build failures and test regressions are caught automatically throughout 
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create `.github/workflows/quality-gate.yml` (AC: #1–#9)
-  - [ ] File path: `.github/workflows/quality-gate.yml`
-  - [ ] Set `name:` to `Quality Gate`
-  - [ ] Set `on:` to trigger on `push:` and `pull_request:` (all branches; no branch filter)
-  - [ ] Add `permissions: contents: read` (principle of least privilege)
-  - [ ] Single job: `quality-gate` on `ubuntu-latest`
-  - [ ] Step 1 — Checkout: `uses: actions/checkout@v4`
-  - [ ] Step 2 — Setup .NET: `uses: actions/setup-dotnet@v4` with `dotnet-version: '10.0.x'` and `include-prerelease: true`
-  - [ ] Step 3 — Restore: `run: dotnet restore DotnetTokenKiller.slnx`
-  - [ ] Step 4 — Build: `run: dotnet build DotnetTokenKiller.slnx --no-restore -warnaserror`
-  - [ ] Step 5 — Test: `run: dotnet test DotnetTokenKiller.slnx --no-build --logger trx`
-  - [ ] Step 6 — Upload TRX: `uses: actions/upload-artifact@v4` with `if: always()`, name `test-results`, path `**/*.trx`, `retention-days: 7`
-  - [ ] Do NOT add a `dotnet format` step
+- [x] Task 1: Create `.github/workflows/quality-gate.yml` (AC: #1–#9)
+  - [x] File path: `.github/workflows/quality-gate.yml`
+  - [x] Set `name:` to `Quality Gate`
+  - [x] Set `on:` to trigger on `push:` and `pull_request:` (all branches; no branch filter)
+  - [x] Add `permissions: contents: read` (principle of least privilege)
+  - [x] Single job: `quality-gate` on `ubuntu-latest`
+  - [x] Step 1 — Checkout: `uses: actions/checkout@v4`
+  - [x] Step 2 — Setup .NET: `uses: actions/setup-dotnet@v4` (no `with:` block; action reads `global.json` automatically)
+  - [x] Step 3 — Restore: `run: dotnet restore DotnetTokenKiller.slnx`
+  - [x] Step 4 — Build: `run: dotnet build DotnetTokenKiller.slnx --no-restore -warnaserror`
+  - [x] Step 5 — Test: `run: dotnet test DotnetTokenKiller.slnx --no-build --logger trx`
+  - [x] Step 6 — Upload TRX: `uses: actions/upload-artifact@v4` with `if: always()`, name `test-results`, path `**/*.trx`, `retention-days: 7`
+  - [x] Do NOT add a `dotnet format` step
 
-- [ ] Task 2: Verify local state (AC: #9, #10)
-  - [ ] Run `dotnet test DotnetTokenKiller.slnx` locally — confirm all 60 tests pass (17 Domain + 43 Application)
-  - [ ] Run `dotnet build DotnetTokenKiller.slnx` locally — confirm 0 errors, 0 warnings
-  - [ ] Confirm `.github/workflows/ci.yml` is unchanged
+- [x] Task 2: Verify local state (AC: #9, #10)
+  - [x] Run `dotnet test DotnetTokenKiller.slnx` locally — confirm all 60 tests pass (17 Domain + 43 Application)
+  - [x] Run `dotnet build DotnetTokenKiller.slnx` locally — confirm 0 errors, 0 warnings
+  - [x] Confirm `.github/workflows/ci.yml` is unchanged
 
 ## Dev Notes
 
@@ -89,9 +89,6 @@ jobs:
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-          include-prerelease: true
 
       - name: Restore
         run: dotnet restore DotnetTokenKiller.slnx
@@ -111,7 +108,7 @@ jobs:
           retention-days: 7
 ```
 
-> **Why `include-prerelease: true`?** — `global.json` pins `sdk.version: 10.0.103` with `allowPrerelease: true`. .NET 10 is pre-release as of March 2026. The `actions/setup-dotnet@v4` action requires `include-prerelease: true` when the version is not yet in GA channel; without it, `10.0.x` would fail to resolve.
+> **Why no `dotnet-version` on setup-dotnet?** — `actions/setup-dotnet@v4` reads `global.json` automatically when no `dotnet-version` input is provided. `global.json` pins `sdk.version: 10.0.103` with `allowPrerelease: true`, so the correct pre-release SDK is resolved without any extra inputs. `include-prerelease` is not a valid input for this action.
 > **Why no branch filter on `push`?** — The epic spec says "on every push" to any branch. No `branches:` filter means every push (all branches) triggers the gate. This is intentional — catches regressions everywhere, not just on main/develop.
 > **Why `-warnaserror` on build?** — Architecture §11 specifies it; also matches `Directory.Build.props` which sets `TreatWarningsAsErrors`. The flag ensures the CI build fails on any warning, consistent with local builds.
 > **Why `--logger trx`?** — TRX is MSTest/xunit's XML result format, compatible with GitHub Actions artifact viewers. Combined with the `upload-artifact` step, test results are preserved even on failure for post-mortem inspection.
@@ -120,7 +117,7 @@ jobs:
 ### Architecture Constraints
 
 - Architecture §11 defines the CI/CD pipeline steps in this order: (1) format, (2) build, (3) test, (4) upload TRX. Story 1.6 defers step 1 (format) to Story 7.2 per explicit AC.
-- Architecture §2: `dotnet-version: '10.0.x'` matches the `net10.0` TFM.
+- Architecture §2: SDK version resolved from `global.json` (`10.0.103`), matching the `net10.0` TFM.
 - Architecture §11: `ubuntu-latest` — single platform for the minimal gate (Story 7.2 may expand).
 
 ### Previous Story Intelligence (from Story 1.5)
@@ -168,10 +165,24 @@ jobs:
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+claude-sonnet-4-6
 
 ### Debug Log References
 
+None.
+
 ### Completion Notes List
 
+- Created `.github/workflows/quality-gate.yml`: checkout, setup-dotnet@v4 (reads global.json automatically; `include-prerelease` is not a valid action input), restore, build (-warnaserror), test (--logger trx), upload TRX artifact (if: always(), retention-days: 7).
+- No `dotnet format` step added (deferred to Story 7.2).
+- Local build: 0 errors, 0 warnings. Local tests: 60 passed (17 Domain + 43 Application).
+- `ci.yml` left untouched (confirmed via git diff).
+
 ### File List
+
+- `.github/workflows/quality-gate.yml` (created)
+
+## Change Log
+
+- 2026-03-09: Created `.github/workflows/quality-gate.yml` — minimal CI quality gate with restore, build, test, and TRX upload steps. All 60 tests pass locally.
+- 2026-03-09: Corrected AC #4 and Dev Notes — `include-prerelease` is not a valid input for `actions/setup-dotnet@v4`; action reads `global.json` automatically when no `dotnet-version` is specified.

@@ -46,8 +46,8 @@ development_status:
   1-3-implement-process-execution-and-cli-entry-point: done
   1-4-implement-core-application-helpers-and-filteredrunusecase: done
   1-5-implement-dotnet-build-filter-with-tests: done
-  1-6-set-up-minimal-ci-quality-gate: ready-for-dev
-  epic-1-retrospective: optional
+  1-6-set-up-minimal-ci-quality-gate: done
+  epic-1-retrospective: done
 
   epic-2: backlog
   2-1-implement-dotnet-test-filter-with-tests: backlog
