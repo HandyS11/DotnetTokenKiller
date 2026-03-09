@@ -49,9 +49,9 @@ development_status:
   1-6-set-up-minimal-ci-quality-gate: done
   epic-1-retrospective: done
 
-  epic-2: backlog
-  2-1-implement-dotnet-test-filter-with-tests: backlog
-  epic-2-retrospective: optional
+  epic-2: done
+  2-1-implement-dotnet-test-filter-with-tests: done
+  epic-2-retrospective: done
 
   epic-3: backlog
   3-1-implement-dotnet-restore-filter-with-tests: backlog

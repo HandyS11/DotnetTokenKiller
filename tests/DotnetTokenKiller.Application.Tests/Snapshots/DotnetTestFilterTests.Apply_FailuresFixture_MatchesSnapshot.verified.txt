@@ -1,0 +1,8 @@
+FAILURES (2):
+  DotnetTokenKiller.Application.Tests.Filters.DotnetBuildFilterTests.Apply_SuccessFixture_SavingsAtLeast85Percent [12 ms]
+    Expected the actual value to be greater than or equal to 85.0 because build success filter should achieve ≥85% savings, but found 70.0.
+    at tests/DotnetTokenKiller.Application.Tests/Filters/DotnetBuildFilterTests.cs:line 43
+  DotnetTokenKiller.Application.Tests.Helpers.TokenEstimatorTests.Estimate_KnownText_ReturnsExpected [5 ms]
+    Expected: 42, Actual:   38
+    at tests/DotnetTokenKiller.Application.Tests/Helpers/TokenEstimatorTests.cs:line 15
+dotnet test: 2 failed, 41 passed (1 project, 0.23s)
