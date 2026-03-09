@@ -1,19 +1,18 @@
 using DotnetTokenKiller.Application.Filters;
 using FluentAssertions;
-using VerifyXunit;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
 
 public class DotnetBuildFilterTests
 {
-    private readonly DotnetBuildFilter _sut = new();
+    private readonly DotnetBuildFilter _sut = new("/home/handys11/Dev/DotnetTokenKiller");
 
     [Fact]
     public Task Apply_SuccessFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_build_success.txt");
         var result = _sut.Apply(fixture);
-        return Verifier.Verify(result);
+        return Verify(result);
     }
 
     [Fact]
@@ -21,7 +20,7 @@ public class DotnetBuildFilterTests
     {
         var fixture = LoadFixture("dotnet_build_warnings.txt");
         var result = _sut.Apply(fixture);
-        return Verifier.Verify(result);
+        return Verify(result);
     }
 
     [Fact]
@@ -29,7 +28,7 @@ public class DotnetBuildFilterTests
     {
         var fixture = LoadFixture("dotnet_build_errors.txt");
         var result = _sut.Apply(fixture);
-        return Verifier.Verify(result);
+        return Verify(result);
     }
 
     [Fact]

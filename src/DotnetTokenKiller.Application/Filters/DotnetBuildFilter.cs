@@ -6,10 +6,12 @@ using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Application.Filters;
 
-public sealed partial class DotnetBuildFilter : IOutputFilter
+public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutputFilter
 {
     private const string Separator = "---";
     private const int MessageMaxLen = 120;
+
+    private readonly string _rootPath = rootPath ?? Environment.CurrentDirectory;
 
     public string Apply(string rawOutput)
     {
@@ -57,7 +59,7 @@ public sealed partial class DotnetBuildFilter : IOutputFilter
                 continue; // deduplicate MSBuild duplicate error section
 
             diagnostics.Add(new Diagnostic(
-                File: TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), Environment.CurrentDirectory),
+                TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
                 Line: diagMatch.Groups["line"].Value,
                 Col: diagMatch.Groups["col"].Value,
                 Level: diagMatch.Groups["level"].Value,

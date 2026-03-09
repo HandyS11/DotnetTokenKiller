@@ -9,7 +9,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddTransient<FilteredRunUseCase>();
-        services.AddSingleton<DotnetBuildFilter>();
+        services.AddSingleton<DotnetBuildFilter>(_ => new DotnetBuildFilter());
         return services;
     }
 }
