@@ -1,6 +1,6 @@
 # Story 1.2: Implement Core Domain Contracts and Value Objects
 
-Status: review
+Status: done
 
 ## Story
 

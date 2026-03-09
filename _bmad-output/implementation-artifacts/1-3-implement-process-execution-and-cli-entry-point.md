@@ -1,6 +1,6 @@
 # Story 1.3: Implement Process Execution and CLI Entry Point
 
-Status: review
+Status: done
 
 ## Story
 
