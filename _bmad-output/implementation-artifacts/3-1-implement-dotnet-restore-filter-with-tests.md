@@ -1,6 +1,6 @@
 # Story 3.1: Implement dotnet restore Filter with Tests
 
-Status: review
+Status: completed
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
