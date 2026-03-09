@@ -12,10 +12,14 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Spectre.Console.Testing" />
+    <PackageReference Include="Verify.Xunit" />
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Fixtures/**/*.txt"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj" />

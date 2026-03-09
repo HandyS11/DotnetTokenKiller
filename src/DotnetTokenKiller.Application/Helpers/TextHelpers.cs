@@ -7,7 +7,7 @@ public static class TextHelpers
     public static string Truncate(string text, int maxLen)
     {
         if (string.IsNullOrEmpty(text) || text.Length <= maxLen)
-            return text ?? string.Empty;
+            return text;
 
         return $"{text[..maxLen]}...";
     }
@@ -26,7 +26,7 @@ public static class TextHelpers
     public static string ShortenPath(string absolutePath, string rootPath)
     {
         if (string.IsNullOrEmpty(absolutePath))
-            return absolutePath ?? string.Empty;
+            return absolutePath;
 
         try
         {
