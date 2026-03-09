@@ -1,0 +1,7 @@
+dotnet build: 0 errors, 3 warnings (2 projects, 2.67s)
+---
+CS0169 (1x)
+  src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs:5 — The field '_unused' is never used
+CS0219 (2x)
+  src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs:10 — The variable 'unused' is assigned but its value is never used
+  src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs:15 — The variable 'alsoUnused' is assigned but its value is never used

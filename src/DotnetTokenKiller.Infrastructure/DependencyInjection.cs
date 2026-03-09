@@ -1,0 +1,23 @@
+using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Tee;
+using DotnetTokenKiller.Domain.Tracking;
+using DotnetTokenKiller.Infrastructure.Configuration;
+using DotnetTokenKiller.Infrastructure.Execution;
+using DotnetTokenKiller.Infrastructure.Tee;
+using DotnetTokenKiller.Infrastructure.Tracking;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace DotnetTokenKiller.Infrastructure;
+
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+    {
+        services.AddSingleton<ICommandRunner, ProcessCommandRunner>();
+        services.AddSingleton<ITracker, NullTracker>();
+        services.AddSingleton<IConfigProvider, NullConfigProvider>();
+        services.AddSingleton<ITeeService, NullTeeService>();
+        return services;
+    }
+}

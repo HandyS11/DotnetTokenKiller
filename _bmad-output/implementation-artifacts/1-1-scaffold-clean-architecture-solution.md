@@ -242,7 +242,7 @@ Notes on test projects:
 
 ### Directory Layout to Create
 
-```
+```sh
 src/
   DotnetTokenKiller.Domain/
     DotnetTokenKiller.Domain.csproj
