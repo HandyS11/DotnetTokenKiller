@@ -55,6 +55,21 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public Task Apply_ZeroTestsFixture_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+        var result = _sut.Apply(fixture);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_ZeroTestsFixture_ReturnsZeroTestsMessage()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+        _sut.Apply(fixture).Should().Be("✓ dotnet test: 0 tests found\n");
+    }
+
+    [Fact]
     public void Apply_NullInput_ReturnsNonNull()
     {
         _sut.Apply(null!).Should().NotBeNull();
