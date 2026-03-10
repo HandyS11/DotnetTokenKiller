@@ -1,10 +1,10 @@
-namespace DotnetTokenKiller.Application.Filters;
-
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+
+namespace DotnetTokenKiller.Application.Filters;
 
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputFilter
 {
@@ -39,7 +39,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             {
                 totalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
                 totalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
-                totalDurationMs += double.Parse(summaryMatch.Groups["duration"].Value, CultureInfo.InvariantCulture);
+                totalDurationMs += NormalizeDurationToMs(
+                    double.Parse(summaryMatch.Groups["duration"].Value, CultureInfo.InvariantCulture),
+                    summaryMatch.Groups["unit"].Value);
                 projectCount++;
                 i++;
                 continue;
@@ -157,8 +159,18 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         return TextHelpers.Truncate(string.Join(" ", lines), MessageMaxLen);
     }
 
+    private static double NormalizeDurationToMs(double value, string unit) => unit.ToLowerInvariant() switch
+    {
+        "ms" => value,
+        "s" => value * 1_000,
+        "m" => value * 60_000,
+        "h" => value * 3_600_000,
+        _ => value,
+    };
+
     // Summary: "Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 89 ms - File.dll"
-    [GeneratedRegex(@"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+\d+,\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+)\s+ms", RegexOptions.IgnoreCase)]
+    // Duration unit can be ms, s, m, or h
+    [GeneratedRegex(@"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+\d+,\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+)\s+(?<unit>ms|s|m|h)", RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
 
     // "  Failed FullyQualifiedTestName [12 ms]"
