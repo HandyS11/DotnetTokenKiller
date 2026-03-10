@@ -142,7 +142,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
     private static partial Regex PartialUpToDatePattern();
 
     // "/path/proj.csproj : error NU1101: message here"
-    [GeneratedRegex(@"^\s*(?<proj>\S+\.[a-z]+proj)\s*:\s*error\s+(?<code>NU\d+):\s+(?<message>.+?)\s*$",
+    [GeneratedRegex(@"^\s*(?<proj>.+?\.[a-z]+proj)\s*:\s*error\s+(?<code>NU\d+):\s+(?<message>.+?)\s*$",
         RegexOptions.IgnoreCase)]
     private static partial Regex NuGetErrorProjectFirstPattern();
 
