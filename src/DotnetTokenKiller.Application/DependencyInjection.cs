@@ -12,6 +12,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DotnetBuildFilter>(_ => new DotnetBuildFilter());
         services.AddSingleton<DotnetTestFilter>(_ => new DotnetTestFilter());
         services.AddSingleton<DotnetRestoreFilter>(_ => new DotnetRestoreFilter());
+        services.AddSingleton<DotnetPublishFilter>(_ => new DotnetPublishFilter());
         return services;
     }
 }
