@@ -53,7 +53,7 @@ development_status:
   2-1-implement-dotnet-test-filter-with-tests: done
   epic-2-retrospective: done
 
-  epic-3: in-progress
+  epic-3: done
   3-1-implement-dotnet-restore-filter-with-tests: done
   3-2-implement-dotnet-publish-filter-with-tests: done
   3-3-implement-dotnet-pack-filter-with-tests: done
