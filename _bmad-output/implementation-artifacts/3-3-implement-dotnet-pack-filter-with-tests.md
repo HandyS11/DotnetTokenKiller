@@ -1,4 +1,4 @@
-# Story 3.2: Implement dotnet publish Filter with Tests
+# Story 3.3: Implement dotnet pack Filter with Tests
 
 Status: done
 
@@ -6,69 +6,68 @@ Status: done
 
 ## Story
 
-As a developer running `dtk dotnet publish`,
-I want publish output filtered to show only the output path and any errors,
-So that I save 80–85% of tokens and immediately know where the published output landed.
+As a developer running `dtk dotnet pack`,
+I want pack output filtered to show only the generated .nupkg filename,
+So that I save 85–90% of tokens and immediately know what package was produced.
 
 ## Acceptance Criteria
 
-1. **Success (published output)**: When `DotnetPublishFilter.Apply(rawOutput)` is called with a fixture containing a successful publish, the output is a single line: `✓ dotnet publish → {relative-publish-path} (N projects, X.XXs)`, where the publish path is the last `→` line ending with `/publish/` (or containing `/publish/`) shortened to project-relative using forward slashes, N is the count of `→ .dll` output lines, and X.XX is the elapsed time parsed from the `Time Elapsed ...` line. Token savings ≥80%.
-2. **Success (publish path shortened)**: The publish output path is shortened from absolute to project-relative using `TextHelpers.ShortenPath` with forward slashes (e.g., `src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/`).
-3. **Failure (build errors)**: When `Apply(rawOutput)` is called with a fixture containing build errors, the output uses the same diagnostic grouping format as `DotnetBuildFilter`: errors grouped by file, count header, top codes listed.
-4. **Noise removal**: None of the following appear in output: "MSBuild version", "Determining projects to restore", "All projects are up-to-date for restore", individual `Restored ...` lines, "Build succeeded", "Build FAILED", `0 Warning(s)` / `0 Error(s)` count lines, "Time Elapsed" line itself, `.dll` / `.exe` redirect lines.
-5. **Null/empty safety**: `Apply(null)` and `Apply("")` return a non-null string without throwing.
-6. **`[GeneratedRegex]`**: All regex patterns in `DotnetPublishFilter` use `[GeneratedRegex]` attributes on `private static partial` methods; class is `partial`.
-7. **`DotnetPublishCommand` wired**: `DotnetPublishCommand` injects `FilteredRunUseCase filteredRun` and `DotnetPublishFilter filter` and calls `filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken)` instead of `RunPassthroughAsync`.
-8. **DI registration**: `DotnetPublishFilter` is registered as a singleton in `AddApplication()`.
-9. **Snapshot test**: A Verify.Xunit snapshot test exists for the success scenario in `tests/DotnetTokenKiller.Application.Tests/Filters/`.
-10. **Fixture file**: `dotnet_publish_raw.txt` exists as an embedded resource in `tests/DotnetTokenKiller.Application.Tests/Fixtures/`.
-11. **All tests pass**: `dotnet test DotnetTokenKiller.slnx` → all tests pass (no regressions on existing 84 tests).
-12. **Zero warnings build**: `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings.
+1. **Success (.nupkg extracted)**: When `DotnetPackFilter.Apply(rawOutput)` is called with a fixture containing a successful pack, the output is a single line: `✓ dotnet pack → MyProject.1.0.0.nupkg (N projects, X.XXs)`, where the .nupkg filename is extracted from the `Successfully created package` line, N is the count of `→ .dll` or `→ .exe` output lines, and X.XX is the elapsed time parsed from the `Time Elapsed ...` line. Token savings ≥85%.
+2. **Failure (build errors)**: When `Apply(rawOutput)` is called with a fixture containing build errors, the output uses the same diagnostic grouping format as `DotnetBuildFilter`: errors grouped by file, count header, top codes listed.
+3. **Noise removal**: None of the following appear in output: "MSBuild version", "Determining projects to restore", "All projects are up-to-date for restore", individual `Restored ...` lines, "Build succeeded", "Build FAILED", `0 Warning(s)` / `0 Error(s)` count lines, "Time Elapsed" line itself, `.dll` / `.exe` redirect lines.
+4. **Null/empty safety**: `Apply(null)` and `Apply("")` return a non-null string without throwing.
+5. **`[GeneratedRegex]`**: All regex patterns in `DotnetPackFilter` use `[GeneratedRegex]` attributes on `private static partial` methods; class is `partial`.
+6. **`DotnetPackCommand` wired**: `DotnetPackCommand` injects `FilteredRunUseCase filteredRun` and `DotnetPackFilter filter` and calls `filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken)` instead of `RunPassthroughAsync`.
+7. **DI registration**: `DotnetPackFilter` is registered as a singleton in `AddApplication()`.
+8. **Snapshot test**: A Verify.Xunit snapshot test exists for the success scenario in `tests/DotnetTokenKiller.Application.Tests/Filters/`.
+9. **Fixture file**: `dotnet_pack_raw.txt` exists as an embedded resource in `tests/DotnetTokenKiller.Application.Tests/Fixtures/`.
+10. **All tests pass**: `dotnet test DotnetTokenKiller.slnx` → all tests pass (no regressions on existing 93 tests).
+11. **Zero warnings build**: `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings.
 
 ## Tasks / Subtasks
 
-- [x] Task 1: Create fixture file as embedded resource (AC: #10)
-  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_publish_raw.txt` — see "Fixture File Content" section below
+- [x] Task 1: Create fixture file as embedded resource (AC: #9)
+  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_pack_raw.txt` — see "Fixture File Content" section below
   - [x] The `EmbeddedResource` glob `Fixtures/**` already exists in the `.csproj` from story 1.5 — no `.csproj` changes needed
 
-- [x] Task 2: Implement `DotnetPublishFilter` (AC: #1, #2, #3, #4, #5, #6)
-  - [x] Create `src/DotnetTokenKiller.Application/Filters/DotnetPublishFilter.cs`
-  - [x] `public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutputFilter`
+- [x] Task 2: Implement `DotnetPackFilter` (AC: #1, #2, #3, #4, #5)
+  - [x] Create `src/DotnetTokenKiller.Application/Filters/DotnetPackFilter.cs`
+  - [x] `public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputFilter`
   - [x] Implement `Apply(string rawOutput)` — see "Precise Implementation" section below
   - [x] All regex patterns via `[GeneratedRegex]` on `private static partial` methods
 
-- [x] Task 3: Register `DotnetPublishFilter` in DI (AC: #8)
-  - [x] Add `services.AddSingleton<DotnetPublishFilter>(_ => new DotnetPublishFilter())` to `src/DotnetTokenKiller.Application/DependencyInjection.cs`
+- [x] Task 3: Register `DotnetPackFilter` in DI (AC: #7)
+  - [x] Add `services.AddSingleton<DotnetPackFilter>(_ => new DotnetPackFilter())` to `src/DotnetTokenKiller.Application/DependencyInjection.cs`
 
-- [x] Task 4: Wire `DotnetPublishCommand` to use `FilteredRunUseCase` (AC: #7)
-  - [x] Update `src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs`
-  - [x] Inject `FilteredRunUseCase filteredRun` and `DotnetPublishFilter filter` via primary constructor
+- [x] Task 4: Wire `DotnetPackCommand` to use `FilteredRunUseCase` (AC: #6)
+  - [x] Update `src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs`
+  - [x] Inject `FilteredRunUseCase filteredRun` and `DotnetPackFilter filter` via primary constructor
   - [x] Replace `commandRunner.RunPassthroughAsync` call with `filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken)`
   - [x] Remove old `ICommandRunner commandRunner` injection
 
-- [x] Task 5: Write filter tests (AC: #1, #2, #4, #5, #9)
-  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPublishFilterTests.cs`
+- [x] Task 5: Write filter tests (AC: #1, #3, #4, #8)
+  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPackFilterTests.cs`
   - [x] Snapshot test for success scenario (Verify.Xunit — static `Verifier.Verify()`)
-  - [x] Savings gate test: success ≥80%
+  - [x] Savings gate test: success ≥85%
   - [x] Noise line tests: verify none of the noise patterns appear in success output
   - [x] Error test: verify error diagnostic grouping format
   - [x] Edge case: `Apply(null!)` → no throw, returns non-null
   - [x] Edge case: `Apply("")` → no throw, returns non-null
 
-- [x] Task 6: Accept Verify snapshots and commit `.verified.txt` files (AC: #9)
-  - [x] Run `dotnet test --filter "FullyQualifiedName~DotnetPublishFilterTests"` → first run fails (no `.verified.txt`)
+- [x] Task 6: Accept Verify snapshots and commit `.verified.txt` files (AC: #8)
+  - [x] Run `dotnet test --filter "FullyQualifiedName~DotnetPackFilterTests"` → first run fails (no `.verified.txt`)
   - [x] Inspect `.received.txt` in `tests/DotnetTokenKiller.Application.Tests/Snapshots/` for correctness
   - [x] Rename `.received.txt` → `.verified.txt`
   - [x] Re-run tests → all snapshot tests pass
 
-- [x] Task 7: Build and verify (AC: #11, #12)
+- [x] Task 7: Build and verify (AC: #10, #11)
   - [x] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
-  - [x] `dotnet test DotnetTokenKiller.slnx` → all tests pass (existing 84 + new filter tests)
+  - [x] `dotnet test DotnetTokenKiller.slnx` → all tests pass (existing 93 + new filter tests)
   - [x] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
 
 ## Dev Notes
 
-### Current Repository State (After Stories 1.1–1.6, 2.1, 3.1)
+### Current Repository State (After Stories 1.1–1.6, 2.1, 3.1, 3.2)
 
 All files below exist and **MUST NOT be modified** unless listed as a target in this story:
 
@@ -85,56 +84,71 @@ All files below exist and **MUST NOT be modified** unless listed as a target in 
 | `src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs` | Complete (story 1.5) — **use as reference for diagnostic grouping and noise patterns** |
 | `src/DotnetTokenKiller.Application/Filters/DotnetTestFilter.cs` | Complete (story 2.1) — DO NOT BREAK |
 | `src/DotnetTokenKiller.Application/Filters/DotnetRestoreFilter.cs` | Complete (story 3.1) — DO NOT BREAK |
+| `src/DotnetTokenKiller.Application/Filters/DotnetPublishFilter.cs` | Complete (story 3.2) — **closest reference for pack filter pattern** |
 | `src/DotnetTokenKiller.Application/UseCases/FilteredRunUseCase.cs` | Complete — DO NOT MODIFY |
-| `src/DotnetTokenKiller.Application/DependencyInjection.cs` | **Needs `DotnetPublishFilter` singleton added** |
-| `src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs` | **Needs rewiring to `FilteredRunUseCase`** — currently uses `ICommandRunner.RunPassthroughAsync` |
+| `src/DotnetTokenKiller.Application/DependencyInjection.cs` | **Needs `DotnetPackFilter` singleton added** |
+| `src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs` | **Needs rewiring to `FilteredRunUseCase`** — currently uses `ICommandRunner.RunPassthroughAsync` |
 | `src/DotnetTokenKiller.Cli/Program.cs` | Complete — DO NOT MODIFY |
 | `tests/DotnetTokenKiller.Application.Tests/VerifyInit.cs` | Complete — `UseProjectRelativeDirectory("Snapshots")` + `IgnoreStackTrace()` |
 | `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetBuildFilterTests.cs` | Complete — DO NOT BREAK |
 | `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetTestFilterTests.cs` | Complete — DO NOT BREAK |
 | `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetRestoreFilterTests.cs` | Complete — DO NOT BREAK |
-| `tests/DotnetTokenKiller.Application.Tests/Fixtures/` | Exists — add `dotnet_publish_raw.txt` here |
+| `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPublishFilterTests.cs` | Complete (story 3.2) — DO NOT BREAK |
+| `tests/DotnetTokenKiller.Application.Tests/Fixtures/` | Exists — add `dotnet_pack_raw.txt` here |
 | `.github/workflows/quality-gate.yml` | Complete (story 1.6) |
 
-**Test count baseline**: 84 tests (17 Domain + 65 Application + 1 Infrastructure + 1 Integration). All must continue to pass.
+**Test count baseline**: 93 tests (17 Domain + 74 Application + 1 Infrastructure + 1 Integration). All must continue to pass.
 
-**`DotnetPublishCommand` currently calls `commandRunner.RunPassthroughAsync` directly** — this story replaces it (same rewiring pattern as `DotnetRestoreCommand` in story 3.1).
+**`DotnetPackCommand` currently calls `commandRunner.RunPassthroughAsync` directly** — this story replaces it (same rewiring pattern as `DotnetRestoreCommand` in story 3.1 and `DotnetPublishCommand` in story 3.2).
 
 ### Architecture Constraints (CRITICAL)
 
-- `DotnetPublishFilter` lives in `Application` layer → references `Domain` only (`IOutputFilter`)
-- Helpers are in `Application.Helpers` namespace — use them: `AnsiStrip.Strip`, `TextHelpers.ShortenPath`, `TextHelpers.Truncate`
+- `DotnetPackFilter` lives in `Application` layer → references `Domain` only (`IOutputFilter`)
+- Helpers are in `Application.Helpers` namespace — use them: `AnsiStrip.Strip`, `TextHelpers.Truncate`
 - Filter MUST be `stateless` — `_rootPath` is readonly; no mutable instance fields
 - Filter MUST be `sealed` (CA1852 analyzer)
 - Filter MUST be `partial` (required for `[GeneratedRegex]` partial methods)
 - All regex patterns MUST use `[GeneratedRegex]` — `new Regex(...)` at runtime is FORBIDDEN (AOT constraint)
 - `[GeneratedRegex]` methods must be `private static partial Regex MethodName()`
 - `IOutputFilter.Apply` signature is `string Apply(string rawOutput)` — MUST NOT change the interface
-- Path shortening uses `TextHelpers.ShortenPath(absolutePath, _rootPath)` (same pattern as all other filters)
+- The `.nupkg` filename (not path) is extracted — use `Path.GetFileName` or a regex that captures just the filename
 - `using System.Text.RegularExpressions` is NOT in implicit usings — must be explicit
 - `using System.Globalization` is NOT in implicit usings — must be explicit
 - File-scoped namespaces: `namespace DotnetTokenKiller.Application.Filters;`
 
-### Precise Implementation: `DotnetPublishFilter`
+### Precise Implementation: `DotnetPackFilter`
 
-The publish filter reuses the same diagnostic handling as `DotnetBuildFilter` for the failure path, and adds publish-path extraction for the success path. Do NOT inherit from `DotnetBuildFilter` (it's sealed) — copy the diagnostic patterns and methods inline.
+The pack filter is structurally identical to `DotnetPublishFilter` (story 3.2) — copy it as the starting point, then adapt:
+
+- Replace `publishPath` extraction (regex for `→ .../publish/`) with `nupkgFilename` extraction (regex for "Successfully created package '...'")
+- Replace `TextHelpers.ShortenPath` (not needed — we extract just the filename, not a path)
+- Replace "dotnet publish" output labels with "dotnet pack"
+- Remove the `_rootPath` field from the primary algorithm (still keep it for diagnostic path shortening)
+
+#### Key Difference from Publish Filter
+
+| Publish | Pack |
+|---|---|
+| Extracts path ending in `/publish/` | Extracts `.nupkg` filename from `Successfully created package` line |
+| Uses `TextHelpers.ShortenPath` on the path | Uses `Path.GetFileName` (or regex group) on the full path |
+| Output: `✓ dotnet publish → src/.../publish/` | Output: `✓ dotnet pack → MyProject.1.0.0.nupkg` |
 
 #### Algorithm
 
 1. ANSI-strip and split by `\n`
 2. For each line:
-   - If it matches `PublishOutputPattern` (→ .../publish/) → capture as `publishPath` (last match wins)
-   - If it matches `ProjectOutputPattern` (→ .dll or .exe) → `projectCount++`
+   - If it matches `PackOutputPattern` (`Successfully created package '...'`) → capture `nupkgFilename` (last match wins — use `Path.GetFileName` on the captured path)
+   - If it matches `ProjectOutputPattern` (`→ .dll` or `→ .exe`) → `projectCount++`
    - If it matches `TimeElapsedPattern` → extract elapsed from `TimeSpanValuePattern`
    - If it matches `DiagnosticPattern` → add to diagnostics (deduplicated by file+line+col+code)
    - Otherwise → silently skip (noise)
-3. If errors exist → output diagnostic grouping (same format as DotnetBuildFilter)
-4. If no errors → `✓ dotnet publish → {shortPath} ({N} project[s], {elapsed})\n`
-   - If no publish path found → `✓ dotnet publish ({N} project[s], {elapsed})\n`
+3. If errors exist → output diagnostic grouping (same format as DotnetBuildFilter / DotnetPublishFilter)
+4. If no errors → `✓ dotnet pack → {nupkgFilename} ({N} project[s], {elapsed})\n`
+   - If no .nupkg filename found → `✓ dotnet pack ({N} project[s], {elapsed})\n`
    - If no elapsed → omit elapsed from context
-   - If no project count and no elapsed → `✓ dotnet publish\n`
+   - If no project count and no elapsed → `✓ dotnet pack\n`
 
-#### Class skeleton
+#### Class Skeleton
 
 ```csharp
 namespace DotnetTokenKiller.Application.Filters;
@@ -145,7 +159,7 @@ using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
 
-public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutputFilter
+public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputFilter
 {
     private const string Separator = "---";
     private const int MessageMaxLen = 120;
@@ -164,17 +178,17 @@ public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutp
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var projectCount = 0;
         var elapsed = string.Empty;
-        var publishPath = string.Empty;
+        var nupkgFilename = string.Empty;
 
         foreach (var rawLine in lines)
         {
             var line = rawLine.TrimEnd('\r');
 
-            // Capture publish output path (last match wins)
-            var publishMatch = PublishOutputPattern().Match(line);
-            if (publishMatch.Success)
+            // Capture .nupkg filename (last match wins)
+            var packMatch = PackOutputPattern().Match(line);
+            if (packMatch.Success)
             {
-                publishPath = TextHelpers.ShortenPath(publishMatch.Groups["path"].Value.Trim(), _rootPath);
+                nupkgFilename = Path.GetFileName(packMatch.Groups["path"].Value.Trim().TrimEnd('\''));
                 continue;
             }
 
@@ -211,13 +225,13 @@ public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutp
                 Message: TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
         }
 
-        var errors = diagnostics.Where(d => d.Level == "error").ToList();
-        var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
+        var errors = diagnostics.FindAll(d => d.Level == "error");
+        var warnings = diagnostics.FindAll(d => d.Level == "warning");
 
         if (errors.Count > 0)
         {
             var sb = new StringBuilder();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet publish: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}")
+            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet pack: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}")
               .AppendLine(Separator);
             AppendGroupedByFile(sb, errors);
             AppendTopCodes(sb, errors);
@@ -229,30 +243,29 @@ public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutp
         if (warnings.Count > 0)
         {
             var sb = new StringBuilder();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet publish: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{BuildContext(projectCount, elapsed, publishPath)}")
+            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet pack: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{BuildContext(projectCount, elapsed, nupkgFilename)}")
               .AppendLine(Separator);
             AppendGroupedByCode(sb, warnings);
             return sb.ToString();
         }
 
-        var context = BuildContext(projectCount, elapsed, publishPath);
-        return $"✓ dotnet publish{context}\n";
+        var context = BuildContext(projectCount, elapsed, nupkgFilename);
+        return $"✓ dotnet pack{context}\n";
     }
 
     private sealed record Diagnostic(string File, string Line, string Col, string Level, string Code, string Message);
 
-    private static string BuildContext(int projectCount, string elapsed, string publishPath)
+    private static string BuildContext(int projectCount, string elapsed, string nupkgFilename)
     {
-        var pathPart = string.IsNullOrEmpty(publishPath) ? string.Empty : $" → {publishPath}";
-        var countPart = projectCount > 0
-            ? $"{projectCount} project{(projectCount == 1 ? "" : "s")}"
-            : string.Empty;
+        var namePart = string.IsNullOrEmpty(nupkgFilename) ? string.Empty : $" → {nupkgFilename}";
+        var projectSuffix = projectCount == 1 ? "" : "s";
+        var countPart = projectCount > 0 ? $"{projectCount} project{projectSuffix}" : string.Empty;
         var timePart = string.IsNullOrEmpty(elapsed) ? string.Empty : elapsed;
 
         var details = string.Join(", ", new[] { countPart, timePart }.Where(s => !string.IsNullOrEmpty(s)));
         return string.IsNullOrEmpty(details)
-            ? pathPart
-            : $"{pathPart} ({details})";
+            ? namePart
+            : $"{namePart} ({details})";
     }
 
     private static string FormatElapsed(string timeElapsedLine)
@@ -302,9 +315,9 @@ public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutp
             sb.AppendLine(CultureInfo.InvariantCulture, $"Top codes: {string.Join(", ", topCodes)}");
     }
 
-    // "  MyProject -> /path/to/publish/" — captures the publish output directory
-    [GeneratedRegex(@"^\s+\S+ -> (?<path>.+/publish[/\\]?)\s*$", RegexOptions.IgnoreCase)]
-    private static partial Regex PublishOutputPattern();
+    // "Successfully created package '/path/to/MyProject.1.0.0.nupkg'."
+    [GeneratedRegex(@"Successfully created package '(?<path>[^']+)'", RegexOptions.IgnoreCase)]
+    private static partial Regex PackOutputPattern();
 
     // "  MyProject -> /path/to/bin/Debug/net10.0/MyProject.dll"
     [GeneratedRegex(@"^\s+\S+ -> .+\.(dll|exe)\s*$")]
@@ -324,7 +337,7 @@ public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutp
 }
 ```
 
-#### Updated `DotnetPublishCommand.cs`
+#### Updated `DotnetPackCommand.cs`
 
 ```csharp
 using DotnetTokenKiller.Application.Filters;
@@ -334,13 +347,13 @@ using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands;
 
-public sealed class DotnetPublishCommand(
+public sealed class DotnetPackCommand(
     FilteredRunUseCase filteredRun,
-    DotnetPublishFilter filter) : AsyncCommand<DotnetCommandSettings>
+    DotnetPackFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
     public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings, CancellationToken cancellationToken)
     {
-        var args = settings.PositionalArgs.Prepend("publish").Concat(context.Remaining.Raw).ToArray();
+        var args = settings.PositionalArgs.Prepend("pack").Concat(context.Remaining.Raw).ToArray();
         return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken);
     }
 }
@@ -350,10 +363,10 @@ public sealed class DotnetPublishCommand(
 
 #### Updated `DependencyInjection.cs` (Application project)
 
-Add one line — singleton registration for `DotnetPublishFilter`. Match the existing pattern:
+Add one line — singleton registration for `DotnetPackFilter`. Match the existing pattern:
 
 ```csharp
-services.AddSingleton<DotnetPublishFilter>(_ => new DotnetPublishFilter());  // ADD THIS
+services.AddSingleton<DotnetPackFilter>(_ => new DotnetPackFilter());  // ADD THIS
 ```
 
 Full file after change:
@@ -373,7 +386,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DotnetBuildFilter>(_ => new DotnetBuildFilter());
         services.AddSingleton<DotnetTestFilter>(_ => new DotnetTestFilter());
         services.AddSingleton<DotnetRestoreFilter>(_ => new DotnetRestoreFilter());
-        services.AddSingleton<DotnetPublishFilter>(_ => new DotnetPublishFilter());  // NEW
+        services.AddSingleton<DotnetPublishFilter>(_ => new DotnetPublishFilter());
+        services.AddSingleton<DotnetPackFilter>(_ => new DotnetPackFilter());  // NEW
         return services;
     }
 }
@@ -381,7 +395,7 @@ public static class ServiceCollectionExtensions
 
 ### Fixture File Content
 
-Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_publish_raw.txt`:
+Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_pack_raw.txt`:
 
 ```sh
 MSBuild version 17.11.9+a69bbaaf5 for .NET
@@ -391,33 +405,33 @@ MSBuild version 17.11.9+a69bbaaf5 for .NET
   DotnetTokenKiller.Application -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/bin/Release/net10.0/DotnetTokenKiller.Application.dll
   DotnetTokenKiller.Infrastructure -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/bin/Release/net10.0/DotnetTokenKiller.Infrastructure.dll
   DotnetTokenKiller.Cli -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/bin/Release/net10.0/DotnetTokenKiller.Cli.dll
-  DotnetTokenKiller.Cli -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/
+  Successfully created package '/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/bin/Release/DotnetTokenKiller.Cli.1.0.0.nupkg'.
 Build succeeded.
     0 Warning(s)
     0 Error(s)
 
-Time Elapsed 00:00:03.27
+Time Elapsed 00:00:04.13
 ```
 
 **Expected output** (for snapshot verification):
 
 ```sh
-✓ dotnet publish → src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/ (4 projects, 3.27s)
+✓ dotnet pack → DotnetTokenKiller.Cli.1.0.0.nupkg (4 projects, 4.13s)
 ```
 
 - 4 `.dll` lines → N = 4
-- Publish path: `/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/` → `src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/`
-- Time Elapsed 00:00:03.27 → 3.27s
-- Token savings: fixture ~560 chars, output ~80 chars → ~86% ≥80% ✓
+- `.nupkg` filename: `DotnetTokenKiller.Cli.1.0.0.nupkg` (via `Path.GetFileName` on the `Successfully created package` path)
+- Time Elapsed 00:00:04.13 → 4.13s
+- Token savings: fixture ~740 chars, output ~57 chars → ~92% ≥85% ✓
 
 ### Test Implementation Patterns
 
-#### Loading embedded fixture files (same pattern as stories 1.5, 2.1, 3.1)
+#### Loading embedded fixture files (same pattern as stories 1.5, 2.1, 3.1, 3.2)
 
 ```csharp
 private static string LoadFixture(string resourceName)
 {
-    var assembly = typeof(DotnetPublishFilterTests).Assembly;
+    var assembly = typeof(DotnetPackFilterTests).Assembly;
     var fullName = assembly.GetManifestResourceNames()
         .First(n => n.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
     using var stream = assembly.GetManifestResourceStream(fullName)!;
@@ -436,25 +450,25 @@ namespace DotnetTokenKiller.Application.Tests.Filters;
 using DotnetTokenKiller.Application.Filters;
 using FluentAssertions;
 
-public class DotnetPublishFilterTests
+public class DotnetPackFilterTests
 {
-    private readonly DotnetPublishFilter _sut = new("/home/handys11/Dev/DotnetTokenKiller");
+    private readonly DotnetPackFilter _sut = new("/home/handys11/Dev/DotnetTokenKiller");
 
     [Fact]
     public Task Apply_SuccessFixture_MatchesSnapshot()
     {
-        var fixture = LoadFixture("dotnet_publish_raw.txt");
+        var fixture = LoadFixture("dotnet_pack_raw.txt");
         var result = _sut.Apply(fixture);
         return Verify(result);
     }
 
     [Fact]
-    public void Apply_SuccessFixture_SavingsAtLeast80Percent()
+    public void Apply_SuccessFixture_SavingsAtLeast85Percent()
     {
-        var fixture = LoadFixture("dotnet_publish_raw.txt");
+        var fixture = LoadFixture("dotnet_pack_raw.txt");
         var result = _sut.Apply(fixture);
         var savings = 100.0 - (result.Length * 100.0 / fixture.Length);
-        savings.Should().BeGreaterThanOrEqualTo(80.0, because: "publish filter should achieve ≥80% savings");
+        savings.Should().BeGreaterThanOrEqualTo(85.0, because: "pack filter should achieve ≥85% savings");
     }
 
     [Theory]
@@ -464,7 +478,7 @@ public class DotnetPublishFilterTests
     [InlineData("Build succeeded")]
     public void Apply_SuccessFixture_DoesNotContainNoiseLine(string noiseLine)
     {
-        var fixture = LoadFixture("dotnet_publish_raw.txt");
+        var fixture = LoadFixture("dotnet_pack_raw.txt");
         _sut.Apply(fixture).Should().NotContain(noiseLine);
     }
 
@@ -473,13 +487,13 @@ public class DotnetPublishFilterTests
     {
         const string input = """
             MSBuild version 17.11.9+a69bbaaf5 for .NET
-              /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs(5,1): error CS0001: Type or namespace 'Foo' not found [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj]
+              /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs(5,1): error CS0001: Type or namespace 'Foo' not found [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj]
             Build FAILED.
                 1 Error(s)
             Time Elapsed 00:00:01.00
             """;
         var result = _sut.Apply(input);
-        result.Should().StartWith("dotnet publish: 1 error");
+        result.Should().StartWith("dotnet pack: 1 error");
         result.Should().Contain("CS0001");
         result.Should().Contain("Top codes:");
     }
@@ -498,7 +512,7 @@ public class DotnetPublishFilterTests
 
     private static string LoadFixture(string resourceName)
     {
-        var assembly = typeof(DotnetPublishFilterTests).Assembly;
+        var assembly = typeof(DotnetPackFilterTests).Assembly;
         var fullName = assembly.GetManifestResourceNames()
             .First(n => n.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
         using var stream = assembly.GetManifestResourceStream(fullName)!;
@@ -510,86 +524,87 @@ public class DotnetPublishFilterTests
 
 #### Verify snapshot acceptance workflow
 
-1. Run: `dotnet test --filter "FullyQualifiedName~DotnetPublishFilterTests"`
+1. Run: `dotnet test --filter "FullyQualifiedName~DotnetPackFilterTests"`
 2. Snapshot test fails; `.received.txt` appears in `tests/DotnetTokenKiller.Application.Tests/Snapshots/`
-3. Inspect `DotnetPublishFilterTests.Apply_SuccessFixture_MatchesSnapshot.received.txt` — should contain `✓ dotnet publish → src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/ (4 projects, 3.27s)`
+3. Inspect `DotnetPackFilterTests.Apply_SuccessFixture_MatchesSnapshot.received.txt` — should contain `✓ dotnet pack → DotnetTokenKiller.Cli.1.0.0.nupkg (4 projects, 4.13s)`
 4. Accept by renaming: `mv *.received.txt *.verified.txt`
 5. Re-run tests — all pass
 6. Commit `.verified.txt` file
 
 **File to commit in Snapshots folder**:
 
-- `DotnetPublishFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt`
+- `DotnetPackFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt`
 
-### Analyzer Pitfalls (CRITICAL — accumulated from stories 1.5, 2.1, 3.1)
+### Analyzer Pitfalls (CRITICAL — accumulated from stories 1.5, 2.1, 3.1, 3.2)
 
-- **CA1852** — `DotnetPublishFilter` MUST be `sealed`
+- **CA1852** — `DotnetPackFilter` MUST be `sealed`
 - **`[GeneratedRegex]`** — Class MUST be `partial`; methods declared as `private static partial Regex MethodName()`; missing `partial` = build error
 - **CA1305** — `sb.AppendLine($"...")` with format args: use `sb.AppendLine(CultureInfo.InvariantCulture, $"...")`
 - **CA1305 on TryParse** — Use `TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var ts)` (3-param overload)
 - **RCS1201** — Chain consecutive `sb.AppendLine(...).AppendLine(...)` when writing header + separator
 - **CA1050/RCS1110/S3903** — All types MUST be in named namespaces (file-scoped `namespace DotnetTokenKiller.Application.Filters;` satisfies this)
 - **RCS1118** — Repeated string literals: use `const string Separator = "---"` (already in skeleton)
-- **IDE0290** — Primary constructors preferred; `DotnetPublishCommand` uses primary constructor pattern
+- **IDE0290** — Primary constructors preferred; `DotnetPackCommand` uses primary constructor pattern
 - **using System.Text.RegularExpressions** — NOT in implicit usings; must be explicit
 - **`using System.Globalization`** — NOT in implicit usings; must be explicit
-- **Namespace must match folder path**: `src/.../Application/Filters/DotnetPublishFilter.cs` → `namespace DotnetTokenKiller.Application.Filters;`
-- **`Diagnostic` record**: declared as `private sealed record` inside the filter class — matches pattern from `DotnetBuildFilter` and `DotnetTestFilter`
-- **`string.Join` with LINQ**: `string.Join(", ", someList)` is analyzer-safe
-- **`List<T>.Where(...).ToList()`**: fine here; if analyzer suggests `FindAll`, use it
+- **Namespace must match folder path**: `src/.../Application/Filters/DotnetPackFilter.cs` → `namespace DotnetTokenKiller.Application.Filters;`
+- **`Diagnostic` record**: declared as `private sealed record` inside the filter class — matches pattern from `DotnetBuildFilter`, `DotnetTestFilter`, `DotnetPublishFilter`
 - **`using` import ordering**: After `dotnet format`, project usings come before system usings per `.editorconfig` — the skeleton above already shows correct order
+- **S3358** — Avoid nested ternaries: if needed, extract intermediate variable (same fix as story 3.2)
+- **`Path.GetFileName`** — In `System.IO` which IS in implicit usings; no explicit `using` needed
 
 ### Git Context (Recent Commits)
 
 ```sh
+42f07b5 feat: add DotnetPublishFilter and integrate into CLI command
 66a43f0 Merge branch 'develop' into feat/restore-publish-pack-filters
 992e65f Fix: enhance duration parsing in DotnetTestFilter to support multiple time units
 6adf543 Feat: update sprint status and mark dotnet restore filter implementation as completed
 e0b29c1 Feat: enhance DotnetRestoreFilter to support F# projects and improve line splitting logic
-d323922 Feat: implement DotnetRestoreFilter with tests and integrate into CLI command
 ```
 
 We are on branch `feat/restore-publish-pack-filters` — this branch is already set up for stories 3.1, 3.2, and 3.3.
 
-### Key Learnings from Stories 2.1 and 3.1 (Applied Here)
+### Key Learnings from Stories 3.1 and 3.2 (Applied Here)
 
-- **`sealed record` inside filter**: `private sealed record Diagnostic(...)` inside the class — do the same
-- **`List<T>.Where(...).ToList()` vs `FindAll`**: Use `FindAll` if the analyzer complains (RCS1201)
+- **`DotnetPublishFilter` is the closest reference** — copy and adapt it (swap publish-path extraction for .nupkg filename extraction)
+- **`sealed record Diagnostic` inside filter**: `private sealed record Diagnostic(...)` inside the class — do the same
+- **`FindAll` vs `Where(...).ToList()`**: Use `FindAll` to avoid potential RCS1201 analyzer complaints
 - **Snapshot directory**: Configured globally in `VerifyInit.cs` via `[ModuleInitializer]` — no per-test class configuration needed
 - **`Verify(result)` returns `Task`**: Test method must return `Task` (not `void`) and must NOT be async — just `return Verify(result)`
-- **Fixture absolute paths**: Fixtures use `/home/handys11/Dev/DotnetTokenKiller/...` absolute paths so that `TextHelpers.ShortenPath` produces reliable relative paths
+- **Fixture absolute paths**: Fixtures use `/home/handys11/Dev/DotnetTokenKiller/...` absolute paths so that `TextHelpers.ShortenPath` produces reliable relative paths in diagnostic tests
 - **`dotnet format` run last**: Always run `dotnet format --verify-no-changes` after all tests pass — catches import ordering issues
-- **`DotnetRestoreFilter` enhanced**: Story e0b29c1 enhanced `DotnetRestoreFilter` to support F# projects (`.fsproj`) and improved line splitting — if copying patterns from restore, be aware of this
-- **Duration parsing fix**: Story 992e65f fixed `DotnetTestFilter` duration parsing to support multiple time units — `DotnetPublishFilter` uses `TimeSpan.TryParse` on the `HH:MM:SS.ff` format (from "Time Elapsed" line), which is different and doesn't need this fix
+- **S3358 nested ternary fix from 3.2**: Extract intermediate variable (e.g. `projectSuffix`) to avoid nested ternary warning
+- **`string.Join` with LINQ**: `string.Join(", ", someList)` is analyzer-safe
+- **`Path.GetFileName` note**: `TrimEnd('\'')` may be needed to strip trailing quote if the regex captures it — alternative: use a regex group that ends before the closing quote
 
 ### What This Story Does NOT Implement (Scope Guard)
 
-- `DotnetPackFilter` — Story 3.3
-- `DotnetCleanFilter`, `DotnetRunFilter`, etc. — Epic 4
+- `DotnetCleanFilter`, `DotnetRunFilter`, `DotnetEfFilter`, `DotnetFormatFilter`, `DotnetNugetFilter` — Epic 4
+- Passthrough command for unrecognized subcommands — Story 4.6
 - `SqliteTracker` — Story 5.1
 - `JsonConfigProvider` — Story 6.1
 - `FileTeeService` — Story 6.2
-- Any other CLI command rewiring besides `DotnetPublishCommand`
+- Any other CLI command rewiring besides `DotnetPackCommand`
 
 ### Project Structure Notes
 
-- New filter: `src/DotnetTokenKiller.Application/Filters/DotnetPublishFilter.cs`
-- Updated DI: `src/DotnetTokenKiller.Application/DependencyInjection.cs` — add `DotnetPublishFilter` singleton
-- Updated command: `src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs` — rewire to `FilteredRunUseCase`
-- New fixture: `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_publish_raw.txt`
-- New test file: `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPublishFilterTests.cs`
-- New snapshot: `tests/DotnetTokenKiller.Application.Tests/Snapshots/DotnetPublishFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt`
+- New filter: `src/DotnetTokenKiller.Application/Filters/DotnetPackFilter.cs`
+- Updated DI: `src/DotnetTokenKiller.Application/DependencyInjection.cs` — add `DotnetPackFilter` singleton
+- Updated command: `src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs` — rewire to `FilteredRunUseCase`
+- New fixture: `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_pack_raw.txt`
+- New test file: `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPackFilterTests.cs`
+- New snapshot: `tests/DotnetTokenKiller.Application.Tests/Snapshots/DotnetPackFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt`
 - No new directories to create — all target directories already exist
 
 ### References
 
-- [Source: _bmad-output/planning-artifacts/epics.md#Story 3.2]
-- [Source: _bmad-output/planning-artifacts/Architecture.md#7. Filter Design]
-- [Source: _bmad-output/planning-artifacts/Architecture.md#3. Solution Structure]
-- [Source: _bmad-output/implementation-artifacts/3-1-implement-dotnet-restore-filter-with-tests.md] — previous story patterns and learnings
-- [Source: src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs] — diagnostic grouping reference (copy AppendGroupedByFile, AppendTopCodes, DiagnosticPattern, TimeElapsedPattern)
-- [Source: src/DotnetTokenKiller.Application/Filters/DotnetRestoreFilter.cs] — general filter structure reference
+- [Source: _bmad-output/planning-artifacts/epics.md#Story 3.3]
+- [Source: _bmad-output/implementation-artifacts/3-2-implement-dotnet-publish-filter-with-tests.md] — closest previous story; pack filter is structurally identical, swap publish-path extraction for nupkg filename extraction
+- [Source: src/DotnetTokenKiller.Application/Filters/DotnetPublishFilter.cs] — direct implementation reference (copy and adapt)
+- [Source: src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs] — diagnostic grouping reference
 - [Source: tests/DotnetTokenKiller.Application.Tests/VerifyInit.cs] — Verify.Xunit v28 init
+- [Source: tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPublishFilterTests.cs] — test structure reference
 
 ## Dev Agent Record
 
@@ -599,28 +614,25 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
-- S3358: Nested ternary in BuildContext — extracted projectSuffix variable to fix
-
 ### Completion Notes List
 
-- Implemented DotnetPublishFilter (sealed partial, [GeneratedRegex], IOutputFilter) with success path showing publish path, project count and elapsed, and failure path with diagnostic grouping matching DotnetBuildFilter format
-- Fixed S3358 analyzer error: extracted nested ternary in BuildContext to separate variable
-- Wired DotnetPublishCommand to FilteredRunUseCase (replaced ICommandRunner.RunPassthroughAsync)
-- Registered DotnetPublishFilter as singleton in AddApplication()
-- All 93 tests pass (74 Application + 17 Domain + 1 Infrastructure + 1 Integration); 0 regressions
-- dotnet build: 0 errors, 0 warnings; dotnet format --verify-no-changes: clean
-- Snapshot output: ✓ dotnet publish → src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/ (4 projects, 3.27s)
-- Token savings: ~86% (above ≥80% threshold)
+- Implemented `DotnetPackFilter` — structurally identical to `DotnetPublishFilter`, adapted to extract `.nupkg` filename via `PackOutputPattern` regex + `Path.GetFileName`
+- Registered `DotnetPackFilter` singleton in `AddApplication()`
+- Rewired `DotnetPackCommand` from `ICommandRunner.RunPassthroughAsync` to `FilteredRunUseCase.RunAsync` with primary constructor injection
+- 9 new tests added (snapshot, savings gate, 4 noise line theory, error grouping, null/empty safety)
+- Verify snapshot accepted: `✓ dotnet pack → DotnetTokenKiller.Cli.1.0.0.nupkg (4 projects, 4.13s)` (~92% savings, ≥85% threshold met)
+- Total test count: 102 (up from 93) — 0 regressions
+- Build: 0 errors, 0 warnings; `dotnet format --verify-no-changes` → exit 0
 
 ### File List
 
-- tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_publish_raw.txt (new)
-- src/DotnetTokenKiller.Application/Filters/DotnetPublishFilter.cs (new)
+- src/DotnetTokenKiller.Application/Filters/DotnetPackFilter.cs (new)
 - src/DotnetTokenKiller.Application/DependencyInjection.cs (modified)
-- src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs (modified)
-- tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPublishFilterTests.cs (new)
-- tests/DotnetTokenKiller.Application.Tests/Snapshots/DotnetPublishFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt (new)
+- src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs (modified)
+- tests/DotnetTokenKiller.Application.Tests/Filters/DotnetPackFilterTests.cs (new)
+- tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_pack_raw.txt (new)
+- tests/DotnetTokenKiller.Application.Tests/Snapshots/DotnetPackFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt (new)
 
 ### Change Log
 
-- 2026-03-10: Implemented DotnetPublishFilter with tests; wired DotnetPublishCommand to FilteredRunUseCase; registered singleton in DI; accepted Verify snapshot
+- 2026-03-10: Implemented DotnetPackFilter with tests; wired DotnetPackCommand to FilteredRunUseCase; registered singleton in DI; accepted Verify snapshot

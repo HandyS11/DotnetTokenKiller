@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DotnetTestFilter>(_ => new DotnetTestFilter());
         services.AddSingleton<DotnetRestoreFilter>(_ => new DotnetRestoreFilter());
         services.AddSingleton<DotnetPublishFilter>(_ => new DotnetPublishFilter());
+        services.AddSingleton<DotnetPackFilter>(_ => new DotnetPackFilter());
         return services;
     }
 }
