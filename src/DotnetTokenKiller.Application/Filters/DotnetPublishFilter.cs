@@ -163,7 +163,7 @@ public sealed partial class DotnetPublishFilter(string? rootPath = null) : IOutp
     }
 
     // "  MyProject -> /path/to/publish/" — captures the publish output directory
-    [GeneratedRegex(@"^\s+\S+ -> (?<path>.+/publish[/\\]?)\s*$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^\s+\S+ -> (?<path>.+[\\/]publish[\\/]?)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex PublishOutputPattern();
 
     // "  MyProject -> /path/to/bin/Debug/net10.0/MyProject.dll"
