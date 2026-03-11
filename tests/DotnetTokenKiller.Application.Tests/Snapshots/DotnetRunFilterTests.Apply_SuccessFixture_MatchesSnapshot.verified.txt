@@ -1,0 +1,6 @@
+DotnetTokenKiller v0.1.0
+Usage: dtk dotnet <subcommand> [options]
+Available subcommands:
+  build     Run dotnet build with filtered output
+  test      Run dotnet test with filtered output
+  clean     Run dotnet clean with filtered output

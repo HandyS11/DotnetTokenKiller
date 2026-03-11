@@ -9,11 +9,14 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddTransient<FilteredRunUseCase>();
-        services.AddSingleton<DotnetBuildFilter>(_ => new DotnetBuildFilter());
-        services.AddSingleton<DotnetTestFilter>(_ => new DotnetTestFilter());
-        services.AddSingleton<DotnetRestoreFilter>(_ => new DotnetRestoreFilter());
-        services.AddSingleton<DotnetPublishFilter>(_ => new DotnetPublishFilter());
-        services.AddSingleton<DotnetPackFilter>(_ => new DotnetPackFilter());
+        services.AddSingleton<DotnetBuildFilter>();
+        services.AddSingleton<DotnetTestFilter>();
+        services.AddSingleton<DotnetRestoreFilter>();
+        services.AddSingleton<DotnetPublishFilter>();
+        services.AddSingleton<DotnetPackFilter>();
+        services.AddSingleton<DotnetCleanFilter>();
+        services.AddSingleton<DotnetRunFilter>();
+        services.AddSingleton<DotnetEfFilter>();
         return services;
     }
 }
