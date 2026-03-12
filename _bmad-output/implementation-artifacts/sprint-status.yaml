@@ -59,14 +59,14 @@ development_status:
   3-3-implement-dotnet-pack-filter-with-tests: done
   epic-3-retrospective: done
 
-  epic-4: in-progress
+  epic-4: done
   4-1-implement-dotnet-clean-filter-with-tests: done
   4.2-implement-dotnet-run-filter-with-tests: done
   4-3-implement-dotnet-ef-filter-with-tests: done
   4-4-implement-dotnet-format-filter-with-tests: done
   4-5-implement-dotnet-nuget-filter-with-tests: done
   4-6-implement-passthrough-for-unrecognized-subcommands: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   epic-5: backlog
   5-1-implement-sqlite-token-tracking: backlog
