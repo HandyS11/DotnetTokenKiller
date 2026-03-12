@@ -68,8 +68,8 @@ development_status:
   4-6-implement-passthrough-for-unrecognized-subcommands: done
   epic-4-retrospective: done
 
-  epic-5: backlog
-  5-1-implement-sqlite-token-tracking: backlog
+  epic-5: in-progress
+  5-1-implement-sqlite-token-tracking: ready-for-dev
   5-2-wire-token-tracking-into-filteredrunusecase: backlog
   5-3-implement-dtk-gain-analytics-command: backlog
   epic-5-retrospective: optional
