@@ -1,0 +1,18 @@
+Build started...
+Build succeeded.
+                     _/\__
+               ---==/    \\
+         ___  ___   |.    \|\
+        | __|| __|  |  )   \\\
+        | _| | _|   \_/ |  //|\\
+        |___||_|       /   \\\/\\
+Entity Framework Core .NET Command-line Tools 8.0.0
+
+Finding DbContext classes...
+Finding IDesignTimeDbContextFactory implementations...
+Finding application service provider...
+Finding Microsoft.Extensions.Hosting service provider...
+Using context 'AppDbContext'.
+20231001000000_InitialCreate (Applied)
+20231015000000_AddUsersTable (Applied)
+20231101000000_AddProductsTable (Applied)
