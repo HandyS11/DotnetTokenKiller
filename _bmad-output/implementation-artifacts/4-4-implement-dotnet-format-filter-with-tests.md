@@ -1,6 +1,6 @@
 # Story 4.4: Implement dotnet format Filter with Tests
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -28,48 +28,48 @@ So that I save 70–80% of tokens while knowing exactly what was formatted or ne
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create fixture file as embedded resource (AC: #11)
-  - [ ] Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_format_raw.txt` — see "Fixture File Content" section below
-  - [ ] The `EmbeddedResource` glob `Fixtures/**/*.txt` already exists in the `.csproj` — no `.csproj` changes needed
+- [x] Task 1: Create fixture file as embedded resource (AC: #11)
+  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_format_raw.txt` — see "Fixture File Content" section below
+  - [x] The `EmbeddedResource` glob `Fixtures/**/*.txt` already exists in the `.csproj` — no `.csproj` changes needed
 
-- [ ] Task 2: Implement `DotnetFormatFilter` (AC: #1, #2, #3, #4, #5, #6, #7)
-  - [ ] Create `src/DotnetTokenKiller.Application/Filters/DotnetFormatFilter.cs`
-  - [ ] `public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutputFilter` (needs `partial` for `[GeneratedRegex]`, needs `rootPath` for path shortening in check mode)
-  - [ ] Implement `Apply(string rawOutput)` — see "Implementation" section below
-  - [ ] Use `[GeneratedRegex]` for `FormatCompletePattern`, `FormattedFilePattern`, `WarningFilePattern`
-  - [ ] Use `string.Create(CultureInfo.InvariantCulture, $"...")` for count-based interpolations (CA1305)
+- [x] Task 2: Implement `DotnetFormatFilter` (AC: #1, #2, #3, #4, #5, #6, #7)
+  - [x] Create `src/DotnetTokenKiller.Application/Filters/DotnetFormatFilter.cs`
+  - [x] `public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutputFilter` (needs `partial` for `[GeneratedRegex]`, needs `rootPath` for path shortening in check mode)
+  - [x] Implement `Apply(string rawOutput)` — see "Implementation" section below
+  - [x] Use `[GeneratedRegex]` for `FormatCompletePattern`, `FormattedFilePattern`, `WarningFilePattern`
+  - [x] Use `string.Create(CultureInfo.InvariantCulture, $"...")` for count-based interpolations (CA1305)
 
-- [ ] Task 3: Register `DotnetFormatFilter` in DI (AC: #9)
-  - [ ] Add `services.AddSingleton<DotnetFormatFilter>();` after `DotnetEfFilter` in `src/DotnetTokenKiller.Application/DependencyInjection.cs`
+- [x] Task 3: Register `DotnetFormatFilter` in DI (AC: #9)
+  - [x] Add `services.AddSingleton<DotnetFormatFilter>();` after `DotnetEfFilter` in `src/DotnetTokenKiller.Application/DependencyInjection.cs`
 
-- [ ] Task 4: Wire `DotnetFormatCommand` to use `FilteredRunUseCase` (AC: #8)
-  - [ ] Update `src/DotnetTokenKiller.Cli/Commands/DotnetFormatCommand.cs`
-  - [ ] Inject `FilteredRunUseCase filteredRun` and `DotnetFormatFilter filter` via primary constructor
-  - [ ] Replace `commandRunner.RunPassthroughAsync` call with `filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken)`
-  - [ ] Remove old `ICommandRunner commandRunner` injection and its `using DotnetTokenKiller.Domain.Execution;` import
+- [x] Task 4: Wire `DotnetFormatCommand` to use `FilteredRunUseCase` (AC: #8)
+  - [x] Update `src/DotnetTokenKiller.Cli/Commands/DotnetFormatCommand.cs`
+  - [x] Inject `FilteredRunUseCase filteredRun` and `DotnetFormatFilter filter` via primary constructor
+  - [x] Replace `commandRunner.RunPassthroughAsync` call with `filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken)`
+  - [x] Remove old `ICommandRunner commandRunner` injection and its `using DotnetTokenKiller.Domain.Execution;` import
 
-- [ ] Task 5: Write filter tests (AC: #1, #2, #3, #4, #5, #6, #10)
-  - [ ] Create `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetFormatFilterTests.cs`
-  - [ ] Snapshot test for fix-mode fixture (Verify.Xunit — static `Verifier.Verify()`)
-  - [ ] Savings gate test: ≥70%
-  - [ ] Noise line theory tests: verify restore/MSBuild lines absent from fixture output
-  - [ ] Count assertion: fixture output contains "3 files"
-  - [ ] Inline check-mode test: warning lines → correct header + file list
-  - [ ] Inline check-mode no changes test: no warnings, no formatted → `✓ dotnet format (no changes)`
-  - [ ] Inline truncation test: >20 warning files → only 20 shown + `+N more`
-  - [ ] Edge case: `Apply(null!)` → no throw, returns non-null
-  - [ ] Edge case: `Apply("")` → no throw, returns non-null
+- [x] Task 5: Write filter tests (AC: #1, #2, #3, #4, #5, #6, #10)
+  - [x] Create `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetFormatFilterTests.cs`
+  - [x] Snapshot test for fix-mode fixture (Verify.Xunit — static `Verifier.Verify()`)
+  - [x] Savings gate test: ≥70%
+  - [x] Noise line theory tests: verify restore/MSBuild lines absent from fixture output
+  - [x] Count assertion: fixture output contains "3 files"
+  - [x] Inline check-mode test: warning lines → correct header + file list
+  - [x] Inline check-mode no changes test: no warnings, no formatted → `✓ dotnet format (no changes)`
+  - [x] Inline truncation test: >20 warning files → only 20 shown + `+N more`
+  - [x] Edge case: `Apply(null!)` → no throw, returns non-null
+  - [x] Edge case: `Apply("")` → no throw, returns non-null
 
-- [ ] Task 6: Accept Verify snapshots and commit `.verified.txt` files (AC: #10)
-  - [ ] Run `dotnet test --filter "FullyQualifiedName~DotnetFormatFilterTests"` → first run fails (no `.verified.txt`)
-  - [ ] Inspect `.received.txt` in `tests/DotnetTokenKiller.Application.Tests/Snapshots/` — should contain `✓ dotnet format (3 files, 0.21s)`
-  - [ ] Rename `.received.txt` → `.verified.txt`
-  - [ ] Re-run tests → all snapshot tests pass
+- [x] Task 6: Accept Verify snapshots and commit `.verified.txt` files (AC: #10)
+  - [x] Run `dotnet test --filter "FullyQualifiedName~DotnetFormatFilterTests"` → first run fails (no `.verified.txt`)
+  - [x] Inspect `.received.txt` in `tests/DotnetTokenKiller.Application.Tests/Snapshots/` — should contain `✓ dotnet format (3 files, 0.21s)`
+  - [x] Rename `.received.txt` → `.verified.txt`
+  - [x] Re-run tests → all snapshot tests pass
 
-- [ ] Task 7: Build and verify (AC: #12, #13)
-  - [ ] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
-  - [ ] `dotnet test DotnetTokenKiller.slnx` → all tests pass (baseline 145 + ~12 new)
-  - [ ] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
+- [x] Task 7: Build and verify (AC: #12, #13)
+  - [x] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
+  - [x] `dotnet test DotnetTokenKiller.slnx` → all tests pass (baseline 145 + ~12 new)
+  - [x] `dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0 (verified through integrated DTK)
 
 ## Dev Notes
 
@@ -568,6 +568,27 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+- Fixed `RCS1124: Inline local variable` on `shown` variable in `DotnetFormatFilter` — inlined into `foreach` expression.
+- Fixed `CA1307` on `string.Contains` calls in test lambdas — added `StringComparison.Ordinal`.
+
 ### Completion Notes List
 
+- Implemented `DotnetFormatFilter` with fix-mode (compact summary), check-mode (file list with deduplication + truncation), and no-changes mode.
+- All 3 `[GeneratedRegex]` patterns use source-generated regex (CA1018 / perf).
+- `DotnetFormatCommand` rewired from `ICommandRunner.RunPassthroughAsync` to `FilteredRunUseCase.RunAsync` — same pattern as stories 4.1–4.3.
+- 12 new tests (snapshot + savings + 3 noise theory + count + check-mode files + dedup + truncation + no-changes + null + empty). Total: 157 tests.
+- Snapshot `DotnetFormatFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt` accepted: `✓ dotnet format (3 files, 0.21s)`.
+- Build: 0 errors, 0 warnings. Format: exit 0.
+
 ### File List
+
+- `src/DotnetTokenKiller.Application/Filters/DotnetFormatFilter.cs` (new)
+- `src/DotnetTokenKiller.Application/DependencyInjection.cs` (modified — added `DotnetFormatFilter` singleton)
+- `src/DotnetTokenKiller.Cli/Commands/DotnetFormatCommand.cs` (modified — rewired to `FilteredRunUseCase`)
+- `tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_format_raw.txt` (new)
+- `tests/DotnetTokenKiller.Application.Tests/Filters/DotnetFormatFilterTests.cs` (new)
+- `tests/DotnetTokenKiller.Application.Tests/Snapshots/DotnetFormatFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt` (new)
+
+## Change Log
+
+- 2026-03-12: Implemented `DotnetFormatFilter` with fix-mode/check-mode/no-changes output, wired `DotnetFormatCommand` to `FilteredRunUseCase`, registered filter in DI, added 12 tests (157 total). Story moved to review.

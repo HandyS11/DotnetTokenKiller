@@ -3,7 +3,6 @@ using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console.Cli;
-
 using DtkTypeRegistrar = DotnetTokenKiller.Cli.Infrastructure.TypeRegistrar;
 
 var services = new ServiceCollection();
@@ -21,6 +20,7 @@ app.Configure(config =>
     config.AddBranch("dotnet", dotnet =>
     {
         dotnet.SetDescription("Run dotnet commands with filtered output");
+        dotnet.SetDefaultCommand<DotnetPassthroughCommand>();
         dotnet.AddCommand<DotnetBuildCommand>("build").WithDescription("Run dotnet build with filtered output");
         dotnet.AddCommand<DotnetTestCommand>("test").WithDescription("Run dotnet test with filtered output");
         dotnet.AddCommand<DotnetRestoreCommand>("restore").WithDescription("Run dotnet restore with filtered output");

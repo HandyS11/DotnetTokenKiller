@@ -9,6 +9,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddTransient<FilteredRunUseCase>();
+        services.AddTransient<PassthroughRunUseCase>();
         services.AddSingleton<DotnetBuildFilter>();
         services.AddSingleton<DotnetTestFilter>();
         services.AddSingleton<DotnetRestoreFilter>();
@@ -17,6 +18,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DotnetCleanFilter>();
         services.AddSingleton<DotnetRunFilter>();
         services.AddSingleton<DotnetEfFilter>();
+        services.AddSingleton<DotnetFormatFilter>();
+        services.AddSingleton<DotnetNugetFilter>();
         return services;
     }
 }
