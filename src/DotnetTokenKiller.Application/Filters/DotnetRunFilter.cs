@@ -26,7 +26,7 @@ public sealed partial class DotnetRunFilter : IOutputFilter
                 continue;
             }
 
-            sb.AppendLine(line);
+            sb.Append(line).Append('\n');
         }
 
         var result = sb.ToString();
