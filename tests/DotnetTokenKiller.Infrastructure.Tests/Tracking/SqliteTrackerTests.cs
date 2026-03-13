@@ -46,7 +46,7 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task RecordAsync_PersistsAllFields_Correctly()
     {
-        var ts = new DateTimeOffset(2026, 1, 15, 10, 30, 0, TimeSpan.Zero);
+        var ts = DateTimeOffset.UtcNow.AddDays(-1);
         var record = MakeRecord(
             command: "test",
             projectPath: "/my/project",
