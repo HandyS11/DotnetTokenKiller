@@ -65,7 +65,9 @@ public sealed partial class FileTeeService : ITeeService
 
             // Write file
             var slug = SanitizeSlug(commandSlug);
-            var fileName = $"{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}_{slug}.log";
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var uniqueSuffix = Guid.NewGuid().ToString("N");
+            var fileName = $"{timestamp}_{uniqueSuffix}_{slug}.log";
             var filePath = Path.Combine(teeDir, fileName);
             await File.WriteAllTextAsync(filePath, content, cancellationToken);
 
