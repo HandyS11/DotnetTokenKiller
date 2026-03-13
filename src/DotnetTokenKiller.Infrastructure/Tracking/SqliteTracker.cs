@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace DotnetTokenKiller.Infrastructure.Tracking;
 
-public sealed class SqliteTracker(string connectionString) : ITracker, IAsyncDisposable
+public sealed class SqliteTracker(string connectionString) : ITracker, IDisposable, IAsyncDisposable
 {
     private const int RetentionDays = 90;
     private readonly SqliteConnection _connection = new(connectionString);
@@ -190,6 +190,8 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IAsyncDis
         cmd.Parameters.AddWithValue("@cutoff", cutoff);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    public void Dispose() => _connection.Dispose();
 
     public async ValueTask DisposeAsync()
     {
