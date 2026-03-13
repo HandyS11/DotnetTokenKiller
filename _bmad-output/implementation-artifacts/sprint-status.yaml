@@ -70,7 +70,7 @@ development_status:
 
   epic-5: in-progress
   5-1-implement-sqlite-token-tracking: done
-  5-2-wire-token-tracking-into-filteredrunusecase: review
+  5-2-wire-token-tracking-into-filteredrunusecase: done
   5-3-implement-dtk-gain-analytics-command: ready-for-dev
   epic-5-retrospective: optional
 
