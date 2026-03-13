@@ -6,7 +6,6 @@ using DotnetTokenKiller.Domain.Tracking;
 using FluentAssertions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
@@ -99,5 +98,58 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
 
         _filter.Received(1).Apply("Hello\nError\n");
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsCorrectTokenCounts_AfterSuccessfulExecution()
+    {
+        // 16 chars → 16 / 4 = 4 input tokens; "1234" = 4 chars → 4 / 4 = 1 output token; saved = 3
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("1234567890123456", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("1234");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r =>
+                r.Command == "build" &&
+                r.InputTokens == 4 &&
+                r.OutputTokens == 1 &&
+                r.SavedTokens == 3),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsCorrectCommand_WhenArgsProvided()
+    {
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.Command == "build"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsCorrectCommand_WhenNoArgs_UsesCommandName()
+    {
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", [], verbosityLevel: 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.Command == "dotnet"),
+            Arg.Any<CancellationToken>());
     }
 }
