@@ -1,0 +1,109 @@
+using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Infrastructure.Configuration;
+using FluentAssertions;
+using Xunit;
+
+namespace DotnetTokenKiller.Infrastructure.Tests.Configuration;
+
+public sealed class JsonConfigProviderTests : IDisposable
+{
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-test-{Guid.NewGuid()}");
+
+    private string ConfigPath => Path.Combine(_tempDir, "config.json");
+
+    private JsonConfigProvider CreateSut()
+    {
+        return new JsonConfigProvider(ConfigPath);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, true);
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public async Task LoadAsync_ReturnsDefaults_WhenNoFileExists()
+    {
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Should().Be(DtkConfig.Default);
+    }
+
+    [Fact]
+    public async Task LoadAsync_ReturnsDefaults_WhenJsonIsInvalid()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, "not valid json {{ }}");
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Should().Be(DtkConfig.Default);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MergesPartialOverrides_WithDefaults()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, """{"Tracking":{"RetentionDays":45}}""");
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Tracking.RetentionDays.Should().Be(45);
+        config.Tracking.Enabled.Should().BeTrue();
+        config.Display.Should().Be(DtkConfig.Default.Display);
+        config.Tee.Should().Be(DtkConfig.Default.Tee);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MergesPartialOverrides_WhenSubRecordHasMissingValueTypeFields()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, """{"Tee":{"MaxFiles":5}}""");
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Tee.MaxFiles.Should().Be(5);
+        config.Tee.Mode.Should().Be("failures");
+        config.Tee.MaxFileSizeBytes.Should().Be(1_048_576L);
+        config.Tracking.Should().Be(DtkConfig.Default.Tracking);
+        config.Display.Should().Be(DtkConfig.Default.Display);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTrips()
+    {
+        var sut = CreateSut();
+        var modified = DtkConfig.Default with
+        {
+            Tracking = new TrackingConfig(false, 30)
+        };
+
+        await sut.SaveAsync(modified);
+        var loaded = await sut.LoadAsync();
+
+        loaded.Tracking.Enabled.Should().BeFalse();
+        loaded.Tracking.RetentionDays.Should().Be(30);
+        loaded.Display.Should().Be(DtkConfig.Default.Display);
+        loaded.Tee.Should().Be(DtkConfig.Default.Tee);
+    }
+
+    [Fact]
+    public async Task SaveAsync_CreatesDirectory_WhenNotExisting()
+    {
+        var sut = CreateSut();
+
+        await sut.SaveAsync(DtkConfig.Default);
+
+        File.Exists(ConfigPath).Should().BeTrue();
+    }
+}

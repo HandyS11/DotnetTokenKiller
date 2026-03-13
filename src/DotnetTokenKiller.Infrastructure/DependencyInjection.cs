@@ -18,8 +18,8 @@ public static class ServiceCollectionExtensions
         var dbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH")
             ?? SqliteTracker.GetDefaultDbPath();
         services.AddSingleton<ITracker>(_ => new SqliteTracker($"Data Source={dbPath}"));
-        services.AddSingleton<IConfigProvider, NullConfigProvider>();
-        services.AddSingleton<ITeeService, NullTeeService>();
+        services.AddSingleton<IConfigProvider, JsonConfigProvider>();
+        services.AddSingleton<ITeeService, FileTeeService>();
         return services;
     }
 }
