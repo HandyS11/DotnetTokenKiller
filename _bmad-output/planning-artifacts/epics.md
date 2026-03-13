@@ -891,6 +891,5 @@ So that no PR can merge with formatting violations, build warnings, or failing t
 **Then** TRX test results are uploaded as a pipeline artifact
 
 **And** the workflow file exists at `.github/workflows/quality-gate.yml`
-**And** the workflow uses `dotnet-version: '10.0.x'` for SDK setup
 **And** the workflow runs on `ubuntu-latest`
 **And** `dotnet test DotnetTokenKiller.slnx` passes locally before the pipeline is pushed

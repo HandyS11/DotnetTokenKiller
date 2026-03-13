@@ -1,57 +1,105 @@
 ---
-project: DotnetTokenKiller
-version: 0.1.0
-status: approved
-source: todo/01-OVERVIEW.md, todo/03-CLI-PARSING.md, todo/04-CORE-INFRASTRUCTURE.md
+workflowType: 'prd'
+workflow: 'edit'
+classification:
+  domain: 'developer-tooling'
+  projectType: 'cli-tool'
+  complexity: 'moderate'
+inputDocuments: []
+stepsCompleted: ['step-e-01-discovery', 'step-e-02-review', 'step-e-03-edit']
+lastEdited: '2026-03-14'
+editHistory:
+  - date: '2026-03-14'
+    changes: 'Full BMAD restructure; aligned dtk gain spec to implementation; added integration test requirements; added Journey 4; fixed FR12/FR24 implementation leakage; fixed NFR3/NFR11 measurability'
 ---
 
 # DotnetTokenKiller — Product Requirements Document
 
-## 1. Problem Statement
+## Executive Summary
 
-LLM-assisted development workflows (e.g., Claude Code, Copilot) consume large amounts of context tokens reading `dotnet` CLI output. A typical `dotnet build` produces 15–40 lines of MSBuild noise for what is ultimately a one-line result. A `dotnet test` run produces 30–80+ lines even when all tests pass. This inflates token costs, slows LLM response times, and clutters context windows — reducing the quality of AI assistance.
+DotnetTokenKiller (`dtk`) is a .NET CLI proxy that intercepts `dotnet` command output and returns compressed, information-dense summaries — eliminating 60–95% of tokens consumed by LLM-assisted development workflows (Claude Code, GitHub Copilot, Cursor, etc.).
 
-## 2. Product Vision
+**Differentiator:** Built natively in C# on .NET 10, distributed as a NuGet global tool — the only token-reduction proxy targeting the .NET ecosystem natively (inspired by [RTK](https://github.com/rtk-ai/rtk) for Rust).
 
-DotnetTokenKiller (CLI command: `dtk`) is a .NET CLI proxy that intercepts `dotnet` command output and applies intelligent filtering to reduce LLM token consumption by 60–95%. It sits transparently between the LLM and the terminal, forwarding commands to the real `dotnet` CLI and returning compressed, information-dense summaries.
+**Target users:**
 
-Inspired by [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk), DTK is built natively in C# with .NET 10, distributed as a NuGet global tool, and targets the .NET developer ecosystem exclusively.
+- .NET developers using AI coding assistants where CLI output fills context windows
+- Development teams running CI/CD pipelines where LLM context is metered or billed
+- Developers who want cleaner, machine-readable `dotnet` CLI output
 
-## 3. Target Users
+## Success Criteria
 
-- **.NET developers** using AI coding assistants (Claude Code, GitHub Copilot, Cursor, etc.)
-- **Development teams** running CI/CD pipelines where LLM context is monitored or billed
-- **Any developer** who wants cleaner, more readable `dotnet` CLI output
+SC1: Each command filter achieves its stated token reduction target (≥60% minimum), verified by automated tests against real fixture data.
 
-## 4. Scope
+SC2: Startup time is imperceptible to LLM agents: <150ms for the global tool.
 
-### In Scope
+SC3: Exit code returned to caller exactly matches the underlying `dotnet` process exit code on 100% of invocations.
 
-DTK covers the following `dotnet` CLI subcommands:
+SC4: Tool installs and runs on Windows, macOS, and Linux via `dotnet tool install -g DotnetTokenKiller` without platform-specific setup.
 
-| DTK Command | Wraps | Filtering Strategy | Expected Savings |
-|---|---|---|---|
-| `dtk dotnet build` | `dotnet build` | Strip restore/compile noise, keep errors + summary | 80–90% |
-| `dtk dotnet test` | `dotnet test` | Failures only + aggregated suite summary | 90–95% |
-| `dtk dotnet restore` | `dotnet restore` | Compact: "✓ restored N packages (Xs)" | 90–95% |
-| `dtk dotnet publish` | `dotnet publish` | Strip restore noise, keep output path + errors | 80–85% |
-| `dtk dotnet pack` | `dotnet pack` | Strip compile noise, keep .nupkg path | 85–90% |
-| `dtk dotnet clean` | `dotnet clean` | "✓ dotnet clean" | 95%+ |
-| `dtk dotnet run` | `dotnet run` | Strip build preamble, preserve app output | 60–80% |
-| `dtk dotnet ef` | `dotnet ef` | Compact migration/DB status | 70–80% |
-| `dtk dotnet format` | `dotnet format` | Files changed only | 70–80% |
-| `dtk dotnet nuget` | `dotnet nuget` | Strip progress, keep results | 75–85% |
-| `dtk dotnet <other>` | any subcommand | Passthrough (no filtering) | 0% |
-| `dtk gain` | — | Token savings analytics dashboard | — |
+SC5: Tracking, tee, and configuration errors never appear in command output — silent failure in all infrastructure paths.
+
+SC6: `dtk gain` produces correct token savings data aggregated across all tracked commands within the configured history window.
+
+## Product Scope
+
+### MVP
+
+All `dotnet` subcommand filters (build, test, restore, publish, pack, clean, run, ef, format, nuget), passthrough for unrecognized subcommands, `dtk gain` analytics, persistent command tracking, JSON configuration, tee output recovery.
+
+### Growth
+
+Native AOT single binaries (<15 MB per platform) for <15ms startup. GitHub Releases CI/CD pipeline.
+
+### Vision
+
+Community-contributed filter plugins. Extended language/ecosystem support (non-`dotnet` commands).
 
 ### Out of Scope
 
-- Non-`dotnet` commands (no `npm`, `cargo`, `git` support — use RTK for those)
+- Non-`dotnet` commands (no `npm`, `cargo`, `git` support)
 - Real-time streaming output filtering
 - GUI or web interface
-- Multi-language support (English output only targeted initially)
+- Non-English CLI output
 
-## 5. Functional Requirements
+## User Journeys
+
+### Journey 1: LLM Agent Running Build and Test
+
+1. LLM agent invokes `dtk dotnet build` instead of `dotnet build`
+2. DTK executes `dotnet build`, captures full output, strips restore/compile noise
+3. Agent receives 1–5 line summary (errors + summary line) instead of 15–40 lines
+4. On failure, structured error output with file paths, error codes, and counts
+5. Agent invokes `dtk dotnet test`; receives failures-only + aggregated suite summary instead of 30–80+ lines
+6. Agent proceeds with precise, actionable output — no context window waste
+
+### Journey 2: Developer Reviewing Token Savings
+
+1. Developer runs `dtk gain` after a day of LLM-assisted coding
+2. DTK queries the tracking database for the last 30 days
+3. Table displays per-command token savings; footer shows total runs and overall average
+4. Developer uses `dtk gain --days 7 --project` to scope to current project this week
+5. Developer uses `dtk gain --json` to pipe savings data to a script or share with team
+
+### Journey 3: Developer Using dtk for Package and Restore Workflows
+
+1. Developer runs `dtk dotnet restore` before a build; receives a single summary line instead of package download noise
+2. Developer runs `dtk dotnet publish` to produce a release artifact; receives output path and any errors — no restore chatter
+3. Developer runs `dtk dotnet pack` to produce a NuGet package; receives the `.nupkg` path only
+4. Developer runs `dtk dotnet clean` to reset build outputs; receives `✓ dotnet clean` confirmation
+5. Developer runs `dtk dotnet run` to start a local app; build preamble is stripped, application output preserved
+6. Developer runs `dtk dotnet format --verify-no-changes`; receives list of files needing formatting or a clean pass confirmation
+7. For any unrecognized subcommand (e.g., `dtk dotnet watch`), DTK passes through output unchanged with exit code preserved
+
+### Journey 4: CI/CD Pipeline Usage
+
+1. Pipeline replaces `dotnet test` with `dtk dotnet test` in build script
+2. DTK runs tests, returns failures-only output on failure or single summary line on success
+3. Pipeline receives correct exit code — non-zero on failure, zero on success
+4. Log output is compact and machine-readable; no filter errors ever corrupt the log
+5. On unexpected failure, tee saves full raw output to timestamped file for debugging
+
+## Functional Requirements
 
 ### Command Filters
 
@@ -75,13 +123,13 @@ FR9: The system shall provide a `dtk dotnet format` command that intercepts `dot
 
 FR10: The system shall provide a `dtk dotnet nuget` command that intercepts `dotnet nuget` output and strips progress bars while keeping results (75–85% token reduction).
 
-### Core Behavior
+### Core Behaviour
 
 FR11: The system shall support passthrough mode for any unrecognized `dotnet` subcommand (e.g., `dtk dotnet new`, `dtk dotnet watch`) with no filtering applied but exit code preserved.
 
-FR12: The system shall track every command execution in a SQLite database recording: timestamp, command, project path, input tokens, output tokens, saved tokens, savings percentage, and execution time.
+FR12: The system shall track every command execution in a persistent tracking database recording: timestamp, command, project path, input tokens, output tokens, saved tokens, savings percentage, and execution time.
 
-FR13: The system shall provide a `dtk gain` command that displays token savings analytics via a Spectre.Console rich table with `--days`, `--project`, and `--json` options.
+FR13: The system shall provide a `dtk gain` command that displays token savings analytics. In table mode, each row shows: Command | Tokens Saved. The footer row shows total run count, total tokens saved, and average savings percentage. Options: `--days N` (history window, default 30), `--project` (filter by current working directory), `--json` (output raw JSON).
 
 FR14: The system shall preserve the exit code of the underlying `dotnet` process exactly.
 
@@ -105,17 +153,21 @@ FR22: The system shall be packaged and distributed as a .NET Global Tool install
 
 FR23: The system shall auto-clean tracking records older than 90 days on every write operation.
 
-FR24: The system shall estimate token counts using the `chars / 4` heuristic for savings calculation.
+FR24: The system shall estimate token counts using a token estimation heuristic for savings calculation.
 
-## 6. Non-Functional Requirements
+### Integration Testing
+
+FR25: The integration test suite shall include fixture .NET projects (covering build, test, and restore scenarios) and invoke the `dtk` CLI end-to-end against them to verify filter output correctness and that token reduction targets are met under real conditions.
+
+## Non-Functional Requirements
 
 NFR1: **Performance** — Startup time must be imperceptible: <150ms for the global tool, <15ms for Native AOT binary.
 
 NFR2: **Token Savings** — Each filter must achieve its stated token reduction target. A hard quality gate of ≥60% savings must pass for every filter against real fixture data in automated tests.
 
-NFR3: **Reliability** — Tracking and tee errors must never surface to the user or affect command output (silent failure). DTK must never make output worse than running `dotnet` directly.
+NFR3: **Reliability** — Tracking and tee errors must never surface to the user or affect command output (silent failure). DTK must never suppress exit codes or omit error lines present in the underlying `dotnet` output.
 
-NFR4: **Testability** — Domain and Application layers must be fully unit-testable without any real I/O. All infrastructure is behind interfaces.
+NFR4: **Testability** — Domain and Application layers must be fully unit-testable without any real I/O. All infrastructure is behind interfaces. The integration test project must exercise the CLI end-to-end against fixture .NET projects to validate real filter behaviour.
 
 NFR5: **Single Responsibility** — Each filter module must handle exactly one subcommand.
 
@@ -129,11 +181,9 @@ NFR9: **Binary Size** — Native AOT binaries must be <15 MB per platform.
 
 NFR10: **Exit Code Fidelity** — The exit code returned to the caller must exactly match the underlying `dotnet` process exit code for CI/CD compatibility.
 
-NFR11: **Overhead** — The tool must not consume more than a negligible amount of additional CPU time compared to running `dotnet` directly.
+NFR11: **Overhead** — The tool must not add more than 50ms of wall-clock overhead compared to running `dotnet` directly, as measured by timing the same command with and without `dtk` wrapping.
 
-## 7. User Experience
-
-### Output Format Conventions
+## Output Format Conventions
 
 All filters follow consistent output conventions:
 
@@ -147,7 +197,7 @@ All filters follow consistent output conventions:
 
 ```sh
 dotnet <subcommand>: 0 errors, N warnings (<context>, <time>)
-═══════════════════════════════════════
+---
   <grouped details>
 ```
 
@@ -155,7 +205,7 @@ dotnet <subcommand>: 0 errors, N warnings (<context>, <time>)
 
 ```sh
 dotnet <subcommand>: N errors, M warnings (<context>)
-═══════════════════════════════════════
+---
 <structured error details>
 ```
 
@@ -165,35 +215,16 @@ dotnet <subcommand>: N errors, M warnings (<context>)
 [full output: ~/.local/share/dtk/tee/1234567890_build.log]
 ```
 
-### Key UX Rules
+**Key UX Rules:**
 
 - Use `✓` prefix for success, no prefix for failures
-- Use `═══` separator for detail sections
+- Use `---` separator for detail sections
 - Shorten absolute paths to project-relative with forward slashes
 - Truncate long messages (120 chars for diagnostics, 200 chars for test error messages)
 - Group errors/warnings by file, sorted by error count descending
 - Limit displayed items (max 15 test failures, max 5 top error codes, max 20 format files)
 
-## 8. Analytics: `dtk gain`
-
-The `dtk gain` command renders a Spectre.Console table with:
-
-| Column | Description |
-|---|---|
-| Command | `dotnet build`, `dotnet test`, etc. |
-| Runs | Number of executions |
-| Tokens Saved | Total tokens eliminated |
-| Avg Savings % | Average reduction per run |
-
-Summary line: total tokens saved + overall average savings %.
-
-Options:
-
-- `--days N` — time range (default: 30)
-- `--project` — filter by current working directory
-- `--json` — output raw JSON for LLM/tooling consumption
-
-## 9. Configuration
+## Configuration
 
 Config stored at:
 
@@ -213,7 +244,7 @@ Config stored at:
 | Tee | maxFileSizeBytes | 1048576 (1 MB) |
 | Tee | directory | (platform default) |
 
-## 10. Distribution
+## Distribution
 
 **Primary:** .NET Global Tool via NuGet
 
