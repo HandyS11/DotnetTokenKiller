@@ -74,9 +74,9 @@ development_status:
   5-3-implement-dtk-gain-analytics-command: done
   epic-5-retrospective: done
 
-  epic-6: backlog
-  6-1-implement-json-configuration: backlog
-  6-2-implement-tee-output-recovery: backlog
+  epic-6: in-progress
+  6-1-implement-json-configuration: done
+  6-2-implement-tee-output-recovery: done
   epic-6-retrospective: optional
 
   epic-7: backlog
