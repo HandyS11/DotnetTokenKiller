@@ -17,6 +17,7 @@ var app = new CommandApp(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("dtk");
+    config.SetApplicationVersion("0.1.0");
     config.Settings.StrictParsing = false;
 
     config.AddBranch("dotnet", dotnet =>
