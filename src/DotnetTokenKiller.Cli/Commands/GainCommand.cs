@@ -35,19 +35,20 @@ public sealed class GainCommand(
 
         var table = new Table()
             .AddColumn("Command")
+            .AddColumn(new TableColumn("Runs").RightAligned())
             .AddColumn(new TableColumn("Tokens Saved").RightAligned());
 
         foreach (var (cmd, saved) in summary.SavedByCommand)
         {
-            table.AddRow(new Text(cmd), new Text(saved.ToString(CultureInfo.InvariantCulture)));
+            table.AddRow(new Text(cmd), new Text("-"), new Text(saved.ToString(CultureInfo.InvariantCulture)));
         }
 
         table.AddEmptyRow();
 
-        var totalValue = string.Create(
-            CultureInfo.InvariantCulture,
-            $"{summary.TotalSavedTokens} ({summary.AverageSavingsPercentage:F1}% avg, {summary.TotalCommands} runs)");
-        table.AddRow(new Markup("[bold]TOTAL[/]"), new Text(totalValue));
+        table.AddRow(
+            new Markup("[bold]TOTAL[/]"),
+            new Text(summary.TotalCommands.ToString(CultureInfo.InvariantCulture)),
+            new Text($"{summary.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)} ({summary.AverageSavingsPercentage:F1}% avg)"));
 
         console.Write(table);
         return 0;
