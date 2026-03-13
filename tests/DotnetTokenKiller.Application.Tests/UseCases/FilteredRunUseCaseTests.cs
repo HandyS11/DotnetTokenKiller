@@ -33,7 +33,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         exitCode.Should().Be(42);
     }
@@ -47,10 +47,10 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await act.Should().NotThrowAsync();
-        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
         exitCode.Should().Be(0);
     }
 
@@ -65,7 +65,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await act.Should().NotThrowAsync();
     }
@@ -79,7 +79,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("io error"));
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await act.Should().NotThrowAsync();
     }
@@ -95,7 +95,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         _filter.Received(1).Apply("Hello\nError\n");
     }
@@ -110,7 +110,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
@@ -130,7 +130,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Command == "build"),
@@ -146,7 +146,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await _sut.RunAsync(_filter, "dotnet", [], verbosityLevel: 0);
+        await _sut.RunAsync(_filter, "dotnet", [], 0);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Command == "dotnet"),
@@ -163,7 +163,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>

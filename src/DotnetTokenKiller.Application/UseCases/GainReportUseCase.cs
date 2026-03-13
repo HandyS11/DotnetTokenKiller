@@ -8,5 +8,7 @@ public sealed class GainReportUseCase(ITracker tracker)
         int days,
         string? projectPath,
         CancellationToken cancellationToken = default)
-        => tracker.GetSummaryAsync(days, projectPath, cancellationToken);
+    {
+        return tracker.GetSummaryAsync(days, projectPath, cancellationToken);
+    }
 }

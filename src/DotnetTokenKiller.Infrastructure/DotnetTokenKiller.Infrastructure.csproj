@@ -3,10 +3,10 @@
     <RootNamespace>DotnetTokenKiller.Infrastructure</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Data.Sqlite"/>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj" />
+    <ProjectReference Include="../DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj"/>
   </ItemGroup>
 </Project>

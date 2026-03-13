@@ -29,7 +29,8 @@ public sealed class GainCommand(
 
         if (summary.TotalCommands == 0)
         {
-            console.MarkupLine("[grey]No data yet. Run some [bold]dtk dotnet[/] commands to start tracking savings.[/]");
+            console.MarkupLine(
+                "[grey]No data yet. Run some [bold]dtk dotnet[/] commands to start tracking savings.[/]");
             return 0;
         }
 
@@ -48,7 +49,8 @@ public sealed class GainCommand(
 
         table.AddRow(
             new Markup($"[bold]TOTAL ({summary.TotalCommands.ToString(CultureInfo.InvariantCulture)} runs)[/]"),
-            new Text($"{summary.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)} ({summary.AverageSavingsPercentage:F1}% avg)"));
+            new Text(
+                $"{summary.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)} ({summary.AverageSavingsPercentage:F1}% avg)"));
 
         console.Write(table);
         return 0;

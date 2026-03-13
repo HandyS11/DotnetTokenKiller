@@ -16,7 +16,9 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     public string Apply(string rawOutput)
     {
         if (string.IsNullOrEmpty(rawOutput))
+        {
             return string.Empty;
+        }
 
         var stripped = AnsiStrip.Strip(rawOutput);
         var lines = stripped.Split('\n');
@@ -47,24 +49,31 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
             // Skip noise lines
             if (IsNoiseLine(line))
+            {
                 continue;
+            }
 
             // Parse diagnostic lines
             var diagMatch = DiagnosticPattern().Match(line);
             if (!diagMatch.Success)
+            {
                 continue;
+            }
 
-            var key = $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
+            var key =
+                $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
             if (!seen.Add(key))
+            {
                 continue; // deduplicate MSBuild duplicate error section
+            }
 
             diagnostics.Add(new Diagnostic(
                 TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
-                Line: diagMatch.Groups["line"].Value,
-                Col: diagMatch.Groups["col"].Value,
-                Level: diagMatch.Groups["level"].Value,
-                Code: diagMatch.Groups["code"].Value,
-                Message: TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
+                diagMatch.Groups["line"].Value,
+                diagMatch.Groups["col"].Value,
+                diagMatch.Groups["level"].Value,
+                diagMatch.Groups["code"].Value,
+                TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
         }
 
         var errors = diagnostics.Where(d => d.Level == "error").ToList();
@@ -72,25 +81,30 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         var context = BuildContext(projectCount, elapsed);
 
         if (errors.Count == 0 && warnings.Count == 0)
+        {
             return $"✓ dotnet build{context}\n";
+        }
 
         var sb = new StringBuilder();
 
         if (errors.Count == 0)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet build: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{context}")
-              .AppendLine(Separator);
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                    $"dotnet build: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{context}")
+                .AppendLine(Separator);
             AppendGroupedByCode(sb, warnings);
         }
         else
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet build: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}")
-              .AppendLine(Separator);
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                    $"dotnet build: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}")
+                .AppendLine(Separator);
             AppendGroupedByFile(sb, errors);
             AppendTopCodes(sb, errors);
             if (warnings.Count > 0)
             {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use -v to see)");
+                sb.AppendLine(CultureInfo.InvariantCulture,
+                    $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use -v to see)");
             }
         }
 
@@ -102,11 +116,20 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     private static string BuildContext(int projectCount, string elapsed)
     {
         if (projectCount == 0 && string.IsNullOrEmpty(elapsed))
+        {
             return string.Empty;
+        }
+
         if (string.IsNullOrEmpty(elapsed))
+        {
             return $" ({projectCount} project{(projectCount == 1 ? "" : "s")})";
+        }
+
         if (projectCount == 0)
+        {
             return $" ({elapsed})";
+        }
+
         return $" ({projectCount} project{(projectCount == 1 ? "" : "s")}, {elapsed})";
     }
 
@@ -114,10 +137,14 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     {
         var match = TimeSpanValuePattern().Match(timeElapsedLine);
         if (!match.Success)
+        {
             return string.Empty;
+        }
 
         if (TimeSpan.TryParse(match.Value, CultureInfo.InvariantCulture, out var ts))
+        {
             return $"{ts.TotalSeconds:F2}s";
+        }
 
         return string.Empty;
     }
@@ -125,15 +152,18 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     private static bool IsNoiseLine(string line)
     {
         if (string.IsNullOrWhiteSpace(line))
+        {
             return true;
+        }
+
         return NoiseMsbuildVersionPattern().IsMatch(line)
-            || NoiseRestoringPattern().IsMatch(line)
-            || NoiseRestoredPattern().IsMatch(line)
-            || NoiseBuildStartedPattern().IsMatch(line)
-            || NoiseBuildResultPattern().IsMatch(line)
-            || NoiseCountPattern().IsMatch(line)
-            || NoiseTimeElapsedPattern().IsMatch(line)
-            || NoiseProjectOutputPattern().IsMatch(line);
+               || NoiseRestoringPattern().IsMatch(line)
+               || NoiseRestoredPattern().IsMatch(line)
+               || NoiseBuildStartedPattern().IsMatch(line)
+               || NoiseBuildResultPattern().IsMatch(line)
+               || NoiseCountPattern().IsMatch(line)
+               || NoiseTimeElapsedPattern().IsMatch(line)
+               || NoiseProjectOutputPattern().IsMatch(line);
     }
 
     private static void AppendGroupedByCode(StringBuilder sb, List<Diagnostic> diags)
@@ -143,7 +173,9 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             var items = group.ToList();
             sb.AppendLine(CultureInfo.InvariantCulture, $"{group.Key} ({items.Count}x)");
             foreach (var d in items)
+            {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  {d.File}:{d.Line} — {d.Message}");
+            }
         }
     }
 
@@ -152,9 +184,12 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         foreach (var group in errors.GroupBy(d => d.File).OrderByDescending(g => g.Count()))
         {
             var items = group.ToList();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{group.Key} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                $"{group.Key} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
             foreach (var d in items)
+            {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  ({d.Line},{d.Col}) {d.Code}: {d.Message}");
+            }
         }
     }
 
@@ -168,11 +203,14 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             .ToList();
 
         if (topCodes.Count > 0)
+        {
             sb.AppendLine(CultureInfo.InvariantCulture, $"Top codes: {string.Join(", ", topCodes)}");
+        }
     }
 
     // Matches: /path/file.cs(10,5): error CS0001: message [project.csproj]
-    [GeneratedRegex(@"^\s*(?<file>[^()]+)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>[^\[]+?)(?:\s*\[.+?\])?\s*$")]
+    [GeneratedRegex(
+        @"^\s*(?<file>[^()]+)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>[^\[]+?)(?:\s*\[.+?\])?\s*$")]
     private static partial Regex DiagnosticPattern();
 
     // Matches: "  MyProject -> /path/to/bin/MyProject.dll"

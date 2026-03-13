@@ -16,7 +16,9 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
     public string Apply(string rawOutput)
     {
         if (string.IsNullOrEmpty(rawOutput))
+        {
             return string.Empty;
+        }
 
         var stripped = AnsiStrip.Strip(rawOutput);
         var lines = stripped.Split('\n');
@@ -57,19 +59,24 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
             // Parse diagnostic lines (errors / warnings)
             var diagMatch = DiagnosticPattern().Match(line);
             if (!diagMatch.Success)
+            {
                 continue;
+            }
 
-            var key = $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
+            var key =
+                $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
             if (!seen.Add(key))
+            {
                 continue;
+            }
 
             diagnostics.Add(new Diagnostic(
                 TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
-                Line: diagMatch.Groups["line"].Value,
-                Col: diagMatch.Groups["col"].Value,
-                Level: diagMatch.Groups["level"].Value,
-                Code: diagMatch.Groups["code"].Value,
-                Message: TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
+                diagMatch.Groups["line"].Value,
+                diagMatch.Groups["col"].Value,
+                diagMatch.Groups["level"].Value,
+                diagMatch.Groups["code"].Value,
+                TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
         }
 
         var errors = diagnostics.FindAll(d => d.Level == "error");
@@ -78,20 +85,26 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
         if (errors.Count > 0)
         {
             var sb = new StringBuilder();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet pack: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}")
-              .AppendLine(Separator);
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                    $"dotnet pack: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}")
+                .AppendLine(Separator);
             AppendGroupedByFile(sb, errors);
             AppendTopCodes(sb, errors);
             if (warnings.Count > 0)
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use -v to see)");
+            {
+                sb.AppendLine(CultureInfo.InvariantCulture,
+                    $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use -v to see)");
+            }
+
             return sb.ToString();
         }
 
         if (warnings.Count > 0)
         {
             var sb = new StringBuilder();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet pack: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{BuildContext(projectCount, elapsed, nupkgFilename)}")
-              .AppendLine(Separator);
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                    $"dotnet pack: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{BuildContext(projectCount, elapsed, nupkgFilename)}")
+                .AppendLine(Separator);
             AppendGroupedByCode(sb, warnings);
             return sb.ToString();
         }
@@ -109,7 +122,10 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
         var countPart = projectCount > 0 ? $"{projectCount} project{projectSuffix}" : string.Empty;
         var timePart = string.IsNullOrEmpty(elapsed) ? string.Empty : elapsed;
 
-        var details = string.Join(", ", new[] { countPart, timePart }.Where(s => !string.IsNullOrEmpty(s)));
+        var details = string.Join(", ", new[]
+        {
+            countPart, timePart
+        }.Where(s => !string.IsNullOrEmpty(s)));
         return string.IsNullOrEmpty(details)
             ? namePart
             : $"{namePart} ({details})";
@@ -119,10 +135,14 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
     {
         var match = TimeSpanValuePattern().Match(timeElapsedLine);
         if (!match.Success)
+        {
             return string.Empty;
+        }
 
         if (TimeSpan.TryParse(match.Value, CultureInfo.InvariantCulture, out var ts))
+        {
             return $"{ts.TotalSeconds:F2}s";
+        }
 
         return string.Empty;
     }
@@ -134,7 +154,9 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
             var items = group.ToList();
             sb.AppendLine(CultureInfo.InvariantCulture, $"{group.Key} ({items.Count}x)");
             foreach (var d in items)
+            {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  {d.File}:{d.Line} — {d.Message}");
+            }
         }
     }
 
@@ -143,9 +165,12 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
         foreach (var group in errors.GroupBy(d => d.File).OrderByDescending(g => g.Count()))
         {
             var items = group.ToList();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{group.Key} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                $"{group.Key} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
             foreach (var d in items)
+            {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  ({d.Line},{d.Col}) {d.Code}: {d.Message}");
+            }
         }
     }
 
@@ -159,7 +184,9 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
             .ToList();
 
         if (topCodes.Count > 0)
+        {
             sb.AppendLine(CultureInfo.InvariantCulture, $"Top codes: {string.Join(", ", topCodes)}");
+        }
     }
 
     // "Successfully created package '/path/to/MyProject.1.0.0.nupkg'."
@@ -171,7 +198,8 @@ public sealed partial class DotnetPackFilter(string? rootPath = null) : IOutputF
     private static partial Regex ProjectOutputPattern();
 
     // Matches: /path/file.cs(10,5): error CS0001: message [project.csproj]
-    [GeneratedRegex(@"^\s*(?<file>[^()]+)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>[^\[]+?)(?:\s*\[.+?\])?\s*$")]
+    [GeneratedRegex(
+        @"^\s*(?<file>[^()]+)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>[^\[]+?)(?:\s*\[.+?\])?\s*$")]
     private static partial Regex DiagnosticPattern();
 
     // Matches "Time Elapsed HH:MM:SS.ff"

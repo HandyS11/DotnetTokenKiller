@@ -9,7 +9,8 @@ public sealed class DotnetPublishCommand(
     FilteredRunUseCase filteredRun,
     DotnetPublishFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
+        CancellationToken cancellationToken)
     {
         var args = settings.PositionalArgs.Prepend("publish").Concat(context.Remaining.Raw).ToArray();
         return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken);

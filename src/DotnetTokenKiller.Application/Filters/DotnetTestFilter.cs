@@ -16,7 +16,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     public string Apply(string rawOutput)
     {
         if (string.IsNullOrEmpty(rawOutput))
+        {
             return string.Empty;
+        }
 
         var stripped = AnsiStrip.Strip(rawOutput);
         var lines = stripped.Split('\n');
@@ -65,7 +67,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
                 // Skip "Error Message:" label
                 if (i < lines.Length && ErrorMessageLabelPattern().IsMatch(lines[i].TrimEnd('\r')))
+                {
                     i++;
+                }
 
                 // Collect message lines until "Stack Trace:", next failed test, or summary
                 var msgLines = new List<string>();
@@ -78,15 +82,21 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
                     {
                         break;
                     }
+
                     var trimmed = current.Trim();
                     if (!string.IsNullOrEmpty(trimmed))
+                    {
                         msgLines.Add(trimmed);
+                    }
+
                     i++;
                 }
 
                 // Skip "Stack Trace:" label
                 if (i < lines.Length && StackTraceLabelPattern().IsMatch(lines[i].TrimEnd('\r')))
+                {
                     i++;
+                }
 
                 // Find first stack frame with a .cs file reference
                 var sourceRef = string.Empty;
@@ -94,12 +104,18 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
                 {
                     var current = lines[i].TrimEnd('\r');
                     if (FailedTestHeaderPattern().IsMatch(current) || SummaryPattern().IsMatch(current))
+                    {
                         break;
+                    }
+
                     if (string.IsNullOrEmpty(sourceRef))
                     {
                         var frameMatch = StackFrameFilePattern().Match(current);
                         if (frameMatch.Success)
-                            sourceRef = $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, _rootPath)}:line {frameMatch.Groups["line"].Value}";
+                        {
+                            sourceRef =
+                                $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, _rootPath)}:line {frameMatch.Groups["line"].Value}";
+                        }
                     }
 
                     i++;
@@ -114,15 +130,22 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         // Zero tests: explicit no-tests pattern or all summaries showed 0 tests
         if (zeroTestsFound || (projectCount > 0 && totalPassed == 0 && totalFailed == 0))
+        {
             return "✓ dotnet test: 0 tests found\n";
+        }
 
         if (projectCount == 0)
+        {
             return string.Empty;
+        }
 
         var elapsed = $"{totalDurationMs / 1000.0:F2}s";
 
         if (totalFailed == 0)
-            return $"✓ dotnet test: {totalPassed} passed ({projectCount} project{(projectCount == 1 ? "" : "s")}, {elapsed})\n";
+        {
+            return
+                $"✓ dotnet test: {totalPassed} passed ({projectCount} project{(projectCount == 1 ? "" : "s")}, {elapsed})\n";
+        }
 
         var sb = new StringBuilder();
         sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({totalFailed}):");
@@ -130,15 +153,20 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         foreach (var f in failures.Take(MaxFailures))
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration} ms]")
-              .AppendLine(CultureInfo.InvariantCulture, $"    {f.Message}");
+                .AppendLine(CultureInfo.InvariantCulture, $"    {f.Message}");
             if (!string.IsNullOrEmpty(f.SourceRef))
+            {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"    at {f.SourceRef}");
+            }
         }
 
         if (failures.Count > MaxFailures)
+        {
             sb.AppendLine(CultureInfo.InvariantCulture, $"+{failures.Count - MaxFailures} more failures");
+        }
 
-        sb.AppendLine(CultureInfo.InvariantCulture, $"dotnet test: {totalFailed} failed, {totalPassed} passed ({projectCount} project{(projectCount == 1 ? "" : "s")}, {elapsed})");
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"dotnet test: {totalFailed} failed, {totalPassed} passed ({projectCount} project{(projectCount == 1 ? "" : "s")}, {elapsed})");
 
         return sb.ToString();
     }
@@ -148,29 +176,38 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private static string CompactMessage(List<string> lines)
     {
         if (lines.Count == 0)
+        {
             return string.Empty;
+        }
 
         // xUnit Assert.Equal multi-line: "Expected: ..." and "Actual: ..." on separate lines
         var expectedLine = lines.Find(l => l.StartsWith("Expected:", StringComparison.OrdinalIgnoreCase));
         var actualLine = lines.Find(l => l.StartsWith("Actual:", StringComparison.OrdinalIgnoreCase));
         if (expectedLine != null && actualLine != null)
+        {
             return TextHelpers.Truncate($"{expectedLine}, {actualLine}", MessageMaxLen);
+        }
 
         return TextHelpers.Truncate(string.Join(" ", lines), MessageMaxLen);
     }
 
-    private static double NormalizeDurationToMs(double value, string unit) => unit.ToLowerInvariant() switch
+    private static double NormalizeDurationToMs(double value, string unit)
     {
-        "ms" => value,
-        "s" => value * 1_000,
-        "m" => value * 60_000,
-        "h" => value * 3_600_000,
-        _ => value,
-    };
+        return unit.ToLowerInvariant() switch
+        {
+            "ms" => value,
+            "s" => value * 1_000,
+            "m" => value * 60_000,
+            "h" => value * 3_600_000,
+            _ => value
+        };
+    }
 
     // Summary: "Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 89 ms - File.dll"
     // Duration unit can be ms, s, m, or h
-    [GeneratedRegex(@"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+\d+,\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+)\s+(?<unit>ms|s|m|h)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(
+        @"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+\d+,\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+)\s+(?<unit>ms|s|m|h)",
+        RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
 
     // "  Failed FullyQualifiedTestName [12 ms]"

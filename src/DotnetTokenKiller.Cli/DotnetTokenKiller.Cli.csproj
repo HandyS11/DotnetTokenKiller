@@ -13,14 +13,14 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="../../README.md" Pack="true" PackagePath="\" />
+    <None Include="../../README.md" Pack="true" PackagePath="\"/>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Spectre.Console" />
-    <PackageReference Include="Spectre.Console.Cli" />
+    <PackageReference Include="Spectre.Console"/>
+    <PackageReference Include="Spectre.Console.Cli"/>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj" />
-    <ProjectReference Include="../DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj" />
+    <ProjectReference Include="../DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj"/>
+    <ProjectReference Include="../DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj"/>
   </ItemGroup>
 </Project>

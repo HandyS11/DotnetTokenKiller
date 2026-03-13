@@ -9,5 +9,7 @@ public sealed class NullTeeService : ITeeService
         string commandSlug,
         int exitCode,
         CancellationToken cancellationToken = default)
-        => Task.FromResult<string?>(null);
+    {
+        return Task.FromResult<string?>(null);
+    }
 }

@@ -39,7 +39,7 @@ public class DotnetBuildFilterTests
         var inputTokens = fixture.Length / 4;
         var outputTokens = result.Length / 4;
         var savings = 100.0 - (outputTokens * 100.0 / inputTokens);
-        savings.Should().BeGreaterThanOrEqualTo(85.0, because: "build success filter should achieve ≥85% savings");
+        savings.Should().BeGreaterThanOrEqualTo(85.0, "build success filter should achieve ≥85% savings");
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public class DotnetBuildFilterTests
         var inputTokens = fixture.Length / 4;
         var outputTokens = result.Length / 4;
         var savings = 100.0 - (outputTokens * 100.0 / inputTokens);
-        savings.Should().BeGreaterThanOrEqualTo(75.0, because: "build warnings filter should achieve ≥75% savings");
+        savings.Should().BeGreaterThanOrEqualTo(75.0, "build warnings filter should achieve ≥75% savings");
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class DotnetBuildFilterTests
         var inputTokens = fixture.Length / 4;
         var outputTokens = result.Length / 4;
         var savings = 100.0 - (outputTokens * 100.0 / inputTokens);
-        savings.Should().BeGreaterThanOrEqualTo(70.0, because: "build errors filter should achieve ≥70% savings");
+        savings.Should().BeGreaterThanOrEqualTo(70.0, "build errors filter should achieve ≥70% savings");
     }
 
     [Theory]

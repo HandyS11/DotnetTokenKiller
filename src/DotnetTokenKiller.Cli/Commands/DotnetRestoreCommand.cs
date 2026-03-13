@@ -9,7 +9,8 @@ public sealed class DotnetRestoreCommand(
     FilteredRunUseCase filteredRun,
     DotnetRestoreFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
+        CancellationToken cancellationToken)
     {
         var args = settings.PositionalArgs.Prepend("restore").Concat(context.Remaining.Raw).ToArray();
         return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken);
