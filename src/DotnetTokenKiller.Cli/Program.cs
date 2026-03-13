@@ -1,3 +1,4 @@
+using System.Reflection;
 using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
@@ -17,7 +18,10 @@ var app = new CommandApp(registrar);
 app.Configure(config =>
 {
     config.SetApplicationName("dtk");
-    config.SetApplicationVersion("0.1.0");
+    var version = typeof(Program).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+        ?.InformationalVersion ?? "0.0.0";
+    config.SetApplicationVersion(version);
     config.Settings.StrictParsing = false;
 
     config.AddBranch("dotnet", dotnet =>

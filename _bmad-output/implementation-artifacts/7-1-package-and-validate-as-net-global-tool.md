@@ -1,6 +1,6 @@
 # Story 7.1: Package and Validate as .NET Global Tool
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -203,10 +203,13 @@ None.
 
 ### File List
 
-- `src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj` (modified — added `PackageReadmeFile`, `<None Pack>` item)
-- `src/DotnetTokenKiller.Cli/Program.cs` (modified — added `config.SetApplicationVersion("0.1.0")`)
-- `README.md` (modified — expanded with installation, usage, configuration sections)
+- `src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj` (modified — added `PackageReadmeFile`, `<None Pack>` item; fixed XML formatting)
+- `src/DotnetTokenKiller.Cli/Program.cs` (modified — version read dynamically from `AssemblyInformationalVersionAttribute`)
+- `README.md` (modified — expanded with installation, usage; corrected configuration example to real `DtkConfig` structure)
+- `tests/DotnetTokenKiller.Cli.IntegrationTests/DotnetTokenKiller.Cli.IntegrationTests.csproj` (modified — added project reference to Cli, added `Spectre.Console.Testing`)
+- `tests/DotnetTokenKiller.Cli.IntegrationTests/VersionTests.cs` (created — asserts CLI assembly carries a valid informational version)
 
 ## Change Log
 
 - 2026-03-13: Implemented Story 7.1 — added NuGet packaging metadata (`PackageReadmeFile`, README `<None Pack>` item), expanded README.md, added `SetApplicationVersion` to Program.cs. Pack produces `DotnetTokenKiller.0.1.0.nupkg`; `dtk --version` outputs `0.1.0`; end-to-end smoke test passes. 199 tests, 0 failures.
+- 2026-03-13: Code review fixes — version now read dynamically from `AssemblyInformationalVersionAttribute` (eliminates dual-hardcoding drift risk); corrected README config example (was showing nonexistent `verbosity` field, now shows real `DtkConfig` structure); fixed csproj XML formatting; added `VersionTests` to integration test project. 200 tests, 0 failures.

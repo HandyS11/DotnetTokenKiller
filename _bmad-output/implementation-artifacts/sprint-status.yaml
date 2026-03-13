@@ -80,6 +80,6 @@ development_status:
   epic-6-retrospective: done
 
   epic-7: in-progress
-  7-1-package-and-validate-as-net-global-tool: review
-  7-2-expand-ci-cd-quality-gate-pipeline-to-full-quality-enforcement: backlog
+  7-1-package-and-validate-as-net-global-tool: done
+  7-2-expand-ci-cd-quality-gate-pipeline-to-full-quality-enforcement: done
   epic-7-retrospective: optional

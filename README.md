@@ -47,6 +47,8 @@ DTK supports optional JSON configuration at `~/.config/dtk/config.json`:
 
 ```json
 {
-  "verbosity": "normal"
+  "tracking": { "enabled": true, "retentionDays": 90 },
+  "display":  { "colors": true, "emoji": true },
+  "tee":      { "mode": "failures" }
 }
 ```
