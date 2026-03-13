@@ -1,10 +1,10 @@
-using System.Reflection;
 using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Spectre.Console.Cli;
+using System.Reflection;
 using DtkTypeRegistrar = DotnetTokenKiller.Cli.Infrastructure.TypeRegistrar;
 
 var services = new ServiceCollection();
