@@ -15,7 +15,9 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(this IServiceCollection services)
     {
         services.AddSingleton<ICommandRunner, ProcessCommandRunner>();
-        services.AddSingleton<ITracker, NullTracker>();
+        var dbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH")
+            ?? SqliteTracker.GetDefaultDbPath();
+        services.AddSingleton<ITracker>(_ => new SqliteTracker($"Data Source={dbPath}"));
         services.AddSingleton<IConfigProvider, NullConfigProvider>();
         services.AddSingleton<ITeeService, NullTeeService>();
         return services;
