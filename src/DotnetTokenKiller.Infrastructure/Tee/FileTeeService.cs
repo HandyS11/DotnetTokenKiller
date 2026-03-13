@@ -85,7 +85,13 @@ public sealed partial class FileTeeService : ITeeService
             return;
         }
 
-        var files = Directory.GetFiles(teeDir).Order().ToList();
+        if (!Directory.Exists(teeDir))
+        {
+            return;
+        }
+
+        // Only rotate expected tee artifacts (log files) to avoid deleting unrelated files.
+        var files = Directory.GetFiles(teeDir, "*.log").Order().ToList();
         var excess = files.Count - maxFiles + 1; // +1 to make room for new file
         for (var i = 0; i < excess; i++)
         {
