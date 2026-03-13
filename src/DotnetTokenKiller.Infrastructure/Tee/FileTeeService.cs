@@ -60,7 +60,7 @@ public sealed partial class FileTeeService : ITeeService
             RotateFiles(teeDir, teeConfig.MaxFiles);
 
             // Truncate content
-            var maxChars = (int)Math.Min(teeConfig.MaxFileSizeBytes, int.MaxValue);
+            var maxChars = Math.Max(0, (int)Math.Min(teeConfig.MaxFileSizeBytes, int.MaxValue));
             var content = rawOutput.Length > maxChars ? rawOutput[..maxChars] : rawOutput;
 
             // Write file
