@@ -1,5 +1,5 @@
 ---
-stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation]
+stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories, step-04-final-validation, step-review-2026-03-14]
 inputDocuments:
   - _bmad-output/planning-artifacts/PRD.md
   - _bmad-output/planning-artifacts/Architecture.md
@@ -107,6 +107,7 @@ FR21: Epic 1 — Path shortening
 FR22: Epic 7 — Global tool distribution
 FR23: Epic 5 — 90-day retention cleanup
 FR24: Epic 1 — Token estimation (chars/4 heuristic)
+FR25: Epic 8 — Sample projects & CLI integration test suite
 
 ## Epic List
 
@@ -144,6 +145,11 @@ Users can customize DTK's behavior via a JSON config file (tracking retention, d
 
 Any .NET developer can install DTK with `dotnet tool install -g DotnetTokenKiller`. The tool is correctly packaged as a NuGet global tool with metadata, versioning, and a CI/CD quality gate pipeline.
 **FRs covered:** FR22
+
+### Epic 8: Sample Projects & End-to-End Integration Tests
+
+A `/sample` folder at the repo root contains purpose-built .NET projects that `Cli.IntegrationTests` runs `dtk` against — validating every filter produces correct output and meets token reduction targets under real SDK conditions.
+**FRs covered:** FR25
 
 ---
 
@@ -893,3 +899,321 @@ So that no PR can merge with formatting violations, build warnings, or failing t
 **And** the workflow file exists at `.github/workflows/quality-gate.yml`
 **And** the workflow runs on `ubuntu-latest`
 **And** `dotnet test DotnetTokenKiller.slnx` passes locally before the pipeline is pushed
+
+---
+
+## Epic 8: Sample Projects & End-to-End Integration Tests
+
+A `/sample` folder at the repo root contains purpose-built .NET projects that `DotnetTokenKiller.Cli.IntegrationTests` runs `dtk` against — validating every filter produces correct output under both success and failure conditions, and meets token reduction targets under real SDK conditions. These tests run as part of `dotnet test DotnetTokenKiller.slnx` with no special opt-in required.
+
+**FRs covered:** FR25
+
+---
+
+### Story 8.1: Scaffold Sample Solution
+
+As a developer,
+I want a `/sample` folder containing small .NET projects that cover every `dtk` command scenario including failure paths,
+So that integration tests have a stable, realistic foundation to run against without any runtime file injection.
+
+**Acceptance Criteria:**
+
+**Given** the repository root contains a `sample/` folder with the following structure:
+
+```sh
+sample/
+├── DotnetTokenKiller.Sample.slnx
+├── SampleApp/                  # console app — build, run, publish, pack, clean, restore (success)
+├── SampleApp.Tests/            # xunit project — test (success + failure)
+├── SampleApp.EfCore/           # EF Core project — ef (success + failure)
+├── SampleApp.Broken/           # project with deliberate compile error — build, publish, pack (failure)
+└── SampleApp.BadPackage/       # project referencing a non-existent NuGet package — restore (failure)
+```
+
+**When** `dotnet build sample/DotnetTokenKiller.Sample.slnx` is run
+**Then** `SampleApp`, `SampleApp.Tests`, and `SampleApp.EfCore` build without errors
+**And** `SampleApp.Broken` and `SampleApp.BadPackage` are intentionally broken and expected to fail — they are NOT built by this command (excluded from the solution build target or documented as fixture-only)
+**And** all buildable projects inherit `net10.0`, `LangVersion=14`, `Nullable=enable`, and `TreatWarningsAsErrors=true` from the root `Directory.Build.props` with no `<TargetFramework>` or `<LangVersion>` overrides in their `.csproj` files
+
+**Given** `SampleApp` is a console application
+**When** its source is inspected
+**Then** `Program.cs` prints at least one line to stdout (to exercise `dtk dotnet run` output preservation)
+**And** `Program.cs` checks for a `--fail` argument and calls `Environment.Exit(1)` when present (to exercise `dtk dotnet run` failure path)
+**And** it is configured with `<PackageId>SampleApp</PackageId>` and `<Version>1.0.0</Version>` (to exercise `dtk dotnet pack`)
+
+**Given** `SampleApp.Tests` is an xunit test project
+**When** its source is inspected
+**Then** it contains at least 3 passing tests and exactly 1 intentionally failing test (`Assert.True(false, "Intentional failure")`)
+**And** the failing test is in a class named `IntentionallyFailingTests` so integration tests can target or exclude it deterministically via `--filter`
+
+**Given** `SampleApp.EfCore` is a class library project
+**When** its source is inspected
+**Then** it references `Microsoft.EntityFrameworkCore.Sqlite` and `Microsoft.EntityFrameworkCore.Design`
+**And** it contains a `SampleDbContext` with at least one `DbSet<>` entity
+**And** it contains exactly one committed EF migration named `InitialCreate` (generated with `dotnet ef migrations add InitialCreate`, migration files committed — not generated at test time)
+
+**Given** `SampleApp.Broken` is a console application
+**When** its source is inspected
+**Then** it contains a `.cs` file with a deliberate syntax error (e.g., `int x = "not an int";`) that causes a `CS`-prefixed compiler error with a file path and line number
+**And** it has no other errors so the error count is deterministic (exactly 1 error)
+
+**Given** `SampleApp.BadPackage` is a class library project
+**When** its source is inspected
+**Then** its `.csproj` references a NuGet package that does not exist (e.g., `<PackageReference Include="DotnetTokenKiller.DoesNotExist" Version="99.0.0" />`)
+**And** `<RestoreLockedMode>false</RestoreLockedMode>` is NOT set so restore actually attempts and fails with a `NU1101` error
+
+**And** the `sample/` folder is NOT added to `DotnetTokenKiller.slnx`
+**And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
+
+---
+
+### Story 8.2: Integration Tests for build, restore, and clean
+
+As a developer,
+I want integration tests that invoke `dtk dotnet build`, `dtk dotnet restore`, and `dtk dotnet clean` against real sample projects — covering both success and failure paths for each command,
+So that filter correctness, output format, exit codes, and token reduction targets are all validated under actual SDK conditions.
+
+**Acceptance Criteria:**
+
+**— dotnet build —**
+
+**Given** `dtk dotnet build` is invoked against `sample/SampleApp`
+**When** the build succeeds
+**Then** the output is a single line starting with `✓ dotnet build`
+**And** no MSBuild noise is present (version header, restore lines, "Build succeeded.", blank lines)
+**And** the exit code is 0
+**And** token savings is ≥80%
+
+**Given** `dtk dotnet build` is invoked against `sample/SampleApp.Broken`
+**When** the build fails
+**Then** the output starts with `dotnet build: 1 error`
+**And** the error line contains a shortened file path and line number
+**And** no MSBuild noise lines are present in the output
+**And** the exit code is non-zero
+**And** token savings is ≥70%
+
+**— dotnet restore —**
+
+**Given** `dtk dotnet restore` is invoked against `sample/SampleApp`
+**When** restore succeeds
+**Then** the output is a single line starting with `✓ dotnet restore`
+**And** no package download progress lines or "Writing assets file" lines are present
+**And** the exit code is 0
+**And** token savings is ≥90%
+
+**Given** `dtk dotnet restore` is invoked against `sample/SampleApp.BadPackage`
+**When** restore fails with a `NU1101` package-not-found error
+**Then** the output starts with `dotnet restore: 1 error(s)`
+**And** the `NU1101` error code and package name are present in the output
+**And** no package download progress lines are present
+**And** the exit code is non-zero
+
+**— dotnet clean —**
+
+**Given** `dtk dotnet clean` is invoked against `sample/SampleApp` after a prior successful build
+**When** clean succeeds
+**Then** the output is exactly `✓ dotnet clean`
+**And** the exit code is 0
+**And** token savings is ≥95%
+
+**Given** `dtk dotnet clean` is invoked against `sample/SampleApp.Broken` (unbuildable project)
+**When** clean runs (clean does not require a prior successful build)
+**Then** the exit code is 0 and the output is `✓ dotnet clean` (clean succeeds even on broken projects)
+
+**And** all integration tests in this story are in `DotnetTokenKiller.Cli.IntegrationTests`
+**And** a shared `IntegrationTestHelper` class resolves the `dtk` CLI executable path (from the built `DotnetTokenKiller.Cli` output DLL relative to `Environment.CurrentDirectory`) and resolves the `sample/` folder path (navigating up to the repo root)
+**And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
+
+---
+
+### Story 8.3: Integration Tests for test
+
+As a developer,
+I want integration tests that invoke `dtk dotnet test` against `SampleApp.Tests` — covering both all-pass and with-failures scenarios,
+So that the test filter output format, exit codes, and savings targets are validated against real xunit output.
+
+**Acceptance Criteria:**
+
+**— Success path —**
+
+**Given** `dtk dotnet test` is invoked against `sample/SampleApp.Tests` with `--filter "FullyQualifiedName!~IntentionallyFailing"`
+**When** all selected tests pass
+**Then** the output is a single line starting with `✓ dotnet test: N passed`
+**And** no test runner header, copyright lines, or "Starting test execution" lines are present
+**And** the exit code is 0
+**And** token savings is ≥90%
+
+**— Failure path —**
+
+**Given** `dtk dotnet test` is invoked against `sample/SampleApp.Tests` without any filter
+**When** the run completes with the intentionally failing test
+**Then** the output begins with `FAILURES (1):`
+**And** the failing test name (`IntentionallyFailingTests`) is present
+**And** the compacted error message is present on a single line (max 200 chars)
+**And** the summary line shows `dotnet test: 1 failed, N passed`
+**And** no test runner noise lines are present
+**And** the exit code is non-zero
+**And** token savings is ≥70%
+
+**And** all integration tests in this story are in `DotnetTokenKiller.Cli.IntegrationTests`
+**And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
+
+---
+
+### Story 8.4: Integration Tests for publish, pack, and run
+
+As a developer,
+I want integration tests that invoke `dtk dotnet publish`, `dtk dotnet pack`, and `dtk dotnet run` — covering both success and failure paths for each,
+So that output path extraction, preamble stripping, and exit code propagation are validated against real MSBuild and process output.
+
+**Acceptance Criteria:**
+
+**— dotnet publish —**
+
+**Given** `dtk dotnet publish` is invoked against `sample/SampleApp`
+**When** publish succeeds
+**Then** the output is a single line starting with `✓ dotnet publish →`
+**And** the output contains the shortened publish output path ending in `publish/`
+**And** no MSBuild restore or compile noise is present
+**And** the exit code is 0
+**And** token savings is ≥80%
+
+**Given** `dtk dotnet publish` is invoked against `sample/SampleApp.Broken`
+**When** publish fails due to the compile error
+**Then** the output starts with `dotnet publish: 1 error`
+**And** the error line contains a shortened file path and line number
+**And** the exit code is non-zero
+**And** token savings is ≥70%
+
+**— dotnet pack —**
+
+**Given** `dtk dotnet pack` is invoked against `sample/SampleApp`
+**When** pack succeeds
+**Then** the output is a single line starting with `✓ dotnet pack → SampleApp.1.0.0.nupkg`
+**And** no MSBuild noise is present
+**And** the exit code is 0
+**And** token savings is ≥85%
+
+**Given** `dtk dotnet pack` is invoked against `sample/SampleApp.Broken`
+**When** pack fails due to the compile error
+**Then** the output starts with `dotnet pack: 1 error`
+**And** the error line contains a shortened file path and line number
+**And** the exit code is non-zero
+
+**— dotnet run —**
+
+**Given** `dtk dotnet run` is invoked against `sample/SampleApp` (no extra arguments)
+**When** the application runs and exits with code 0
+**Then** the application's stdout output from `Program.cs` is present in the output
+**And** no MSBuild build preamble lines are present (`MSBuild version`, `Determining projects to restore`, `Build started`, lines matching `→ .dll`)
+**And** the exit code is 0
+**And** token savings is ≥60%
+
+**Given** `dtk dotnet run` is invoked against `sample/SampleApp` with `-- --fail`
+**When** the application calls `Environment.Exit(1)`
+**Then** the application's stdout output is still present (output before exit is preserved)
+**And** no MSBuild build preamble lines are present
+**And** the exit code is 1
+
+**And** all integration tests in this story are in `DotnetTokenKiller.Cli.IntegrationTests`
+**And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
+
+---
+
+### Story 8.5: Integration Tests for format, nuget, and passthrough
+
+As a developer,
+I want integration tests that invoke `dtk dotnet format`, `dtk dotnet nuget`, and passthrough for unrecognized subcommands — covering both success and failure paths,
+So that the remaining filters and passthrough mode are fully validated end-to-end.
+
+**Acceptance Criteria:**
+
+**— dotnet format —**
+
+**Given** `dtk dotnet format --verify-no-changes` is invoked against `sample/SampleApp` (correctly formatted)
+**When** format finds no issues
+**Then** the output is `✓ dotnet format (no changes)`
+**And** the exit code is 0
+
+**Given** the test copies `sample/SampleApp` to a temp directory, injects a formatting violation (trailing whitespace on a line), then invokes `dtk dotnet format --verify-no-changes` against the temp copy
+**When** format detects files needing changes
+**Then** the output starts with `dotnet format: N files need formatting`
+**And** the filename of the modified file appears in the output shortened to a relative path
+**And** the exit code is non-zero
+**And** the temp directory is deleted in test teardown regardless of test outcome
+
+**— dotnet nuget —**
+
+**Given** `dtk dotnet nuget locals all --list` is invoked
+**When** nuget executes successfully
+**Then** progress bar characters and download indicator lines are absent from the output
+**And** at least one NuGet cache location line (e.g., `http-cache:`) is present
+**And** the exit code is 0
+
+**Given** `dtk dotnet nuget push nonexistent.nupkg --source https://api.nuget.org/v3/index.json` is invoked
+**When** the push fails because the file does not exist
+**Then** the output contains the error message from nuget (file not found or similar)
+**And** the exit code is non-zero
+
+**— passthrough —**
+
+**Given** `dtk dotnet --version` is invoked (unrecognized subcommand, passthrough mode)
+**When** the command executes
+**Then** the raw output from `dotnet --version` is returned unchanged (no filtering applied)
+**And** the exit code is 0
+
+**Given** `dtk dotnet build /nonexistent.csproj` is invoked (unrecognized project path passed through build — actually this goes via build filter; use `dtk dotnet fsi nonexistent.fsx` or another unrecognized subcommand that exits non-zero)
+**When** the passthrough command exits with a non-zero code
+**Then** the raw output is returned unchanged
+**And** the exit code exactly matches what the underlying `dotnet` command returns
+
+**And** all integration tests in this story are in `DotnetTokenKiller.Cli.IntegrationTests`
+**And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
+
+---
+
+### Story 8.6: Integration Tests for ef
+
+As a developer,
+I want integration tests that invoke `dtk dotnet ef` against `SampleApp.EfCore` — covering both success and failure paths,
+So that the EF filter output format and exit code propagation are validated against real `dotnet ef` tool output.
+
+**Acceptance Criteria:**
+
+**— Success paths —**
+
+**Given** `dtk dotnet ef migrations list` is invoked against `sample/SampleApp.EfCore`
+**When** the command runs
+**Then** the output is compact: `1 migration (latest: InitialCreate)`
+**And** the EF CLI banner/logo lines and build preamble are absent
+**And** the exit code is 0
+**And** token savings is ≥70%
+
+**Given** `dtk dotnet ef database update` is invoked against `sample/SampleApp.EfCore` with a `--connection` pointing to a temp SQLite file
+**When** the database update succeeds (applies `InitialCreate`)
+**Then** the output starts with `✓ database updated (1 migration applied)`
+**And** verbose SQL execution logs and build preamble are absent
+**And** the exit code is 0
+
+**— Failure paths —**
+
+**Given** `dtk dotnet ef migrations add InitialCreate` is invoked against `sample/SampleApp.EfCore` (migration already exists)
+**When** the command fails because the migration name is already taken
+**Then** the output contains the EF error message indicating the migration already exists
+**And** no EF banner or build preamble lines are present
+**And** the exit code is non-zero
+
+**Given** `dtk dotnet ef database update` is invoked against `sample/SampleApp.EfCore` with a `--connection` pointing to a read-only path
+**When** the command fails due to a database access error
+**Then** the output contains the error details
+**And** the exit code is non-zero
+
+**— Tool availability —**
+
+**Given** the `dotnet-ef` global tool is not installed in the test environment
+**When** any `dtk dotnet ef` integration test runs
+**Then** the test is skipped with the message: `"dotnet-ef tool not found — skipping EF integration tests"`
+
+**And** the test uses a temp directory for all SQLite database files, cleaned up in test teardown regardless of outcome
+**And** all integration tests in this story are in `DotnetTokenKiller.Cli.IntegrationTests`
+**And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
