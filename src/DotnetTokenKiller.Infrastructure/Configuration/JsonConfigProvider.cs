@@ -34,7 +34,11 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
 
     public async Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
     {
-        var directory = Path.GetDirectoryName(configPath)!;
+        var directory = Path.GetDirectoryName(configPath);
+        if (string.IsNullOrEmpty(directory))
+        {
+            directory = Environment.CurrentDirectory;
+        }
         Directory.CreateDirectory(directory);
         var json = JsonSerializer.Serialize(config, DtkConfigJsonContext.Default.DtkConfig);
         await File.WriteAllTextAsync(configPath, json, cancellationToken);
