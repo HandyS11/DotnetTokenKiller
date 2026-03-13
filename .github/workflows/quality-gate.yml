@@ -20,6 +20,9 @@ jobs:
       - name: Restore
         run: dotnet restore DotnetTokenKiller.slnx
 
+      - name: Format
+        run: dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
+
       - name: Build
         run: dotnet build DotnetTokenKiller.slnx --no-restore -warnaserror
 

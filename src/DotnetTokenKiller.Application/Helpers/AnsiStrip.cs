@@ -11,7 +11,9 @@ public static partial class AnsiStrip
     public static string Strip(string text)
     {
         if (string.IsNullOrEmpty(text))
+        {
             return text;
+        }
 
         return CsiPattern().Replace(text, string.Empty);
     }

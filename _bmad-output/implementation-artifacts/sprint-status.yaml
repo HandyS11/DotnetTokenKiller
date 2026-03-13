@@ -79,7 +79,7 @@ development_status:
   6-2-implement-tee-output-recovery: done
   epic-6-retrospective: done
 
-  epic-7: backlog
-  7-1-package-and-validate-as-net-global-tool: backlog
-  7-2-expand-ci-cd-quality-gate-pipeline-to-full-quality-enforcement: backlog
-  epic-7-retrospective: optional
+  epic-7: done
+  7-1-package-and-validate-as-net-global-tool: done
+  7-2-expand-ci-cd-quality-gate-pipeline-to-full-quality-enforcement: done
+  epic-7-retrospective: done

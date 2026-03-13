@@ -52,7 +52,10 @@ public class GainReportUseCaseTests
     [Fact]
     public async Task GetSummaryAsync_ReturnsSummaryFromTracker()
     {
-        var expected = new GainSummary(5, 1000, 200, 800, 80.0, new Dictionary<string, int> { ["build"] = 800 });
+        var expected = new GainSummary(5, 1000, 200, 800, 80.0, new Dictionary<string, int>
+        {
+            ["build"] = 800
+        });
         _tracker.GetSummaryAsync(Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(expected);
 
         var result = await _sut.GetSummaryAsync(30, null);

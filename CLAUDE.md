@@ -38,7 +38,8 @@ git config core.hooksPath .githooks
 - **Target framework**: net10.0
 - **CLI framework**: Spectre.Console + Spectre.Console.Cli
 - **Testing**: xunit + FluentAssertions + Spectre.Console.Testing
-- **Package management**: Central via `Directory.Packages.props` — all version numbers go there, `.csproj` files omit versions
+- **Package management**: Central via `Directory.Packages.props` — all version numbers go there, `.csproj` files omit
+  versions
 
 ## Code Style
 

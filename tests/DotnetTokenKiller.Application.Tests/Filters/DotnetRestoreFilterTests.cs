@@ -64,9 +64,9 @@ public class DotnetRestoreFilterTests
     public void Apply_MixedRestoredAndUpToDate_SumsCounts()
     {
         const string input = """
-            Restored C:\Code\Proj1.csproj (in 100 ms).
-            3 of 5 projects are up-to-date for restore.
-            """;
+                             Restored C:\Code\Proj1.csproj (in 100 ms).
+                             3 of 5 projects are up-to-date for restore.
+                             """;
         // totalProjects = 1 (restored) + 3 (up-to-date) = 4
         var result = _sut.Apply(input);
         result.Should().Be("✓ dotnet restore (4 projects, 0.10s)\n");

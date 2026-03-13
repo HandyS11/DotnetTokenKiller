@@ -39,6 +39,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         {
             directory = Environment.CurrentDirectory;
         }
+
         Directory.CreateDirectory(directory);
         var json = JsonSerializer.Serialize(config, DtkConfigJsonContext.Default.DtkConfig);
         await File.WriteAllTextAsync(configPath, json, cancellationToken);

@@ -31,7 +31,9 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
 
         var dir = Path.GetDirectoryName(csb.DataSource);
         if (!string.IsNullOrWhiteSpace(dir))
+        {
             Directory.CreateDirectory(dir);
+        }
     }
 
     private async Task EnsureInitializedAsync(CancellationToken ct)
@@ -51,20 +53,20 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
     {
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS commands (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                command TEXT NOT NULL,
-                project_path TEXT NOT NULL,
-                input_tokens INTEGER NOT NULL,
-                output_tokens INTEGER NOT NULL,
-                saved_tokens INTEGER NOT NULL,
-                savings_percentage REAL NOT NULL,
-                execution_time_ms REAL NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
-            """;
+                          CREATE TABLE IF NOT EXISTS commands (
+                              id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              timestamp TEXT NOT NULL,
+                              command TEXT NOT NULL,
+                              project_path TEXT NOT NULL,
+                              input_tokens INTEGER NOT NULL,
+                              output_tokens INTEGER NOT NULL,
+                              saved_tokens INTEGER NOT NULL,
+                              savings_percentage REAL NOT NULL,
+                              execution_time_ms REAL NOT NULL
+                          );
+                          CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
+                          CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
+                          """;
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -73,10 +75,10 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         await EnsureInitializedAsync(cancellationToken);
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                saved_tokens, savings_percentage, execution_time_ms)
-            VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms)
-            """;
+                          INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
+                              saved_tokens, savings_percentage, execution_time_ms)
+                          VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms)
+                          """;
         cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("O", CultureInfo.InvariantCulture));
         cmd.Parameters.AddWithValue("@cmd", record.Command);
         cmd.Parameters.AddWithValue("@path", record.ProjectPath);
@@ -99,17 +101,17 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
 
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
-            SELECT command,
-                   COUNT(*) as run_count,
-                   SUM(input_tokens) as total_input,
-                   SUM(output_tokens) as total_output,
-                   SUM(saved_tokens) as total_saved,
-                   AVG(savings_percentage) as avg_pct
-            FROM commands
-            WHERE timestamp >= @since
-              AND (@path IS NULL OR project_path = @path)
-            GROUP BY command
-            """;
+                          SELECT command,
+                                 COUNT(*) as run_count,
+                                 SUM(input_tokens) as total_input,
+                                 SUM(output_tokens) as total_output,
+                                 SUM(saved_tokens) as total_saved,
+                                 AVG(savings_percentage) as avg_pct
+                          FROM commands
+                          WHERE timestamp >= @since
+                            AND (@path IS NULL OR project_path = @path)
+                          GROUP BY command
+                          """;
         cmd.Parameters.AddWithValue("@since", since);
         cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
 
@@ -154,13 +156,13 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
 
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = """
-            SELECT timestamp, command, project_path, input_tokens, output_tokens,
-                   saved_tokens, savings_percentage, execution_time_ms
-            FROM commands
-            WHERE timestamp >= @since
-              AND (@path IS NULL OR project_path = @path)
-            ORDER BY timestamp DESC
-            """;
+                          SELECT timestamp, command, project_path, input_tokens, output_tokens,
+                                 saved_tokens, savings_percentage, execution_time_ms
+                          FROM commands
+                          WHERE timestamp >= @since
+                            AND (@path IS NULL OR project_path = @path)
+                          ORDER BY timestamp DESC
+                          """;
         cmd.Parameters.AddWithValue("@since", since);
         cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
 
@@ -169,15 +171,17 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         while (await reader.ReadAsync(cancellationToken))
         {
             results.Add(new CommandRecord(
-                Timestamp: DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-                Command: reader.GetString(1),
-                ProjectPath: reader.GetString(2),
-                InputTokens: reader.GetInt32(3),
-                OutputTokens: reader.GetInt32(4),
-                SavedTokens: reader.GetInt32(5),
-                SavingsPercentage: reader.GetDouble(6),
-                ExecutionTime: TimeSpan.FromMilliseconds(reader.GetDouble(7))));
+                DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4),
+                reader.GetInt32(5),
+                reader.GetDouble(6),
+                TimeSpan.FromMilliseconds(reader.GetDouble(7))));
         }
+
         return results;
     }
 
@@ -191,7 +195,10 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public void Dispose() => _connection.Dispose();
+    public void Dispose()
+    {
+        _connection.Dispose();
+    }
 
     public async ValueTask DisposeAsync()
     {

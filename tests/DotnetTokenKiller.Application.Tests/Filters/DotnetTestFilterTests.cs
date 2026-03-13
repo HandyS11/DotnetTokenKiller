@@ -29,7 +29,7 @@ public class DotnetTestFilterTests
         var fixture = LoadFixture("dotnet_test_all_pass.txt");
         var result = _sut.Apply(fixture);
         var savings = 100.0 - (result.Length * 100.0 / fixture.Length);
-        savings.Should().BeGreaterThanOrEqualTo(90.0, because: "test all-pass filter should achieve ≥90% savings");
+        savings.Should().BeGreaterThanOrEqualTo(90.0, "test all-pass filter should achieve ≥90% savings");
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class DotnetTestFilterTests
         var fixture = LoadFixture("dotnet_test_failures.txt");
         var result = _sut.Apply(fixture);
         var savings = 100.0 - (result.Length * 100.0 / fixture.Length);
-        savings.Should().BeGreaterThanOrEqualTo(70.0, because: "test failures filter should achieve ≥70% savings");
+        savings.Should().BeGreaterThanOrEqualTo(70.0, "test failures filter should achieve ≥70% savings");
     }
 
     [Theory]

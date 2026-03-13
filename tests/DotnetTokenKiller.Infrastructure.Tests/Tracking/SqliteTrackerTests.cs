@@ -22,16 +22,18 @@ public class SqliteTrackerTests : IAsyncDisposable
         int outputTokens = 150,
         int savedTokens = 850,
         double savingsPct = 85.0,
-        DateTimeOffset? timestamp = null) =>
-        new(
-            Timestamp: timestamp ?? DateTimeOffset.UtcNow,
-            Command: command,
-            ProjectPath: projectPath,
-            InputTokens: inputTokens,
-            OutputTokens: outputTokens,
-            SavedTokens: savedTokens,
-            SavingsPercentage: savingsPct,
-            ExecutionTime: TimeSpan.FromMilliseconds(500));
+        DateTimeOffset? timestamp = null)
+    {
+        return new CommandRecord(
+            timestamp ?? DateTimeOffset.UtcNow,
+            command,
+            projectPath,
+            inputTokens,
+            outputTokens,
+            savedTokens,
+            savingsPct,
+            TimeSpan.FromMilliseconds(500));
+    }
 
     [Fact]
     public async Task RecordAsync_PersistsRecord_RetrievableViaGetHistoryAsync()
@@ -48,13 +50,13 @@ public class SqliteTrackerTests : IAsyncDisposable
     {
         var ts = DateTimeOffset.UtcNow.AddDays(-1);
         var record = MakeRecord(
-            command: "test",
-            projectPath: "/my/project",
-            inputTokens: 2000,
-            outputTokens: 200,
-            savedTokens: 1800,
-            savingsPct: 90.0,
-            timestamp: ts);
+            "test",
+            "/my/project",
+            2000,
+            200,
+            1800,
+            90.0,
+            ts);
 
         await _sut.RecordAsync(record);
         var history = await _sut.GetHistoryAsync(365, null);
@@ -84,9 +86,9 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task GetSummaryAsync_AggregatesCorrectly()
     {
-        await _sut.RecordAsync(MakeRecord(command: "build", savedTokens: 800));
-        await _sut.RecordAsync(MakeRecord(command: "build", savedTokens: 900));
-        await _sut.RecordAsync(MakeRecord(command: "test", savedTokens: 500));
+        await _sut.RecordAsync(MakeRecord("build", savedTokens: 800));
+        await _sut.RecordAsync(MakeRecord("build", savedTokens: 900));
+        await _sut.RecordAsync(MakeRecord("test", savedTokens: 500));
 
         var summary = await _sut.GetSummaryAsync(30, null);
 
@@ -123,8 +125,8 @@ public class SqliteTrackerTests : IAsyncDisposable
     {
         var ts1 = DateTimeOffset.UtcNow.AddMinutes(-10);
         var ts2 = DateTimeOffset.UtcNow.AddMinutes(-5);
-        await _sut.RecordAsync(MakeRecord(command: "first", timestamp: ts1));
-        await _sut.RecordAsync(MakeRecord(command: "second", timestamp: ts2));
+        await _sut.RecordAsync(MakeRecord("first", timestamp: ts1));
+        await _sut.RecordAsync(MakeRecord("second", timestamp: ts2));
 
         var history = await _sut.GetHistoryAsync(1, null);
 

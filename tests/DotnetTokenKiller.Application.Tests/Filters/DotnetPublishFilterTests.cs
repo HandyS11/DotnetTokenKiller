@@ -39,12 +39,12 @@ public class DotnetPublishFilterTests
     public void Apply_BuildError_ShowsErrorGroupingFormat()
     {
         const string input = """
-            MSBuild version 17.11.9+a69bbaaf5 for .NET
-              /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs(5,1): error CS0001: Type or namespace 'Foo' not found [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj]
-            Build FAILED.
-                1 Error(s)
-            Time Elapsed 00:00:01.00
-            """;
+                             MSBuild version 17.11.9+a69bbaaf5 for .NET
+                               /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs(5,1): error CS0001: Type or namespace 'Foo' not found [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj]
+                             Build FAILED.
+                                 1 Error(s)
+                             Time Elapsed 00:00:01.00
+                             """;
         var result = _sut.Apply(input);
         result.Should().StartWith("dotnet publish: 1 error");
         result.Should().Contain("CS0001");

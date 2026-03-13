@@ -14,13 +14,15 @@ public sealed class ProcessCommandRunner : ICommandRunner
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false,
+            UseShellExecute = false
         };
         foreach (var arg in args)
+        {
             psi.ArgumentList.Add(arg);
+        }
 
         using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start process: {command}");
+                            ?? throw new InvalidOperationException($"Failed to start process: {command}");
 
         // CRITICAL: Read both streams concurrently — sequential reads deadlock on large output
         var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
@@ -37,12 +39,17 @@ public sealed class ProcessCommandRunner : ICommandRunner
         IReadOnlyList<string> args,
         CancellationToken cancellationToken = default)
     {
-        var psi = new ProcessStartInfo(command) { UseShellExecute = false };
+        var psi = new ProcessStartInfo(command)
+        {
+            UseShellExecute = false
+        };
         foreach (var arg in args)
+        {
             psi.ArgumentList.Add(arg);
+        }
 
         using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start process: {command}");
+                            ?? throw new InvalidOperationException($"Failed to start process: {command}");
 
         await process.WaitForExitAsync(cancellationToken);
         return process.ExitCode;

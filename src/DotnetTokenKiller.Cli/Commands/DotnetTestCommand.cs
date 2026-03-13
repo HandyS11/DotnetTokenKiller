@@ -9,7 +9,8 @@ public sealed class DotnetTestCommand(
     FilteredRunUseCase filteredRun,
     DotnetTestFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings, CancellationToken cancellationToken)
+    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
+        CancellationToken cancellationToken)
     {
         var args = settings.PositionalArgs.Prepend("test").Concat(context.Remaining.Raw).ToArray();
         return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken);

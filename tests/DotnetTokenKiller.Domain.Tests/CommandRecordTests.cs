@@ -13,14 +13,14 @@ public class CommandRecordTests
         var executionTime = TimeSpan.FromSeconds(1.5);
 
         var record = new CommandRecord(
-            Timestamp: timestamp,
-            Command: "build",
-            ProjectPath: "/home/user/MyApp",
-            InputTokens: 1000,
-            OutputTokens: 150,
-            SavedTokens: 850,
-            SavingsPercentage: 85.0,
-            ExecutionTime: executionTime);
+            timestamp,
+            "build",
+            "/home/user/MyApp",
+            1000,
+            150,
+            850,
+            85.0,
+            executionTime);
 
         record.Timestamp.Should().Be(timestamp);
         record.Command.Should().Be("build");
@@ -50,7 +50,10 @@ public class CommandRecordTests
         var original = new CommandRecord(
             DateTimeOffset.UtcNow, "build", "/app", 100, 10, 90, 90.0, TimeSpan.Zero);
 
-        var updated = original with { Command = "test" };
+        var updated = original with
+        {
+            Command = "test"
+        };
 
         updated.Command.Should().Be("test");
         original.Command.Should().Be("build");

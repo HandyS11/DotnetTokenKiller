@@ -21,7 +21,7 @@ public class DotnetPackFilterTests
         var fixture = LoadFixture("dotnet_pack_raw.txt");
         var result = _sut.Apply(fixture);
         var savings = 100.0 - (result.Length * 100.0 / fixture.Length);
-        savings.Should().BeGreaterThanOrEqualTo(85.0, because: "pack filter should achieve ≥85% savings");
+        savings.Should().BeGreaterThanOrEqualTo(85.0, "pack filter should achieve ≥85% savings");
     }
 
     [Theory]
@@ -42,12 +42,12 @@ public class DotnetPackFilterTests
     public void Apply_BuildError_ShowsErrorGroupingFormat()
     {
         const string input = """
-            MSBuild version 17.11.9+a69bbaaf5 for .NET
-              /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs(5,1): error CS0001: Type or namespace 'Foo' not found [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj]
-            Build FAILED.
-                1 Error(s)
-            Time Elapsed 00:00:01.00
-            """;
+                             MSBuild version 17.11.9+a69bbaaf5 for .NET
+                               /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs(5,1): error CS0001: Type or namespace 'Foo' not found [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj]
+                             Build FAILED.
+                                 1 Error(s)
+                             Time Elapsed 00:00:01.00
+                             """;
         var result = _sut.Apply(input);
         result.Should().StartWith("dotnet pack: 1 error");
         result.Should().Contain("CS0001");

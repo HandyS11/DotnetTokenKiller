@@ -22,7 +22,9 @@ public sealed class FilteredRunUseCase(
         var stopwatch = Stopwatch.StartNew();
 
         if (verbosityLevel >= 1)
+        {
             Console.WriteLine($"$ {command} {string.Join(' ', args)}");
+        }
 
         var result = await commandRunner.RunCapturedAsync(command, args, cancellationToken);
 
@@ -38,7 +40,10 @@ public sealed class FilteredRunUseCase(
         {
             // Intentional: filter errors must not break the user's workflow
             if (verbosityLevel >= 2)
+            {
                 Console.WriteLine("[filter error — using raw output]");
+            }
+
             filtered = stripped;
         }
 
@@ -59,7 +64,9 @@ public sealed class FilteredRunUseCase(
             var commandSlug = args.Count > 0 ? args[0] : command;
             var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken);
             if (hint is not null)
+            {
                 Console.WriteLine(hint);
+            }
         }
         catch
         {
@@ -75,14 +82,14 @@ public sealed class FilteredRunUseCase(
             var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;
 
             var record = new CommandRecord(
-                Timestamp: DateTimeOffset.UtcNow,
-                Command: args.Count > 0 ? args[0] : command,
-                ProjectPath: Environment.CurrentDirectory,
-                InputTokens: inputTokens,
-                OutputTokens: outputTokens,
-                SavedTokens: savedTokens,
-                SavingsPercentage: savingsPct,
-                ExecutionTime: stopwatch.Elapsed);
+                DateTimeOffset.UtcNow,
+                args.Count > 0 ? args[0] : command,
+                Environment.CurrentDirectory,
+                inputTokens,
+                outputTokens,
+                savedTokens,
+                savingsPct,
+                stopwatch.Elapsed);
 
             await tracker.RecordAsync(record, cancellationToken);
         }

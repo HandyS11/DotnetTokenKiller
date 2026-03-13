@@ -82,7 +82,13 @@ public class DtkConfigTests
     public void DtkConfig_supports_with_expression_for_immutable_updates()
     {
         var original = DtkConfig.Default;
-        var modified = original with { Tracking = original.Tracking with { Enabled = false } };
+        var modified = original with
+        {
+            Tracking = original.Tracking with
+            {
+                Enabled = false
+            }
+        };
 
         modified.Tracking.Enabled.Should().BeFalse();
         original.Tracking.Enabled.Should().BeTrue();
