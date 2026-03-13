@@ -1,6 +1,6 @@
 # Story 5.3: Implement dtk gain Analytics Command
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -40,40 +40,40 @@ Current state of relevant files:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1**: Update `GainCommandSettings` (AC: #7)
-  - [ ] Change `Days` default from `7` to `30`
-  - [ ] Add `[CommandOption("--project")]` `bool Project` — filter by CWD
-  - [ ] Add `[CommandOption("--json")]` `bool Json` — JSON output mode
+- [x] **Task 1**: Update `GainCommandSettings` (AC: #7)
+  - [x] Change `Days` default from `7` to `30`
+  - [x] Add `[CommandOption("--project")]` `bool Project` — filter by CWD
+  - [x] Add `[CommandOption("--json")]` `bool Json` — JSON output mode
 
-- [ ] **Task 2**: Create `GainReportUseCase` in Application layer (AC: #6)
-  - [ ] File: `src/DotnetTokenKiller.Application/UseCases/GainReportUseCase.cs`
-  - [ ] Constructor: primary constructor `GainReportUseCase(ITracker tracker)`
-  - [ ] Method: `Task<GainSummary> GetSummaryAsync(int days, string? projectPath, CancellationToken ct = default)` — delegates to `tracker.GetSummaryAsync(days, projectPath, ct)`
-  - [ ] Register in `src/DotnetTokenKiller.Application/DependencyInjection.cs`: `services.AddTransient<GainReportUseCase>()`
+- [x] **Task 2**: Create `GainReportUseCase` in Application layer (AC: #6)
+  - [x] File: `src/DotnetTokenKiller.Application/UseCases/GainReportUseCase.cs`
+  - [x] Constructor: primary constructor `GainReportUseCase(ITracker tracker)`
+  - [x] Method: `Task<GainSummary> GetSummaryAsync(int days, string? projectPath, CancellationToken ct = default)` — delegates to `tracker.GetSummaryAsync(days, projectPath, ct)`
+  - [x] Register in `src/DotnetTokenKiller.Application/DependencyInjection.cs`: `services.AddTransient<GainReportUseCase>()`
 
-- [ ] **Task 3**: Implement `GainCommand.ExecuteAsync` (AC: #1–#5)
-  - [ ] Inject `GainReportUseCase` and `IAnsiConsole` via primary constructor
-  - [ ] Resolve `projectPath`: `settings.Project ? Environment.CurrentDirectory : null`
-  - [ ] Call `await _gainReport.GetSummaryAsync(settings.Days, projectPath, cancellationToken)`
-  - [ ] If `settings.Json`: serialize `GainSummary` to JSON using source-generated context and write to stdout; return 0
-  - [ ] If `summary.TotalCommands == 0`: write no-data message; return 0
-  - [ ] Else: render Spectre.Console table with per-command rows + summary footer; return 0
+- [x] **Task 3**: Implement `GainCommand.ExecuteAsync` (AC: #1–#5)
+  - [x] Inject `GainReportUseCase` and `IAnsiConsole` via primary constructor
+  - [x] Resolve `projectPath`: `settings.Project ? Environment.CurrentDirectory : null`
+  - [x] Call `await _gainReport.GetSummaryAsync(settings.Days, projectPath, cancellationToken)`
+  - [x] If `settings.Json`: serialize `GainSummary` to JSON using source-generated context and write to stdout; return 0
+  - [x] If `summary.TotalCommands == 0`: write no-data message; return 0
+  - [x] Else: render Spectre.Console table with per-command rows + summary footer; return 0
 
-- [ ] **Task 4**: Add JSON source-generated serializer context in Cli project (AC: #4)
-  - [ ] Create `[JsonSerializable(typeof(GainSummary))]` source context in Cli project
-  - [ ] Use `JsonSerializer.Serialize(summary, GainSummaryJsonContext.Default.GainSummary)` in `GainCommand`
+- [x] **Task 4**: Add JSON source-generated serializer context in Cli project (AC: #4)
+  - [x] Create `[JsonSerializable(typeof(GainSummary))]` source context in Cli project
+  - [x] Use `JsonSerializer.Serialize(summary, GainSummaryJsonContext.Default.GainSummary)` in `GainCommand`
 
-- [ ] **Task 5**: Write `GainReportUseCase` tests (AC: #8)
-  - [ ] File: `tests/DotnetTokenKiller.Application.Tests/UseCases/GainReportUseCaseTests.cs`
-  - [ ] Test: `GetSummaryAsync_DelegatesCorrectDaysToTracker`
-  - [ ] Test: `GetSummaryAsync_PassesProjectPath_WhenProvided`
-  - [ ] Test: `GetSummaryAsync_PassesNullProjectPath_WhenNotProvided`
-  - [ ] Test: `GetSummaryAsync_ReturnsSummaryFromTracker`
+- [x] **Task 5**: Write `GainReportUseCase` tests (AC: #8)
+  - [x] File: `tests/DotnetTokenKiller.Application.Tests/UseCases/GainReportUseCaseTests.cs`
+  - [x] Test: `GetSummaryAsync_DelegatesCorrectDaysToTracker`
+  - [x] Test: `GetSummaryAsync_PassesProjectPath_WhenProvided`
+  - [x] Test: `GetSummaryAsync_PassesNullProjectPath_WhenNotProvided`
+  - [x] Test: `GetSummaryAsync_ReturnsSummaryFromTracker`
 
-- [ ] **Task 6**: Build and verify (AC: #8)
-  - [ ] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
-  - [ ] `dotnet test DotnetTokenKiller.slnx` → all tests green
-  - [ ] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
+- [x] **Task 6**: Build and verify (AC: #8)
+  - [x] `dotnet build DotnetTokenKiller.slnx` → 0 errors, 0 warnings
+  - [x] `dotnet test DotnetTokenKiller.slnx` → all tests green
+  - [x] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` → exit 0
 
 ## Dev Notes
 
@@ -320,6 +320,25 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+- Fixed RCS1201: chained `table.AddColumn()` calls
+- Fixed CA1305: used `CultureInfo.InvariantCulture` for `int.ToString()` and `string.Create()`
+- Fixed `AddRow` ambiguity (`params string[]` vs `params IRenderable[]`): switched to explicit `new Text()`/`new Markup()` renderables
+
 ### Completion Notes List
 
+- Implemented `GainCommand` with `--days`, `--project`, `--json` support and Spectre.Console table rendering
+- Created `GainReportUseCase` (thin delegate to `ITracker.GetSummaryAsync`) in Application layer — zero Spectre.Console deps
+- Added `GainSummaryJsonContext` source-generated JSON context for AOT-safe serialization
+- Registered `GainReportUseCase` in Application DI and `IAnsiConsole` in Cli Program.cs
+- Table shows per-command token savings rows + summary footer with total saved, avg %, and run count
+- 4 new tests in `GainReportUseCaseTests` — all pass; 185 total tests green, 0 warnings
+
 ### File List
+
+- `src/DotnetTokenKiller.Application/UseCases/GainReportUseCase.cs` (new)
+- `src/DotnetTokenKiller.Cli/Serialization/GainSummaryJsonContext.cs` (new)
+- `tests/DotnetTokenKiller.Application.Tests/UseCases/GainReportUseCaseTests.cs` (new)
+- `src/DotnetTokenKiller.Cli/Commands/GainCommand.cs` (implemented)
+- `src/DotnetTokenKiller.Cli/Commands/Settings/GainCommandSettings.cs` (updated: Days=30, added --project, --json)
+- `src/DotnetTokenKiller.Application/DependencyInjection.cs` (registered GainReportUseCase)
+- `src/DotnetTokenKiller.Cli/Program.cs` (added IAnsiConsole DI registration)
