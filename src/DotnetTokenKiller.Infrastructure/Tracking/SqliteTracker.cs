@@ -70,30 +70,23 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IAsyncDis
 
     public async Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken);
-            await using var cmd = _connection.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                    saved_tokens, savings_percentage, execution_time_ms)
-                VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms)
-                """;
-            cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("O", CultureInfo.InvariantCulture));
-            cmd.Parameters.AddWithValue("@cmd", record.Command);
-            cmd.Parameters.AddWithValue("@path", record.ProjectPath);
-            cmd.Parameters.AddWithValue("@in", record.InputTokens);
-            cmd.Parameters.AddWithValue("@out", record.OutputTokens);
-            cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
-            cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
-            cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
-            await cmd.ExecuteNonQueryAsync(cancellationToken);
-            await CleanupAsync(RetentionDays, cancellationToken);
-        }
-        catch
-        {
-            // Intentional: tracking errors must never surface to the user
-        }
+        await EnsureInitializedAsync(cancellationToken);
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
+                saved_tokens, savings_percentage, execution_time_ms)
+            VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms)
+            """;
+        cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("O", CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("@cmd", record.Command);
+        cmd.Parameters.AddWithValue("@path", record.ProjectPath);
+        cmd.Parameters.AddWithValue("@in", record.InputTokens);
+        cmd.Parameters.AddWithValue("@out", record.OutputTokens);
+        cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
+        cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
+        cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        await CleanupAsync(RetentionDays, cancellationToken);
     }
 
     public async Task<GainSummary> GetSummaryAsync(

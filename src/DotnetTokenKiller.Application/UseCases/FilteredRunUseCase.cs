@@ -70,7 +70,7 @@ public sealed class FilteredRunUseCase(
         try
         {
             var inputTokens = TokenEstimator.Estimate(stripped);
-            var outputTokens = TokenEstimator.Estimate(filtered);
+            var outputTokens = TokenEstimator.Estimate(AnsiStrip.Strip(filtered));
             var savedTokens = inputTokens - outputTokens;
             var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;
 

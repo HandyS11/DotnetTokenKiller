@@ -152,4 +152,25 @@ public class FilteredRunUseCaseTests
             Arg.Is<CommandRecord>(r => r.Command == "dotnet"),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task RunAsync_RecordsNegativeSavedTokens_WhenFilterExpandsOutput()
+    {
+        // 4 chars → 1 input token; filter returns 16 chars → 4 output tokens; saved = -3
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("1234", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("1234567890123456");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r =>
+                r.InputTokens == 1 &&
+                r.OutputTokens == 4 &&
+                r.SavedTokens == -3 &&
+                r.SavingsPercentage < 0),
+            Arg.Any<CancellationToken>());
+    }
 }
