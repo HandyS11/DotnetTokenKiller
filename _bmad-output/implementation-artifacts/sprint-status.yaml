@@ -86,7 +86,7 @@ development_status:
 
   epic-8: in-progress
   8-1-scaffold-sample-solution: review
-  8-2-integration-tests-for-build-restore-and-clean: backlog
+  8-2-integration-tests-for-build-restore-and-clean: review
   8-3-integration-tests-for-test: backlog
   8-4-integration-tests-for-publish-pack-and-run: backlog
   8-5-integration-tests-for-format-nuget-and-passthrough: backlog

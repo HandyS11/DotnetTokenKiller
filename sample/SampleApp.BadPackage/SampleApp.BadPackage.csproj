@@ -3,6 +3,6 @@
     <NoWarn>$(NoWarn);CA1515</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DotnetTokenKiller.DoesNotExist" Version="99.0.0"/>
+    <PackageReference Include="DotnetTokenKiller.DoesNotExist" />
   </ItemGroup>
 </Project>
