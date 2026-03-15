@@ -24,14 +24,16 @@ When piping `dotnet` output to an LLM you pay for every token. The examples belo
 ### `dotnet build` — success
 
 **Raw** (`dotnet build samples/SampleApp/SampleApp.csproj`)
-```
+
+```sh
 Restore complete (0.2s)
   SampleApp net10.0 succeeded (0.1s) → samples/SampleApp/bin/Debug/net10.0/SampleApp.dll
 Build succeeded in 0.5s
 ```
 
 **dtk** (`dtk dotnet build samples/SampleApp/SampleApp.csproj`)
-```
+
+```sh
 ✓ dotnet build (1 project, 0.51s)
 ```
 
@@ -40,7 +42,8 @@ Build succeeded in 0.5s
 ### `dotnet build` — with errors
 
 **Raw** (`dotnet build samples/SampleApp.Broken/SampleApp.Broken.csproj`)
-```
+
+```sh
 Restore complete (0.2s)
   SampleApp.Broken net10.0 failed with 1 error(s) (0.1s)
     /home/user/Dev/DotnetTokenKiller/samples/SampleApp.Broken/BrokenClass.cs
@@ -49,7 +52,8 @@ Build failed with 1 error(s) in 0.6s
 ```
 
 **dtk** (`dtk dotnet build samples/SampleApp.Broken/SampleApp.Broken.csproj`)
-```
+
+```sh
 dotnet build: 1 error, 0 warnings
 ---
 samples/SampleApp.Broken/BrokenClass.cs (1 error)
@@ -62,7 +66,8 @@ Top codes: CS0029 (1x)
 ### `dotnet test` — with failures
 
 **Raw** (`dotnet test samples/SampleApp.Tests/SampleApp.Tests.csproj`)
-```
+
+```sh
 Restore complete (0.2s)
   SampleApp.Tests net10.0 succeeded (0.1s) → samples/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll
 [xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.5)
@@ -95,7 +100,8 @@ Build failed with 1 error(s) in 1.0s
 ```
 
 **dtk** (`dtk dotnet test samples/SampleApp.Tests/SampleApp.Tests.csproj`)
-```
+
+```sh
 FAILURES (1):
   SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [1 ms]
     Intentional failure
@@ -108,7 +114,8 @@ dotnet test: 1 failed, 3 passed (1 project, 0.02s)
 ### `dotnet restore` — missing package
 
 **Raw** (`dotnet restore samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj`)
-```
+
+```sh
     /home/user/Dev/DotnetTokenKiller/samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj :
     error NU1101: Unable to find package DotnetTokenKiller.DoesNotExist.
     No packages exist with this id in source(s): nuget.org
@@ -116,7 +123,8 @@ Restore failed with 1 error(s) in 0.8s
 ```
 
 **dtk** (`dtk dotnet restore samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj`)
-```
+
+```sh
 dotnet restore: 1 error
   NU1101: Unable to find package DotnetTokenKiller.DoesNotExist. No packages exist with this id in source(s): nuget.org (samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj)
 ```
@@ -126,11 +134,13 @@ dotnet restore: 1 error
 ### `dotnet clean` — success
 
 **Raw** (`dotnet clean samples/SampleApp/SampleApp.csproj`)
-```
+
+```sh
 Build succeeded in 0.2s
 ```
 
 **dtk** (`dtk dotnet clean samples/SampleApp/SampleApp.csproj`)
-```
+
+```sh
 ✓ dotnet clean
 ```

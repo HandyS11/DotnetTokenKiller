@@ -4,26 +4,17 @@ using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Infrastructure.Tee;
 
-public sealed partial class FileTeeService : ITeeService
+/// <summary>Constructor for testability — pass temp dir to avoid touching real FS.</summary>
+/// <param name="configProvider">The configuration provider.</param>
+/// <param name="teeDirOverride">Optional directory override; uses platform default when null.</param>
+public sealed partial class FileTeeService(IConfigProvider configProvider, string? teeDirOverride) : ITeeService
 {
     private const string FailuresMode = "failures";
     private const string AlwaysMode = "always";
 
-    private readonly IConfigProvider _configProvider;
-    private readonly string? _teeDirOverride;
-
     public FileTeeService(IConfigProvider configProvider)
         : this(configProvider, null)
     {
-    }
-
-    /// <summary>Constructor for testability — pass temp dir to avoid touching real FS.</summary>
-    /// <param name="configProvider">The configuration provider.</param>
-    /// <param name="teeDirOverride">Optional directory override; uses platform default when null.</param>
-    public FileTeeService(IConfigProvider configProvider, string? teeDirOverride)
-    {
-        _configProvider = configProvider;
-        _teeDirOverride = teeDirOverride;
     }
 
     public async Task<string?> TeeAndHintAsync(
@@ -34,7 +25,7 @@ public sealed partial class FileTeeService : ITeeService
     {
         try
         {
-            var config = await _configProvider.LoadAsync(cancellationToken);
+            var config = await configProvider.LoadAsync(cancellationToken);
             var teeConfig = config.Tee;
 
             // Mode check
@@ -53,7 +44,7 @@ public sealed partial class FileTeeService : ITeeService
                 return null;
             }
 
-            var teeDir = GetTeeDir(teeConfig, _teeDirOverride);
+            var teeDir = GetTeeDir(teeConfig, teeDirOverride);
             Directory.CreateDirectory(teeDir);
 
             // Rotate: delete oldest files if at/over limit

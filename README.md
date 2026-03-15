@@ -44,46 +44,46 @@ Unknown subcommands are passed through to `dotnet` unchanged.
 **Build — no errors:**
 
 ```text
-✓ dotnet build (3 projects, 2.45s)
+✓ dotnet build (1 project, 0.51s)
 ```
 
 **Build — with errors:**
 
 ```text
-dotnet build: 2 errors, 1 warning
-
-src/MyApp/Program.cs(12,5): error CS0103: The name 'Foo' does not exist in the current context
-src/MyApp/Program.cs(18,9): warning CS8600: Converting null literal to non-nullable type
-src/MyLib/Service.cs(34,1): error CS1002: ; expected
-
-Top error codes: CS0103 (1), CS1002 (1)
+dotnet build: 1 error, 0 warnings
+---
+samples/SampleApp.Broken/BrokenClass.cs (1 error)
+  (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'
+Top codes: CS0029 (1x)
 ```
 
 **Test — all passing:**
 
 ```text
-✓ dotnet test: 47 passed (2 projects, 3.12s)
+✓ dotnet test: 3 passed (1 project, 0.02s)
 ```
 
 **Test — with failures:**
 
 ```text
-FAILURES (2):
-
-MyApp.Tests.OrderServiceTests.CalculateTotal_WithDiscount_ReturnsCorrectAmount [23 ms]
-  Expected: 85.00
-  Actual:   90.00
-  at OrderServiceTests.cs:42
-
-MyApp.Tests.UserServiceTests.GetUser_WhenNotFound_ThrowsException [8 ms]
-  Expected exception of type KeyNotFoundException but none was thrown.
-  at UserServiceTests.cs:67
+FAILURES (1):
+  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [1 ms]
+    Intentional failure
+    at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
+dotnet test: 1 failed, 3 passed (1 project, 0.02s)
 ```
 
-**Restore:**
+**Restore — missing package:**
 
 ```text
-✓ dotnet restore (4 projects, 1.89s)
+dotnet restore: 1 error
+  NU1101: Unable to find package DotnetTokenKiller.DoesNotExist. No packages exist with this id in source(s): nuget.org (samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj)
+```
+
+**Restore — up to date:**
+
+```text
+✓ dotnet restore (all up-to-date)
 ```
 
 **Clean:**

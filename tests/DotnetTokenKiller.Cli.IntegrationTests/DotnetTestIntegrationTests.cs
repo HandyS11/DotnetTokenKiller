@@ -1,4 +1,3 @@
-using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
 using Xunit;
 
