@@ -1,14 +1,14 @@
+using Microsoft.ML.Tokenizers;
+
 namespace DotnetTokenKiller.Application.Helpers;
 
 public static class TokenEstimator
 {
+    private static readonly Lazy<TiktokenTokenizer> Tokenizer =
+        new(() => TiktokenTokenizer.CreateForEncoding("cl100k_base"));
+
     public static int Estimate(string text)
     {
-        if (string.IsNullOrEmpty(text))
-        {
-            return 0;
-        }
-
-        return text.Length / 4;
+        return string.IsNullOrEmpty(text) ? 0 : Tokenizer.Value.CountTokens(text);
     }
 }
