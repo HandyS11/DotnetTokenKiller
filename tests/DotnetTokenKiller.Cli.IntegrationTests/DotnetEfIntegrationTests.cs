@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using FluentAssertions;
+using System.Diagnostics;
 using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests;
