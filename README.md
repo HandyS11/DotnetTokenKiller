@@ -22,13 +22,7 @@ Replace `dotnet` with `dtk dotnet` to filter output:
 dtk dotnet build        # build with filtered output
 dtk dotnet test         # test with filtered output
 dtk dotnet restore      # restore with filtered output
-dtk dotnet publish      # publish with filtered output
-dtk dotnet pack         # pack with filtered output
 dtk dotnet clean        # clean with filtered output
-dtk dotnet run          # run with filtered output
-dtk dotnet format       # format with filtered output
-dtk dotnet ef <cmd>     # EF Core commands with filtered output
-dtk dotnet nuget <cmd>  # NuGet commands with filtered output
 ```
 
 Unknown subcommands are passed through to `dotnet` unchanged.

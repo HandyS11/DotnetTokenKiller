@@ -93,10 +93,10 @@ development_status:
   8-6-integration-tests-for-ef: done
   epic-8-retrospective: done
 
-  epic-9: in-progress
+  epic-9: done
   9-1-remove-non-core-application-filters: done
   9-2-remove-passthrough-use-case-and-cli-commands: done
   9-3-remove-integration-tests-for-non-core-commands: done
   9-4-remove-non-core-sample-projects-and-fixtures: done
   9-5-update-planning-artifacts: done
-  epic-9-retrospective: optional
+  epic-9-retrospective: done
