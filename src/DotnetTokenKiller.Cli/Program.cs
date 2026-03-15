@@ -6,7 +6,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using System.Reflection;
+using System.Text;
 using DtkTypeRegistrar = DotnetTokenKiller.Cli.Infrastructure.TypeRegistrar;
+
+Console.OutputEncoding = Encoding.UTF8;
 
 var services = new ServiceCollection();
 services.AddInfrastructure();
