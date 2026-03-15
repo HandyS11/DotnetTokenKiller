@@ -6,4 +6,4 @@ public sealed record GainSummary(
     int TotalOutputTokens,
     int TotalSavedTokens,
     double AverageSavingsPercentage,
-    IReadOnlyDictionary<string, int> SavedByCommand);
+    IReadOnlyDictionary<string, CommandGainDetail> CommandDetails);

@@ -1,1 +1,0 @@
-✓ dotnet format (3 files, 0.21s)

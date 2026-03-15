@@ -3,7 +3,6 @@
     <RootNamespace>DotnetTokenKiller.Cli.IntegrationTests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <NoWarn>$(NoWarn);CA1515</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj"/>
@@ -12,7 +11,6 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk"/>
     <PackageReference Include="xunit"/>
     <PackageReference Include="xunit.runner.visualstudio"/>
-    <PackageReference Include="Xunit.SkippableFact"/>
     <PackageReference Include="FluentAssertions"/>
     <PackageReference Include="Spectre.Console.Testing"/>
     <PackageReference Include="coverlet.collector">

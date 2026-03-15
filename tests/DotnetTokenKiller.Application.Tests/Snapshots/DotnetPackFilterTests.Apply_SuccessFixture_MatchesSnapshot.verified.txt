@@ -1,1 +1,0 @@
-✓ dotnet pack → DotnetTokenKiller.Cli.1.0.0.nupkg (4 projects, 4.13s)

@@ -7,12 +7,6 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
 {
     public JsonConfigProvider() : this(GetDefaultConfigPath()) { }
 
-    public static string GetDefaultConfigPath()
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        return Path.Combine(appData, "dtk", "config.json");
-    }
-
     public async Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -43,6 +37,12 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         Directory.CreateDirectory(directory);
         var json = JsonSerializer.Serialize(config, DtkConfigJsonContext.Default.DtkConfig);
         await File.WriteAllTextAsync(configPath, json, cancellationToken);
+    }
+
+    private static string GetDefaultConfigPath()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "dtk", "config.json");
     }
 
     private static DtkConfig Merge(DtkConfig loaded)

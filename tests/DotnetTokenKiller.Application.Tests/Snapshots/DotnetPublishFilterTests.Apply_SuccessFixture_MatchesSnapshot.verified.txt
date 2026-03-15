@@ -1,1 +1,0 @@
-✓ dotnet publish → src/DotnetTokenKiller.Cli/bin/Release/net10.0/publish/ (4 projects, 3.27s)

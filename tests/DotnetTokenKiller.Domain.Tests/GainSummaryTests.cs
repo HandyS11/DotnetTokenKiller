@@ -9,10 +9,10 @@ public class GainSummaryTests
     [Fact]
     public void GainSummary_stores_all_fields()
     {
-        var savedByCommand = new Dictionary<string, int>
+        var commandDetails = new Dictionary<string, CommandGainDetail>
         {
-            ["build"] = 850,
-            ["test"] = 1200
+            ["build"] = new CommandGainDetail(5, 2500, 400, 850, 82.0),
+            ["test"] = new CommandGainDetail(5, 2500, 550, 1200, 80.0)
         };
 
         var summary = new GainSummary(
@@ -21,19 +21,21 @@ public class GainSummaryTests
             950,
             4050,
             81.0,
-            savedByCommand);
+            commandDetails);
 
         summary.TotalCommands.Should().Be(10);
         summary.TotalInputTokens.Should().Be(5000);
         summary.TotalOutputTokens.Should().Be(950);
         summary.TotalSavedTokens.Should().Be(4050);
         summary.AverageSavingsPercentage.Should().Be(81.0);
-        summary.SavedByCommand.Should().ContainKey("build").WhoseValue.Should().Be(850);
-        summary.SavedByCommand.Should().ContainKey("test").WhoseValue.Should().Be(1200);
+        summary.CommandDetails.Should().ContainKey("build")
+            .WhoseValue.TotalSavedTokens.Should().Be(850);
+        summary.CommandDetails.Should().ContainKey("test")
+            .WhoseValue.TotalSavedTokens.Should().Be(1200);
     }
 
     [Fact]
-    public void GainSummary_with_empty_saved_by_command()
+    public void GainSummary_with_empty_command_details()
     {
         var summary = new GainSummary(
             0,
@@ -41,9 +43,9 @@ public class GainSummaryTests
             0,
             0,
             0.0,
-            new Dictionary<string, int>());
+            new Dictionary<string, CommandGainDetail>());
 
         summary.TotalCommands.Should().Be(0);
-        summary.SavedByCommand.Should().BeEmpty();
+        summary.CommandDetails.Should().BeEmpty();
     }
 }

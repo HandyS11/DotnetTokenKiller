@@ -36,21 +36,32 @@ public sealed class GainCommand(
 
         var table = new Table()
             .AddColumn("Command")
-            .AddColumn(new TableColumn("Tokens Saved").RightAligned());
+            .AddColumn(new TableColumn("Runs").RightAligned())
+            .AddColumn(new TableColumn("Without Tool").RightAligned())
+            .AddColumn(new TableColumn("Used by Tool").RightAligned())
+            .AddColumn(new TableColumn("Saved").RightAligned())
+            .AddColumn(new TableColumn("Avg Savings").RightAligned());
 
-        foreach (var (cmd, saved) in summary.SavedByCommand)
+        foreach (var (cmd, detail) in summary.CommandDetails)
         {
             table.AddRow(
                 new Text(cmd),
-                new Text(saved.ToString(CultureInfo.InvariantCulture)));
+                new Text(detail.RunCount.ToString(CultureInfo.InvariantCulture)),
+                new Text(detail.TotalInputTokens.ToString(CultureInfo.InvariantCulture)),
+                new Text(detail.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)),
+                new Text(detail.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)),
+                new Text(detail.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture) + "%"));
         }
 
         table.AddEmptyRow();
 
         table.AddRow(
-            new Markup($"[bold]TOTAL ({summary.TotalCommands.ToString(CultureInfo.InvariantCulture)} runs)[/]"),
-            new Text(
-                $"{summary.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)} ({summary.AverageSavingsPercentage:F1}% avg)"));
+            new Markup("[bold]TOTAL[/]"),
+            new Markup($"[bold]{summary.TotalCommands.ToString(CultureInfo.InvariantCulture)}[/]"),
+            new Markup($"[bold]{summary.TotalInputTokens.ToString(CultureInfo.InvariantCulture)}[/]"),
+            new Markup($"[bold]{summary.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)}[/]"),
+            new Markup($"[bold]{summary.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)}[/]"),
+            new Markup($"[bold]{summary.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture)}%[/]"));
 
         console.Write(table);
         return 0;

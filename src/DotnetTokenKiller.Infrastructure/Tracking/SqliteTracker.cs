@@ -121,7 +121,7 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         var totalSaved = 0;
         var totalAvgPct = 0.0;
         var commandCount = 0;
-        var savedByCommand = new Dictionary<string, int>(StringComparer.Ordinal);
+        var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -139,11 +139,11 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
             totalSaved += sumSaved;
             totalAvgPct += avgPct;
             commandCount++;
-            savedByCommand[cmdName] = sumSaved;
+            commandDetails[cmdName] = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct);
         }
 
         var averagePct = commandCount > 0 ? totalAvgPct / commandCount : 0.0;
-        return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, savedByCommand);
+        return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, commandDetails);
     }
 
     public async Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
@@ -192,6 +192,14 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         await using var cmd = _connection.CreateCommand();
         cmd.CommandText = "DELETE FROM commands WHERE timestamp < @cutoff";
         cmd.Parameters.AddWithValue("@cutoff", cutoff);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task ResetAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken);
+        await using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM commands";
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 

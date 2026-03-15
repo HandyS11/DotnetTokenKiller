@@ -60,18 +60,11 @@ DotnetTokenKiller/
 │   │
 │   ├── DotnetTokenKiller.Application/
 │   │   ├── UseCases/FilteredRunUseCase.cs
-│   │   ├── UseCases/PassthroughRunUseCase.cs
 │   │   ├── UseCases/GainReportUseCase.cs
 │   │   ├── Filters/DotnetBuildFilter.cs
 │   │   ├── Filters/DotnetTestFilter.cs
 │   │   ├── Filters/DotnetRestoreFilter.cs
-│   │   ├── Filters/DotnetPublishFilter.cs
-│   │   ├── Filters/DotnetPackFilter.cs
 │   │   ├── Filters/DotnetCleanFilter.cs
-│   │   ├── Filters/DotnetRunFilter.cs
-│   │   ├── Filters/DotnetEfFilter.cs
-│   │   ├── Filters/DotnetFormatFilter.cs
-│   │   ├── Filters/DotnetNugetFilter.cs
 │   │   └── Helpers/TokenEstimator.cs
 │   │   └── Helpers/AnsiStrip.cs
 │   │   └── Helpers/TextHelpers.cs
@@ -88,13 +81,7 @@ DotnetTokenKiller/
 │       ├── Commands/DotnetBuildCommand.cs
 │       ├── Commands/DotnetTestCommand.cs
 │       ├── Commands/DotnetRestoreCommand.cs
-│       ├── Commands/DotnetPublishCommand.cs
-│       ├── Commands/DotnetPackCommand.cs
 │       ├── Commands/DotnetCleanCommand.cs
-│       ├── Commands/DotnetRunCommand.cs
-│       ├── Commands/DotnetEfCommand.cs
-│       ├── Commands/DotnetFormatCommand.cs
-│       ├── Commands/DotnetNugetCommand.cs
 │       ├── Commands/GainCommand.cs
 │       ├── Commands/Settings/DotnetCommandSettings.cs
 │       ├── Commands/Settings/GainCommandSettings.cs
@@ -124,7 +111,7 @@ The innermost layer. **Zero external NuGet dependencies. Zero project references
 
 Business logic. **References Domain only.**
 
-- **Use cases**: `FilteredRunUseCase`, `PassthroughRunUseCase`, `GainReportUseCase`
+- **Use cases**: `FilteredRunUseCase`, `GainReportUseCase`
 - **Filter implementations**: All `IOutputFilter` implementations (one class per subcommand)
 - **Helpers**: `TokenEstimator`, `AnsiStrip`, `TextHelpers` — pure static functions, no I/O
 
@@ -153,14 +140,7 @@ dtk
 │   ├── build [args...]      → DotnetBuildCommand   → FilteredRunUseCase + DotnetBuildFilter
 │   ├── test [args...]       → DotnetTestCommand    → FilteredRunUseCase + DotnetTestFilter
 │   ├── restore [args...]    → DotnetRestoreCommand → FilteredRunUseCase + DotnetRestoreFilter
-│   ├── publish [args...]    → DotnetPublishCommand → FilteredRunUseCase + DotnetPublishFilter
-│   ├── pack [args...]       → DotnetPackCommand    → FilteredRunUseCase + DotnetPackFilter
-│   ├── clean [args...]      → DotnetCleanCommand   → FilteredRunUseCase + DotnetCleanFilter
-│   ├── run [args...]        → DotnetRunCommand     → FilteredRunUseCase + DotnetRunFilter
-│   ├── ef [args...]         → DotnetEfCommand      → FilteredRunUseCase + DotnetEfFilter
-│   ├── format [args...]     → DotnetFormatCommand  → FilteredRunUseCase + DotnetFormatFilter
-│   ├── nuget [args...]      → DotnetNugetCommand   → FilteredRunUseCase + DotnetNugetFilter
-│   └── <other> [args...]    → (fallback)           → PassthroughRunUseCase
+│   └── clean [args...]      → DotnetCleanCommand   → FilteredRunUseCase + DotnetCleanFilter
 └── gain                     → GainCommand          → GainReportUseCase
 ```
 
@@ -290,7 +270,6 @@ ITracker           → SqliteTracker
 IConfigProvider    → JsonConfigProvider
 ITeeService        → FileTeeService
 FilteredRunUseCase → (transient, per-command)
-PassthroughRunUseCase → (transient)
 GainReportUseCase  → (transient)
 DotnetBuildFilter  → (singleton)
 ... (all filter classes)

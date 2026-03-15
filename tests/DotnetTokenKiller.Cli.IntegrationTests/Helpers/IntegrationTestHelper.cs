@@ -1,7 +1,6 @@
 using System.Diagnostics;
-using System.Text;
 
-namespace DotnetTokenKiller.Cli.IntegrationTests;
+namespace DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 
 internal static class IntegrationTestHelper
 {
@@ -36,8 +35,6 @@ internal static class IntegrationTestHelper
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
