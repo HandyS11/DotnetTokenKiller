@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application;
+using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,6 +12,21 @@ var services = new ServiceCollection();
 services.AddInfrastructure();
 services.AddApplication();
 services.AddSingleton<IAnsiConsole>(_ => AnsiConsole.Console);
+
+// Spectre.Console cannot route unrecognized positional words to SetDefaultCommand in branches.
+// Pre-intercept `dtk dotnet <unrecognized-subcommand> [args]` here and run passthrough directly.
+if (args.Length >= 2 && args[0] == "dotnet" && !args[1].StartsWith('-'))
+{
+    var knownSubcommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "build", "test", "restore", "publish", "pack", "clean", "run", "ef", "format", "nuget" };
+
+    if (!knownSubcommands.Contains(args[1]))
+    {
+        await using var sp = services.BuildServiceProvider();
+        var passthrough = sp.GetRequiredService<PassthroughRunUseCase>();
+        return await passthrough.RunAsync("dotnet", args[1..], CancellationToken.None);
+    }
+}
 
 var registrar = new DtkTypeRegistrar(services);
 var app = new CommandApp(registrar);
