@@ -1,5 +1,4 @@
 using DotnetTokenKiller.Application;
-using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,21 +11,6 @@ var services = new ServiceCollection();
 services.AddInfrastructure();
 services.AddApplication();
 services.AddSingleton<IAnsiConsole>(_ => AnsiConsole.Console);
-
-// Spectre.Console cannot route unrecognized positional words to SetDefaultCommand in branches.
-// Pre-intercept `dtk dotnet <unrecognized-subcommand> [args]` here and run passthrough directly.
-if (args.Length >= 2 && args[0] == "dotnet" && !args[1].StartsWith('-'))
-{
-    var knownSubcommands = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        { "build", "test", "restore", "publish", "pack", "clean", "run", "ef", "format", "nuget" };
-
-    if (!knownSubcommands.Contains(args[1]))
-    {
-        await using var sp = services.BuildServiceProvider();
-        var passthrough = sp.GetRequiredService<PassthroughRunUseCase>();
-        return await passthrough.RunAsync("dotnet", args[1..], CancellationToken.None);
-    }
-}
 
 var registrar = new DtkTypeRegistrar(services);
 var app = new CommandApp(registrar);
@@ -43,17 +27,10 @@ app.Configure(config =>
     config.AddBranch("dotnet", dotnet =>
     {
         dotnet.SetDescription("Run dotnet commands with filtered output");
-        dotnet.SetDefaultCommand<DotnetPassthroughCommand>();
         dotnet.AddCommand<DotnetBuildCommand>("build").WithDescription("Run dotnet build with filtered output");
         dotnet.AddCommand<DotnetTestCommand>("test").WithDescription("Run dotnet test with filtered output");
         dotnet.AddCommand<DotnetRestoreCommand>("restore").WithDescription("Run dotnet restore with filtered output");
-        dotnet.AddCommand<DotnetPublishCommand>("publish").WithDescription("Run dotnet publish with filtered output");
-        dotnet.AddCommand<DotnetPackCommand>("pack").WithDescription("Run dotnet pack with filtered output");
         dotnet.AddCommand<DotnetCleanCommand>("clean").WithDescription("Run dotnet clean with filtered output");
-        dotnet.AddCommand<DotnetRunCommand>("run").WithDescription("Run dotnet run with filtered output");
-        dotnet.AddCommand<DotnetEfCommand>("ef").WithDescription("Run dotnet ef with filtered output");
-        dotnet.AddCommand<DotnetFormatCommand>("format").WithDescription("Run dotnet format with filtered output");
-        dotnet.AddCommand<DotnetNugetCommand>("nuget").WithDescription("Run dotnet nuget with filtered output");
     });
 
     config.AddCommand<GainCommand>("gain").WithDescription("Show token savings analytics");

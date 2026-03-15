@@ -1217,3 +1217,194 @@ So that the EF filter output format and exit code propagation are validated agai
 **And** the test uses a temp directory for all SQLite database files, cleaned up in test teardown regardless of outcome
 **And** all integration tests in this story are in `DotnetTokenKiller.Cli.IntegrationTests`
 **And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
+
+---
+
+## Epic 9: Command Scope Reduction (Cleanup)
+
+Remove all non-core sub-command filters and their associated code, tests, CLI commands, DI registrations, sample projects, and integration tests. After this epic the codebase contains only the four core filters (`build`, `test`, `restore`, `clean`), zero dead code, and all planning artifacts reflect the final narrowed scope.
+
+**Scope basis:** Sprint Change Proposal 2026-03-15 (Epic 8 retrospective finding)
+**FRs covered:** N/A — deletion epic
+
+> **Recommended execution order:** 9-2 → 9-1 → 9-3 → 9-4 → 9-5
+> (Remove CLI routing first to break inbound references before deleting filter implementations.)
+
+### Story 9.1: Remove Non-Core Application Filters
+
+As a developer maintaining DotnetTokenKiller,
+I want all non-core filter classes and their unit tests deleted from the Application layer,
+So that only the four high-value filters remain and there is no dead code in the codebase.
+
+**Files to delete:**
+
+- `src/DotnetTokenKiller.Application/Filters/DotnetPublishFilter.cs`
+- `src/DotnetTokenKiller.Application/Filters/DotnetPackFilter.cs`
+- `src/DotnetTokenKiller.Application/Filters/DotnetRunFilter.cs`
+- `src/DotnetTokenKiller.Application/Filters/DotnetEfFilter.cs`
+- `src/DotnetTokenKiller.Application/Filters/DotnetFormatFilter.cs`
+- `src/DotnetTokenKiller.Application/Filters/DotnetNugetFilter.cs`
+- Corresponding unit test files in `tests/DotnetTokenKiller.Application.Tests/Filters/`
+- Corresponding Verify snapshot files in `tests/DotnetTokenKiller.Application.Tests/`
+
+**Acceptance Criteria:**
+
+**Given** the Application project is inspected
+**When** the Filters directory is listed
+**Then** only `DotnetBuildFilter.cs`, `DotnetTestFilter.cs`, `DotnetRestoreFilter.cs`, and `DotnetCleanFilter.cs` exist
+
+**Given** `dotnet build DotnetTokenKiller.slnx` is run after deletions
+**When** the build completes
+**Then** there are zero errors and zero warnings
+
+**Given** `dotnet test DotnetTokenKiller.slnx` is run after deletions
+**When** the test run completes
+**Then** all remaining tests pass with zero failures and zero regressions
+
+---
+
+### Story 9.2: Remove Passthrough Use Case and CLI Commands
+
+As a developer maintaining DotnetTokenKiller,
+I want the `PassthroughRunUseCase` and all non-core CLI command classes deleted, along with their DI registrations,
+So that `dtk --help` shows only the four core subcommands and there is no dead routing code.
+
+**Files to delete:**
+
+- `src/DotnetTokenKiller.Application/UseCases/PassthroughRunUseCase.cs`
+- `src/DotnetTokenKiller.Cli/Commands/DotnetPublishCommand.cs`
+- `src/DotnetTokenKiller.Cli/Commands/DotnetPackCommand.cs`
+- `src/DotnetTokenKiller.Cli/Commands/DotnetRunCommand.cs`
+- `src/DotnetTokenKiller.Cli/Commands/DotnetEfCommand.cs`
+- `src/DotnetTokenKiller.Cli/Commands/DotnetFormatCommand.cs`
+- `src/DotnetTokenKiller.Cli/Commands/DotnetNugetCommand.cs`
+- `src/DotnetTokenKiller.Cli/Commands/DotnetPassthroughCommand.cs` (if it exists)
+- Corresponding unit/integration test files referencing these commands
+
+**Files to update:**
+
+- `src/DotnetTokenKiller.Cli/Program.cs` — remove all `AddCommand` registrations for deleted commands and any passthrough pre-intercept routing
+- DI registration file(s) — remove `PassthroughRunUseCase` and the six deleted filter registrations
+
+**Acceptance Criteria:**
+
+**Given** `dtk --help` is run after deletions
+**When** the help output is displayed
+**Then** subcommands listed are exactly: `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `gain`
+**And** no `publish`, `pack`, `run`, `ef`, `format`, `nuget`, or passthrough entries appear
+
+**Given** `dotnet build DotnetTokenKiller.slnx` is run after deletions
+**When** the build completes
+**Then** there are zero errors and zero warnings
+
+**Given** `dotnet test DotnetTokenKiller.slnx` is run
+**When** the test run completes
+**Then** all remaining tests pass with zero failures
+
+---
+
+### Story 9.3: Remove Integration Tests for Non-Core Commands
+
+As a developer maintaining DotnetTokenKiller,
+I want the integration test classes for `publish`/`pack`/`run`, `format`/`nuget`/`passthrough`, and `ef` deleted,
+So that the integration test suite only covers the four retained commands.
+
+**Files to delete:**
+
+- `tests/DotnetTokenKiller.Cli.IntegrationTests/` test class(es) covering publish, pack, run (story 8-4)
+- `tests/DotnetTokenKiller.Cli.IntegrationTests/` test class(es) covering format, nuget, passthrough (story 8-5)
+- `tests/DotnetTokenKiller.Cli.IntegrationTests/` test class(es) covering ef (story 8-6)
+- Any `ISkippableFact`/`SkippableFact` test boilerplate that was ef-specific
+- Associated fixture data files in `tests/DotnetTokenKiller.Cli.IntegrationTests/Fixtures/` for deleted commands
+
+**Acceptance Criteria:**
+
+**Given** the integration test project is inspected
+**When** all test classes are listed
+**Then** test classes exist only for `build`, `restore`, `clean`, and `test` commands
+
+**Given** `dotnet test DotnetTokenKiller.slnx --filter "Category=Integration"` is run
+**When** the integration test run completes
+**Then** all integration tests pass and no tests reference deleted command names
+
+**Given** `dotnet build DotnetTokenKiller.slnx` is run
+**When** the build completes
+**Then** there are zero errors and zero warnings
+
+---
+
+### Story 9.4: Remove Non-Core Sample Projects and Fixtures
+
+As a developer maintaining DotnetTokenKiller,
+I want the `SampleApp.EfCore` sample project and any fixtures/test helpers for deleted commands removed,
+So that the `/sample` folder only contains projects needed to test the four retained commands.
+
+**Projects to delete:**
+
+- `sample/SampleApp.EfCore/` (entire directory)
+
+**Files to update:**
+
+- `sample/DotnetTokenKiller.Sample.slnx` — remove `SampleApp.EfCore` project reference
+- Any `IntegrationTestHelper` or shared fixture files specifically used only by deleted test stories
+
+**Acceptance Criteria:**
+
+**Given** the `/sample` directory is inspected after deletions
+**When** the project list is reviewed
+**Then** `SampleApp.EfCore` is absent
+**And** remaining sample projects are exactly those needed for `build`, `restore`, `clean`, and `test` integration tests
+
+**Given** `dotnet build sample/DotnetTokenKiller.Sample.slnx` is run
+**When** the build completes
+**Then** there are zero errors and zero warnings
+
+**Given** `dotnet test DotnetTokenKiller.slnx` is run
+**When** the test run completes
+**Then** all tests pass with zero failures
+
+---
+
+### Story 9.5: Update Planning Artifacts
+
+As a project maintainer,
+I want PRD, Architecture, and Epics documents updated to reflect the final 4-command scope,
+So that all planning artifacts accurately represent what the tool actually does post-cleanup.
+
+**Documents to update (per Sprint Change Proposal 2026-03-15 Section 4):**
+
+**PRD (`_bmad-output/planning-artifacts/PRD.md`):**
+
+- Remove FR4, FR5, FR7, FR8, FR9, FR10, FR11 from Requirements Inventory
+- Update MVP Scope from "all subcommand filters (build, test, restore, publish, pack, clean, run, ef, format, nuget), passthrough" to "core subcommand filters (build, test, restore, clean)"
+- Remove FR4, FR5, FR7–FR11 entries from FR Coverage Map
+
+**Architecture (`_bmad-output/planning-artifacts/Architecture.md`):**
+
+- Remove `DotnetPublishFilter.cs`, `DotnetPackFilter.cs`, `DotnetRunFilter.cs`, `DotnetEfFilter.cs`, `DotnetFormatFilter.cs`, `DotnetNugetFilter.cs` from solution structure listing
+- Remove `PassthroughRunUseCase.cs` from UseCases listing
+
+**Epics (`_bmad-output/planning-artifacts/epics.md`):**
+
+- Rewrite Epic 3 overview to "Restore Filter" (FR3 only)
+- Add removal note under Epic 3 for stories 3-2 and 3-3
+- Rewrite Epic 4 overview to "Clean Filter" (FR6 only)
+- Add removal note under Epic 4 for stories 4-2 through 4-6
+
+**Acceptance Criteria:**
+
+**Given** PRD.md is reviewed after updates
+**When** the Requirements Inventory section is read
+**Then** FR4, FR5, FR7–FR11 do not appear
+**And** MVP Scope mentions only `build`, `test`, `restore`, `clean`
+
+**Given** Architecture.md is reviewed after updates
+**When** the solution structure listing is read
+**Then** only `DotnetBuildFilter.cs`, `DotnetTestFilter.cs`, `DotnetRestoreFilter.cs`, `DotnetCleanFilter.cs` appear in the Filters listing
+**And** `PassthroughRunUseCase.cs` does not appear
+
+**Given** Epics.md is reviewed after updates
+**When** Epic 3 and Epic 4 overviews are read
+**Then** Epic 3 describes only the restore filter
+**And** Epic 4 describes only the clean filter
+**And** removal notes reference Sprint Change Proposal 2026-03-15
