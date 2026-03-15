@@ -1,6 +1,6 @@
 # Story 9.4: Remove Non-Core Sample Projects and Fixtures
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -22,23 +22,23 @@ So that the `/sample` folder only contains projects needed to test the four reta
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Delete `sample/SampleApp.EfCore/` directory entirely (AC: #1)
-  - [ ] Delete `sample/SampleApp.EfCore/SampleApp.EfCore.csproj`
-  - [ ] Delete `sample/SampleApp.EfCore/SampleItem.cs`
-  - [ ] Delete `sample/SampleApp.EfCore/SampleDbContext.cs`
-  - [ ] Delete `sample/SampleApp.EfCore/SampleDbContextFactory.cs`
-  - [ ] Delete `sample/SampleApp.EfCore/Migrations/20260314161654_InitialCreate.cs`
-  - [ ] Delete `sample/SampleApp.EfCore/Migrations/20260314161654_InitialCreate.Designer.cs`
-  - [ ] Delete `sample/SampleApp.EfCore/Migrations/SampleDbContextModelSnapshot.cs`
-  - [ ] Confirm `bin/` and `obj/` subdirectories are also removed (standard git delete removes tracked files; untracked build artifacts in `bin/obj` are ignored by git)
+- [x] Task 1 — Delete `sample/SampleApp.EfCore/` directory entirely (AC: #1)
+  - [x] Delete `sample/SampleApp.EfCore/SampleApp.EfCore.csproj`
+  - [x] Delete `sample/SampleApp.EfCore/SampleItem.cs`
+  - [x] Delete `sample/SampleApp.EfCore/SampleDbContext.cs`
+  - [x] Delete `sample/SampleApp.EfCore/SampleDbContextFactory.cs`
+  - [x] Delete `sample/SampleApp.EfCore/Migrations/20260314161654_InitialCreate.cs`
+  - [x] Delete `sample/SampleApp.EfCore/Migrations/20260314161654_InitialCreate.Designer.cs`
+  - [x] Delete `sample/SampleApp.EfCore/Migrations/SampleDbContextModelSnapshot.cs`
+  - [x] Confirm `bin/` and `obj/` subdirectories are also removed (standard git delete removes tracked files; untracked build artifacts in `bin/obj` are ignored by git)
 
-- [ ] Task 2 — Update `sample/DotnetTokenKiller.Sample.slnx` (AC: #2)
-  - [ ] Remove the line `<Project Path="SampleApp.EfCore/SampleApp.EfCore.csproj" />` from the solution file
-  - [ ] Verify the remaining solution file contains exactly 3 project references: `SampleApp`, `SampleApp.Broken`, `SampleApp.BadPackage` (note: `SampleApp.Tests` may or may not appear — verify current state)
+- [x] Task 2 — Update `sample/DotnetTokenKiller.Sample.slnx` (AC: #2)
+  - [x] Remove the line `<Project Path="SampleApp.EfCore/SampleApp.EfCore.csproj" />` from the solution file
+  - [x] Verify the remaining solution file contains exactly 3 project references: `SampleApp`, `SampleApp.Broken`, `SampleApp.BadPackage` (note: `SampleApp.Tests` may or may not appear — verify current state)
 
-- [ ] Task 3 — Verify build and tests pass (AC: #3, #4)
-  - [ ] Run `dotnet build sample/DotnetTokenKiller.Sample.slnx` — confirm zero errors, zero warnings
-  - [ ] Run `dotnet test DotnetTokenKiller.slnx` — confirm all tests pass
+- [x] Task 3 — Verify build and tests pass (AC: #3, #4)
+  - [x] Run `dotnet build sample/DotnetTokenKiller.Sample.slnx` — confirm zero errors, zero warnings
+  - [x] Run `dotnet test DotnetTokenKiller.slnx` — confirm all tests pass
 
 ## Dev Notes
 
@@ -208,6 +208,34 @@ claude-sonnet-4-6
 
 ### Debug Log References
 
+_None._
+
 ### Completion Notes List
 
+- Deleted all 7 tracked source files from `sample/SampleApp.EfCore/` using `git rm`. The `bin/` and `obj/` subdirectories were untracked (in `.gitignore`) and not present in git history.
+- Removed the `<Project Path="SampleApp.EfCore/SampleApp.EfCore.csproj" />` line from `sample/DotnetTokenKiller.Sample.slnx`. The remaining solution references only `SampleApp` and `SampleApp.Tests` (confirmed: `SampleApp.Broken` and `SampleApp.BadPackage` were never in the slnx — they are fixture-only).
+- `dotnet build sample/DotnetTokenKiller.Sample.slnx`: 0 errors, 0 warnings.
+- `dotnet test DotnetTokenKiller.slnx`: 149 tests passed (Domain: 17, Infrastructure: 22, Application: 87, Integration: 23), 0 failures, 0 regressions.
+- No changes to `Directory.Packages.props` needed — EF packages were not centralised there.
+
 ### File List
+
+**Deleted:**
+
+- `sample/SampleApp.EfCore/SampleApp.EfCore.csproj`
+- `sample/SampleApp.EfCore/SampleItem.cs`
+- `sample/SampleApp.EfCore/SampleDbContext.cs`
+- `sample/SampleApp.EfCore/SampleDbContextFactory.cs`
+- `sample/SampleApp.EfCore/Migrations/20260314161654_InitialCreate.cs`
+- `sample/SampleApp.EfCore/Migrations/20260314161654_InitialCreate.Designer.cs`
+- `sample/SampleApp.EfCore/Migrations/SampleDbContextModelSnapshot.cs`
+
+**Modified:**
+
+- `sample/DotnetTokenKiller.Sample.slnx`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/implementation-artifacts/9-4-remove-non-core-sample-projects-and-fixtures.md`
+
+## Change Log
+
+- 2026-03-15: Deleted `sample/SampleApp.EfCore/` project tree (7 source files) and removed its reference from `sample/DotnetTokenKiller.Sample.slnx`. All tests pass.
