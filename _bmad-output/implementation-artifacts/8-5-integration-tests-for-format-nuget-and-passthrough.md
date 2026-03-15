@@ -1,6 +1,6 @@
 # Story 8.5: Integration Tests for format, nuget, and passthrough
 
-Status: review
+Status: done
 
 ## Story
 

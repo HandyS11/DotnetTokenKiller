@@ -84,11 +84,11 @@ development_status:
   7-2-expand-ci-cd-quality-gate-pipeline-to-full-quality-enforcement: done
   epic-7-retrospective: done
 
-  epic-8: in-progress
-  8-1-scaffold-sample-solution: review
-  8-2-integration-tests-for-build-restore-and-clean: review
-  8-3-integration-tests-for-test: review
-  8-4-integration-tests-for-publish-pack-and-run: review
-  8-5-integration-tests-for-format-nuget-and-passthrough: review
-  8-6-integration-tests-for-ef: review
-  epic-8-retrospective: optional
+  epic-8: done
+  8-1-scaffold-sample-solution: done
+  8-2-integration-tests-for-build-restore-and-clean: done
+  8-3-integration-tests-for-test: done
+  8-4-integration-tests-for-publish-pack-and-run: done
+  8-5-integration-tests-for-format-nuget-and-passthrough: done
+  8-6-integration-tests-for-ef: done
+  epic-8-retrospective: done

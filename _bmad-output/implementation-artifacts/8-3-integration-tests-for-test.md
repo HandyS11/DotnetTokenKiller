@@ -1,6 +1,6 @@
 # Story 8.3: Integration Tests for test
 
-Status: review
+Status: done
 
 ## Story
 

@@ -1,6 +1,6 @@
 # Story 8.6: Integration Tests for ef
 
-Status: review
+Status: done
 
 ## Story
 

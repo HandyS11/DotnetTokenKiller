@@ -1,6 +1,6 @@
 # Story 8.4: Integration Tests for publish, pack, and run
 
-Status: review
+Status: done
 
 ## Story
 

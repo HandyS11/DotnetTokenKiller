@@ -1,6 +1,6 @@
 # Story 8.2: Integration Tests for build, restore, and clean
 
-Status: review
+Status: done
 
 ## Story
 

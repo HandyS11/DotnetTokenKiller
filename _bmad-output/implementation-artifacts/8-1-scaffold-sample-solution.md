@@ -1,6 +1,6 @@
 # Story 8.1: Scaffold Sample Solution
 
-Status: review
+Status: done
 
 ## Story
 
@@ -252,7 +252,7 @@ claude-sonnet-4-6
 
 - All 7 task groups completed; `sample/DotnetTokenKiller.Sample.slnx` references only the 3 buildable projects
 - EF Core 10.0.4 packages added to root `Directory.Packages.props`; migrations generated and committed (3 files)
-- `SampleApp.BadPackage` isolates `ManagePackageVersionsCentrally=false` via its own `Directory.Packages.props`
+- `SampleApp.BadPackage` triggers NU1101 via a fake `DotnetTokenKiller.DoesNotExist` package at `Version="99.0.0"` declared in the root `Directory.Packages.props`; a local `Directory.Packages.props` was not used because `Directory.Build.props` injects analyzer `PackageReference` items without versions into every project, requiring central management to remain active
 - `SampleApp.Broken` has exactly 1 CS0029 compile error in `BrokenClass.cs`; valid `Program.cs` top-level statement prevents CS5001
 - `IntentionallyFailingTests.AlwaysFails` uses `Assert.Fail("Intentional failure")` — load-bearing class name for Story 8.3 test filtering
 - `dotnet build sample/DotnetTokenKiller.Sample.slnx` → succeeded (0 warnings, 0 errors)
@@ -277,6 +277,5 @@ claude-sonnet-4-6
 - sample/SampleApp.Broken/SampleApp.Broken.csproj (new)
 - sample/SampleApp.Broken/Program.cs (new)
 - sample/SampleApp.Broken/BrokenClass.cs (new)
-- sample/SampleApp.BadPackage/Directory.Packages.props (new)
 - sample/SampleApp.BadPackage/SampleApp.BadPackage.csproj (new)
 - sample/SampleApp.BadPackage/Class1.cs (new)
