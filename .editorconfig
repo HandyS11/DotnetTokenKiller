@@ -462,5 +462,5 @@ dotnet_diagnostic.xUnit1042.severity = none # object[] are okay for MemberData
 dotnet_diagnostic.xUnit1044.severity = none # Object might be serializable (bullshit)
 dotnet_diagnostic.xUnit1045.severity = none # Object might be serializable (bullshit)
 
-[**/samples/*/**.cs]
+[**/sample/*/**.cs]
 generated_code = true

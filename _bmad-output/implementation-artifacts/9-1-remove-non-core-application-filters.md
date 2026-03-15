@@ -1,6 +1,6 @@
 # Story 9.1: Remove Non-Core Application Filters
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
