@@ -1,4 +1,4 @@
-# generated: 2026-03-06
+# generated: 2026-03-14
 # project: DotnetTokenKiller
 # project_key: NOKEY
 # tracking_system: file-system
@@ -33,7 +33,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-03-06
+generated: 2026-03-14
 project: DotnetTokenKiller
 project_key: NOKEY
 tracking_system: file-system
@@ -83,3 +83,12 @@ development_status:
   7-1-package-and-validate-as-net-global-tool: done
   7-2-expand-ci-cd-quality-gate-pipeline-to-full-quality-enforcement: done
   epic-7-retrospective: done
+
+  epic-8: done
+  8-1-scaffold-sample-solution: done
+  8-2-integration-tests-for-build-restore-and-clean: done
+  8-3-integration-tests-for-test: done
+  8-4-integration-tests-for-publish-pack-and-run: done
+  8-5-integration-tests-for-format-nuget-and-passthrough: done
+  8-6-integration-tests-for-ef: done
+  epic-8-retrospective: done

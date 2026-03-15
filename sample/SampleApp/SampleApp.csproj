@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackageId>SampleApp</PackageId>
+    <Version>1.0.0</Version>
+    <IsPackable>true</IsPackable>
+    <NoWarn>$(NoWarn);CA1515</NoWarn>
+  </PropertyGroup>
+</Project>

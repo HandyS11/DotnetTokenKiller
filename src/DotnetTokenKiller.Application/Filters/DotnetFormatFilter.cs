@@ -38,13 +38,16 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
                 continue;
             }
 
-            if (FormattedFilePattern().IsMatch(line))
+            if (FormattedFilePattern().IsMatch(line) || FormattedFilePatternSdk10().IsMatch(line))
             {
                 formattedCount++;
                 continue;
             }
 
             var warningMatch = WarningFilePattern().Match(line);
+            if (!warningMatch.Success)
+                warningMatch = WarningFilePatternSdk10().Match(line);
+
             if (warningMatch.Success)
             {
                 var path = warningMatch.Groups["path"].Value.Trim();
@@ -96,11 +99,19 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
     [GeneratedRegex(@"Format complete in (?<duration>\d+\.\d+s)\.")]
     private static partial Regex FormatCompletePattern();
 
-    // Matches fix-mode lines: "/path/to/file.cs formatted."
+    // Matches fix-mode lines (older SDK): "/path/to/file.cs formatted."
     [GeneratedRegex(@"formatted\.\s*$")]
     private static partial Regex FormattedFilePattern();
 
-    // Matches check-mode warning lines: "/path/to/file.cs - warning IDE0055: ..."
+    // Matches fix-mode lines (SDK 10+): "Formatted code file '/path/to/file.cs'."
+    [GeneratedRegex(@"^Formatted code file '")]
+    private static partial Regex FormattedFilePatternSdk10();
+
+    // Matches check-mode warning lines (older SDK): "/path/to/file.cs - warning IDE0055: ..."
     [GeneratedRegex(@"^\s*(?<path>.+?)\s+-\s+warning\s+")]
     private static partial Regex WarningFilePattern();
+
+    // Matches check-mode diagnostic lines (SDK 10+): "/path/to/file.cs(9,1): error WHITESPACE: ..."
+    [GeneratedRegex(@"^(?<path>.+?)\(\d+,\d+\)\s*:\s*(?:error|warning) ")]
+    private static partial Regex WarningFilePatternSdk10();
 }
