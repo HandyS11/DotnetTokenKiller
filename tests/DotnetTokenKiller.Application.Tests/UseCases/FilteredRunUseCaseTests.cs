@@ -103,7 +103,7 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsCorrectTokenCounts_AfterSuccessfulExecution()
     {
-        // 16 chars → 16 / 4 = 4 input tokens; "1234" = 4 chars → 4 / 4 = 1 output token; saved = 3
+        // tiktoken cl100k_base: "1234567890123456" = 6 tokens; "1234" = 2 tokens; saved = 4
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234567890123456", "", 0));
         _filter.Apply(Arg.Any<string>()).Returns("1234");
@@ -115,9 +115,9 @@ public class FilteredRunUseCaseTests
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
                 r.Command == "build" &&
-                r.InputTokens == 4 &&
-                r.OutputTokens == 1 &&
-                r.SavedTokens == 3),
+                r.InputTokens == 6 &&
+                r.OutputTokens == 2 &&
+                r.SavedTokens == 4),
             Arg.Any<CancellationToken>());
     }
 
@@ -156,7 +156,7 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsNegativeSavedTokens_WhenFilterExpandsOutput()
     {
-        // 4 chars → 1 input token; filter returns 16 chars → 4 output tokens; saved = -3
+        // tiktoken cl100k_base: "1234" = 2 tokens; filter returns "1234567890123456" = 6 tokens; saved = -4
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234", "", 0));
         _filter.Apply(Arg.Any<string>()).Returns("1234567890123456");
@@ -167,9 +167,9 @@ public class FilteredRunUseCaseTests
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r.InputTokens == 1 &&
-                r.OutputTokens == 4 &&
-                r.SavedTokens == -3 &&
+                r.InputTokens == 2 &&
+                r.OutputTokens == 6 &&
+                r.SavedTokens == -4 &&
                 r.SavingsPercentage < 0),
             Arg.Any<CancellationToken>());
     }
