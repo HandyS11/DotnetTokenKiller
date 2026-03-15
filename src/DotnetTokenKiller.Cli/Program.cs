@@ -1,5 +1,6 @@
 using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli.Commands;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -36,5 +37,16 @@ app.Configure(config =>
     config.AddCommand<GainCommand>("gain").WithDescription("Show token savings analytics");
     config.AddCommand<ResetCommand>("reset").WithDescription("Clear all tracking data");
 });
+
+// Passthrough: run any unsupported dotnet subcommand directly without filtering
+HashSet<string> knownDotnetSubcommands = ["build", "test", "restore", "clean"];
+if (args.Length >= 2 &&
+    string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
+    !knownDotnetSubcommands.Contains(args[1]))
+{
+    await using var sp = services.BuildServiceProvider();
+    var runner = sp.GetRequiredService<ICommandRunner>();
+    return await runner.RunPassthroughAsync("dotnet", args[1..]);
+}
 
 return await app.RunAsync(args);
