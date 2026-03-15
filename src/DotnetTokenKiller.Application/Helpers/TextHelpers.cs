@@ -16,17 +16,12 @@ public static class TextHelpers
 
     public static string FormatTokens(int count)
     {
-        if (count >= 1_000_000)
+        return count switch
         {
-            return $"{count / 1_000_000.0:F1}M";
-        }
-
-        if (count >= 1_000)
-        {
-            return $"{count / 1_000.0:F1}K";
-        }
-
-        return count.ToString(CultureInfo.InvariantCulture);
+            >= 1_000_000 => $"{count / 1_000_000.0:F1}M",
+            >= 1_000 => $"{count / 1_000.0:F1}K",
+            _ => count.ToString(CultureInfo.InvariantCulture)
+        };
     }
 
     public static string ShortenPath(string absolutePath, string rootPath)

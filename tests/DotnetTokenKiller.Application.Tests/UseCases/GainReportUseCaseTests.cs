@@ -18,7 +18,7 @@ public class GainReportUseCaseTests
     [Fact]
     public async Task GetSummaryAsync_DelegatesCorrectDaysToTracker()
     {
-        var expected = new GainSummary(0, 0, 0, 0, 0.0, new Dictionary<string, int>());
+        var expected = new GainSummary(0, 0, 0, 0, 0.0, new Dictionary<string, CommandGainDetail>());
         _tracker.GetSummaryAsync(7, null, Arg.Any<CancellationToken>()).Returns(expected);
 
         var result = await _sut.GetSummaryAsync(7, null);
@@ -30,7 +30,7 @@ public class GainReportUseCaseTests
     [Fact]
     public async Task GetSummaryAsync_PassesProjectPath_WhenProvided()
     {
-        var expected = new GainSummary(0, 0, 0, 0, 0.0, new Dictionary<string, int>());
+        var expected = new GainSummary(0, 0, 0, 0, 0.0, new Dictionary<string, CommandGainDetail>());
         _tracker.GetSummaryAsync(Arg.Any<int>(), "/my/project", Arg.Any<CancellationToken>()).Returns(expected);
 
         await _sut.GetSummaryAsync(30, "/my/project");
@@ -41,7 +41,7 @@ public class GainReportUseCaseTests
     [Fact]
     public async Task GetSummaryAsync_PassesNullProjectPath_WhenNotProvided()
     {
-        var expected = new GainSummary(0, 0, 0, 0, 0.0, new Dictionary<string, int>());
+        var expected = new GainSummary(0, 0, 0, 0, 0.0, new Dictionary<string, CommandGainDetail>());
         _tracker.GetSummaryAsync(Arg.Any<int>(), null, Arg.Any<CancellationToken>()).Returns(expected);
 
         await _sut.GetSummaryAsync(30, null);
@@ -52,9 +52,9 @@ public class GainReportUseCaseTests
     [Fact]
     public async Task GetSummaryAsync_ReturnsSummaryFromTracker()
     {
-        var expected = new GainSummary(5, 1000, 200, 800, 80.0, new Dictionary<string, int>
+        var expected = new GainSummary(5, 1000, 200, 800, 80.0, new Dictionary<string, CommandGainDetail>
         {
-            ["build"] = 800
+            ["build"] = new CommandGainDetail(5, 1000, 200, 800, 80.0)
         });
         _tracker.GetSummaryAsync(Arg.Any<int>(), Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(expected);
 

@@ -1,0 +1,22 @@
+name: Dependency Submission (NuGet)
+
+on:
+  push:
+    branches: ["develop"]
+
+permissions:
+  contents: write
+
+jobs:
+  dependency-submission:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+
+      - name: Submit NuGet dependencies
+        uses: advanced-security/nuget-dependency-submission-action@v1
+        with:
+          solution-path: DotnetTokenKiller.slnx

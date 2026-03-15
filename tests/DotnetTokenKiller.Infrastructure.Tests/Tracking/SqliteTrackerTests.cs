@@ -94,8 +94,8 @@ public class SqliteTrackerTests : IAsyncDisposable
 
         summary.TotalCommands.Should().Be(3);
         summary.TotalSavedTokens.Should().Be(2200);
-        summary.SavedByCommand["build"].Should().Be(1700);
-        summary.SavedByCommand["test"].Should().Be(500);
+        summary.CommandDetails["build"].TotalSavedTokens.Should().Be(1700);
+        summary.CommandDetails["test"].TotalSavedTokens.Should().Be(500);
     }
 
     [Fact]
@@ -132,6 +132,27 @@ public class SqliteTrackerTests : IAsyncDisposable
 
         history[0].Command.Should().Be("second"); // most recent first
         history[1].Command.Should().Be("first");
+    }
+
+    [Fact]
+    public async Task ResetAsync_DeletesAllRecords()
+    {
+        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord("test"));
+
+        await _sut.ResetAsync();
+
+        var history = await _sut.GetHistoryAsync(365, null);
+        history.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ResetAsync_IsIdempotent_WhenDatabaseIsEmpty()
+    {
+        await _sut.ResetAsync();
+
+        var history = await _sut.GetHistoryAsync(365, null);
+        history.Should().BeEmpty();
     }
 
     [Fact]

@@ -15,4 +15,6 @@ public interface ITracker
         CancellationToken cancellationToken = default);
 
     Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default);
+
+    Task ResetAsync(CancellationToken cancellationToken = default);
 }

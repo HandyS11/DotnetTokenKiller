@@ -34,6 +34,7 @@ app.Configure(config =>
     });
 
     config.AddCommand<GainCommand>("gain").WithDescription("Show token savings analytics");
+    config.AddCommand<ResetCommand>("reset").WithDescription("Clear all tracking data");
 });
 
 return await app.RunAsync(args);

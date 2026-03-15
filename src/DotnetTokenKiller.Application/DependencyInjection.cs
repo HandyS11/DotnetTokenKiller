@@ -10,6 +10,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddTransient<FilteredRunUseCase>();
         services.AddTransient<GainReportUseCase>();
+        services.AddTransient<ResetTrackingUseCase>();
         services.AddSingleton<DotnetBuildFilter>();
         services.AddSingleton<DotnetTestFilter>();
         services.AddSingleton<DotnetRestoreFilter>();
