@@ -45,7 +45,7 @@ SC6: `dtk gain` produces correct token savings data aggregated across all tracke
 
 ### MVP
 
-All `dotnet` subcommand filters (build, test, restore, publish, pack, clean, run, ef, format, nuget), passthrough for unrecognized subcommands, `dtk gain` analytics, persistent command tracking, JSON configuration, tee output recovery.
+Core `dotnet` subcommand filters (`build`, `test`, `restore`, `clean`), `dtk gain` analytics, persistent command tracking, JSON configuration, tee output recovery.
 
 ### Growth
 
@@ -109,23 +109,9 @@ FR2: The system shall provide a `dtk dotnet test` command that intercepts `dotne
 
 FR3: The system shall provide a `dtk dotnet restore` command that intercepts `dotnet restore` output and compacts it to a one-line summary (90–95% token reduction).
 
-FR4: The system shall provide a `dtk dotnet publish` command that intercepts `dotnet publish` output and strips restore noise while keeping the output path and any errors (80–85% token reduction).
-
-FR5: The system shall provide a `dtk dotnet pack` command that intercepts `dotnet pack` output and strips compile noise while keeping the .nupkg path (85–90% token reduction).
-
 FR6: The system shall provide a `dtk dotnet clean` command that intercepts `dotnet clean` output and reduces it to a success marker or error lines (95%+ token reduction).
 
-FR7: The system shall provide a `dtk dotnet run` command that intercepts `dotnet run` output and strips only the build preamble, preserving actual application output (60–80% token reduction).
-
-FR8: The system shall provide a `dtk dotnet ef` command that intercepts `dotnet ef` output and compacts migration/database status messages (70–80% token reduction).
-
-FR9: The system shall provide a `dtk dotnet format` command that intercepts `dotnet format` output and shows only files changed or needing changes (70–80% token reduction).
-
-FR10: The system shall provide a `dtk dotnet nuget` command that intercepts `dotnet nuget` output and strips progress bars while keeping results (75–85% token reduction).
-
 ### Core Behaviour
-
-FR11: The system shall support passthrough mode for any unrecognized `dotnet` subcommand (e.g., `dtk dotnet new`, `dtk dotnet watch`) with no filtering applied but exit code preserved.
 
 FR12: The system shall track every command execution in a persistent tracking database recording: timestamp, command, project path, input tokens, output tokens, saved tokens, savings percentage, and execution time.
 

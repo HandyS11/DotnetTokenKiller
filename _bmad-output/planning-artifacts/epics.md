@@ -86,14 +86,7 @@ Testing Requirements (from project specification):
 FR1: Epic 1 — `dotnet build` filter
 FR2: Epic 2 — `dotnet test` filter
 FR3: Epic 3 — `dotnet restore` filter
-FR4: Epic 3 — `dotnet publish` filter
-FR5: Epic 3 — `dotnet pack` filter
 FR6: Epic 4 — `dotnet clean` filter
-FR7: Epic 4 — `dotnet run` filter
-FR8: Epic 4 — `dotnet ef` filter
-FR9: Epic 4 — `dotnet format` filter
-FR10: Epic 4 — `dotnet nuget` filter
-FR11: Epic 4 — Passthrough for unrecognized subcommands
 FR12: Epic 5 — SQLite token tracking
 FR13: Epic 5 — `dtk gain` analytics command
 FR14: Epic 1 — Exit code preservation
@@ -121,15 +114,15 @@ Users can install and run `dtk dotnet build` to receive dramatically compressed 
 Users can run `dtk dotnet test` and see only failed tests with error messages and source locations, plus an aggregated pass/fail summary — eliminating the verbose test runner output that dominates LLM context windows.
 **FRs covered:** FR2
 
-### Epic 3: Restore, Publish & Pack Filters
+### Epic 3: Restore Filter
 
-Users can run `dtk dotnet restore`, `dtk dotnet publish`, and `dtk dotnet pack` and receive one-line summaries instead of verbose MSBuild output, with meaningful output paths shown for publish and pack operations.
-**FRs covered:** FR3, FR4, FR5
+Users can run `dtk dotnet restore` and receive a one-line summary instead of verbose MSBuild output.
+**FRs covered:** FR3
 
-### Epic 4: Remaining Filters & Passthrough Coverage
+### Epic 4: Clean Filter
 
-Every `dotnet` subcommand works with DTK — `clean`, `run`, `ef`, `format`, and `nuget` all produce compact output, and any unrecognized subcommand silently passes through with exit code preserved. The filter suite is now complete.
-**FRs covered:** FR6, FR7, FR8, FR9, FR10, FR11
+Users can run `dtk dotnet clean` and receive a minimal confirmation instead of verbose MSBuild output.
+**FRs covered:** FR6
 
 ### Epic 5: Token Savings Analytics
 
@@ -407,6 +400,8 @@ So that I save 90–95% of tokens while still seeing the project count, timing, 
 
 ---
 
+> **Note (Sprint Change Proposal 2026-03-15):** Stories 3.2 (dotnet publish) and 3.3 (dotnet pack) were removed during Epic 9 scope reduction. Their filter implementations have been deleted from the codebase.
+
 ### Story 3.2: Implement dotnet publish Filter with Tests
 
 As a developer running `dtk dotnet publish`,
@@ -505,6 +500,8 @@ So that I save 95%+ of tokens from the verbose MSBuild clean output.
 **And** `dotnet test DotnetTokenKiller.slnx` passes with all tests green
 
 ---
+
+> **Note (Sprint Change Proposal 2026-03-15):** Stories 4.2 (dotnet run), 4.3 (dotnet ef), 4.4 (dotnet format), 4.5 (dotnet nuget), and 4.6 (passthrough) were removed during Epic 9 scope reduction. Their filter implementations have been deleted from the codebase.
 
 ### Story 4.2: Implement dotnet run Filter with Tests
 
