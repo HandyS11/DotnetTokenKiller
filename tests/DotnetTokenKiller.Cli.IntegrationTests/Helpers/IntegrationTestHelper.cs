@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace DotnetTokenKiller.Cli.IntegrationTests;
+namespace DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 
 internal static class IntegrationTestHelper
 {
