@@ -8,7 +8,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Clears all saved tracking data.</summary>
 /// <param name="resetTracking">The reset tracking use case.</param>
 /// <param name="console">The Spectre.Console output sink.</param>
-public sealed class ResetCommand(
+internal sealed class ResetCommand(
     ResetTrackingUseCase resetTracking,
     IAnsiConsole console) : AsyncCommand<ResetCommandSettings>
 {

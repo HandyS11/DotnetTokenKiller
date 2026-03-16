@@ -4,7 +4,7 @@ using System.ComponentModel;
 namespace DotnetTokenKiller.Cli.Commands.Settings;
 
 /// <summary>Settings for dotnet subcommands.</summary>
-public class DotnetCommandSettings : CommandSettings
+internal sealed class DotnetCommandSettings : CommandSettings
 {
     /// <summary>Gets the verbosity level flags.</summary>
     [CommandOption("-v|--verbose")]

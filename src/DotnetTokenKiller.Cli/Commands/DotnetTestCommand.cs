@@ -8,7 +8,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Runs dotnet test with filtered output.</summary>
 /// <param name="filteredRun">The filtered run use case.</param>
 /// <param name="filter">The test output filter.</param>
-public sealed class DotnetTestCommand(
+internal sealed class DotnetTestCommand(
     FilteredRunUseCase filteredRun,
     DotnetTestFilter filter) : AsyncCommand<DotnetCommandSettings>
 {

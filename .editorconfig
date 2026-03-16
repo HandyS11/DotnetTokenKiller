@@ -390,15 +390,15 @@ roslynator_compiler_diagnostic_fixes.enabled = true
 
 # https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/
 dotnet_diagnostic.CA1008.severity = none # Enums should have zero value
+dotnet_diagnostic.CA1031.severity = none # Do not catch general exception types (intentional for fail-safe CLI resilience)
 dotnet_diagnostic.CA1056.severity = none # Uri properties should not be strings
+dotnet_diagnostic.CA1303.severity = none # Do not pass literals as localized parameters (literal strings in console output — CLI tool not localized)
 dotnet_diagnostic.CA1308.severity = none # Normalize strings to uppercase
 dotnet_diagnostic.CA1707.severity = none # Identifiers should not contain underscores
 dotnet_diagnostic.CA1716.severity = none # Identifiers should not match keywords
 dotnet_diagnostic.CA1806.severity = none # Ignore method results (not working properly on all cases)
-dotnet_diagnostic.CA1515.severity = none # Public types required for Spectre.Console.Cli reflection on command/settings types
-dotnet_diagnostic.CA1819.severity = none # bool[] required by Spectre.Console.Cli for multi-occurrence flag counting
-dotnet_diagnostic.CA1031.severity = none # Catch general exception — intentional for fail-safe CLI resilience
-dotnet_diagnostic.CA1303.severity = none # Literal strings in console output — CLI tool not localized
+# dotnet_diagnostic.CA1515.severity = none # Public types required for Spectre.Console.Cli reflection on command/settings types
+# dotnet_diagnostic.CA1819.severity = none # bool[] required by Spectre.Console.Cli for multi-occurrence flag counting
 dotnet_diagnostic.CS1574.severity = none # XML comment has cref attribute that could not be resolved (boring with {} generics)
 
 dotnet_diagnostic.IDE0058.severity = none # Expression not used (boring with extension methods) _ = Foo()
@@ -445,7 +445,9 @@ dotnet_diagnostic.CA2227.severity = none # Collection properties should be read-
 [**/*Tests*/**.cs]
 dotnet_diagnostic.CA1309.severity = none # Use ordinal string comparison (not suitable for testing gridify sorting)
 dotnet_diagnostic.CA1515.severity = none # Application API means internal classes
+dotnet_diagnostic.CS1591.severity = none # Missing XML comment for publicly visible type or member
 dotnet_diagnostic.CA2000.severity = none # Using statement required for IDisposable
+dotnet_diagnostic.CA2007.severity = none # Consider calling ConfigureAwait on the awaited task
 
 dotnet_diagnostic.IDE1006.severity = none # Naming rule for test classes
 

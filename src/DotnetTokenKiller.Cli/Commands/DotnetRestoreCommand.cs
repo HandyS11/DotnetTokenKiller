@@ -8,7 +8,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Runs dotnet restore with filtered output.</summary>
 /// <param name="filteredRun">The filtered run use case.</param>
 /// <param name="filter">The restore output filter.</param>
-public sealed class DotnetRestoreCommand(
+internal sealed class DotnetRestoreCommand(
     FilteredRunUseCase filteredRun,
     DotnetRestoreFilter filter) : AsyncCommand<DotnetCommandSettings>
 {

@@ -8,7 +8,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Runs dotnet build with filtered output.</summary>
 /// <param name="filteredRun">The filtered run use case.</param>
 /// <param name="filter">The build output filter.</param>
-public sealed class DotnetBuildCommand(
+internal sealed class DotnetBuildCommand(
     FilteredRunUseCase filteredRun,
     DotnetBuildFilter filter) : AsyncCommand<DotnetCommandSettings>
 {

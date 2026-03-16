@@ -271,6 +271,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private static partial Regex StackTraceLabelPattern();
 
     // Zero tests: "No test matches the given testcase filter" or "No test is available"
-    [GeneratedRegex(@"No test matches the given testcase filter|No test is available", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("No test matches the given testcase filter|No test is available", RegexOptions.IgnoreCase)]
     private static partial Regex NoTestsPattern();
 }

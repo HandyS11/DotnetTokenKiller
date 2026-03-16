@@ -5,7 +5,7 @@ namespace DotnetTokenKiller.Cli.Infrastructure;
 
 /// <summary>Bridges Spectre.Console.Cli's type registration to Microsoft DI.</summary>
 /// <param name="services">The service collection to register types into.</param>
-public sealed class TypeRegistrar(IServiceCollection services) : ITypeRegistrar
+internal sealed class TypeRegistrar(IServiceCollection services) : ITypeRegistrar
 {
     /// <inheritdoc/>
     public ITypeResolver Build()

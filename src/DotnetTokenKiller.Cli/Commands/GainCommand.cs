@@ -11,7 +11,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Shows token savings analytics.</summary>
 /// <param name="gainReport">The gain report use case.</param>
 /// <param name="console">The Spectre.Console output sink.</param>
-public sealed class GainCommand(
+internal sealed class GainCommand(
     GainReportUseCase gainReport,
     IAnsiConsole console) : AsyncCommand<GainCommandSettings>
 {

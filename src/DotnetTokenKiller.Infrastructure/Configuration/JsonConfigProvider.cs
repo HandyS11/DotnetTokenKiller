@@ -57,18 +57,17 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         var display = loaded.Display;
         var tee = loaded.Tee;
         return new DtkConfig(
-            new TrackingConfig(
-                tracking?.Enabled ?? defaults.Tracking.Enabled,
-                tracking?.RetentionDays ?? defaults.Tracking.RetentionDays,
-                tracking?.DbPath ?? defaults.Tracking.DbPath),
+            tracking with
+            {
+                DbPath = tracking.DbPath ?? defaults.Tracking.DbPath
+            },
             new DisplayConfig(
-                display?.Colors ?? defaults.Display.Colors,
-                display?.Emoji ?? defaults.Display.Emoji,
-                display?.Width ?? defaults.Display.Width),
-            new TeeConfig(
-                tee?.Mode ?? defaults.Tee.Mode,
-                tee?.Directory ?? defaults.Tee.Directory,
-                tee?.MaxFiles ?? defaults.Tee.MaxFiles,
-                tee?.MaxFileSizeBytes ?? defaults.Tee.MaxFileSizeBytes));
+                display.Colors,
+                display.Emoji,
+                display.Width),
+            tee with
+            {
+                Directory = tee.Directory ?? defaults.Tee.Directory
+            });
     }
 }

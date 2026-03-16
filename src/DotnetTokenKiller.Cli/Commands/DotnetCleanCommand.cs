@@ -8,7 +8,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Runs dotnet clean with filtered output.</summary>
 /// <param name="filteredRun">The filtered run use case.</param>
 /// <param name="filter">The clean output filter.</param>
-public sealed class DotnetCleanCommand(
+internal sealed class DotnetCleanCommand(
     FilteredRunUseCase filteredRun,
     DotnetCleanFilter filter) : AsyncCommand<DotnetCommandSettings>
 {

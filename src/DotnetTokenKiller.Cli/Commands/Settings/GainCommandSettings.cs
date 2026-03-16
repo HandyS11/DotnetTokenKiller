@@ -4,7 +4,7 @@ using System.ComponentModel;
 namespace DotnetTokenKiller.Cli.Commands.Settings;
 
 /// <summary>Settings for the gain command.</summary>
-public sealed class GainCommandSettings : CommandSettings
+internal sealed class GainCommandSettings : CommandSettings
 {
     /// <summary>Gets the number of history days to include.</summary>
     [CommandOption("--days")]

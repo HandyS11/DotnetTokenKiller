@@ -133,6 +133,6 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
     [GeneratedRegex(@"[^a-zA-Z0-9\-]")]
     private static partial Regex NonSafeCharRegex();
 
-    [GeneratedRegex(@"-{2,}")]
+    [GeneratedRegex("-{2,}")]
     private static partial Regex CollapseHyphensRegex();
 }
