@@ -23,4 +23,7 @@
     <ProjectReference Include="../DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj"/>
     <ProjectReference Include="../DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj"/>
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotnetTokenKiller.Cli.IntegrationTests"/>
+  </ItemGroup>
 </Project>

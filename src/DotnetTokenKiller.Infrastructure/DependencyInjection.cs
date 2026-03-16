@@ -10,8 +10,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace DotnetTokenKiller.Infrastructure;
 
+/// <summary>DI registration for Infrastructure layer services.</summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>Registers infrastructure implementations.</summary>
+    /// <param name="services">The service collection to add registrations to.</param>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services)
     {
         services.AddSingleton<ICommandRunner, ProcessCommandRunner>();

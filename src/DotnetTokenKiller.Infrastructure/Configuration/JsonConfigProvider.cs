@@ -3,10 +3,14 @@ using System.Text.Json;
 
 namespace DotnetTokenKiller.Infrastructure.Configuration;
 
+/// <summary>Loads and saves configuration from a JSON file on disk.</summary>
+/// <param name="configPath">Path to the JSON configuration file.</param>
 public sealed class JsonConfigProvider(string configPath) : IConfigProvider
 {
+    /// <summary>Initializes a new instance using the default configuration path.</summary>
     public JsonConfigProvider() : this(GetDefaultConfigPath()) { }
 
+    /// <inheritdoc/>
     public async Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -16,7 +20,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
                 return DtkConfig.Default;
             }
 
-            var json = await File.ReadAllTextAsync(configPath, cancellationToken);
+            var json = await File.ReadAllTextAsync(configPath, cancellationToken).ConfigureAwait(false);
             var loaded = JsonSerializer.Deserialize(json, DtkConfigJsonContext.Default.DtkConfig);
             return loaded is null ? DtkConfig.Default : Merge(loaded);
         }
@@ -26,6 +30,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         }
     }
 
+    /// <inheritdoc/>
     public async Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
     {
         var directory = Path.GetDirectoryName(configPath);
@@ -36,7 +41,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
 
         Directory.CreateDirectory(directory);
         var json = JsonSerializer.Serialize(config, DtkConfigJsonContext.Default.DtkConfig);
-        await File.WriteAllTextAsync(configPath, json, cancellationToken);
+        await File.WriteAllTextAsync(configPath, json, cancellationToken).ConfigureAwait(false);
     }
 
     private static string GetDefaultConfigPath()

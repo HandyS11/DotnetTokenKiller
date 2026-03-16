@@ -4,6 +4,6 @@
     <PackageId>SampleApp</PackageId>
     <Version>1.0.0</Version>
     <IsPackable>true</IsPackable>
-    <NoWarn>$(NoWarn);CA1515</NoWarn>
+    <NoWarn>$(NoWarn);CA1515;CS1591</NoWarn>
   </PropertyGroup>
 </Project>

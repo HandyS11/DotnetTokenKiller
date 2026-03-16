@@ -8,17 +8,23 @@ using System.Text.Json;
 
 namespace DotnetTokenKiller.Cli.Commands;
 
-public sealed class GainCommand(
+/// <summary>Shows token savings analytics.</summary>
+/// <param name="gainReport">The gain report use case.</param>
+/// <param name="console">The Spectre.Console output sink.</param>
+internal sealed class GainCommand(
     GainReportUseCase gainReport,
     IAnsiConsole console) : AsyncCommand<GainCommandSettings>
 {
+    /// <inheritdoc/>
     public override async Task<int> ExecuteAsync(
         CommandContext context,
         GainCommandSettings settings,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+
         var projectPath = settings.Project ? Environment.CurrentDirectory : null;
-        var summary = await gainReport.GetSummaryAsync(settings.Days, projectPath, cancellationToken);
+        var summary = await gainReport.GetSummaryAsync(settings.Days, projectPath, cancellationToken).ConfigureAwait(false);
 
         if (settings.Json)
         {

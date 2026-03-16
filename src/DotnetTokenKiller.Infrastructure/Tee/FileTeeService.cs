@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Infrastructure.Tee;
 
-/// <summary>Constructor for testability — pass temp dir to avoid touching real FS.</summary>
+/// <summary>Persists command output to a file and optionally returns a hint message.</summary>
 /// <param name="configProvider">The configuration provider.</param>
 /// <param name="teeDirOverride">Optional directory override; uses platform default when null.</param>
 public sealed partial class FileTeeService(IConfigProvider configProvider, string? teeDirOverride) : ITeeService
@@ -12,20 +12,24 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
     private const string FailuresMode = "failures";
     private const string AlwaysMode = "always";
 
+    /// <summary>Initializes a new instance using the default tee directory.</summary>
+    /// <param name="configProvider">The configuration provider.</param>
     public FileTeeService(IConfigProvider configProvider)
         : this(configProvider, null)
     {
     }
 
+    /// <inheritdoc/>
     public async Task<string?> TeeAndHintAsync(
         string rawOutput,
         string commandSlug,
         int exitCode,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(rawOutput);
         try
         {
-            var config = await configProvider.LoadAsync(cancellationToken);
+            var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
             var teeConfig = config.Tee;
 
             // Mode check
@@ -60,7 +64,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             var uniqueSuffix = Guid.NewGuid().ToString("N");
             var fileName = $"{timestamp}_{uniqueSuffix}_{slug}.log";
             var filePath = Path.Combine(teeDir, fileName);
-            await File.WriteAllTextAsync(filePath, content, cancellationToken);
+            await File.WriteAllTextAsync(filePath, content, cancellationToken).ConfigureAwait(false);
 
             return $"[full output: {filePath}]";
         }
@@ -129,6 +133,6 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
     [GeneratedRegex(@"[^a-zA-Z0-9\-]")]
     private static partial Regex NonSafeCharRegex();
 
-    [GeneratedRegex(@"-{2,}")]
+    [GeneratedRegex("-{2,}")]
     private static partial Regex CollapseHyphensRegex();
 }

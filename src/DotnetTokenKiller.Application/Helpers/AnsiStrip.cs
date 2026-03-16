@@ -2,8 +2,11 @@ using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Application.Helpers;
 
+/// <summary>Strips ANSI/VT100 escape sequences from text.</summary>
 public static partial class AnsiStrip
 {
+    /// <summary>Returns the text with all ANSI CSI sequences removed.</summary>
+    /// <param name="text">The text to strip.</param>
     public static string Strip(string text)
     {
         if (string.IsNullOrEmpty(text))

@@ -47,9 +47,11 @@ if (args.Length >= 2 &&
     string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
     !knownDotnetSubcommands.Contains(args[1]))
 {
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
     await using var sp = services.BuildServiceProvider();
+#pragma warning restore CA2007
     var runner = sp.GetRequiredService<ICommandRunner>();
-    return await runner.RunPassthroughAsync("dotnet", args[1..]);
+    return await runner.RunPassthroughAsync("dotnet", args[1..]).ConfigureAwait(false);
 }
 
-return await app.RunAsync(args);
+return await app.RunAsync(args).ConfigureAwait(false);

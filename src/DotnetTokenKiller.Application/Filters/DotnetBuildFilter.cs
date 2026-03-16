@@ -6,6 +6,8 @@ using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Application.Filters;
 
+/// <summary>Condenses dotnet build output to a concise error/warning summary.</summary>
+/// <param name="rootPath">Optional root path used to shorten file paths in diagnostics.</param>
 public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutputFilter
 {
     private const string Separator = "---";
@@ -13,6 +15,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
     private readonly string _rootPath = rootPath ?? Environment.CurrentDirectory;
 
+    /// <summary>Applies the filter to the raw build output.</summary>
+    /// <param name="rawOutput">The raw build output to filter.</param>
     public string Apply(string rawOutput)
     {
         if (string.IsNullOrEmpty(rawOutput))
@@ -20,9 +24,21 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             return string.Empty;
         }
 
-        var stripped = AnsiStrip.Strip(rawOutput);
-        var lines = stripped.Split('\n');
+        var (diagnostics, projectCount, elapsed) = ParseLines(AnsiStrip.Strip(rawOutput).Split('\n'));
+        var errors = diagnostics.Where(d => d.Level == "error").ToList();
+        var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
+        var context = BuildContext(projectCount, elapsed);
 
+        if (errors.Count == 0 && warnings.Count == 0)
+        {
+            return $"✓ dotnet build{context}\n";
+        }
+
+        return FormatDiagnostics(errors, warnings, context);
+    }
+
+    private (List<Diagnostic> Diagnostics, int ProjectCount, string Elapsed) ParseLines(string[] lines)
+    {
         var diagnostics = new List<Diagnostic>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var projectCount = 0;
@@ -76,15 +92,11 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
                 TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
         }
 
-        var errors = diagnostics.Where(d => d.Level == "error").ToList();
-        var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
-        var context = BuildContext(projectCount, elapsed);
+        return (diagnostics, projectCount, elapsed);
+    }
 
-        if (errors.Count == 0 && warnings.Count == 0)
-        {
-            return $"✓ dotnet build{context}\n";
-        }
-
+    private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context)
+    {
         var sb = new StringBuilder();
 
         if (errors.Count == 0)
@@ -226,11 +238,11 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     private static partial Regex TimeSpanValuePattern();
 
     // Noise: MSBuild version header
-    [GeneratedRegex(@"MSBuild version", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("MSBuild version", RegexOptions.IgnoreCase)]
     private static partial Regex NoiseMsbuildVersionPattern();
 
     // Noise: Restore progress lines
-    [GeneratedRegex(@"Determining projects to restore|All projects are up-to-date for restore")]
+    [GeneratedRegex("Determining projects to restore|All projects are up-to-date for restore")]
     private static partial Regex NoiseRestoringPattern();
 
     // Noise: "Restored /path/Project.csproj (in N ms)."
@@ -238,7 +250,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     private static partial Regex NoiseRestoredPattern();
 
     // Noise: "Build started ..."
-    [GeneratedRegex(@"Build started")]
+    [GeneratedRegex("Build started")]
     private static partial Regex NoiseBuildStartedPattern();
 
     // Noise: "Build succeeded." or "Build FAILED."
@@ -250,7 +262,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     private static partial Regex NoiseCountPattern();
 
     // Noise: "Time Elapsed ..." line itself
-    [GeneratedRegex(@"^Time Elapsed")]
+    [GeneratedRegex("^Time Elapsed")]
     private static partial Regex NoiseTimeElapsedPattern();
 
     // Noise: project output redirect (-> dll/exe) - fallback for IsNoiseLine

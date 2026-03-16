@@ -3,6 +3,7 @@ using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests;
 
+[Collection("Integration")]
 [Trait("Category", "Integration")]
 public class DotnetBuildIntegrationTests
 {
