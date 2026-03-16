@@ -397,8 +397,6 @@ dotnet_diagnostic.CA1308.severity = none # Normalize strings to uppercase
 dotnet_diagnostic.CA1707.severity = none # Identifiers should not contain underscores
 dotnet_diagnostic.CA1716.severity = none # Identifiers should not match keywords
 dotnet_diagnostic.CA1806.severity = none # Ignore method results (not working properly on all cases)
-# dotnet_diagnostic.CA1515.severity = none # Public types required for Spectre.Console.Cli reflection on command/settings types
-# dotnet_diagnostic.CA1819.severity = none # bool[] required by Spectre.Console.Cli for multi-occurrence flag counting
 dotnet_diagnostic.CS1574.severity = none # XML comment has cref attribute that could not be resolved (boring with {} generics)
 
 dotnet_diagnostic.IDE0058.severity = none # Expression not used (boring with extension methods) _ = Foo()
