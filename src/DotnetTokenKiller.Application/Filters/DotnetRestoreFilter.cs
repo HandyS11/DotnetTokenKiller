@@ -6,12 +6,16 @@ using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Application.Filters;
 
+/// <summary>Condenses dotnet restore output to a concise summary.</summary>
+/// <param name="rootPath">Optional root path used to shorten file paths in error messages.</param>
 public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutputFilter
 {
     private const int MessageMaxLen = 200;
 
     private readonly string _rootPath = rootPath ?? Environment.CurrentDirectory;
 
+    /// <summary>Applies the filter to the raw restore output.</summary>
+    /// <param name="rawOutput">The raw restore output to filter.</param>
     public string Apply(string rawOutput)
     {
         if (string.IsNullOrEmpty(rawOutput))
@@ -161,7 +165,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
     private static partial Regex RestoredPattern();
 
     // "All projects are up-to-date for restore."
-    [GeneratedRegex(@"All projects are up-to-date for restore", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("All projects are up-to-date for restore", RegexOptions.IgnoreCase)]
     private static partial Regex AllUpToDatePattern();
 
     // "3 of 5 projects are up-to-date for restore."

@@ -4,8 +4,11 @@ using System.Text;
 
 namespace DotnetTokenKiller.Application.Filters;
 
+/// <summary>Condenses dotnet clean output to a concise summary.</summary>
 public sealed class DotnetCleanFilter : IOutputFilter
 {
+    /// <summary>Applies the filter to the raw clean output.</summary>
+    /// <param name="rawOutput">The raw clean output to filter.</param>
     public string Apply(string rawOutput)
     {
         if (string.IsNullOrEmpty(rawOutput))

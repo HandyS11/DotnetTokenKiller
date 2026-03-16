@@ -3,6 +3,7 @@
     <RootNamespace>DotnetTokenKiller.Infrastructure.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);CS1591;VSTHRD200;CA2007</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk"/>

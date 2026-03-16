@@ -5,14 +5,21 @@ using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands;
 
+/// <summary>Runs dotnet build with filtered output.</summary>
+/// <param name="filteredRun">The filtered run use case.</param>
+/// <param name="filter">The build output filter.</param>
 public sealed class DotnetBuildCommand(
     FilteredRunUseCase filteredRun,
     DotnetBuildFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
+    /// <inheritdoc/>
     public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(context);
+
         var args = settings.PositionalArgs.Prepend("build").Concat(context.Remaining.Raw).ToArray();
-        return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken);
+        return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, cancellationToken).ConfigureAwait(false);
     }
 }

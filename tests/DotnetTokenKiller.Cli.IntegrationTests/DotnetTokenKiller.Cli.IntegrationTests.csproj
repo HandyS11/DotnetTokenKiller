@@ -3,6 +3,7 @@
     <RootNamespace>DotnetTokenKiller.Cli.IntegrationTests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);CS1591;VSTHRD200;CA2007</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj"/>

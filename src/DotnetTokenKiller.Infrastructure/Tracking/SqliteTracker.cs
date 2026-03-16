@@ -4,6 +4,8 @@ using System.Globalization;
 
 namespace DotnetTokenKiller.Infrastructure.Tracking;
 
+/// <summary>Persists command tracking records in a SQLite database.</summary>
+/// <param name="connectionString">The SQLite connection string.</param>
 public sealed class SqliteTracker(string connectionString) : ITracker, IDisposable, IAsyncDisposable
 {
     private const int RetentionDays = 90;
@@ -44,14 +46,16 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         }
 
         EnsureDataDirectory(connectionString);
-        await _connection.OpenAsync(ct);
-        await InitializeSchemaAsync(ct);
+        await _connection.OpenAsync(ct).ConfigureAwait(false);
+        await InitializeSchemaAsync(ct).ConfigureAwait(false);
         _initialized = true;
     }
 
     private async Task InitializeSchemaAsync(CancellationToken ct)
     {
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
         cmd.CommandText = """
                           CREATE TABLE IF NOT EXISTS commands (
                               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,13 +71,18 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
                           CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
                           CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
                           """;
-        await cmd.ExecuteNonQueryAsync(ct);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
     {
-        await EnsureInitializedAsync(cancellationToken);
+        ArgumentNullException.ThrowIfNull(record);
+
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
         cmd.CommandText = """
                           INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
                               saved_tokens, savings_percentage, execution_time_ms)
@@ -87,19 +96,22 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
         cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
         cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
-        await CleanupAsync(RetentionDays, cancellationToken);
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await CleanupAsync(RetentionDays, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task<GainSummary> GetSummaryAsync(
         int days,
         string? projectPath,
         CancellationToken cancellationToken = default)
     {
-        await EnsureInitializedAsync(cancellationToken);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var since = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
 
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
         cmd.CommandText = """
                           SELECT command,
                                  COUNT(*) as run_count,
@@ -123,8 +135,10 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         var commandCount = 0;
         var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
 
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning restore CA2007
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var cmdName = reader.GetString(0);
             var runCount = reader.GetInt32(1);
@@ -146,15 +160,18 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, commandDetails);
     }
 
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
         int days,
         string? projectPath,
         CancellationToken cancellationToken = default)
     {
-        await EnsureInitializedAsync(cancellationToken);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var since = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
 
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
         cmd.CommandText = """
                           SELECT timestamp, command, project_path, input_tokens, output_tokens,
                                  saved_tokens, savings_percentage, execution_time_ms
@@ -167,8 +184,10 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
 
         var results = new List<CommandRecord>();
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning restore CA2007
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             results.Add(new CommandRecord(
                 DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture,
@@ -185,31 +204,39 @@ public sealed class SqliteTracker(string connectionString) : ITracker, IDisposab
         return results;
     }
 
+    /// <inheritdoc/>
     public async Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)
     {
-        await EnsureInitializedAsync(cancellationToken);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays).ToString("O", CultureInfo.InvariantCulture);
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
         cmd.CommandText = "DELETE FROM commands WHERE timestamp < @cutoff";
         cmd.Parameters.AddWithValue("@cutoff", cutoff);
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
     public async Task ResetAsync(CancellationToken cancellationToken = default)
     {
-        await EnsureInitializedAsync(cancellationToken);
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
         cmd.CommandText = "DELETE FROM commands";
-        await cmd.ExecuteNonQueryAsync(cancellationToken);
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Releases managed resources.</summary>
     public void Dispose()
     {
         _connection.Dispose();
     }
 
+    /// <summary>Asynchronously releases managed resources.</summary>
     public async ValueTask DisposeAsync()
     {
-        await _connection.DisposeAsync();
+        await _connection.DisposeAsync().ConfigureAwait(false);
     }
 }

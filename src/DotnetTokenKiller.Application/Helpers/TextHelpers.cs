@@ -2,8 +2,12 @@ using System.Globalization;
 
 namespace DotnetTokenKiller.Application.Helpers;
 
+/// <summary>String formatting utilities.</summary>
 public static class TextHelpers
 {
+    /// <summary>Truncates text to the given length, appending "..." if truncated.</summary>
+    /// <param name="text">The text to truncate.</param>
+    /// <param name="maxLen">Maximum allowed length before truncation.</param>
     public static string Truncate(string text, int maxLen)
     {
         if (string.IsNullOrEmpty(text) || text.Length <= maxLen)
@@ -14,6 +18,8 @@ public static class TextHelpers
         return $"{text[..maxLen]}...";
     }
 
+    /// <summary>Formats a token count as a human-readable string (e.g. "1.2K").</summary>
+    /// <param name="count">The token count to format.</param>
     public static string FormatTokens(int count)
     {
         return count switch
@@ -24,6 +30,9 @@ public static class TextHelpers
         };
     }
 
+    /// <summary>Returns the path relative to rootPath, falling back to filename on error.</summary>
+    /// <param name="absolutePath">The absolute path to shorten.</param>
+    /// <param name="rootPath">The root path to make the path relative to.</param>
     public static string ShortenPath(string absolutePath, string rootPath)
     {
         if (string.IsNullOrEmpty(absolutePath))

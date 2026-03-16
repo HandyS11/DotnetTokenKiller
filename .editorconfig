@@ -391,7 +391,6 @@ roslynator_compiler_diagnostic_fixes.enabled = true
 # https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/quality-rules/
 dotnet_diagnostic.CA1008.severity = none # Enums should have zero value
 dotnet_diagnostic.CA1056.severity = none # Uri properties should not be strings
-dotnet_diagnostic.CA1062.severity = none # Validate arguments of public methods
 dotnet_diagnostic.CA1308.severity = none # Normalize strings to uppercase
 dotnet_diagnostic.CA1707.severity = none # Identifiers should not contain underscores
 dotnet_diagnostic.CA1716.severity = none # Identifiers should not match keywords
@@ -400,18 +399,13 @@ dotnet_diagnostic.CA1515.severity = none # Public types required for Spectre.Con
 dotnet_diagnostic.CA1819.severity = none # bool[] required by Spectre.Console.Cli for multi-occurrence flag counting
 dotnet_diagnostic.CA1031.severity = none # Catch general exception — intentional for fail-safe CLI resilience
 dotnet_diagnostic.CA1303.severity = none # Literal strings in console output — CLI tool not localized
-dotnet_diagnostic.CA2007.severity = none # Consider calling ConfigureAwait on the awaited task
-
 dotnet_diagnostic.CS1574.severity = none # XML comment has cref attribute that could not be resolved (boring with {} generics)
-dotnet_diagnostic.CS1591.severity = none # Missing XML comment for publicly visible type or member
 
 dotnet_diagnostic.IDE0058.severity = none # Expression not used (boring with extension methods) _ = Foo()
 
 dotnet_diagnostic.Moq1203.severity = none # Method setup should specify a return value
 dotnet_diagnostic.Moq1400.severity = none # Choose a mock behaviour (strict, loose)
 dotnet_diagnostic.Moq1410.severity = none # Set behaviour to Strict
-
-dotnet_diagnostic.S3213.severity = none # Use ConfigureAwait(false) in async methods
 
 dotnet_diagnostic.T0000.severity = none # Do not use Get prefix
 dotnet_diagnostic.T0003.severity = none # Do not use tuples
@@ -454,7 +448,6 @@ dotnet_diagnostic.CA1515.severity = none # Application API means internal classe
 dotnet_diagnostic.CA2000.severity = none # Using statement required for IDisposable
 
 dotnet_diagnostic.IDE1006.severity = none # Naming rule for test classes
-dotnet_diagnostic.VSTHRD200.severity = none # Async suffix not required on xUnit test methods
 
 dotnet_diagnostic.S3220.severity = none # Partial match for parameters (params)
 

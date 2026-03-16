@@ -6,6 +6,8 @@ using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Application.Filters;
 
+/// <summary>Condenses dotnet test output to a concise pass/fail summary.</summary>
+/// <param name="rootPath">Optional root path used to shorten file paths in stack traces.</param>
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputFilter
 {
     private const int MaxFailures = 15;
@@ -13,6 +15,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
     private readonly string _rootPath = rootPath ?? Environment.CurrentDirectory;
 
+    /// <summary>Applies the filter to the raw test output.</summary>
+    /// <param name="rawOutput">The raw test output to filter.</param>
     public string Apply(string rawOutput)
     {
         if (string.IsNullOrEmpty(rawOutput))
@@ -154,7 +158,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private static string FormatOutput(ParseState state)
     {
         // Zero tests: explicit no-tests pattern or all summaries showed 0 tests
-        if (state.ZeroTestsFound || (state.ProjectCount > 0 && state.TotalPassed == 0 && state.TotalFailed == 0))
+        if (state.ZeroTestsFound || state is { ProjectCount: > 0, TotalPassed: 0, TotalFailed: 0 })
         {
             return "✓ dotnet test: 0 tests found\n";
         }

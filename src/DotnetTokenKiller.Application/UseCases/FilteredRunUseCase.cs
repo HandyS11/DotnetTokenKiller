@@ -7,11 +7,21 @@ using System.Diagnostics;
 
 namespace DotnetTokenKiller.Application.UseCases;
 
+/// <summary>Runs a dotnet command, filters its output, and records the token savings.</summary>
+/// <param name="commandRunner">The command runner.</param>
+/// <param name="tracker">The tracking store.</param>
+/// <param name="teeService">The tee output service.</param>
 public sealed class FilteredRunUseCase(
     ICommandRunner commandRunner,
     ITracker tracker,
     ITeeService teeService)
 {
+    /// <summary>Executes the command, writes filtered output, and records the run.</summary>
+    /// <param name="filter">The output filter to apply.</param>
+    /// <param name="command">The executable to run.</param>
+    /// <param name="args">Arguments to pass to the executable.</param>
+    /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<int> RunAsync(
         IOutputFilter filter,
         string command,
@@ -19,6 +29,9 @@ public sealed class FilteredRunUseCase(
         int verbosityLevel,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(args);
+
         var stopwatch = Stopwatch.StartNew();
 
         if (verbosityLevel >= 1)
@@ -26,7 +39,7 @@ public sealed class FilteredRunUseCase(
             Console.WriteLine($"$ {command} {string.Join(' ', args)}");
         }
 
-        var result = await commandRunner.RunCapturedAsync(command, args, cancellationToken);
+        var result = await commandRunner.RunCapturedAsync(command, args, cancellationToken).ConfigureAwait(false);
 
         var raw = result.StdOut + result.StdErr;
         var stripped = AnsiStrip.Strip(raw);
@@ -62,7 +75,7 @@ public sealed class FilteredRunUseCase(
         try
         {
             var commandSlug = args.Count > 0 ? args[0] : command;
-            var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken);
+            var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken).ConfigureAwait(false);
             if (hint is not null)
             {
                 Console.WriteLine(hint);
@@ -91,7 +104,7 @@ public sealed class FilteredRunUseCase(
                 savingsPct,
                 stopwatch.Elapsed);
 
-            await tracker.RecordAsync(record, cancellationToken);
+            await tracker.RecordAsync(record, cancellationToken).ConfigureAwait(false);
         }
         catch
         {

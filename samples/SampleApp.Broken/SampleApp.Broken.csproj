@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <NoWarn>$(NoWarn);CA1515</NoWarn>
+    <NoWarn>$(NoWarn);CA1515;CS1591</NoWarn>
   </PropertyGroup>
 </Project>
