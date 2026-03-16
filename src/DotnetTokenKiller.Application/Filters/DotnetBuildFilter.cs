@@ -20,9 +20,21 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             return string.Empty;
         }
 
-        var stripped = AnsiStrip.Strip(rawOutput);
-        var lines = stripped.Split('\n');
+        var (diagnostics, projectCount, elapsed) = ParseLines(AnsiStrip.Strip(rawOutput).Split('\n'));
+        var errors = diagnostics.Where(d => d.Level == "error").ToList();
+        var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
+        var context = BuildContext(projectCount, elapsed);
 
+        if (errors.Count == 0 && warnings.Count == 0)
+        {
+            return $"✓ dotnet build{context}\n";
+        }
+
+        return FormatDiagnostics(errors, warnings, context);
+    }
+
+    private (List<Diagnostic> Diagnostics, int ProjectCount, string Elapsed) ParseLines(string[] lines)
+    {
         var diagnostics = new List<Diagnostic>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var projectCount = 0;
@@ -76,15 +88,11 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
                 TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
         }
 
-        var errors = diagnostics.Where(d => d.Level == "error").ToList();
-        var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
-        var context = BuildContext(projectCount, elapsed);
+        return (diagnostics, projectCount, elapsed);
+    }
 
-        if (errors.Count == 0 && warnings.Count == 0)
-        {
-            return $"✓ dotnet build{context}\n";
-        }
-
+    private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context)
+    {
         var sb = new StringBuilder();
 
         if (errors.Count == 0)

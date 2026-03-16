@@ -1,7 +1,7 @@
-namespace DotnetTokenKiller.Application.Tests.Filters;
-
 using DotnetTokenKiller.Application.Filters;
 using FluentAssertions;
+
+namespace DotnetTokenKiller.Application.Tests.Filters;
 
 public class DotnetTestFilterTests
 {

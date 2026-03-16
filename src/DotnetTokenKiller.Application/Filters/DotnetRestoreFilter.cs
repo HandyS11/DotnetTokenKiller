@@ -19,101 +19,99 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             return string.Empty;
         }
 
-        var stripped = AnsiStrip.Strip(rawOutput);
-        var lines = stripped.Split(["\r\n", "\n"], StringSplitOptions.None);
-
-        var errors = new List<NuGetError>();
-        var restoredCount = 0;
-        var upToDateCount = 0;
-        var allUpToDate = false;
-        double totalDurationMs = 0;
-
+        var lines = AnsiStrip.Strip(rawOutput).Split(["\r\n", "\n"], StringSplitOptions.None);
+        var state = new ParseState();
         foreach (var rawLine in lines)
         {
-            var line = rawLine.Trim();
-
-            // "  Restored /path/Project.csproj (in 123 ms)."
-            var restoredMatch = RestoredPattern().Match(line);
-            if (restoredMatch.Success)
-            {
-                restoredCount++;
-                if (double.TryParse(restoredMatch.Groups["ms"].Value, CultureInfo.InvariantCulture, out var ms))
-                {
-                    totalDurationMs += ms;
-                }
-
-                continue;
-            }
-
-            // "All projects are up-to-date for restore."
-            if (AllUpToDatePattern().IsMatch(line))
-            {
-                allUpToDate = true;
-                continue;
-            }
-
-            // "3 of 5 projects are up-to-date for restore."
-            var partialMatch = PartialUpToDatePattern().Match(line);
-            if (partialMatch.Success)
-            {
-                if (int.TryParse(partialMatch.Groups["count"].Value, CultureInfo.InvariantCulture, out var count))
-                {
-                    upToDateCount = count;
-                }
-
-                continue;
-            }
-
-            // "/path/proj.csproj : error NU1101: message" (project path before error code)
-            var errorProjFirstMatch = NuGetErrorProjectFirstPattern().Match(line);
-            if (errorProjFirstMatch.Success)
-            {
-                var proj = TextHelpers.ShortenPath(errorProjFirstMatch.Groups["proj"].Value.Trim(), _rootPath);
-                errors.Add(new NuGetError(
-                    errorProjFirstMatch.Groups["code"].Value,
-                    TextHelpers.Truncate(errorProjFirstMatch.Groups["message"].Value.Trim(), MessageMaxLen),
-                    proj));
-                continue;
-            }
-
-            // "error NU1101: message [/path/proj.csproj]" (standard NuGet error format)
-            var errorStdMatch = NuGetErrorStandardPattern().Match(line);
-            if (errorStdMatch.Success)
-            {
-                var projRaw = errorStdMatch.Groups["proj"].Value.Trim();
-                var proj = string.IsNullOrEmpty(projRaw)
-                    ? string.Empty
-                    : TextHelpers.ShortenPath(projRaw, _rootPath);
-                errors.Add(new NuGetError(
-                    errorStdMatch.Groups["code"].Value,
-                    TextHelpers.Truncate(errorStdMatch.Groups["message"].Value.Trim(), MessageMaxLen),
-                    proj));
-            }
+            ProcessLine(rawLine.Trim(), state);
         }
 
-        if (errors.Count > 0)
+        return FormatOutput(state);
+    }
+
+    private void ProcessLine(string line, ParseState state)
+    {
+        var restoredMatch = RestoredPattern().Match(line);
+        if (restoredMatch.Success)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"dotnet restore: {errors.Count} error{(errors.Count == 1 ? "" : "s")}");
-            foreach (var e in errors)
+            state.RestoredCount++;
+            if (double.TryParse(restoredMatch.Groups["ms"].Value, CultureInfo.InvariantCulture, out var ms))
             {
-                if (string.IsNullOrEmpty(e.Project))
-                {
-                    sb.AppendLine(CultureInfo.InvariantCulture, $"  {e.Code}: {e.Message}");
-                }
-                else
-                {
-                    sb.AppendLine(CultureInfo.InvariantCulture, $"  {e.Code}: {e.Message} ({e.Project})");
-                }
+                state.TotalDurationMs += ms;
             }
 
-            return sb.ToString();
+            return;
         }
 
-        var totalProjects = restoredCount + upToDateCount;
+        if (AllUpToDatePattern().IsMatch(line))
+        {
+            state.AllUpToDate = true;
+            return;
+        }
 
-        if (totalProjects == 0 && allUpToDate)
+        var partialMatch = PartialUpToDatePattern().Match(line);
+        if (partialMatch.Success)
+        {
+            if (int.TryParse(partialMatch.Groups["count"].Value, CultureInfo.InvariantCulture, out var count))
+            {
+                state.UpToDateCount = count;
+            }
+
+            return;
+        }
+
+        if (!TryParseProjectFirstError(line, state.Errors))
+        {
+            TryParseStandardError(line, state.Errors);
+        }
+    }
+
+    private bool TryParseProjectFirstError(string line, List<NuGetError> errors)
+    {
+        // "/path/proj.csproj : error NU1101: message" (project path before error code)
+        var match = NuGetErrorProjectFirstPattern().Match(line);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var proj = TextHelpers.ShortenPath(match.Groups["proj"].Value.Trim(), _rootPath);
+        errors.Add(new NuGetError(
+            match.Groups["code"].Value,
+            TextHelpers.Truncate(match.Groups["message"].Value.Trim(), MessageMaxLen),
+            proj));
+        return true;
+    }
+
+    private void TryParseStandardError(string line, List<NuGetError> errors)
+    {
+        // "error NU1101: message [/path/proj.csproj]" (standard NuGet error format)
+        var match = NuGetErrorStandardPattern().Match(line);
+        if (!match.Success)
+        {
+            return;
+        }
+
+        var projRaw = match.Groups["proj"].Value.Trim();
+        var proj = string.IsNullOrEmpty(projRaw)
+            ? string.Empty
+            : TextHelpers.ShortenPath(projRaw, _rootPath);
+        errors.Add(new NuGetError(
+            match.Groups["code"].Value,
+            TextHelpers.Truncate(match.Groups["message"].Value.Trim(), MessageMaxLen),
+            proj));
+    }
+
+    private static string FormatOutput(ParseState state)
+    {
+        if (state.Errors.Count > 0)
+        {
+            return FormatErrors(state.Errors);
+        }
+
+        var totalProjects = state.RestoredCount + state.UpToDateCount;
+
+        if (totalProjects == 0 && state.AllUpToDate)
         {
             return "✓ dotnet restore (all up-to-date)\n";
         }
@@ -123,8 +121,37 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             return string.Empty;
         }
 
-        var elapsed = $"{totalDurationMs / 1000.0:F2}s";
+        var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
         return $"✓ dotnet restore ({totalProjects} project{(totalProjects == 1 ? "" : "s")}, {elapsed})\n";
+    }
+
+    private static string FormatErrors(List<NuGetError> errors)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"dotnet restore: {errors.Count} error{(errors.Count == 1 ? "" : "s")}");
+        foreach (var e in errors)
+        {
+            if (string.IsNullOrEmpty(e.Project))
+            {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  {e.Code}: {e.Message}");
+            }
+            else
+            {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  {e.Code}: {e.Message} ({e.Project})");
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private sealed class ParseState
+    {
+        public List<NuGetError> Errors { get; } = [];
+        public int RestoredCount { get; set; }
+        public int UpToDateCount { get; set; }
+        public bool AllUpToDate { get; set; }
+        public double TotalDurationMs { get; set; }
     }
 
     private sealed record NuGetError(string Code, string Message, string Project);

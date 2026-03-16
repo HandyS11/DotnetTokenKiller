@@ -20,137 +20,167 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return string.Empty;
         }
 
-        var stripped = AnsiStrip.Strip(rawOutput);
-        var lines = stripped.Split('\n');
+        var lines = AnsiStrip.Strip(rawOutput).Split('\n');
+        var state = ParseLines(lines);
+        return FormatOutput(state);
+    }
 
-        var failures = new List<FailureInfo>();
-        var totalPassed = 0;
-        var totalFailed = 0;
-        var projectCount = 0;
-        double totalDurationMs = 0;
-        var zeroTestsFound = false;
-
+    private ParseState ParseLines(string[] lines)
+    {
+        var state = new ParseState();
         var i = 0;
         while (i < lines.Length)
         {
             var line = lines[i].TrimEnd('\r');
 
-            // Summary: "Passed! - Failed: 0, Passed: 17, ..., Duration: 89 ms - File.dll"
             var summaryMatch = SummaryPattern().Match(line);
             if (summaryMatch.Success)
             {
-                totalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
-                totalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
-                totalDurationMs += NormalizeDurationToMs(
-                    double.Parse(summaryMatch.Groups["duration"].Value, CultureInfo.InvariantCulture),
-                    summaryMatch.Groups["unit"].Value);
-                projectCount++;
+                AccumulateSummary(summaryMatch, state);
                 i++;
                 continue;
             }
 
-            // Explicit zero-tests pattern
             if (NoTestsPattern().IsMatch(line))
             {
-                zeroTestsFound = true;
+                state.ZeroTestsFound = true;
                 i++;
                 continue;
             }
 
-            // Failed test header: "  Failed TestName [12 ms]"
             var failedHeaderMatch = FailedTestHeaderPattern().Match(line);
             if (failedHeaderMatch.Success)
             {
-                var testName = failedHeaderMatch.Groups["name"].Value.Trim();
-                var duration = failedHeaderMatch.Groups["duration"].Value;
-                i++;
-
-                // Skip "Error Message:" label
-                if (i < lines.Length && ErrorMessageLabelPattern().IsMatch(lines[i].TrimEnd('\r')))
-                {
-                    i++;
-                }
-
-                // Collect message lines until "Stack Trace:", next failed test, or summary
-                var msgLines = new List<string>();
-                while (i < lines.Length)
-                {
-                    var current = lines[i].TrimEnd('\r');
-                    if (StackTraceLabelPattern().IsMatch(current)
-                        || FailedTestHeaderPattern().IsMatch(current)
-                        || SummaryPattern().IsMatch(current))
-                    {
-                        break;
-                    }
-
-                    var trimmed = current.Trim();
-                    if (!string.IsNullOrEmpty(trimmed))
-                    {
-                        msgLines.Add(trimmed);
-                    }
-
-                    i++;
-                }
-
-                // Skip "Stack Trace:" label
-                if (i < lines.Length && StackTraceLabelPattern().IsMatch(lines[i].TrimEnd('\r')))
-                {
-                    i++;
-                }
-
-                // Find first stack frame with a .cs file reference
-                var sourceRef = string.Empty;
-                while (i < lines.Length)
-                {
-                    var current = lines[i].TrimEnd('\r');
-                    if (FailedTestHeaderPattern().IsMatch(current) || SummaryPattern().IsMatch(current))
-                    {
-                        break;
-                    }
-
-                    if (string.IsNullOrEmpty(sourceRef))
-                    {
-                        var frameMatch = StackFrameFilePattern().Match(current);
-                        if (frameMatch.Success)
-                        {
-                            sourceRef =
-                                $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, _rootPath)}:line {frameMatch.Groups["line"].Value}";
-                        }
-                    }
-
-                    i++;
-                }
-
-                failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef));
+                i = ParseFailure(lines, i, failedHeaderMatch, state);
                 continue;
             }
 
             i++;
         }
 
+        return state;
+    }
+
+    private int ParseFailure(string[] lines, int i, Match failedHeaderMatch, ParseState state)
+    {
+        var testName = failedHeaderMatch.Groups["name"].Value.Trim();
+        var duration = failedHeaderMatch.Groups["duration"].Value;
+        i++;
+
+        // Skip "Error Message:" label
+        if (i < lines.Length && ErrorMessageLabelPattern().IsMatch(lines[i].TrimEnd('\r')))
+        {
+            i++;
+        }
+
+        var (msgLines, afterMsg) = CollectMessageLines(lines, i);
+        i = afterMsg;
+
+        // Skip "Stack Trace:" label
+        if (i < lines.Length && StackTraceLabelPattern().IsMatch(lines[i].TrimEnd('\r')))
+        {
+            i++;
+        }
+
+        var (sourceRef, afterStack) = FindSourceRef(lines, i);
+        i = afterStack;
+
+        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef));
+        return i;
+    }
+
+    private static (List<string> Lines, int NextIndex) CollectMessageLines(string[] lines, int i)
+    {
+        var msgLines = new List<string>();
+        while (i < lines.Length)
+        {
+            var current = lines[i].TrimEnd('\r');
+            if (StackTraceLabelPattern().IsMatch(current)
+                || FailedTestHeaderPattern().IsMatch(current)
+                || SummaryPattern().IsMatch(current))
+            {
+                break;
+            }
+
+            var trimmed = current.Trim();
+            if (!string.IsNullOrEmpty(trimmed))
+            {
+                msgLines.Add(trimmed);
+            }
+
+            i++;
+        }
+
+        return (msgLines, i);
+    }
+
+    private (string SourceRef, int NextIndex) FindSourceRef(string[] lines, int i)
+    {
+        var sourceRef = string.Empty;
+        while (i < lines.Length)
+        {
+            var current = lines[i].TrimEnd('\r');
+            if (FailedTestHeaderPattern().IsMatch(current) || SummaryPattern().IsMatch(current))
+            {
+                break;
+            }
+
+            if (string.IsNullOrEmpty(sourceRef))
+            {
+                var frameMatch = StackFrameFilePattern().Match(current);
+                if (frameMatch.Success)
+                {
+                    sourceRef =
+                        $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, _rootPath)}:line {frameMatch.Groups["line"].Value}";
+                }
+            }
+
+            i++;
+        }
+
+        return (sourceRef, i);
+    }
+
+    private static void AccumulateSummary(Match summaryMatch, ParseState state)
+    {
+        state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
+        state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
+        state.TotalDurationMs += NormalizeDurationToMs(
+            double.Parse(summaryMatch.Groups["duration"].Value, CultureInfo.InvariantCulture),
+            summaryMatch.Groups["unit"].Value);
+        state.ProjectCount++;
+    }
+
+    private static string FormatOutput(ParseState state)
+    {
         // Zero tests: explicit no-tests pattern or all summaries showed 0 tests
-        if (zeroTestsFound || (projectCount > 0 && totalPassed == 0 && totalFailed == 0))
+        if (state.ZeroTestsFound || (state.ProjectCount > 0 && state.TotalPassed == 0 && state.TotalFailed == 0))
         {
             return "✓ dotnet test: 0 tests found\n";
         }
 
-        if (projectCount == 0)
+        if (state.ProjectCount == 0)
         {
             return string.Empty;
         }
 
-        var elapsed = $"{totalDurationMs / 1000.0:F2}s";
+        var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
 
-        if (totalFailed == 0)
+        if (state.TotalFailed == 0)
         {
             return
-                $"✓ dotnet test: {totalPassed} passed ({projectCount} project{(projectCount == 1 ? "" : "s")}, {elapsed})\n";
+                $"✓ dotnet test: {state.TotalPassed} passed ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})\n";
         }
 
-        var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({totalFailed}):");
+        return FormatFailures(state, elapsed);
+    }
 
-        foreach (var f in failures.Take(MaxFailures))
+    private static string FormatFailures(ParseState state, string elapsed)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({state.TotalFailed}):");
+
+        foreach (var f in state.Failures.Take(MaxFailures))
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration} ms]")
                 .AppendLine(CultureInfo.InvariantCulture, $"    {f.Message}");
@@ -160,15 +190,25 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             }
         }
 
-        if (failures.Count > MaxFailures)
+        if (state.Failures.Count > MaxFailures)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"+{failures.Count - MaxFailures} more failures");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"+{state.Failures.Count - MaxFailures} more failures");
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet test: {totalFailed} failed, {totalPassed} passed ({projectCount} project{(projectCount == 1 ? "" : "s")}, {elapsed})");
+            $"dotnet test: {state.TotalFailed} failed, {state.TotalPassed} passed ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})");
 
         return sb.ToString();
+    }
+
+    private sealed class ParseState
+    {
+        public List<FailureInfo> Failures { get; } = [];
+        public int TotalPassed { get; set; }
+        public int TotalFailed { get; set; }
+        public int ProjectCount { get; set; }
+        public double TotalDurationMs { get; set; }
+        public bool ZeroTestsFound { get; set; }
     }
 
     private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);

@@ -35,11 +35,13 @@ public sealed class DotnetCleanFilter : IOutputFilter
                 }
 
                 var line = rawLine.TrimEnd('\r');
-                if (line.Contains("error", StringComparison.OrdinalIgnoreCase))
+                if (!line.Contains("error", StringComparison.OrdinalIgnoreCase))
                 {
-                    sb.AppendLine(line);
-                    count++;
+                    continue;
                 }
+
+                sb.AppendLine(line);
+                count++;
             }
 
             return sb.ToString();
