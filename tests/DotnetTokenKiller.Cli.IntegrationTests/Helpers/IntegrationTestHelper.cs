@@ -37,7 +37,14 @@ internal static class IntegrationTestHelper
             RedirectStandardError = true,
             UseShellExecute = false,
             StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
+            StandardErrorEncoding = Encoding.UTF8,
+            Environment =
+            {
+                // Prevent MSBuild node reuse and server mode to avoid file-lock
+                // contention between sequential test runs on shared sample projects.
+                ["MSBUILDDISABLENODEREUSE"] = "1",
+                ["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] = "1"
+            }
         };
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
