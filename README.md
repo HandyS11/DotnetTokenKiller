@@ -23,7 +23,7 @@ dtk dotnet restore
 dtk dotnet clean
 ```
 
-All positional arguments are forwarded to the underlying process:
+All positional arguments and flags are forwarded to the underlying process:
 
 ```sh
 dtk dotnet build --configuration Release
@@ -31,25 +31,89 @@ dtk dotnet test --filter "Category=Unit"
 dtk dotnet build src/MyProject/MyProject.csproj
 ```
 
-Use `-v` / `--verbose` to increase output verbosity (pass it twice for maximum detail):
+Unknown subcommands are passed through to `dotnet` unchanged.
+
+## Reference
+
+### `dtk --help`
 
 ```sh
-dtk dotnet build -v
+USAGE:
+    dtk [OPTIONS] <COMMAND>
+
+OPTIONS:
+    -h, --help       Prints help information
+    -v, --version    Prints version information
+
+COMMANDS:
+    dotnet    Run dotnet commands with filtered output
+    gain      Show token savings analytics
+    reset     Clear all tracking data
 ```
 
-Unknown subcommands are passed through to `dotnet` unchanged.
+### `dtk dotnet build --help`
+
+```sh
+DESCRIPTION:
+Run dotnet build with filtered output
+
+USAGE:
+    dtk dotnet build [args] [OPTIONS]
+
+ARGUMENTS:
+    [args]    Arguments to forward to the underlying dotnet process
+
+OPTIONS:
+    -h, --help        Prints help information
+    -v, --verbose     Increase verbosity (use -v for level 1, -v -v for level 2)
+        --show-log    Print the path to the full log file when the output was saved
+```
+
+> `dtk dotnet test`, `dtk dotnet restore`, and `dtk dotnet clean` accept the same options.
+
+### `dtk gain --help`
+
+```sh
+DESCRIPTION:
+Show token savings analytics
+
+USAGE:
+    dtk gain [OPTIONS]
+
+OPTIONS:
+    -h, --help       Prints help information
+        --days       Number of days of history to include (default: 30)
+        --project    Filter by current project directory
+        --json       Output raw JSON instead of table
+```
+
+### `dtk reset --help`
+
+```sh
+DESCRIPTION:
+Clear all tracking data
+
+USAGE:
+    dtk reset [OPTIONS]
+
+OPTIONS:
+    -h, --help     Prints help information
+    -f, --force    Skip confirmation prompt
+```
 
 ## Output Examples
 
-**Build — no errors:**
+### Build
 
-```text
-✓ dotnet build (1 project, 0.51s)
+Successful builds show a concise summary:
+
+```sh
+✓ dotnet build (2 projects, 2.78s)
 ```
 
-**Build — with errors:**
+Errors are grouped by file with line numbers and error codes:
 
-```text
+```sh
 dotnet build: 1 error, 0 warnings
 ---
 samples/SampleApp.Broken/BrokenClass.cs (1 error)
@@ -57,40 +121,19 @@ samples/SampleApp.Broken/BrokenClass.cs (1 error)
 Top codes: CS0029 (1x)
 ```
 
-**Test — all passing:**
+### Test
 
-```text
-✓ dotnet test: 3 passed (1 project, 0.02s)
-```
+Passes and failures are summarized. Detailed stack traces are provided for failures:
 
-**Test — with failures:**
-
-```text
+```sh
 FAILURES (1):
-  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [1 ms]
+  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [5 ms]
     Intentional failure
     at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
-dotnet test: 1 failed, 3 passed (1 project, 0.02s)
+dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 ```
 
-**Restore — missing package:**
-
-```text
-dotnet restore: 1 error
-  NU1101: Unable to find package DotnetTokenKiller.DoesNotExist. No packages exist with this id in source(s): nuget.org (samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj)
-```
-
-**Restore — up to date:**
-
-```text
-✓ dotnet restore (all up-to-date)
-```
-
-**Clean:**
-
-```text
-✓ dotnet clean
-```
+For more examples including multi-project builds, warnings, and restore/clean output, see [`samples/examples/`](samples/examples/).
 
 ## Token Savings Analytics
 
@@ -105,12 +148,17 @@ dtk gain --json        # machine-readable JSON output
 
 Example output:
 
-```text
- Command   Runs   Without Tool   Used by Tool   Saved    Avg Savings
- build     5      45,230         12,100         33,130   73.2%
- test      8      89,430         22,510         66,920   74.8%
- restore   3      12,340         8,900          3,440    27.9%
- TOTAL     16     147,000        43,510         103,490  70.4%
+```sh
+┌─────────┬──────┬──────────────┬──────────────┬───────┬─────────────┐
+│ Command │ Runs │ Without Tool │ Used by Tool │ Saved │ Avg Savings │
+├─────────┼──────┼──────────────┼──────────────┼───────┼─────────────┤
+│ build   │   44 │        30720 │         5178 │ 25542 │       77.6% │
+│ clean   │   18 │         8752 │          108 │  8644 │       97.9% │
+│ restore │   26 │         2651 │         1022 │  1629 │       47.0% │
+│ test    │   41 │        17939 │         2434 │ 15505 │       84.1% │
+│         │      │              │              │       │             │
+│ TOTAL   │  129 │        60062 │         8742 │ 51320 │       85.4% │
+└─────────┴──────┴──────────────┴──────────────┴───────┴─────────────┘
 ```
 
 To reset all tracking data:
@@ -118,6 +166,14 @@ To reset all tracking data:
 ```sh
 dtk reset          # prompts for confirmation
 dtk reset --force  # skips confirmation
+```
+
+## Log Files
+
+DTK can save the raw, unfiltered command output to disk so you can inspect it later. Controlled via `tee.mode` in the config (see below); by default only failed runs are saved. To print the log path after a command, pass `--show-log`:
+
+```sh
+dtk dotnet test --show-log
 ```
 
 ## Configuration
@@ -147,33 +203,25 @@ Optional JSON config at `~/.config/dtk/config.json`:
 
 ### Tracking
 
-| Key             | Default | Description                                         |
-|-----------------|---------|-----------------------------------------------------|
-| `enabled`       | `true`  | Enable or disable token tracking                    |
-| `retentionDays` | `90`    | How many days of history to keep                    |
-| `dbPath`        | `null`  | Custom SQLite path (defaults to `%LOCALAPPDATA%/dtk/tracking.db`) |
+| Key             | Default | Description                                                           |
+|-----------------|---------|-----------------------------------------------------------------------|
+| `enabled`       | `true`  | Enable or disable token tracking                                      |
+| `retentionDays` | `90`    | How many days of history to keep                                      |
+| `dbPath`        | `null`  | Custom SQLite path (defaults to `%LOCALAPPDATA%/dtk/tracking.db`)    |
 
 ### Display
 
-| Key      | Default | Description                  |
-|----------|---------|------------------------------|
-| `colors` | `true`  | Enable colored terminal output |
+| Key      | Default | Description                        |
+|----------|---------|------------------------------------|
+| `colors` | `true`  | Enable colored terminal output     |
 | `emoji`  | `true`  | Enable emoji characters (✓, etc.) |
-| `width`  | `120`   | Display width in characters  |
+| `width`  | `120`   | Display width in characters        |
 
 ### Tee Logs
 
-DTK can save the raw, unfiltered output to disk so you can inspect it when needed.
-
-| Key                | Default       | Description                                          |
-|--------------------|---------------|------------------------------------------------------|
-| `mode`             | `"failures"`  | `"failures"` saves only failed runs; `"always"` saves all |
-| `directory`        | `null`        | Log directory (defaults to `%LOCALAPPDATA%/dtk/tee`, overridden by `DTK_TEE_DIR` env var) |
-| `maxFiles`         | `20`          | Maximum log files to keep; oldest are deleted first  |
-| `maxFileSizeBytes` | `1048576`     | Maximum size per log file (1 MB)                    |
-
-When a log is saved, DTK prints its path:
-
-```text
-[full output: /home/user/.local/share/dtk/tee/20260315T143022_abc123_build.log]
-```
+| Key                | Default      | Description                                                       |
+|--------------------|--------------|-------------------------------------------------------------------|
+| `mode`             | `"failures"` | `"failures"` saves only failed runs; `"always"` saves all runs   |
+| `directory`        | `null`       | Log directory (defaults to `%LOCALAPPDATA%/dtk/tee`)             |
+| `maxFiles`         | `20`         | Maximum log files to keep; oldest are deleted first               |
+| `maxFileSizeBytes` | `1048576`    | Maximum size per log file (1 MB)                                  |

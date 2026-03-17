@@ -18,10 +18,20 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(this IServiceCollection services)
     {
         services.AddSingleton<ICommandRunner, ProcessCommandRunner>();
-        var dbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH")
-                     ?? SqliteTracker.GetDefaultDbPath();
-        services.AddSingleton<ITracker>(_ => new SqliteTracker($"Data Source={dbPath}"));
         services.AddSingleton<IConfigProvider, JsonConfigProvider>();
+
+        services.AddSingleton<ITracker>(sp =>
+        {
+            var configProvider = sp.GetRequiredService<IConfigProvider>();
+#pragma warning disable VSTHRD002 // Sync-over-async; runs once at startup for local file I/O
+            var config = configProvider.LoadAsync().GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
+            var dbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH")
+                         ?? config.Tracking.DbPath
+                         ?? SqliteTracker.GetDefaultDbPath();
+            return new SqliteTracker($"Data Source={dbPath}", config.Tracking.RetentionDays);
+        });
+
         services.AddSingleton<ITeeService, FileTeeService>();
         return services;
     }

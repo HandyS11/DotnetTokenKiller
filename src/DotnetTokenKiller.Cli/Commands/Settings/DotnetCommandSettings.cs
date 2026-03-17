@@ -11,6 +11,11 @@ internal sealed class DotnetCommandSettings : CommandSettings
     [Description("Increase verbosity (use -v for level 1, -v -v for level 2)")]
     public bool[] Verbose { get; init; } = [];
 
+    /// <summary>Gets a value indicating whether to print the path to the full log file.</summary>
+    [CommandOption("--show-log")]
+    [Description("Print the path to the full log file when the output was saved")]
+    public bool ShowLog { get; init; }
+
     /// <summary>Gets additional arguments forwarded to dotnet.</summary>
     [CommandArgument(0, "[args]")]
     [Description("Arguments to forward to the underlying dotnet process")]

@@ -28,14 +28,25 @@ public sealed class ProcessCommandRunner : ICommandRunner
         using var process = Process.Start(psi)
                             ?? throw new InvalidOperationException($"Failed to start process: {command}");
 
-        // CRITICAL: Read both streams concurrently — sequential reads deadlock on large output
-        var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning disable CA2016 // CancellationToken is handled via registration below
+        var registration = cancellationToken.Register(() => KillProcess(process));
+#pragma warning restore CA2016
+        try
+        {
+            // CRITICAL: Read both streams concurrently — sequential reads deadlock on large output
+            var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
-        // Tasks are already complete after WhenAll; await here is instant and satisfies analyzers
-        return new CommandResult(await stdOutTask.ConfigureAwait(false), await stdErrTask.ConfigureAwait(false), process.ExitCode);
+            // Tasks are already complete after WhenAll; await here is instant and satisfies analyzers
+            return new CommandResult(await stdOutTask.ConfigureAwait(false), await stdErrTask.ConfigureAwait(false),
+                process.ExitCode);
+        }
+        finally
+        {
+            await registration.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -58,7 +69,32 @@ public sealed class ProcessCommandRunner : ICommandRunner
         using var process = Process.Start(psi)
                             ?? throw new InvalidOperationException($"Failed to start process: {command}");
 
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        return process.ExitCode;
+#pragma warning disable CA2016 // CancellationToken is handled via registration below
+        var registration = cancellationToken.Register(() => KillProcess(process));
+#pragma warning restore CA2016
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            return process.ExitCode;
+        }
+        finally
+        {
+            await registration.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private static void KillProcess(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Process already exited between the check and the kill
+        }
     }
 }

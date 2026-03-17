@@ -14,10 +14,11 @@ public static class ServiceCollectionExtensions
         services.AddTransient<FilteredRunUseCase>();
         services.AddTransient<GainReportUseCase>();
         services.AddTransient<ResetTrackingUseCase>();
-        services.AddSingleton<DotnetBuildFilter>();
-        services.AddSingleton<DotnetTestFilter>();
-        services.AddSingleton<DotnetRestoreFilter>();
-        services.AddSingleton<DotnetCleanFilter>();
+        services.AddTransient<DotnetBuildFilter>();
+        services.AddTransient<DotnetTestFilter>();
+        services.AddTransient<DotnetRestoreFilter>();
+        services.AddTransient<DotnetCleanFilter>();
+        services.AddSingleton<TextWriter>(_ => Console.Out);
         return services;
     }
 }

@@ -149,6 +149,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     {
         state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
         state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
+        state.TotalSkipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
         state.TotalDurationMs += NormalizeDurationToMs(
             double.Parse(summaryMatch.Groups["duration"].Value, CultureInfo.InvariantCulture),
             summaryMatch.Groups["unit"].Value);
@@ -172,8 +173,11 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         if (state.TotalFailed == 0)
         {
+            var skippedSuffix = state.TotalSkipped > 0
+                ? $", {state.TotalSkipped} skipped"
+                : string.Empty;
             return
-                $"✓ dotnet test: {state.TotalPassed} passed ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})\n";
+                $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})\n";
         }
 
         return FormatFailures(state, elapsed);
@@ -200,7 +204,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet test: {state.TotalFailed} failed, {state.TotalPassed} passed ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})");
+            $"dotnet test: {state.TotalFailed} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})");
 
         return sb.ToString();
     }
@@ -210,6 +214,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         public List<FailureInfo> Failures { get; } = [];
         public int TotalPassed { get; set; }
         public int TotalFailed { get; set; }
+        public int TotalSkipped { get; set; }
         public int ProjectCount { get; set; }
         public double TotalDurationMs { get; set; }
         public bool ZeroTestsFound { get; set; }
@@ -250,7 +255,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     // Summary: "Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 89 ms - File.dll"
     // Duration unit can be ms, s, m, or h
     [GeneratedRegex(
-        @"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+\d+,\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+)\s+(?<unit>ms|s|m|h)",
+        @"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+)\s+(?<unit>ms|s|m|h)",
         RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
 

@@ -71,25 +71,44 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
             // Parse diagnostic lines
             var diagMatch = DiagnosticPattern().Match(line);
-            if (!diagMatch.Success)
+            if (diagMatch.Success)
+            {
+                var key =
+                    $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
+                if (seen.Add(key))
+                {
+                    diagnostics.Add(new Diagnostic(
+                        TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
+                        diagMatch.Groups["line"].Value,
+                        diagMatch.Groups["col"].Value,
+                        diagMatch.Groups["level"].Value,
+                        diagMatch.Groups["code"].Value,
+                        TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
+                }
+
+                continue;
+            }
+
+            // Parse diagnostic lines without file/line/col (e.g., "MSBUILD : error MSB1001: message")
+            var simpleDiagMatch = SimpleDiagnosticPattern().Match(line);
+            if (!simpleDiagMatch.Success)
             {
                 continue;
             }
 
-            var key =
-                $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
-            if (!seen.Add(key))
+            var simpleKey = $"{simpleDiagMatch.Groups["code"].Value}:{simpleDiagMatch.Groups["message"].Value}";
+            if (!seen.Add(simpleKey))
             {
-                continue; // deduplicate MSBuild duplicate error section
+                continue;
             }
 
             diagnostics.Add(new Diagnostic(
-                TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
-                diagMatch.Groups["line"].Value,
-                diagMatch.Groups["col"].Value,
-                diagMatch.Groups["level"].Value,
-                diagMatch.Groups["code"].Value,
-                TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
+                string.Empty,
+                string.Empty,
+                string.Empty,
+                simpleDiagMatch.Groups["level"].Value,
+                simpleDiagMatch.Groups["code"].Value,
+                TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
         }
 
         return (diagnostics, projectCount, elapsed);
@@ -224,6 +243,11 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     [GeneratedRegex(
         @"^\s*(?<file>[^()]+)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>[^\[]+?)(?:\s*\[.+?\])?\s*$")]
     private static partial Regex DiagnosticPattern();
+
+    // Matches: "MSBUILD : error MSB1001: message" or "CSC : error CS2012: message" (no file/line/col)
+    [GeneratedRegex(
+        @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>.+?)(?:\s*\[.+?\])?\s*$")]
+    private static partial Regex SimpleDiagnosticPattern();
 
     // Matches: "  MyProject -> /path/to/bin/MyProject.dll"
     [GeneratedRegex(@"^\s+\S+ -> .+\.dll\s*$")]

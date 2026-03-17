@@ -16,42 +16,35 @@ public sealed class DotnetCleanFilter : IOutputFilter
             return string.Empty;
         }
 
-        try
-        {
-            var stripped = AnsiStrip.Strip(rawOutput);
-            var lines = stripped.Split('\n');
+        var stripped = AnsiStrip.Strip(rawOutput);
+        var lines = stripped.Split('\n');
 
-            var failed = Array.Exists(lines,
-                l => l.TrimEnd('\r').Contains("FAILED", StringComparison.OrdinalIgnoreCase));
-            if (!failed)
+        var failed = Array.Exists(lines,
+            l => l.TrimEnd('\r').Contains("FAILED", StringComparison.OrdinalIgnoreCase));
+        if (!failed)
+        {
+            return "✓ dotnet clean\n";
+        }
+
+        var sb = new StringBuilder();
+        var count = 0;
+        foreach (var rawLine in lines)
+        {
+            if (count >= 5)
             {
-                return "✓ dotnet clean\n";
+                break;
             }
 
-            var sb = new StringBuilder();
-            var count = 0;
-            foreach (var rawLine in lines)
+            var line = rawLine.TrimEnd('\r');
+            if (!line.Contains("error", StringComparison.OrdinalIgnoreCase))
             {
-                if (count >= 5)
-                {
-                    break;
-                }
-
-                var line = rawLine.TrimEnd('\r');
-                if (!line.Contains("error", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                sb.AppendLine(line);
-                count++;
+                continue;
             }
 
-            return sb.ToString();
+            sb.AppendLine(line);
+            count++;
         }
-        catch
-        {
-            return rawOutput;
-        }
+
+        return sb.ToString();
     }
 }

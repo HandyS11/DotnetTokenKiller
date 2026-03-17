@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
 using Xunit;
 
@@ -13,7 +14,7 @@ public class DotnetRestoreIntegrationTests
     private static readonly string SampleAppBadPackage =
         IntegrationTestHelper.SamplePath("SampleApp.BadPackage");
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Restore_SampleApp_Success_OutputStartsWithCheckmark()
     {
         // Use --force and --verbosity normal to produce verbose raw output for savings calculation
@@ -31,7 +32,7 @@ public class DotnetRestoreIntegrationTests
         savings.Should().BeGreaterThanOrEqualTo(90.0, "restore success should achieve ≥90% token savings");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Restore_SampleApp_Success_NoProgressNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "restore", SampleApp);
@@ -41,7 +42,7 @@ public class DotnetRestoreIntegrationTests
         output.Should().NotContain("Determining projects");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Restore_SampleAppBadPackage_Failure_OutputStartsWith1Error()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "restore", SampleAppBadPackage);
@@ -50,7 +51,7 @@ public class DotnetRestoreIntegrationTests
         output.Trim().Should().StartWith("dotnet restore: 1 error");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Restore_SampleAppBadPackage_Failure_ContainsNu1101()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "restore", SampleAppBadPackage);
@@ -59,7 +60,7 @@ public class DotnetRestoreIntegrationTests
         output.Should().Contain("DotnetTokenKiller.DoesNotExist");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Restore_SampleAppBadPackage_Failure_NoProgressNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "restore", SampleAppBadPackage);

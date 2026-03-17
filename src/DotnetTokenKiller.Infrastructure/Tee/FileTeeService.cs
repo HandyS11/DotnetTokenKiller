@@ -9,9 +9,6 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// <param name="teeDirOverride">Optional directory override; uses platform default when null.</param>
 public sealed partial class FileTeeService(IConfigProvider configProvider, string? teeDirOverride) : ITeeService
 {
-    private const string FailuresMode = "failures";
-    private const string AlwaysMode = "always";
-
     /// <summary>Initializes a new instance using the default tee directory.</summary>
     /// <param name="configProvider">The configuration provider.</param>
     public FileTeeService(IConfigProvider configProvider)
@@ -32,10 +29,12 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
             var teeConfig = config.Tee;
 
-            // Mode check
-            var mode = teeConfig.Mode;
-            var shouldWrite = mode.Equals(AlwaysMode, StringComparison.OrdinalIgnoreCase)
-                              || (mode.Equals(FailuresMode, StringComparison.OrdinalIgnoreCase) && exitCode != 0);
+            var shouldWrite = teeConfig.Mode switch
+            {
+                TeeMode.Always => true,
+                TeeMode.Failures => exitCode != 0,
+                _ => false
+            };
 
             if (!shouldWrite)
             {
@@ -66,7 +65,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             var filePath = Path.Combine(teeDir, fileName);
             await File.WriteAllTextAsync(filePath, content, cancellationToken).ConfigureAwait(false);
 
-            return $"[full output: {filePath}]";
+            return $"[full output: {Path.GetFileName(filePath)}]";
         }
         catch
         {

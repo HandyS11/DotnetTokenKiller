@@ -11,6 +11,11 @@
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Authors>HandyS11</Authors>
+    <Copyright>Copyright (c) HandyS11</Copyright>
+    <PackageProjectUrl>https://github.com/HandyS11/DotnetTokenKiller</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/HandyS11/DotnetTokenKiller.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="\"/>

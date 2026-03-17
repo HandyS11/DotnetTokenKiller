@@ -76,18 +76,24 @@ public class SqliteTrackerTests : IAsyncDisposable
     {
         var oldTimestamp = DateTimeOffset.UtcNow.AddDays(-91);
         await _sut.RecordAsync(MakeRecord(timestamp: oldTimestamp));
-        await _sut.RecordAsync(MakeRecord()); // triggers cleanup
+
+        // Cleanup runs every 50 inserts; insert enough to trigger it
+        for (var i = 0; i < 50; i++)
+        {
+            await _sut.RecordAsync(MakeRecord());
+        }
 
         var history = await _sut.GetHistoryAsync(365, null);
 
-        history.Should().HaveCount(1); // only the recent record remains
+        // The old record should have been cleaned up; only the 50 recent ones remain
+        history.Should().HaveCount(50);
     }
 
     [Fact]
     public async Task GetSummaryAsync_AggregatesCorrectly()
     {
-        await _sut.RecordAsync(MakeRecord("build", savedTokens: 800));
-        await _sut.RecordAsync(MakeRecord("build", savedTokens: 900));
+        await _sut.RecordAsync(MakeRecord(savedTokens: 800));
+        await _sut.RecordAsync(MakeRecord(savedTokens: 900));
         await _sut.RecordAsync(MakeRecord("test", savedTokens: 500));
 
         var summary = await _sut.GetSummaryAsync(30, null);
@@ -137,7 +143,7 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task ResetAsync_DeletesAllRecords()
     {
-        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord());
         await _sut.RecordAsync(MakeRecord("test"));
 
         await _sut.ResetAsync();
@@ -166,5 +172,37 @@ public class SqliteTrackerTests : IAsyncDisposable
 
         var history = await _sut.GetHistoryAsync(365, null);
         history.Should().HaveCount(2); // 50 days and 1 day remain; 100 days gone
+    }
+
+    [Fact]
+    public async Task RecordAsync_ConcurrentWrites_AllRecordsArePersisted()
+    {
+        const int concurrency = 20;
+        var tasks = Enumerable.Range(0, concurrency)
+            .Select(i => _sut.RecordAsync(MakeRecord($"cmd-{i}")))
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+
+        var history = await _sut.GetHistoryAsync(1, null);
+        history.Should().HaveCount(concurrency);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_ConcurrentReadsDuringWrites_DoesNotThrow()
+    {
+        // Seed some data first
+        await _sut.RecordAsync(MakeRecord());
+
+        var tasks = new List<Task>();
+        for (var i = 0; i < 10; i++)
+        {
+            tasks.Add(_sut.RecordAsync(MakeRecord($"cmd-{i}")));
+            tasks.Add(_sut.GetSummaryAsync(30, null));
+        }
+
+        var act = () => Task.WhenAll(tasks);
+
+        await act.Should().NotThrowAsync();
     }
 }

@@ -22,7 +22,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
 
             var json = await File.ReadAllTextAsync(configPath, cancellationToken).ConfigureAwait(false);
             var loaded = JsonSerializer.Deserialize(json, DtkConfigJsonContext.Default.DtkConfig);
-            return loaded is null ? DtkConfig.Default : Merge(loaded);
+            return loaded is null ? DtkConfig.Default : Validate(Merge(loaded));
         }
         catch
         {
@@ -70,5 +70,28 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
                 tee?.Directory ?? defaults.Tee.Directory,
                 tee?.MaxFiles ?? defaults.Tee.MaxFiles,
                 tee?.MaxFileSizeBytes ?? defaults.Tee.MaxFileSizeBytes));
+    }
+
+    private static DtkConfig Validate(DtkConfig config)
+    {
+        var tracking = config.Tracking with
+        {
+            RetentionDays = Math.Max(1, config.Tracking.RetentionDays)
+        };
+        var display = config.Display with
+        {
+            Width = Math.Max(40, config.Display.Width)
+        };
+        var tee = config.Tee with
+        {
+            MaxFiles = Math.Max(1, config.Tee.MaxFiles),
+            MaxFileSizeBytes = Math.Max(0, config.Tee.MaxFileSizeBytes)
+        };
+        return config with
+        {
+            Tracking = tracking,
+            Display = display,
+            Tee = tee
+        };
     }
 }

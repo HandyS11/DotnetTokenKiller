@@ -31,7 +31,7 @@ public class DtkConfigTests
     {
         var config = DtkConfig.Default;
 
-        config.Tee.Mode.Should().Be("failures");
+        config.Tee.Mode.Should().Be(TeeMode.Failures);
         config.Tee.Directory.Should().BeNull();
         config.Tee.MaxFiles.Should().Be(20);
         config.Tee.MaxFileSizeBytes.Should().Be(1_048_576L);
@@ -72,7 +72,7 @@ public class DtkConfigTests
     {
         var config = new TeeConfig();
 
-        config.Mode.Should().Be("failures");
+        config.Mode.Should().Be(TeeMode.Failures);
         config.Directory.Should().BeNull();
         config.MaxFiles.Should().Be(20);
         config.MaxFileSizeBytes.Should().Be(1_048_576L);
