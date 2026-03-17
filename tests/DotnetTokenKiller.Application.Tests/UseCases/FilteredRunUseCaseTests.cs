@@ -222,6 +222,44 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_ShowLogHintFalse_DoesNotPrintHintLine()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 1));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("[full output: 123_test.log]");
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, showLogHint: false);
+
+        writer.ToString().Should().NotContain("[full output:");
+    }
+
+    [Fact]
+    public async Task RunAsync_ShowLogHintTrue_PrintsHintLine()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 1));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("[full output: 123_test.log]");
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, showLogHint: true);
+
+        writer.ToString().Should().Contain("[full output: 123_test.log]");
+    }
+
+    [Fact]
     public async Task RunAsync_SkipsTracking_WhenTrackingDisabled()
     {
         var configProvider = Substitute.For<IConfigProvider>();

@@ -3,6 +3,7 @@
 How `dtk` filters `dotnet build` and `dotnet clean` output.
 
 > **How to read these examples:** the _Raw_ block is what `dotnet` actually prints to stdout; the _dtk_ block is what you would send to your LLM.
+> **Log files:** when the output is too large to display, dtk writes the full output to a log file. Pass `--show-log` to print its path.
 
 ---
 
@@ -66,7 +67,6 @@ dotnet build: 1 error, 0 warnings
 samples/SampleApp.Broken/BrokenClass.cs (1 error)
   (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'
 Top codes: CS0029 (1x)
-[full output: 1773735195595_…_build.log]
 ```
 
 ---
@@ -131,7 +131,6 @@ samples/SampleApp.MultiError/UndefinedReferences.cs (4 errors)
   (8,1) RCS1181: Convert comment to documentation comment
   (15,9) CS0103: The name 'NonExistentClass' does not exist in the current context
 Top codes: RCS1181 (4x), S2325 (3x), CS0029 (2x), CS0266 (2x), CS0103 (3x), CS0122 (7x)
-[full output: 1773735195595_…_build.log]
 ```
 
 Token reduction: **~40 lines → 30 lines**, but crucially the errors are now grouped by file and ranked by frequency, making the root cause immediately apparent.
@@ -227,7 +226,6 @@ S2325 (3x)
   samples/SampleApp.Warnings/NullableWarnings.cs:10 — Make this a 'static' method.
   samples/SampleApp.Warnings/UnusedCode.cs:8 — Make this a 'static' method.
   samples/SampleApp.Warnings/ObsoleteUsage.cs:10 — Make this a 'static' method.
-[full output: 1773735195595_…_build.log]
 ```
 
 Token reduction: **32 warning lines → grouped-by-code list**, frequency counts highlight the most common patterns first.

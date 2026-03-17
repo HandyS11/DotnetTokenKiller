@@ -3,6 +3,7 @@
 How `dtk` filters `dotnet test` output.
 
 > **How to read these examples:** the _Raw_ block is what `dotnet` actually prints to stdout; the _dtk_ block is what you would send to your LLM.
+> **Log files:** when the output is too large to display, dtk writes the full output to a log file. Pass `--show-log` to print its path.
 
 ---
 
@@ -53,7 +54,6 @@ FAILURES (1):
     Intentional failure
     at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
 dotnet test: 1 failed, 3 passed (1 project, 0.07s)
-[full output: 1773735195595_…_test.log]
 ```
 
 Token reduction: **~35 lines → 5 lines**
@@ -124,7 +124,6 @@ FAILURES (12):
     Expected actual to be a match with the expectation because this demonstrates string diff output, but it differs at index 6: ↓ (actual) "Hello World" "Hello Mars" ↑ (expected)
     at samples/SampleApp.Tests.MultiFailure/AssertionFailures.cs:line 20
 dotnet test: 12 failed, 9 passed (1 project, 0.11s)
-[full output: 1773754104396_…_test.log]
 ```
 
 Token reduction: **~250 lines (33 KB) → 28 lines**
@@ -184,7 +183,6 @@ FAILURES (3):
     System.InvalidOperationException : Intentional exception from NUnit test
     at samples/SampleApp.Tests.NUnit/FailingTests.cs:line 25
 dotnet test: 3 failed, 5 passed (1 project, 0.08s)
-[full output: 1773735195595_…_test.log]
 ```
 
 Token reduction: **~35 lines → 10 lines**
@@ -235,7 +233,6 @@ FAILURES (3):
     Test method threw exception System.InvalidOperationException, but exception System.ArgumentException was expected. Exception message: Thrown intentionally.
     at samples/SampleApp.Tests.MSTest/FailingTests.cs:line 24
 dotnet test: 3 failed, 5 passed (1 project, 0.08s)
-[full output: 1773735195595_…_test.log]
 ```
 
 Token reduction: **~35 lines → 8 lines**
@@ -306,7 +303,6 @@ FAILURES (2):
     System.DivideByZeroException : Attempted to divide by zero.
     at samples/SampleApp.Tests.Reqnroll/Steps/CalculatorSteps.cs:line 32
 dotnet test: 2 failed, 5 passed (1 project, 0.18s)
-[full output: 1773735195595_…_test.log]
 ```
 
 Token reduction: **~60 lines → 7 lines** — the step-by-step trace for all passing scenarios is completely stripped.

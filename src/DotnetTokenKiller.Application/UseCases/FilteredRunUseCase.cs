@@ -26,12 +26,14 @@ public sealed class FilteredRunUseCase(
     /// <param name="command">The executable to run.</param>
     /// <param name="args">Arguments to pass to the executable.</param>
     /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
+    /// <param name="showLogHint">When <see langword="true"/>, prints the path to the full log file if one was written.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<int> RunAsync(
         IOutputFilter filter,
         string command,
         IReadOnlyList<string> args,
         int verbosityLevel,
+        bool showLogHint = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
@@ -87,7 +89,7 @@ public sealed class FilteredRunUseCase(
         {
             var commandSlug = args.Count > 0 ? args[0] : command;
             var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken).ConfigureAwait(false);
-            if (hint is not null)
+            if (hint is not null && showLogHint)
             {
                 await output.WriteLineAsync(hint).ConfigureAwait(false);
             }
