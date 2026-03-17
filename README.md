@@ -103,19 +103,15 @@ OPTIONS:
 
 ## Output Examples
 
-### Build — success
+### Build
 
-```sh
-✓ dotnet build (1 project, 1.86s)
-```
-
-### Build — multi-project success
+Successful builds show a concise summary:
 
 ```sh
 ✓ dotnet build (2 projects, 2.78s)
 ```
 
-### Build — with errors
+Errors are grouped by file with line numbers and error codes:
 
 ```sh
 dotnet build: 1 error, 0 warnings
@@ -125,36 +121,9 @@ samples/SampleApp.Broken/BrokenClass.cs (1 error)
 Top codes: CS0029 (1x)
 ```
 
-### Build — many errors across files
+### Test
 
-```sh
-dotnet build: 22 errors, 0 warnings
----
-samples/SampleApp.MultiError/AccessErrors.cs (7 errors)
-  (10,34) CS0122: 'SecretHolder._value' is inaccessible due to its protection level
-  ...
-Top codes: CS0122 (7x), RCS1181 (4x), CS0103 (3x), S2325 (3x)
-```
-
-### Build — warnings only
-
-```sh
-dotnet build: 0 errors, 31 warnings (1 project, 2.61s)
----
-CS8600 (1x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:10 — Converting null literal or possible null value to non-nullable type.
-CS8603 (2x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:11 — Possible null reference return.
-  ...
-```
-
-### Test — all passing
-
-```sh
-✓ dotnet test: 3 passed (1 project, 0.02s)
-```
-
-### Test — with failures
+Passes and failures are summarized. Detailed stack traces are provided for failures:
 
 ```sh
 FAILURES (1):
@@ -164,36 +133,7 @@ FAILURES (1):
 dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 ```
 
-### Test — many failures
-
-```sh
-FAILURES (12):
-  SampleApp.Tests.MultiFailure.ExceptionTests.Throws_InvalidOperation [5 ms]
-    System.InvalidOperationException : Simulated invalid-operation during test
-    at samples/SampleApp.Tests.MultiFailure/ExceptionTests.cs:line 11
-  SampleApp.Tests.MultiFailure.AssertionFailures.Equality_Mismatch [79 ms]
-    Expected actual to be 99 because we want to show a numeric mismatch, but found 42 (difference of -57).
-    at samples/SampleApp.Tests.MultiFailure/AssertionFailures.cs:line 13
-  ...
-dotnet test: 12 failed, 9 passed (1 project, 0.11s)
-```
-
-> Real output captured from 250-line / 33 KB raw input.
-
-### Restore — missing package
-
-```sh
-dotnet restore: 1 error
-  NU1101: Unable to find package DotnetTokenKiller.DoesNotExist. No packages exist with this id in source(s): nuget.org (samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj)
-```
-
-### Clean
-
-```sh
-✓ dotnet clean
-```
-
-For exhaustive before/after comparisons across all supported scenarios see [`samples/examples/`](samples/examples/).
+For more examples including multi-project builds, warnings, and restore/clean output, see [`samples/examples/`](samples/examples/).
 
 ## Token Savings Analytics
 
