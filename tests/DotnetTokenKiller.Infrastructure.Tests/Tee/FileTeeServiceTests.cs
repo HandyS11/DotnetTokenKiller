@@ -36,7 +36,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_WritesFileAndReturnsHint_WhenFailuresMode_NonZeroExit()
     {
-        var sut = CreateSut(new TeeConfig("failures"));
+        var sut = CreateSut(new TeeConfig());
 
         var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 1);
 
@@ -47,7 +47,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_ReturnsNull_WhenFailuresMode_ZeroExit()
     {
-        var sut = CreateSut(new TeeConfig("failures"));
+        var sut = CreateSut(new TeeConfig());
 
         var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
 
@@ -58,7 +58,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_ReturnsNull_WhenNeverMode()
     {
-        var sut = CreateSut(new TeeConfig("never"));
+        var sut = CreateSut(new TeeConfig(TeeMode.Never));
 
         var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 1);
 
@@ -68,7 +68,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_WritesFile_WhenAlwaysMode_ZeroExit()
     {
-        var sut = CreateSut(new TeeConfig("always"));
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
 
         var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
 
@@ -79,7 +79,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_ReturnsNull_WhenOutputTooSmall()
     {
-        var sut = CreateSut(new TeeConfig("failures"));
+        var sut = CreateSut(new TeeConfig());
 
         var hint = await sut.TeeAndHintAsync(new string('x', 499), "build", 1);
 
@@ -96,7 +96,7 @@ public sealed class FileTeeServiceTests : IDisposable
             await File.WriteAllTextAsync(Path.Combine(_tempDir, $"{i:D10}_old.log"), "old");
         }
 
-        var sut = CreateSut(new TeeConfig("always", MaxFiles: 3));
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 3));
 
         await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
 
@@ -106,7 +106,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_SanitizesSlug_InFileName()
     {
-        var sut = CreateSut(new TeeConfig("always"));
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
 
         await sut.TeeAndHintAsync(LargeOutput(), "dotnet::run --project", 0);
 
@@ -118,7 +118,7 @@ public sealed class FileTeeServiceTests : IDisposable
     public async Task TeeAndHintAsync_TruncatesContent_WhenOutputExceedsMaxSize()
     {
         const long maxBytes = 100L;
-        var sut = CreateSut(new TeeConfig("always", MaxFileSizeBytes: maxBytes));
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
 
         await sut.TeeAndHintAsync(LargeOutput(600), "build", 0);
 

@@ -34,13 +34,26 @@ public sealed record DisplayConfig(
     bool Emoji = true,
     int Width = 120);
 
+/// <summary>Supported tee output modes.</summary>
+public enum TeeMode
+{
+    /// <summary>Only tee output for commands that fail (non-zero exit code).</summary>
+    Failures = 0,
+
+    /// <summary>Always tee output regardless of exit code.</summary>
+    Always = 1,
+
+    /// <summary>Never tee output.</summary>
+    Never = 2
+}
+
 /// <summary>Configuration for the tee file feature.</summary>
-/// <param name="Mode">Tee mode: "failures" or "always".</param>
+/// <param name="Mode">Tee mode controlling when output is saved.</param>
 /// <param name="Directory">Optional custom tee directory.</param>
 /// <param name="MaxFiles">Maximum number of tee files to keep.</param>
 /// <param name="MaxFileSizeBytes">Maximum size of a single tee file in bytes.</param>
 public sealed record TeeConfig(
-    string Mode = "failures",
+    TeeMode Mode = TeeMode.Failures,
     string? Directory = null,
     int MaxFiles = 20,
     long MaxFileSizeBytes = 1_048_576L);

@@ -73,7 +73,7 @@ public sealed class JsonConfigProviderTests : IDisposable
         var config = await sut.LoadAsync();
 
         config.Tee.MaxFiles.Should().Be(5);
-        config.Tee.Mode.Should().Be("failures");
+        config.Tee.Mode.Should().Be(TeeMode.Failures);
         config.Tee.MaxFileSizeBytes.Should().Be(1_048_576L);
         config.Tracking.Should().Be(DtkConfig.Default.Tracking);
         config.Display.Should().Be(DtkConfig.Default.Display);

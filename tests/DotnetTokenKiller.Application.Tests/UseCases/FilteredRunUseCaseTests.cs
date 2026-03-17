@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.UseCases;
+using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
@@ -17,11 +18,13 @@ public class FilteredRunUseCaseTests
     private readonly ITracker _tracker = Substitute.For<ITracker>();
     private readonly ITeeService _teeService = Substitute.For<ITeeService>();
     private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
+    private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly FilteredRunUseCase _sut;
 
     public FilteredRunUseCaseTests()
     {
-        _sut = new FilteredRunUseCase(_runner, _tracker, _teeService);
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        _sut = new FilteredRunUseCase(_runner, _tracker, _teeService, TextWriter.Null, _configProvider);
     }
 
     [Fact]
@@ -171,6 +174,74 @@ public class FilteredRunUseCaseTests
                 r.OutputTokens == 6 &&
                 r.SavedTokens == -4 &&
                 r.SavingsPercentage < 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_WritesFilteredOutput_ToTextWriter()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("✓ dotnet build\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        writer.ToString().Should().Contain("✓ dotnet build");
+    }
+
+    [Fact]
+    public async Task RunAsync_ReplacesEmoji_WhenDisplayEmojiDisabled()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        var config = DtkConfig.Default with
+        {
+            Display = new DisplayConfig(Emoji: false)
+        };
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("✓ dotnet build\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        var output = writer.ToString();
+        output.Should().NotContain("✓");
+        output.Should().Contain("ok: dotnet build");
+    }
+
+    [Fact]
+    public async Task RunAsync_SkipsTracking_WhenTrackingDisabled()
+    {
+        var configProvider = Substitute.For<IConfigProvider>();
+        var config = DtkConfig.Default with
+        {
+            Tracking = new TrackingConfig(false)
+        };
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, TextWriter.Null, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.DidNotReceive().RecordAsync(
+            Arg.Any<CommandRecord>(),
             Arg.Any<CancellationToken>());
     }
 }

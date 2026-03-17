@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
 using Xunit;
 
@@ -10,7 +11,7 @@ public class DotnetTestIntegrationTests
     private static readonly string SampleTestsCsproj =
         IntegrationTestHelper.SamplePath("SampleApp.Tests/SampleApp.Tests.csproj");
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_AllPass_OutputStartsWithCheckmark()
     {
         // Use -- to pass --filter through Spectre.Console's Remaining.Raw to dotnet test
@@ -23,7 +24,7 @@ public class DotnetTestIntegrationTests
         output.Trim().Should().NotContain("\n");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_AllPass_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -37,7 +38,7 @@ public class DotnetTestIntegrationTests
         output.Should().NotContain("Failed!");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_AllPass_Savings90Percent()
     {
         // --verbosity normal for raw output only; dtk runs with default verbosity
@@ -54,7 +55,7 @@ public class DotnetTestIntegrationTests
         savings.Should().BeGreaterThanOrEqualTo(90.0, "test all-pass should achieve ≥90% token savings");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_WithFailure_OutputStartsWithFailures()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -64,7 +65,7 @@ public class DotnetTestIntegrationTests
         output.Should().StartWith("FAILURES (1):");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_WithFailure_ContainsIntentionallyFailing()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -73,7 +74,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("IntentionallyFailing");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_WithFailure_ContainsSummaryLine()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -82,7 +83,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("dotnet test: 1 failed, 3 passed");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_WithFailure_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -95,7 +96,7 @@ public class DotnetTestIntegrationTests
         output.Should().NotContain("Failed!");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_WithFailure_Savings70Percent()
     {
         // --verbosity normal for raw output only; dtk runs with default verbosity

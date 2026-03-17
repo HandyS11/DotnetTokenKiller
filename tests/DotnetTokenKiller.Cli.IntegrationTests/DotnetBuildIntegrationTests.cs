@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
 using Xunit;
 
@@ -13,7 +14,7 @@ public class DotnetBuildIntegrationTests
     private static readonly string SampleAppBroken =
         IntegrationTestHelper.SamplePath("SampleApp.Broken");
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Build_SampleApp_Success_OutputStartsWithCheckmark()
     {
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync("build", SampleApp);
@@ -28,7 +29,7 @@ public class DotnetBuildIntegrationTests
         savings.Should().BeGreaterThanOrEqualTo(80.0, "build success should achieve ≥80% token savings");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Build_SampleApp_Success_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleApp);
@@ -42,7 +43,7 @@ public class DotnetBuildIntegrationTests
             "no blank lines should be present in the output");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Build_SampleAppBroken_Failure_OutputStartsWith1Error()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
@@ -51,7 +52,7 @@ public class DotnetBuildIntegrationTests
         output.Trim().Should().StartWith("dotnet build: 1 error");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Build_SampleAppBroken_Failure_ErrorContainsShortenedPath()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
@@ -63,7 +64,7 @@ public class DotnetBuildIntegrationTests
         output.Should().MatchRegex(@"\(\d+,\d+\)");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Build_SampleAppBroken_Failure_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
@@ -72,7 +73,7 @@ public class DotnetBuildIntegrationTests
         output.Should().NotContain("Build FAILED");
     }
 
-    [Fact]
+    [Fact(Timeout = 60_000)]
     public async Task Build_SampleAppBroken_Failure_Savings70Percent()
     {
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync(
