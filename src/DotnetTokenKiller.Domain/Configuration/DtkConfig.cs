@@ -20,10 +20,12 @@ public sealed record DtkConfig(
 /// <param name="Enabled">Whether tracking is enabled.</param>
 /// <param name="RetentionDays">How many days to retain records.</param>
 /// <param name="DbPath">Optional custom database path.</param>
+/// <param name="Tokenizer">The tokenizer model used for token counting.</param>
 public sealed record TrackingConfig(
     bool Enabled = true,
     int RetentionDays = 90,
-    string? DbPath = null);
+    string? DbPath = null,
+    TokenizerModel Tokenizer = TokenizerModel.Cl100kBase);
 
 /// <summary>Configuration for display output.</summary>
 /// <param name="Colors">Whether to use ANSI colors.</param>
@@ -33,6 +35,25 @@ public sealed record DisplayConfig(
     bool Colors = true,
     bool Emoji = true,
     int Width = 120);
+
+/// <summary>Supported tokenizer models for token counting.</summary>
+public enum TokenizerModel
+{
+    /// <summary>OpenAI cl100k_base encoding (GPT-4, GPT-3.5-turbo).</summary>
+    Cl100kBase = 0,
+
+    /// <summary>OpenAI o200k_base encoding (GPT-4o).</summary>
+    O200kBase = 1,
+
+    /// <summary>OpenAI p50k_base encoding (Codex, text-davinci).</summary>
+    P50kBase = 2,
+
+    /// <summary>OpenAI r50k_base encoding (GPT-3).</summary>
+    R50kBase = 3,
+
+    /// <summary>OpenAI p50k_edit encoding (text-davinci-edit, code-davinci-edit).</summary>
+    P50kEdit = 4
+}
 
 /// <summary>Supported tee output modes.</summary>
 public enum TeeMode

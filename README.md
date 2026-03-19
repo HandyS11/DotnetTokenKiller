@@ -143,7 +143,8 @@ For more examples including multi-project builds, warnings, and restore/clean ou
 
 ## Token Savings Analytics
 
-DTK tracks token counts for every run using OpenAI's `cl100k_base` tokenizer. View your cumulative savings:
+DTK tracks token counts for every run using a configurable tiktoken tokenizer (defaults to OpenAI's `cl100k_base`). View
+your cumulative savings:
 
 ```sh
 dtk gain               # last 30 days
@@ -191,7 +192,8 @@ Optional JSON config at `~/.config/dtk/config.json`:
   "tracking": {
     "enabled": true,
     "retentionDays": 90,
-    "dbPath": null
+    "dbPath": null,
+    "tokenizer": "Cl100kBase"
   },
   "display": {
     "colors": true,
@@ -209,11 +211,12 @@ Optional JSON config at `~/.config/dtk/config.json`:
 
 ### Tracking
 
-| Key             | Default | Description                                                            |
-|-----------------|---------|------------------------------------------------------------------------|
-| `enabled`       | `true`  | Enable or disable token tracking                                       |
-| `retentionDays` | `90`    | How many days of history to keep                                       |
-| `dbPath`        | `null`  | Custom SQLite path (defaults to `%LOCALAPPDATA%/dtk/tracking.db`)      |
+| Key             | Default        | Description                                                                         |
+|-----------------|----------------|-------------------------------------------------------------------------------------|
+| `enabled`       | `true`         | Enable or disable token tracking                                                    |
+| `retentionDays` | `90`           | How many days of history to keep                                                    |
+| `dbPath`        | `null`         | Custom SQLite path (defaults to `%LOCALAPPDATA%/dtk/tracking.db`)                   |
+| `tokenizer`     | `"Cl100kBase"` | Tokenizer model used for token counting (see [Tokenizer Models](#tokenizer-models)) |
 
 ### Display
 
@@ -231,3 +234,15 @@ Optional JSON config at `~/.config/dtk/config.json`:
 | `directory`        | `null`       | Log directory (defaults to `%LOCALAPPDATA%/dtk/tee`)               |
 | `maxFiles`         | `20`         | Maximum log files to keep; oldest are deleted first                |
 | `maxFileSizeBytes` | `1048576`    | Maximum size per log file (1 MB)                                   |
+
+### Tokenizer Models
+
+The `tokenizer` field accepts one of the following values:
+
+| Value        | Encoding      | Typical Models                       |
+|--------------|---------------|--------------------------------------|
+| `Cl100kBase` | `cl100k_base` | GPT-4, GPT-3.5-turbo                 |
+| `O200kBase`  | `o200k_base`  | GPT-4o                               |
+| `P50kBase`   | `p50k_base`   | Codex, text-davinci                  |
+| `P50kEdit`   | `p50k_edit`   | text-davinci-edit, code-davinci-edit |
+| `R50kBase`   | `r50k_base`   | GPT-3                                |

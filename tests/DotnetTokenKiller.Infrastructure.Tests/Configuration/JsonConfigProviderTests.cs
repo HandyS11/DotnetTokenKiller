@@ -93,8 +93,38 @@ public sealed class JsonConfigProviderTests : IDisposable
 
         loaded.Tracking.Enabled.Should().BeFalse();
         loaded.Tracking.RetentionDays.Should().Be(30);
+        loaded.Tracking.Tokenizer.Should().Be(TokenizerModel.Cl100kBase);
         loaded.Display.Should().Be(DtkConfig.Default.Display);
         loaded.Tee.Should().Be(DtkConfig.Default.Tee);
+    }
+
+    [Fact]
+    public async Task LoadAsync_MergesTokenizerOverride_WithDefaults()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, """{ "Tracking": { "Tokenizer": "O200kBase" } }""");
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Tracking.Tokenizer.Should().Be(TokenizerModel.O200kBase);
+        config.Tracking.Enabled.Should().BeTrue();
+        config.Tracking.RetentionDays.Should().Be(90);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ThenLoadAsync_RoundTripsTokenizer()
+    {
+        var sut = CreateSut();
+        var modified = DtkConfig.Default with
+        {
+            Tracking = new TrackingConfig(Tokenizer: TokenizerModel.P50kBase)
+        };
+
+        await sut.SaveAsync(modified);
+        var loaded = await sut.LoadAsync();
+
+        loaded.Tracking.Tokenizer.Should().Be(TokenizerModel.P50kBase);
     }
 
     [Fact]
