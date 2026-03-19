@@ -220,8 +220,10 @@ public sealed class FileTeeServiceTests : IDisposable
         var method = typeof(FileTeeService)
             .GetMethod("RotateFiles", BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        var act = () => method.Invoke(null, ["/nonexistent/path/xyz/tee", 5]);
+        var nonExistentDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-nonexistent-{Guid.NewGuid()}");
+        Directory.Exists(nonExistentDir).Should().BeFalse();
 
+        var act = () => method.Invoke(null, [nonExistentDir, 5]);
         act.Should().NotThrow();
     }
 
