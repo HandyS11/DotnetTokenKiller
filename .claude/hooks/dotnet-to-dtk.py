@@ -13,16 +13,23 @@ import sys
 
 _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean"}
 
-# Matches `dotnet <subcommand>` at a word boundary, not already preceded by `dtk `.
-# Handles the command appearing at the start of a line or after && / || / ; / |.
-_PATTERN = re.compile(
-    r"(?<!\bdtk )(?<!\bdtk\.exe )\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b"
-)
+# Matches `dotnet <subcommand>` anywhere in the command; the replacement function
+# checks the actual preceding token (ignoring any amount of whitespace) so that
+# `dtk  dotnet build`, `dtk\tdotnet build`, etc. are all treated as already-prefixed.
+_PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
 
 
 def rewrite(command: str) -> str:
-    """Prefix matching `dotnet <sub>` invocations with `dtk`."""
-    return _PATTERN.sub(r"dtk dotnet \1", command)
+    """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
+
+    def _replace(match: re.Match) -> str:
+        preceding = command[: match.start()].rstrip()
+        last_token = preceding.split()[-1] if preceding else ""
+        if last_token in ("dtk", "dtk.exe"):
+            return match.group(0)
+        return f"dtk dotnet {match.group(1)}"
+
+    return _PATTERN.sub(_replace, command)
 
 
 def main() -> None:
