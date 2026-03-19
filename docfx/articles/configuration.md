@@ -3,7 +3,10 @@
 DTK uses an optional JSON configuration file at:
 
 ```sh
-~/.config/dtk/config.json
+# Default locations:
+# - Windows: %APPDATA%/dtk/config.json
+# - macOS:  ~/Library/Application\ Support/dtk/config.json
+# - Linux:  ~/.config/dtk/config.json
 ```
 
 All settings have sensible defaults — no configuration is required to get started.
