@@ -13,7 +13,7 @@ public sealed class ProcessCommandRunnerTests
 
     private static (string command, string[] args) LongRunningCommand() =>
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? ("ping", ["-n", "31", "127.0.0.1"])
+            ? ("ping", ["-n", "5", "10.255.255.1"])   // non-routable: each ping times out ~4 s
             : ("sleep", ["30"]);
 
     private static (string command, string[] args) EchoCommand(string message) =>
