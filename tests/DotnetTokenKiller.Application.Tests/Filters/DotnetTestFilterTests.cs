@@ -221,7 +221,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input);
 
-        // No summary → ProjectCount = 0 → empty string, but KillProcess path covered
+        // No summary → empty output
         result.Should().BeEmpty();
     }
 
