@@ -72,24 +72,6 @@ dtk dotnet build src/MyProject/MyProject.csproj
 
 Unknown subcommands are passed through to `dotnet` unchanged.
 
-## Reference
-
-### `dtk --help`
-
-```sh
-USAGE:
-    dtk [OPTIONS] <COMMAND>
-
-OPTIONS:
-    -h, --help       Prints help information
-    -v, --version    Prints version information
-
-COMMANDS:
-    dotnet    Run dotnet commands with filtered output
-    gain      Show token savings analytics
-    reset     Clear all tracking data
-```
-
 ## Examples
 
 Classic `dotnet test` output is verbose and noisy:

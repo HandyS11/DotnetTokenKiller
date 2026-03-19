@@ -70,22 +70,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             }
 
             // Parse diagnostic lines
-            var diagMatch = DiagnosticPattern().Match(line);
-            if (diagMatch.Success)
+            if (TryAddDiagnosticLine(line, seen, diagnostics))
             {
-                var key =
-                    $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
-                if (seen.Add(key))
-                {
-                    diagnostics.Add(new Diagnostic(
-                        TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
-                        diagMatch.Groups["line"].Value,
-                        diagMatch.Groups["col"].Value,
-                        diagMatch.Groups["level"].Value,
-                        diagMatch.Groups["code"].Value,
-                        TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
-                }
-
                 continue;
             }
 
@@ -112,6 +98,30 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         }
 
         return (diagnostics, projectCount, elapsed);
+    }
+
+    private bool TryAddDiagnosticLine(string line, HashSet<string> seen, List<Diagnostic> diagnostics)
+    {
+        var diagMatch = DiagnosticPattern().Match(line);
+        if (!diagMatch.Success)
+        {
+            return false;
+        }
+
+        var key =
+            $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
+        if (seen.Add(key))
+        {
+            diagnostics.Add(new Diagnostic(
+                TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
+                diagMatch.Groups["line"].Value,
+                diagMatch.Groups["col"].Value,
+                diagMatch.Groups["level"].Value,
+                diagMatch.Groups["code"].Value,
+                TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
+        }
+
+        return true;
     }
 
     private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context)

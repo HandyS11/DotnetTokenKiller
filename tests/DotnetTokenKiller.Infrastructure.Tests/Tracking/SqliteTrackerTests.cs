@@ -28,10 +28,7 @@ public class SqliteTrackerTests : IAsyncDisposable
             timestamp ?? DateTimeOffset.UtcNow,
             command,
             projectPath,
-            inputTokens,
-            outputTokens,
-            savedTokens,
-            savingsPct,
+            new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
             TimeSpan.FromMilliseconds(500));
     }
 
