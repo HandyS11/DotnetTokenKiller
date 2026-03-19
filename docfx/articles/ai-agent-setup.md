@@ -51,12 +51,11 @@ For GitHub Copilot in VS Code, you can instruct it to use DTK via a custom instr
 ```markdown
 Use `dtk` instead of raw `dotnet` for build, test, restore, and clean to reduce token usage.
 
-```bash
+```sh
 dtk dotnet build
 dtk dotnet test
 dtk dotnet restore
 dtk dotnet clean
-```​
 ```
 
 ## Other Agents
