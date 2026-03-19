@@ -50,4 +50,3 @@ DTK intercepts `dotnet` subcommands, runs them, and applies per-command output f
 - [Output Examples](articles/examples/index.md) — side-by-side raw vs filtered output
 - [Architecture](articles/architecture.md) — how the codebase is organized
 - [AI Agent Setup](articles/ai-agent-setup.md) — integrate DTK with Claude Code and other agents
-- [API Reference](api/index.md) — full .NET API documentation
