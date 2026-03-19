@@ -18,7 +18,10 @@ public class GainCommandTests
     {
         var (command, console) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings { Json = true }, CancellationToken.None);
+        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings
+        {
+            Json = true
+        }, CancellationToken.None);
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("{");
@@ -40,7 +43,7 @@ public class GainCommandTests
     {
         var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
         {
-            ["build"] = new CommandGainDetail(5, 2500, 400, 2100, 84.0)
+            ["build"] = new(5, 2500, 400, 2100, 84.0)
         };
         var summary = new GainSummary(5, 2500, 400, 2100, 84.0, details);
         var (command, console) = Create(summary);
@@ -54,11 +57,17 @@ public class GainCommandTests
     [Fact]
     public async Task ExecuteAsync_ProjectFlag_PassesCurrentDirectoryAsPath()
     {
-        var tracker = new StubTracker { Summary = EmptySummary };
+        var tracker = new StubTracker
+        {
+            Summary = EmptySummary
+        };
         var console = new TestConsole();
         var command = new GainCommand(new GainReportUseCase(tracker), console);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings { Project = true }, CancellationToken.None);
+        await command.ExecuteAsync(null!, new GainCommandSettings
+        {
+            Project = true
+        }, CancellationToken.None);
 
         tracker.LastProjectPath.Should().Be(Environment.CurrentDirectory);
     }
@@ -66,28 +75,46 @@ public class GainCommandTests
     private static (GainCommand command, TestConsole console) Create(GainSummary? summary = null)
     {
         var console = new TestConsole();
-        var tracker = new StubTracker { Summary = summary ?? EmptySummary };
+        var tracker = new StubTracker
+        {
+            Summary = summary ?? EmptySummary
+        };
         return (new GainCommand(new GainReportUseCase(tracker), console), console);
     }
 
     private sealed class StubTracker : ITracker
     {
-        public GainSummary Summary { get; set; } = new(0, 0, 0, 0, 0.0, new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal));
+        public GainSummary Summary { get; set; } = new(0, 0, 0, 0, 0.0,
+            new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal));
+
         public string? LastProjectPath { get; private set; }
 
-        public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task<GainSummary> GetSummaryAsync(int days, string? projectPath, CancellationToken cancellationToken = default)
+        public Task<GainSummary> GetSummaryAsync(int days, string? projectPath,
+            CancellationToken cancellationToken = default)
         {
             LastProjectPath = projectPath;
             return Task.FromResult(Summary);
         }
 
-        public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(int days, string? projectPath, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<CommandRecord>>(Array.Empty<CommandRecord>());
+        public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(int days, string? projectPath,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<CommandRecord>>([]);
+        }
 
-        public Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task ResetAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task ResetAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 }
