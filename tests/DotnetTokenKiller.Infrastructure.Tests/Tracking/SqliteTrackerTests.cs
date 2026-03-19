@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tracking;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tracking;
@@ -199,6 +200,8 @@ public class SqliteTrackerTests : IAsyncDisposable
         }
         finally
         {
+            // ClearAllPools releases Windows file locks held by SQLite connection pooling
+            SqliteConnection.ClearAllPools();
             var dir = Path.GetDirectoryName(tempPath);
             if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
