@@ -6,11 +6,50 @@ When you feed `dotnet build` or `dotnet test` output to an LLM, most of it is no
 
 ## Installation
 
+### Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) or later
+
+### Install
+
 ```sh
 dotnet tool install -g DotnetTokenKiller
 ```
 
-Requires [.NET 10 SDK](https://dotnet.microsoft.com/download).
+### AI Agent Setup (Claude Code)
+
+If you use Claude Code, a pre-built hook automatically rewrites `dotnet build|test|restore|clean` commands to use `dtk`. Copy the hook into your project:
+
+It required `curl` and `python3` to install; if you don't have those, you can create the hook file manually with the same content from [dotnet-to-dtk.py](https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.claude/hooks/dotnet-to-dtk.py).
+
+```sh
+# From your project root
+mkdir -p .claude/hooks
+curl -sSL https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.claude/hooks/dotnet-to-dtk.py \
+  -o .claude/hooks/dotnet-to-dtk.py
+```
+
+Then add the following to `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/dotnet-to-dtk.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, or `dotnet clean`, it is silently rewritten to `dtk dotnet ...` before execution.
 
 ## Usage
 
@@ -51,77 +90,44 @@ COMMANDS:
     reset     Clear all tracking data
 ```
 
-### `dtk dotnet build --help`
+## Examples
+
+Classic `dotnet test` output is verbose and noisy:
 
 ```sh
-DESCRIPTION:
-Run dotnet build with filtered output
-
-USAGE:
-    dtk dotnet build [args] [OPTIONS]
-
-ARGUMENTS:
-    [args]    Arguments to forward to the underlying dotnet process
-
-OPTIONS:
-    -h, --help        Prints help information
-    -v, --verbose     Increase verbosity (use -v for level 1, -v -v for level 2)
-        --show-log    Print the path to the full log file when the output was saved
+Restore complete (0.7s)
+  SampleApp.Tests net10.0 succeeded (0.4s) → samples\SampleApp.Tests\bin\Debug\net10.0\SampleApp.Tests.dll
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.4)
+[xUnit.net 00:00:00.17]   Discovering: SampleApp.Tests
+[xUnit.net 00:00:00.28]   Discovered:  SampleApp.Tests
+[xUnit.net 00:00:00.34]   Starting:    SampleApp.Tests
+     Warning:
+     The component "Fluent Assertions" is governed by the rules defined in the Xceed License Agreement and
+     the Xceed Fluent Assertions Community License. You may use Fluent Assertions free of charge for
+     non-commercial use only. An active subscription is required to use Fluent Assertions for commercial use.
+     Please contact Xceed Sales mailto:sales@xceed.com to acquire a subscription at a very low cost.
+     A paid commercial license supports the development and continued increasing support of
+     Fluent Assertions users under both commercial and community licenses. Help us
+     keep Fluent Assertions at the forefront of unit testing.
+     For more information, visit https://xceed.com/products/unit-testing/fluent-assertions/
+[xUnit.net 00:00:00.48]     SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [FAIL]
+[xUnit.net 00:00:00.48]       Intentional failure
+[xUnit.net 00:00:00.48]       Stack Trace:
+[xUnit.net 00:00:00.49]         D:\DotnetTokenKiller\samples\SampleApp.Tests\IntentionallyFailingTests.cs(8,0): at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails()
+[xUnit.net 00:00:00.49]            at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+[xUnit.net 00:00:00.49]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.56]   Finished:    SampleApp.Tests
+  SampleApp.Tests test net10.0 failed with 1 error(s) (0.5s)
+    D:\DotnetTokenKiller\samples\SampleApp.Tests\IntentionallyFailingTests.cs(8): error TESTERROR:
+          SampleApp.Tests.IntentionallyFailingTests.AlwaysFails (5ms):
+            Error Message: Intentional failure
+            Stack Trace:
+               at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails() in D:\DotnetTokenKiller\samples\SampleApp.Tests\IntentionallyFailingTests.cs:line 8
+               at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+               at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+Test summary: total: 4, failed: 1, succeeded: 3, skipped: 0, duration: 0.5s
+Build failed with 1 error(s) in 5.4s
 ```
-
-> `dtk dotnet test`, `dtk dotnet restore`, and `dtk dotnet clean` accept the same options.
-
-### `dtk gain --help`
-
-```sh
-DESCRIPTION:
-Show token savings analytics
-
-USAGE:
-    dtk gain [OPTIONS]
-
-OPTIONS:
-    -h, --help       Prints help information
-        --days       Number of days of history to include (default: 30)
-        --project    Filter by current project directory
-        --json       Output raw JSON instead of table
-```
-
-### `dtk reset --help`
-
-```sh
-DESCRIPTION:
-Clear all tracking data
-
-USAGE:
-    dtk reset [OPTIONS]
-
-OPTIONS:
-    -h, --help     Prints help information
-    -f, --force    Skip confirmation prompt
-```
-
-## Output Examples
-
-### Build
-
-Successful builds show a concise summary:
-
-```sh
-✓ dotnet build (2 projects, 2.78s)
-```
-
-Errors are grouped by file with line numbers and error codes:
-
-```sh
-dotnet build: 1 error, 0 warnings
----
-samples/SampleApp.Broken/BrokenClass.cs (1 error)
-  (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'
-Top codes: CS0029 (1x)
-```
-
-### Test
 
 Passes and failures are summarized. Detailed stack traces are provided for failures:
 
@@ -203,25 +209,25 @@ Optional JSON config at `~/.config/dtk/config.json`:
 
 ### Tracking
 
-| Key             | Default | Description                                                           |
-|-----------------|---------|-----------------------------------------------------------------------|
-| `enabled`       | `true`  | Enable or disable token tracking                                      |
-| `retentionDays` | `90`    | How many days of history to keep                                      |
-| `dbPath`        | `null`  | Custom SQLite path (defaults to `%LOCALAPPDATA%/dtk/tracking.db`)    |
+| Key             | Default | Description                                                            |
+|-----------------|---------|------------------------------------------------------------------------|
+| `enabled`       | `true`  | Enable or disable token tracking                                       |
+| `retentionDays` | `90`    | How many days of history to keep                                       |
+| `dbPath`        | `null`  | Custom SQLite path (defaults to `%LOCALAPPDATA%/dtk/tracking.db`)      |
 
 ### Display
 
-| Key      | Default | Description                        |
-|----------|---------|------------------------------------|
-| `colors` | `true`  | Enable colored terminal output     |
-| `emoji`  | `true`  | Enable emoji characters (✓, etc.) |
-| `width`  | `120`   | Display width in characters        |
+| Key      | Default | Description                         |
+|----------|---------|-------------------------------------|
+| `colors` | `true`  | Enable colored terminal output      |
+| `emoji`  | `true`  | Enable emoji characters (✓, etc.)   |
+| `width`  | `120`   | Display width in characters         |
 
 ### Tee Logs
 
-| Key                | Default      | Description                                                       |
-|--------------------|--------------|-------------------------------------------------------------------|
-| `mode`             | `"failures"` | `"failures"` saves only failed runs; `"always"` saves all runs   |
-| `directory`        | `null`       | Log directory (defaults to `%LOCALAPPDATA%/dtk/tee`)             |
-| `maxFiles`         | `20`         | Maximum log files to keep; oldest are deleted first               |
-| `maxFileSizeBytes` | `1048576`    | Maximum size per log file (1 MB)                                  |
+| Key                | Default      | Description                                                        |
+|--------------------|--------------|--------------------------------------------------------------------|
+| `mode`             | `"failures"` | `"failures"` saves only failed runs; `"always"` saves all runs     |
+| `directory`        | `null`       | Log directory (defaults to `%LOCALAPPDATA%/dtk/tee`)               |
+| `maxFiles`         | `20`         | Maximum log files to keep; oldest are deleted first                |
+| `maxFileSizeBytes` | `1048576`    | Maximum size per log file (1 MB)                                   |
