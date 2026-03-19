@@ -4,9 +4,11 @@
     <RootNamespace>DotnetTokenKiller.Cli</RootNamespace>
     <AssemblyName>dtk</AssemblyName>
     <PackAsTool>true</PackAsTool>
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ToolCommandName>dtk</ToolCommandName>
     <PackageId>DotnetTokenKiller</PackageId>
-    <Version>0.1.0</Version>
     <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

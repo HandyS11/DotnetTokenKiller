@@ -14,6 +14,7 @@ public class DtkConfigTests
         config.Tracking.Enabled.Should().BeTrue();
         config.Tracking.RetentionDays.Should().Be(90);
         config.Tracking.DbPath.Should().BeNull();
+        config.Tracking.Tokenizer.Should().Be(TokenizerModel.Cl100kBase);
     }
 
     [Fact]
@@ -55,6 +56,7 @@ public class DtkConfigTests
         config.Enabled.Should().BeTrue();
         config.RetentionDays.Should().Be(90);
         config.DbPath.Should().BeNull();
+        config.Tokenizer.Should().Be(TokenizerModel.Cl100kBase);
     }
 
     [Fact]

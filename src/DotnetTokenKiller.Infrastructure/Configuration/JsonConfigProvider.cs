@@ -60,7 +60,8 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
             new TrackingConfig(
                 tracking?.Enabled ?? defaults.Tracking.Enabled,
                 tracking?.RetentionDays ?? defaults.Tracking.RetentionDays,
-                tracking?.DbPath ?? defaults.Tracking.DbPath),
+                tracking?.DbPath ?? defaults.Tracking.DbPath,
+                tracking?.Tokenizer ?? defaults.Tracking.Tokenizer),
             new DisplayConfig(
                 display?.Colors ?? defaults.Display.Colors,
                 display?.Emoji ?? defaults.Display.Emoji,

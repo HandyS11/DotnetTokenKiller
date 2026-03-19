@@ -259,8 +259,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
 
-    // "  Failed FullyQualifiedTestName [12 ms]"
-    [GeneratedRegex(@"^\s+Failed\s+(?<name>.+?)\s+\[(?<duration>\d+)\s+ms\]\s*$")]
+    // "  Failed FullyQualifiedTestName [12 ms]" or "  Failed FullyQualifiedTestName [< 1 ms]"
+    [GeneratedRegex(@"^\s+Failed\s+(?<name>.+?)\s+\[(?<duration>(?:< )?\d+)\s+ms\]\s*$")]
     private static partial Regex FailedTestHeaderPattern();
 
     // Stack frame with CS file: "   at Class.Method() in /path/to/File.cs:line 42"

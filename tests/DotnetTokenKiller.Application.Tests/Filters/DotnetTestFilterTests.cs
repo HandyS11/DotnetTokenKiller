@@ -81,6 +81,27 @@ public class DotnetTestFilterTests
         _sut.Apply(string.Empty).Should().NotBeNull();
     }
 
+    [Fact]
+    public void Apply_FailureWithSubMillisecondDuration_IsIncluded()
+    {
+        // xUnit reports durations < 1ms as "[< 1 ms]" — ensure these are captured
+        const string input = """
+                               A total of 1 test files matched the specified pattern.
+
+                               Failed MyTests.Throws_InvalidOperation [< 1 ms]
+                               Error Message:
+                                System.InvalidOperationException : Simulated failure
+                               Stack Trace:
+                                  at MyTests.Throws_InvalidOperation() in /path/to/Test.cs:line 10
+
+                             Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = new DotnetTestFilter().Apply(input);
+        result.Should().Contain("Throws_InvalidOperation");
+        result.Should().Contain("InvalidOperationException");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetTestFilterTests).Assembly;

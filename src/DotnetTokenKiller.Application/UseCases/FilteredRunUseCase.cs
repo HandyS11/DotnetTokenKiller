@@ -104,8 +104,8 @@ public sealed class FilteredRunUseCase(
         {
             try
             {
-                var inputTokens = TokenEstimator.Estimate(stripped);
-                var outputTokens = TokenEstimator.Estimate(filtered);
+                var inputTokens = TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
+                var outputTokens = TokenEstimator.Estimate(filtered, config.Tracking.Tokenizer);
                 var savedTokens = inputTokens - outputTokens;
                 var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;
 

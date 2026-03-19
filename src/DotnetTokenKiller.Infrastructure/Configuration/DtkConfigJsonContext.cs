@@ -4,6 +4,6 @@ using System.Text.Json.Serialization;
 namespace DotnetTokenKiller.Infrastructure.Configuration;
 
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true,
-    Converters = [typeof(JsonStringEnumConverter<TeeMode>)])]
+    Converters = [typeof(JsonStringEnumConverter<TeeMode>), typeof(JsonStringEnumConverter<TokenizerModel>)])]
 [JsonSerializable(typeof(DtkConfig))]
 internal sealed partial class DtkConfigJsonContext : JsonSerializerContext;

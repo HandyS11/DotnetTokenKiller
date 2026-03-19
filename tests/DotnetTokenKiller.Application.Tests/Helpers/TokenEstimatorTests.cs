@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Helpers;
+using DotnetTokenKiller.Domain.Configuration;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Helpers;
@@ -27,5 +28,25 @@ public class TokenEstimatorTests
         var longText = string.Join(" ", Enumerable.Repeat("Hello world", 100));
 
         TokenEstimator.Estimate(longText).Should().BeGreaterThan(TokenEstimator.Estimate(shortText));
+    }
+
+    [Fact]
+    public void Estimate_DefaultModel_UsesCl100kBase()
+    {
+        var withDefault = TokenEstimator.Estimate("Hello world");
+        var withExplicit = TokenEstimator.Estimate("Hello world");
+
+        withDefault.Should().Be(withExplicit);
+    }
+
+    [Theory]
+    [InlineData(TokenizerModel.Cl100kBase)]
+    [InlineData(TokenizerModel.O200kBase)]
+    [InlineData(TokenizerModel.P50kBase)]
+    [InlineData(TokenizerModel.R50kBase)]
+    [InlineData(TokenizerModel.P50kEdit)]
+    public void Estimate_AllModels_ReturnPositiveForNonEmptyText(TokenizerModel model)
+    {
+        TokenEstimator.Estimate("Hello world, this is a test.", model).Should().BeGreaterThan(0);
     }
 }

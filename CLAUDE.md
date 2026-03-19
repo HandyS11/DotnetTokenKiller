@@ -8,17 +8,19 @@ DotnetTokenKiller is a .NET CLI proxy that reduces LLM token usage through dotne
 
 ## Commands
 
+Use `dtk` instead of raw `dotnet` for build, test, restore, and clean to reduce token usage. A PreToolUse hook in `.claude/settings.json` automatically rewrites these commands.
+
 ```bash
 # Build
-dotnet build DotnetTokenKiller.slnx
+dtk dotnet build DotnetTokenKiller.slnx
 
 # Run tests
-dotnet test DotnetTokenKiller.slnx
+dtk dotnet test DotnetTokenKiller.slnx
 
 # Run a single test
-dotnet test --filter "FullyQualifiedName~TestClassName.TestMethodName"
+dtk dotnet test --filter "FullyQualifiedName~TestClassName.TestMethodName"
 
-# Format code
+# Format code (no dtk wrapper — format is not a supported subcommand)
 dotnet format DotnetTokenKiller.slnx --no-restore
 
 # Verify formatting without making changes
