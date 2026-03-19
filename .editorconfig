@@ -394,10 +394,10 @@ dotnet_diagnostic.CA1031.severity = none # Do not catch general exception types 
 dotnet_diagnostic.CA1056.severity = none # Uri properties should not be strings
 dotnet_diagnostic.CA1303.severity = none # Do not pass literals as localized parameters (literal strings in console output — CLI tool not localized)
 dotnet_diagnostic.CA1308.severity = none # Normalize strings to uppercase
+dotnet_diagnostic.CS1574.severity = none # XML comment has cref attribute that could not be resolved (boring with {} generics)
 dotnet_diagnostic.CA1707.severity = none # Identifiers should not contain underscores
 dotnet_diagnostic.CA1716.severity = none # Identifiers should not match keywords
 dotnet_diagnostic.CA1806.severity = none # Ignore method results (not working properly on all cases)
-dotnet_diagnostic.CS1574.severity = none # XML comment has cref attribute that could not be resolved (boring with {} generics)
 
 dotnet_diagnostic.IDE0058.severity = none # Expression not used (boring with extension methods) _ = Foo()
 
@@ -405,7 +405,6 @@ dotnet_diagnostic.Moq1203.severity = none # Method setup should specify a return
 dotnet_diagnostic.Moq1400.severity = none # Choose a mock behaviour (strict, loose)
 dotnet_diagnostic.Moq1410.severity = none # Set behaviour to Strict
 
-dotnet_diagnostic.T0000.severity = none # Do not use Get prefix
 dotnet_diagnostic.T0003.severity = none # Do not use tuples
 dotnet_diagnostic.T0006.severity = none # Do not use Helper in type name
 dotnet_diagnostic.T0008.severity = none # Move methods before nested types

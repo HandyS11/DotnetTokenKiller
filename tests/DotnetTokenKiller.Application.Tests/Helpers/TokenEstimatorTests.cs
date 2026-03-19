@@ -49,4 +49,13 @@ public class TokenEstimatorTests
     {
         TokenEstimator.Estimate("Hello world, this is a test.", model).Should().BeGreaterThan(0);
     }
+
+    [Fact]
+    public void Estimate_UnrecognizedModel_DefaultsToCl100kBase()
+    {
+        var result = TokenEstimator.Estimate("Hello world", (TokenizerModel)999);
+        var expected = TokenEstimator.Estimate("Hello world");
+
+        result.Should().Be(expected);
+    }
 }

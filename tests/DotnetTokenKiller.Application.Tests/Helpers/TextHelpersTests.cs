@@ -42,4 +42,17 @@ public class TextHelpersTests
     {
         TextHelpers.ShortenPath(string.Empty, "/root").Should().Be(string.Empty);
     }
+
+    [InlineData("", 5, "")]
+    [Theory]
+    public void Truncate_EmptyText_ReturnsEmpty(string text, int maxLen, string expected)
+    {
+        TextHelpers.Truncate(text, maxLen).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ShortenPath_NullRoot_FallsBackToFileName()
+    {
+        TextHelpers.ShortenPath("/some/path/File.cs", null!).Should().Be("File.cs");
+    }
 }

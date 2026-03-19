@@ -186,6 +186,28 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task RecordAsync_FileBasedDb_PersistsRecord()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "tracking.db");
+        try
+        {
+            await using var tracker = new SqliteTracker($"Data Source={tempPath}");
+            await tracker.RecordAsync(MakeRecord());
+
+            var history = await tracker.GetHistoryAsync(1, null);
+            history.Should().HaveCount(1);
+        }
+        finally
+        {
+            var dir = Path.GetDirectoryName(tempPath);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task GetSummaryAsync_ConcurrentReadsDuringWrites_DoesNotThrow()
     {
         // Seed some data first

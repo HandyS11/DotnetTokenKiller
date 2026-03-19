@@ -260,6 +260,66 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_VerbosityLevel1_PrintsCommandLine()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 1);
+
+        writer.ToString().Should().Contain("$ dotnet build");
+    }
+
+    [Fact]
+    public async Task RunAsync_VerbosityLevel2_PrintsRawOutputAndElapsed()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 2);
+
+        var output = writer.ToString();
+        output.Should().Contain("[raw output]");
+        output.Should().Contain("raw output");
+        output.Should().Contain("[elapsed:");
+    }
+
+    [Fact]
+    public async Task RunAsync_VerbosityLevel2_FilterThrows_PrintsFilterErrorMessage()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Throws(new InvalidOperationException("boom"));
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 2);
+
+        writer.ToString().Should().Contain("[filter error — using raw output]");
+    }
+
+    [Fact]
     public async Task RunAsync_SkipsTracking_WhenTrackingDisabled()
     {
         var configProvider = Substitute.For<IConfigProvider>();
