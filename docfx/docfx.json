@@ -1,0 +1,74 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "files": [
+            "src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj",
+            "src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj",
+            "src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj",
+            "src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj"
+          ],
+          "src": ".."
+        }
+      ],
+      "dest": "api",
+      "includePrivateMembers": false,
+      "disableGitFeatures": false,
+      "disableDefaultFilter": false,
+      "properties": {
+        "TargetFramework": "net10.0"
+      }
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "api/**.yml"
+        ]
+      },
+      {
+        "files": [
+          "articles/**.md",
+          "articles/**/toc.yml",
+          "toc.yml",
+          "*.md"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "images/**"
+        ]
+      }
+    ],
+    "output": "_site",
+    "globalMetadataFiles": [],
+    "fileMetadataFiles": [],
+    "template": [
+      "default",
+      "modern"
+    ],
+    "globalMetadata": {
+      "_appTitle": "DotnetTokenKiller",
+      "_appName": "DotnetTokenKiller",
+      "_appFooter": "DotnetTokenKiller &mdash; Reduce LLM token usage from dotnet CLI output",
+      "_enableSearch": true,
+      "_enableNewTab": true,
+      "_disableContribution": false,
+      "_gitContribute": {
+        "repo": "https://github.com/HandyS11/DotnetTokenKiller",
+        "branch": "develop",
+        "apiSpecFolder": "docfx/api"
+      },
+      "pdf": false
+    },
+    "postProcessors": [
+      "ExtractSearchIndex"
+    ],
+    "keepFileLink": false,
+    "disableGitFeatures": false
+  }
+}
