@@ -20,7 +20,7 @@ dotnet tool install -g DotnetTokenKiller
 
 If you use Claude Code, a pre-built hook automatically rewrites `dotnet build|test|restore|clean` commands to use `dtk`. Copy the hook into your project:
 
-It required `curl` and `python3` to install; if you don't have those, you can create the hook file manually with the same content from [dotnet-to-dtk.py](https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.claude/hooks/dotnet-to-dtk.py).
+It requires `curl` and `python3` to install; if you don't have those, you can create the hook file manually with the same content from [dotnet-to-dtk.py](https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.claude/hooks/dotnet-to-dtk.py).
 
 ```sh
 # From your project root
