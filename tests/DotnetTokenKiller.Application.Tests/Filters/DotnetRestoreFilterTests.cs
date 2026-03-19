@@ -80,6 +80,54 @@ public class DotnetRestoreFilterTests
         result.Should().Contain("(1 project, 0.05s)");
     }
 
+    [Fact]
+    public void Apply_StandardErrorFormat_WithProject_ShowsError()
+    {
+        // Covers TryParseStandardError match-success path (lines 99-106), condition 100 false branch
+        const string input = "error NU1101: Unable to find package [/path/proj.csproj]";
+
+        var result = _sut.Apply(input);
+
+        result.Should().StartWith("dotnet restore: 1 error");
+        result.Should().Contain("NU1101");
+    }
+
+    [Fact]
+    public void Apply_StandardErrorFormat_WithoutProject_ShowsErrorWithoutProject()
+    {
+        // Covers condition 100 true branch (empty proj) and FormatErrors empty-project path (lines 140-142)
+        const string input = "error NU1101: Unable to find package 'Foo'";
+
+        var result = _sut.Apply(input);
+
+        result.Should().StartWith("dotnet restore: 1 error");
+        result.Should().Contain("NU1101");
+        result.Should().NotContain("(");
+    }
+
+    [Fact]
+    public void Apply_MultipleErrors_UsesPluralForm()
+    {
+        // Covers (errors.Count == 1 ? "" : "s") false branch (plural) at line 135
+        const string input =
+            "error NU1101: Package not found [/path/a.csproj]\nerror NU1102: Version mismatch [/path/b.csproj]";
+
+        var result = _sut.Apply(input);
+
+        result.Should().StartWith("dotnet restore: 2 errors");
+    }
+
+    [Fact]
+    public void Apply_NoSummaryLines_ReturnsEmpty()
+    {
+        // Covers FormatOutput totalProjects==0 path (lines 124-125) when no errors and AllUpToDate=false
+        const string input = "Some unrecognised restore output";
+
+        var result = _sut.Apply(input);
+
+        result.Should().BeEmpty();
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetRestoreFilterTests).Assembly;

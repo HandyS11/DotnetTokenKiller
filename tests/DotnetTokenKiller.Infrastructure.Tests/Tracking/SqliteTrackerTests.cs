@@ -2,6 +2,7 @@ using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tracking;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
+using System.Reflection;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tracking;
@@ -226,5 +227,28 @@ public class SqliteTrackerTests : IAsyncDisposable
         var act = () => Task.WhenAll(tasks);
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_EmptyDatabase_ReturnsZeroAverageSavingsPct()
+    {
+        // Covers totalInput == 0 → averagePct = 0.0 branch (line 218)
+        var summary = await _sut.GetSummaryAsync(30, null);
+
+        summary.TotalCommands.Should().Be(0);
+        summary.AverageSavingsPercentage.Should().Be(0.0);
+    }
+
+    [Fact]
+    public void EnsureDataDirectory_EmptyDataSource_ReturnsEarlyWithoutThrowing()
+    {
+        // Covers string.IsNullOrWhiteSpace(csb.DataSource) true branch (lines 33-35) via reflection
+        var method = typeof(SqliteTracker)
+            .GetMethod("EnsureDataDirectory", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        // A connection string with no Data Source key → csb.DataSource = "" → IsNullOrWhiteSpace is true
+        var act = () => method.Invoke(null, ["Mode=ReadWriteCreate"]);
+
+        act.Should().NotThrow();
     }
 }
