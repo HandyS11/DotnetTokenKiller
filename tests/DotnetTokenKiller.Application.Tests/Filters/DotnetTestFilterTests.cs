@@ -1,5 +1,8 @@
 using DotnetTokenKiller.Application.Filters;
 using FluentAssertions;
+using System.Globalization;
+using System.Reflection;
+using System.Text;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
 
@@ -100,6 +103,188 @@ public class DotnetTestFilterTests
         var result = new DotnetTestFilter().Apply(input);
         result.Should().Contain("Throws_InvalidOperation");
         result.Should().Contain("InvalidOperationException");
+    }
+
+    [Fact]
+    public void Apply_ContentWithNoSummaryLine_ReturnsEmpty()
+    {
+        // Covers FormatOutput ProjectCount==0 path (lines 168-169)
+        const string input = "Some test runner output without a summary line";
+
+        var result = _sut.Apply(input);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_SummaryWithDurationInSeconds_ParsedCorrectly()
+    {
+        // Covers NormalizeDurationToMs "s" case (line 248)
+        const string input = "Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 2.5 s - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("passed");
+    }
+
+    [Fact]
+    public void Apply_SummaryWithDurationInMinutes_ParsedCorrectly()
+    {
+        // Covers NormalizeDurationToMs "m" case (line 249)
+        const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("passed");
+    }
+
+    [Fact]
+    public void Apply_SummaryWithDurationInHours_ParsedCorrectly()
+    {
+        // Covers NormalizeDurationToMs "h" case (line 250)
+        const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 h - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("passed");
+    }
+
+    [Fact]
+    public void Apply_SummaryWithSkippedTests_IncludesSkippedCountInOutput()
+    {
+        // Covers TotalSkipped > 0 true branch (condition at line 176)
+        const string input = "Passed!  - Failed: 0, Passed: 5, Skipped: 2, Total: 7, Duration: 10 ms - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("2 skipped");
+    }
+
+    [Fact]
+    public void Apply_SingleProject_UsesSingularProjectForm()
+    {
+        // Covers (ProjectCount == 1 ? "" : "s") true branch (condition at line 179)
+        const string input = "Passed!  - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 100 ms - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("1 project");
+        result.Should().NotContain("projects");
+    }
+
+    [Fact]
+    public void Apply_MoreThanMaxFailures_ShowsPlusMoreLine()
+    {
+        // Covers Failures.Count > MaxFailures path (lines 202-204)
+        var sb = new StringBuilder();
+        for (var i = 0; i < 16; i++)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  Failed MyTests.TestMethod{i} [1 ms]")
+                .AppendLine("  Error Message:")
+                .AppendLine(CultureInfo.InvariantCulture, $"    Assertion failed for test {i}")
+                .AppendLine("  Stack Trace:")
+                .AppendLine(CultureInfo.InvariantCulture,
+                    $"    at MyTests.TestMethod{i}() in /path/Test.cs:line {i + 1}");
+        }
+
+        sb.AppendLine("Failed!  - Failed: 16, Passed: 0, Skipped: 0, Total: 16, Duration: 100 ms - Tests.dll");
+
+        var result = _sut.Apply(sb.ToString());
+
+        result.Should().Contain("+1 more failures");
+    }
+
+    [Fact]
+    public void Apply_FailureWithNoErrorMessage_HandlesEmptyMessageGracefully()
+    {
+        // Covers CompactMessage with empty lines list (lines 228-229)
+        // The failure header is immediately followed by the Stack Trace label (no error message content)
+        const string input = """
+                               Failed MyTests.EmptyMessageTest [1 ms]
+                               Error Message:
+                               Stack Trace:
+                                  at MyTests.EmptyMessageTest() in /path/Test.cs:line 42
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("EmptyMessageTest");
+    }
+
+    [Fact]
+    public void Apply_FailureHeaderAsLastLine_CovershortCircuitCondition()
+    {
+        // Covers i >= lines.Length short-circuit in ParseFailure (conditions at lines 75, 84)
+        const string input = "  Failed MyTests.LastLineTest [1 ms]";
+
+        var result = _sut.Apply(input);
+
+        // No summary → empty output
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_FailuresWithSkippedTests_IncludesSkippedInSummaryLine()
+    {
+        // Covers TotalSkipped > 0 true branch inside FormatFailures (condition at line 206)
+        const string input = """
+                               Failed MyTests.FailingTest [1 ms]
+                               Error Message:
+                                 Assert failed
+                               Stack Trace:
+                                  at MyTests.FailingTest() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 3, Total: 4, Duration: 50 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("3 skipped");
+    }
+
+    [Fact]
+    public void Apply_SingleProjectWithFailures_UsesSingularProjectInSummary()
+    {
+        // Covers (ProjectCount == 1 ? "" : "s") true branch in FormatFailures summary (condition at line 206)
+        const string input = """
+                               Failed MyTests.FailingTest [1 ms]
+                               Error Message:
+                                 Assert failed
+                               Stack Trace:
+                                  at MyTests.FailingTest() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 50 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("1 project");
+        result.Should().NotContain("projects");
+    }
+
+    [Fact]
+    public void NormalizeDurationToMs_UnknownUnit_ReturnsValueUnchanged()
+    {
+        // Covers default arm (line 251) of NormalizeDurationToMs switch via reflection
+        var method = typeof(DotnetTestFilter)
+            .GetMethod("NormalizeDurationToMs", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (double)method.Invoke(null, [42.0, "x"])!;
+
+        result.Should().Be(42.0);
+    }
+
+    [Fact]
+    public void Apply_ZeroTestsFromAllSummariesZero_ReturnsZeroTestsMessage()
+    {
+        // Covers state is { ProjectCount: > 0, TotalPassed: 0, TotalFailed: 0 } branch (line 162)
+        const string input = "Passed!  - Failed: 0, Passed: 0, Skipped: 0, Total: 0, Duration: 5 ms - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Be("✓ dotnet test: 0 tests found\n");
     }
 
     private static string LoadFixture(string resourceName)

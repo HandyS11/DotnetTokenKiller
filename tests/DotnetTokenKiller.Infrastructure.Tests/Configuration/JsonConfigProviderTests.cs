@@ -136,4 +136,35 @@ public sealed class JsonConfigProviderTests : IDisposable
 
         File.Exists(ConfigPath).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task LoadAsync_ReturnsDefaults_WhenJsonIsNullLiteral()
+    {
+        // Covers loaded is null branch (line 25): JSON "null" deserializes to null
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, "null");
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Should().Be(DtkConfig.Default);
+    }
+
+    [Fact]
+    public async Task SaveAsync_FilenameOnlyPath_FallsBackToCurrentDirectory()
+    {
+        // Covers Path.GetDirectoryName returning "" → directory = CurrentDirectory (lines 37-40)
+        const string filename = "dtk-test-config-fallback.json";
+        var expectedPath = Path.Combine(Environment.CurrentDirectory, filename);
+        try
+        {
+            var sut = new JsonConfigProvider(filename);
+            await sut.SaveAsync(DtkConfig.Default);
+            File.Exists(expectedPath).Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(expectedPath);
+        }
+    }
 }

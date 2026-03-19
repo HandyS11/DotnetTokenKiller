@@ -38,6 +38,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
             var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
             await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Tasks are already complete after WhenAll; await here is instant and satisfies analyzers
             return new CommandResult(await stdOutTask.ConfigureAwait(false), await stdErrTask.ConfigureAwait(false),

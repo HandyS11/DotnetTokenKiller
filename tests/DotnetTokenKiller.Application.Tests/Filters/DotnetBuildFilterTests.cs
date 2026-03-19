@@ -1,5 +1,6 @@
 using DotnetTokenKiller.Application.Filters;
 using FluentAssertions;
+using System.Reflection;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
 
@@ -94,6 +95,93 @@ public class DotnetBuildFilterTests
         const string ansiInput = "\x1b[32mBuild succeeded.\x1b[0m\n";
         var result = _sut.Apply(ansiInput);
         result.Should().NotContain("\x1b[");
+    }
+
+    [Fact]
+    public void Apply_SimpleMsbuildDiagnostic_IsIncluded()
+    {
+        // Covers SimpleDiagnosticPattern path (lines 79-98) and TryAddDiagnosticLine false return (lines 107-108)
+        const string input = "MSBUILD : error MSB1001: Unknown switch.";
+
+        var result = new DotnetBuildFilter().Apply(input);
+
+        result.Should().Contain("MSB1001");
+    }
+
+    [Fact]
+    public void Apply_SimpleMsbuildDiagnosticWithNonMatchingLine_BothBranchesCovered()
+    {
+        // "Some random output" → TryAddDiagnosticLine false → SimpleDiagnosticPattern false → continue (lines 80-82)
+        // "MSBUILD : error MSB1001: ..." → SimpleDiagnosticPattern true → adds diagnostic (lines 85-98)
+        // Duplicate → seen.Add false → continue (lines 86-89)
+        const string input = """
+                             Some random output
+                             MSBUILD : error MSB1001: Unknown switch.
+                             MSBUILD : error MSB1001: Unknown switch.
+                             """;
+
+        var result = new DotnetBuildFilter().Apply(input);
+
+        result.Should().Contain("MSB1001");
+    }
+
+    [Fact]
+    public void Apply_SingleWarning_NoErrors_UsesSingularForm()
+    {
+        // Covers (warnings.Count == 1 ? "" : "s") true branch at line 133
+        const string input = "/path/File.cs(1,1): warning CS0001: a warning message [Project.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input);
+
+        result.Should().Contain("1 warning");
+        result.Should().NotContain("warnings");
+    }
+
+    [Fact]
+    public void Apply_SingleErrorAndSingleWarning_SuppressionLineUsesSingularForm()
+    {
+        // Covers (warnings.Count == 1 ? "" : "s") true branch at line 147
+        const string input =
+            "/path/File.cs(1,1): error CS0001: error message [Project.csproj]\n/path/File.cs(2,1): warning CS0002: a warning [Project.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input);
+
+        result.Should().Contain("1 warning").And.Contain("suppressed");
+    }
+
+    [Fact]
+    public void Apply_SingleProjectOutputWithNoElapsed_UsesSingularProjectForm()
+    {
+        // Covers BuildContext elapsed-empty + single-project branch (lines 165-166, condition at 164, 166)
+        const string input = "  MyProject -> /path/MyProject.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("1 project");
+        result.Should().NotContain("projects");
+    }
+
+    [Fact]
+    public void Apply_MultipleProjectsWithNoElapsed_UsesPluralProjectForm()
+    {
+        // Covers BuildContext plural branch for projectCount != 1 (condition at 166)
+        const string input = "  MyProject -> /path/MyProject.dll\n  OtherProject -> /path/OtherProject.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("2 projects");
+    }
+
+    [Fact]
+    public void Apply_FormatElapsed_WhenTimeSpanPatternDoesNotMatch_ReturnsEmpty()
+    {
+        // Covers FormatElapsed early return (lines 181-182) via reflection
+        var method = typeof(DotnetBuildFilter)
+            .GetMethod("FormatElapsed", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var result = (string)method.Invoke(null, ["Time Elapsed invalid-no-digits"])!;
+
+        result.Should().BeEmpty();
     }
 
     private static string LoadFixture(string resourceName)

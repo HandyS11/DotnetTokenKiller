@@ -320,6 +320,23 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_EmptyRawOutput_RecordsZeroSavingsPct()
+    {
+        // Covers inputTokens == 0 → savingsPct = 0.0 branch (line 126)
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => Math.Abs(r.SavingsPercentage) < 0.001),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RunAsync_SkipsTracking_WhenTrackingDisabled()
     {
         var configProvider = Substitute.For<IConfigProvider>();

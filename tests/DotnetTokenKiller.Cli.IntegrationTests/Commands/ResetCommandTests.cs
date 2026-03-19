@@ -17,7 +17,10 @@ public class ResetCommandTests
         var console = new TestConsole();
         var command = new ResetCommand(new ResetTrackingUseCase(tracker), console);
 
-        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings { Force = true }, CancellationToken.None);
+        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings
+        {
+            Force = true
+        }, CancellationToken.None);
 
         exitCode.Should().Be(0);
         tracker.WasReset.Should().BeTrue();
@@ -32,7 +35,10 @@ public class ResetCommandTests
         console.Input.PushTextWithEnter("n");
         var command = new ResetCommand(new ResetTrackingUseCase(tracker), console);
 
-        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings { Force = false }, CancellationToken.None);
+        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings
+        {
+            Force = false
+        }, CancellationToken.None);
 
         exitCode.Should().Be(0);
         tracker.WasReset.Should().BeFalse();
@@ -43,15 +49,28 @@ public class ResetCommandTests
     {
         public bool WasReset { get; private set; }
 
-        public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task<GainSummary> GetSummaryAsync(int days, string? projectPath, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new GainSummary(0, 0, 0, 0, 0.0, new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)));
+        public Task<GainSummary> GetSummaryAsync(int days, string? projectPath,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new GainSummary(0, 0, 0, 0, 0.0,
+                new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)));
+        }
 
-        public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(int days, string? projectPath, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<CommandRecord>>(Array.Empty<CommandRecord>());
+        public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(int days, string? projectPath,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<CommandRecord>>([]);
+        }
 
-        public Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
 
         public Task ResetAsync(CancellationToken cancellationToken = default)
         {
