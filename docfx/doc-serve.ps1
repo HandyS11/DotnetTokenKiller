@@ -1,4 +1,4 @@
-# doc-serve.ps1: Build and serve ProjGraph documentation locally.
+# doc-serve.ps1: Build and serve DotnetTokenKiller (DTK) documentation locally.
 
 Push-Location $PSScriptRoot/..
 $DOCFX_JSON = "docfx/docfx.json"
