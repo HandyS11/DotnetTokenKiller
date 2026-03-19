@@ -16,10 +16,7 @@ public class CommandRecordTests
             timestamp,
             "build",
             "/home/user/MyApp",
-            1000,
-            150,
-            850,
-            85.0,
+            new TokenStatistics(1000, 150, 850, 85.0),
             executionTime);
 
         record.Timestamp.Should().Be(timestamp);
@@ -38,8 +35,8 @@ public class CommandRecordTests
         var timestamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
         var duration = TimeSpan.FromMilliseconds(500);
 
-        var a = new CommandRecord(timestamp, "build", "/app", 100, 10, 90, 90.0, duration);
-        var b = new CommandRecord(timestamp, "build", "/app", 100, 10, 90, 90.0, duration);
+        var a = new CommandRecord(timestamp, "build", "/app", new TokenStatistics(100, 10, 90, 90.0), duration);
+        var b = new CommandRecord(timestamp, "build", "/app", new TokenStatistics(100, 10, 90, 90.0), duration);
 
         a.Should().Be(b);
     }
@@ -48,7 +45,7 @@ public class CommandRecordTests
     public void CommandRecord_supports_with_expression()
     {
         var original = new CommandRecord(
-            DateTimeOffset.UtcNow, "build", "/app", 100, 10, 90, 90.0, TimeSpan.Zero);
+            DateTimeOffset.UtcNow, "build", "/app", new TokenStatistics(100, 10, 90, 90.0), TimeSpan.Zero);
 
         var updated = original with
         {

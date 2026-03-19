@@ -119,10 +119,51 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
     }
 
     /// <inheritdoc/>
-    public async Task<GainSummary> GetSummaryAsync(
+    public Task<GainSummary> GetSummaryAsync(
         int days,
         string? projectPath,
         CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+                           SELECT command,
+                                  COUNT(*) as run_count,
+                                  SUM(input_tokens) as total_input,
+                                  SUM(output_tokens) as total_output,
+                                  SUM(saved_tokens) as total_saved,
+                                  AVG(savings_percentage) as avg_pct
+                           FROM commands
+                           WHERE timestamp >= @since
+                             AND (@path IS NULL OR project_path = @path)
+                           GROUP BY command
+                           """;
+
+        return ExecuteWithFilterAsync(days, projectPath, sql, ReadSummaryAsync, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
+        int days,
+        string? projectPath,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+                           SELECT timestamp, command, project_path, input_tokens, output_tokens,
+                                  saved_tokens, savings_percentage, execution_time_ms
+                           FROM commands
+                           WHERE timestamp >= @since
+                             AND (@path IS NULL OR project_path = @path)
+                           ORDER BY timestamp DESC
+                           """;
+
+        return ExecuteWithFilterAsync(days, projectPath, sql, ReadHistoryAsync, cancellationToken);
+    }
+
+    private async Task<T> ExecuteWithFilterAsync<T>(
+        int days,
+        string? projectPath,
+        string sql,
+        Func<SqliteCommand, CancellationToken, Task<T>> readResultsAsync,
+        CancellationToken cancellationToken)
     {
         await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -133,48 +174,13 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
             await using var cmd = _connection.CreateCommand();
 #pragma warning restore CA2007
-            cmd.CommandText = """
-                              SELECT command,
-                                     COUNT(*) as run_count,
-                                     SUM(input_tokens) as total_input,
-                                     SUM(output_tokens) as total_output,
-                                     SUM(saved_tokens) as total_saved,
-                                     AVG(savings_percentage) as avg_pct
-                              FROM commands
-                              WHERE timestamp >= @since
-                                AND (@path IS NULL OR project_path = @path)
-                              GROUP BY command
-                              """;
+#pragma warning disable CA2100 // sql is a caller-supplied constant literal; no user input reaches this parameter
+            cmd.CommandText = sql;
+#pragma warning restore CA2100
             cmd.Parameters.AddWithValue("@since", since);
             cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
 
-            var totalCommands = 0;
-            var totalInput = 0;
-            var totalOutput = 0;
-            var totalSaved = 0;
-            var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
-
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-#pragma warning restore CA2007
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                var cmdName = reader.GetString(0);
-                var runCount = reader.GetInt32(1);
-                var sumInput = reader.GetInt32(2);
-                var sumOutput = reader.GetInt32(3);
-                var sumSaved = reader.GetInt32(4);
-                var avgPct = reader.GetDouble(5);
-
-                totalCommands += runCount;
-                totalInput += sumInput;
-                totalOutput += sumOutput;
-                totalSaved += sumSaved;
-                commandDetails[cmdName] = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct);
-            }
-
-            var averagePct = totalInput > 0 ? (double)totalSaved / totalInput * 100.0 : 0.0;
-            return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, commandDetails);
+            return await readResultsAsync(cmd, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -182,56 +188,56 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
         }
     }
 
-    /// <inheritdoc/>
-    public async Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
-        int days,
-        string? projectPath,
-        CancellationToken cancellationToken = default)
+    private static async Task<GainSummary> ReadSummaryAsync(SqliteCommand cmd, CancellationToken ct)
     {
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            var since = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
+        var totalCommands = 0;
+        var totalInput = 0;
+        var totalOutput = 0;
+        var totalSaved = 0;
+        var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = _connection.CreateCommand();
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
 #pragma warning restore CA2007
-            cmd.CommandText = """
-                              SELECT timestamp, command, project_path, input_tokens, output_tokens,
-                                     saved_tokens, savings_percentage, execution_time_ms
-                              FROM commands
-                              WHERE timestamp >= @since
-                                AND (@path IS NULL OR project_path = @path)
-                              ORDER BY timestamp DESC
-                              """;
-            cmd.Parameters.AddWithValue("@since", since);
-            cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
-
-            var results = new List<CommandRecord>();
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-#pragma warning restore CA2007
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                results.Add(new CommandRecord(
-                    DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture,
-                        DateTimeStyles.RoundtripKind),
-                    reader.GetString(1),
-                    reader.GetString(2),
-                    reader.GetInt32(3),
-                    reader.GetInt32(4),
-                    reader.GetInt32(5),
-                    reader.GetDouble(6),
-                    TimeSpan.FromMilliseconds(reader.GetDouble(7))));
-            }
-
-            return results;
-        }
-        finally
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
-            _semaphore.Release();
+            var cmdName = reader.GetString(0);
+            var runCount = reader.GetInt32(1);
+            var sumInput = reader.GetInt32(2);
+            var sumOutput = reader.GetInt32(3);
+            var sumSaved = reader.GetInt32(4);
+            var avgPct = reader.GetDouble(5);
+
+            totalCommands += runCount;
+            totalInput += sumInput;
+            totalOutput += sumOutput;
+            totalSaved += sumSaved;
+            commandDetails[cmdName] = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct);
         }
+
+        var averagePct = totalInput > 0 ? (double)totalSaved / totalInput * 100.0 : 0.0;
+        return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, commandDetails);
+    }
+
+    private static async Task<IReadOnlyList<CommandRecord>> ReadHistoryAsync(SqliteCommand cmd, CancellationToken ct)
+    {
+        var results = new List<CommandRecord>();
+
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+#pragma warning restore CA2007
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            results.Add(new CommandRecord(
+                DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind),
+                reader.GetString(1),
+                reader.GetString(2),
+                new TokenStatistics(reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetDouble(6)),
+                TimeSpan.FromMilliseconds(reader.GetDouble(7))));
+        }
+
+        return results;
     }
 
     /// <inheritdoc/>

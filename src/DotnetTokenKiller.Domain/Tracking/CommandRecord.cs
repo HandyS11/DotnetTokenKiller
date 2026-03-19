@@ -31,30 +31,25 @@ public sealed record CommandRecord
     /// <param name="timestamp">When the command ran.</param>
     /// <param name="command">The dotnet subcommand name (must not be empty or whitespace).</param>
     /// <param name="projectPath">The working directory when the command ran.</param>
-    /// <param name="inputTokens">Estimated tokens in the raw output.</param>
-    /// <param name="outputTokens">Estimated tokens in the filtered output.</param>
-    /// <param name="savedTokens">Tokens saved by filtering.</param>
-    /// <param name="savingsPercentage">Percentage of tokens saved.</param>
+    /// <param name="tokens">Token usage statistics for the run.</param>
     /// <param name="executionTime">Total wall-clock time for the command.</param>
     public CommandRecord(
         DateTimeOffset timestamp,
         string command,
         string projectPath,
-        int inputTokens,
-        int outputTokens,
-        int savedTokens,
-        double savingsPercentage,
+        TokenStatistics tokens,
         TimeSpan executionTime)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
+        ArgumentNullException.ThrowIfNull(tokens);
 
         Timestamp = timestamp;
         Command = command;
         ProjectPath = projectPath;
-        InputTokens = inputTokens;
-        OutputTokens = outputTokens;
-        SavedTokens = savedTokens;
-        SavingsPercentage = savingsPercentage;
+        InputTokens = tokens.Input;
+        OutputTokens = tokens.Output;
+        SavedTokens = tokens.Saved;
+        SavingsPercentage = tokens.SavingsPercentage;
         ExecutionTime = executionTime;
     }
 }

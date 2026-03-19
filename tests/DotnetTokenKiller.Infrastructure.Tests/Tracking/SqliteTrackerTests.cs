@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tracking;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tracking;
@@ -28,10 +29,7 @@ public class SqliteTrackerTests : IAsyncDisposable
             timestamp ?? DateTimeOffset.UtcNow,
             command,
             projectPath,
-            inputTokens,
-            outputTokens,
-            savedTokens,
-            savingsPct,
+            new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
             TimeSpan.FromMilliseconds(500));
     }
 
@@ -186,6 +184,30 @@ public class SqliteTrackerTests : IAsyncDisposable
 
         var history = await _sut.GetHistoryAsync(1, null);
         history.Should().HaveCount(concurrency);
+    }
+
+    [Fact]
+    public async Task RecordAsync_FileBasedDb_PersistsRecord()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "tracking.db");
+        try
+        {
+            await using var tracker = new SqliteTracker($"Data Source={tempPath}");
+            await tracker.RecordAsync(MakeRecord());
+
+            var history = await tracker.GetHistoryAsync(1, null);
+            history.Should().HaveCount(1);
+        }
+        finally
+        {
+            // ClearAllPools releases Windows file locks held by SQLite connection pooling
+            SqliteConnection.ClearAllPools();
+            var dir = Path.GetDirectoryName(tempPath);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
     }
 
     [Fact]

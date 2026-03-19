@@ -84,10 +84,11 @@ public sealed class FilteredRunUseCase(
 
         stopwatch.Stop();
 
+        var commandSlug = args.Count > 0 ? args[0] : command;
+
         // Tee: silent — errors never surface
         try
         {
-            var commandSlug = args.Count > 0 ? args[0] : command;
             var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken).ConfigureAwait(false);
             if (hint is not null && showLogHint)
             {
@@ -99,34 +100,43 @@ public sealed class FilteredRunUseCase(
             // Intentional: tee errors must not surface to the user
         }
 
-        // Track: silent — errors never surface
-        if (config.Tracking.Enabled)
-        {
-            try
-            {
-                var inputTokens = TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
-                var outputTokens = TokenEstimator.Estimate(filtered, config.Tracking.Tokenizer);
-                var savedTokens = inputTokens - outputTokens;
-                var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;
-
-                var record = new CommandRecord(
-                    DateTimeOffset.UtcNow,
-                    args.Count > 0 ? args[0] : command,
-                    Environment.CurrentDirectory,
-                    inputTokens,
-                    outputTokens,
-                    savedTokens,
-                    savingsPct,
-                    stopwatch.Elapsed);
-
-                await tracker.RecordAsync(record, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                // Intentional: tracking errors must not surface to the user
-            }
-        }
+        await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, cancellationToken).ConfigureAwait(false);
 
         return result.ExitCode;
+    }
+
+    private async Task TrackIfEnabledAsync(
+        DtkConfig config,
+        string commandSlug,
+        string stripped,
+        string filtered,
+        TimeSpan elapsed,
+        CancellationToken cancellationToken)
+    {
+        if (!config.Tracking.Enabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var inputTokens = TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
+            var outputTokens = TokenEstimator.Estimate(filtered, config.Tracking.Tokenizer);
+            var savedTokens = inputTokens - outputTokens;
+            var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;
+
+            var record = new CommandRecord(
+                DateTimeOffset.UtcNow,
+                commandSlug,
+                Environment.CurrentDirectory,
+                new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
+                elapsed);
+
+            await tracker.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Intentional: tracking errors must not surface to the user
+        }
     }
 }
