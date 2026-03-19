@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# doc-serve.sh: Build and serve ProjGraph documentation locally.
+# doc-serve.sh: Build and serve DotnetTokenKiller (DTK) documentation locally.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 pushd "$SCRIPT_DIR/.." > /dev/null
