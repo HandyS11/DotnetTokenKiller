@@ -157,7 +157,7 @@ public class DotnetBuildIntegrationTests
     {
         // Pass --no-incremental through to dotnet so warnings are always emitted
         var (_, exitCode) = await IntegrationTestHelper.RunDtkAsync(
-            "dotnet", "build", SampleAppWarnings, "--", "--no-incremental");
+            "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
         exitCode.Should().Be(0);
     }
@@ -166,7 +166,7 @@ public class DotnetBuildIntegrationTests
     public async Task Build_SampleAppWarnings_Success_OutputContainsWarnings()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
-            "dotnet", "build", SampleAppWarnings, "--", "--no-incremental");
+            "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
         output.Should().MatchRegex(@"dotnet build: 0 errors, \d+ warnings");
     }
@@ -175,7 +175,7 @@ public class DotnetBuildIntegrationTests
     public async Task Build_SampleAppWarnings_Success_ContainsWarningCodes()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
-            "dotnet", "build", SampleAppWarnings, "--", "--no-incremental");
+            "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
         // CS-level compiler warnings
         output.Should().Contain("CS0162");
@@ -187,7 +187,7 @@ public class DotnetBuildIntegrationTests
     public async Task Build_SampleAppWarnings_Success_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
-            "dotnet", "build", SampleAppWarnings, "--", "--no-incremental");
+            "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
         output.Should().NotContain("MSBuild version");
         output.Should().NotContain("Build succeeded");
@@ -199,7 +199,7 @@ public class DotnetBuildIntegrationTests
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync(
             "build", "--no-incremental", "--verbosity", "normal", SampleAppWarnings);
         var (dtkOutput, _) = await IntegrationTestHelper.RunDtkAsync(
-            "dotnet", "build", SampleAppWarnings, "--", "--no-incremental");
+            "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
         var savings = IntegrationTestHelper.CalculateSavings(rawOutput, dtkOutput);
         savings.Should().BeGreaterThanOrEqualTo(70.0, "warnings-only build should achieve ≥70% token savings");

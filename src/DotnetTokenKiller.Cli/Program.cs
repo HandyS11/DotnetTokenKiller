@@ -14,13 +14,40 @@ Console.OutputEncoding = Encoding.UTF8;
 // Known filtered subcommands — keep in sync with the branch registration below
 HashSet<string> knownDotnetSubcommands = ["build", "test", "restore", "clean"];
 
-// Passthrough: run any unsupported dotnet subcommand directly without extra DI
-if (args.Length >= 2 &&
-    string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
-    !knownDotnetSubcommands.Contains(args[1]))
+switch (args.Length)
 {
-    var runner = new ProcessCommandRunner();
-    return await runner.RunPassthroughAsync("dotnet", args[1..]).ConfigureAwait(false);
+    // Passthrough: run any unsupported dotnet subcommand directly without extra DI
+    case >= 2 when string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
+                   !knownDotnetSubcommands.Contains(args[1]):
+        var runner = new ProcessCommandRunner();
+        return await runner.RunPassthroughAsync("dotnet", args[1..]).ConfigureAwait(false);
+
+    // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
+    // forwarded via Spectre's Remaining.Raw without requiring the user to type "--".
+    case > 2 when string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
+                  knownDotnetSubcommands.Contains(args[1]) &&
+                  !args.Contains("--"):
+        HashSet<string> dtkOptions = ["-v", "--verbose", "--show-log"];
+        var insertIndex = -1;
+        for (var i = 2; i < args.Length; i++)
+        {
+            if (args[i].StartsWith('-') && !dtkOptions.Contains(args[i]))
+            {
+                insertIndex = i;
+                break;
+            }
+        }
+
+        if (insertIndex >= 0)
+        {
+            var updated = new List<string>(args.Length + 1);
+            updated.AddRange(args[..insertIndex]);
+            updated.Add("--");
+            updated.AddRange(args[insertIndex..]);
+            args = [.. updated];
+        }
+
+        break;
 }
 
 try

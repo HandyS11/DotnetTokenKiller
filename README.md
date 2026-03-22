@@ -1,6 +1,17 @@
+<div align="center">
+
 # DotnetTokenKiller
 
 A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands down to only what matters.
+
+[![CI](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml)
+[![CD](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml)
+[![License](https://img.shields.io/github/license/HandyS11/DotnetTokenKiller)](./LICENSE)
+
+[![DotnetTokenKiller NuGet](https://img.shields.io/nuget/v/DotnetTokenKiller?label=CLI&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
+[![DotnetTokenKiller Downloads](https://img.shields.io/nuget/dt/DotnetTokenKiller?label=CLI%20downloads&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
+
+</div>
 
 When you feed `dotnet build` or `dotnet test` output to an LLM, most of it is noise — SDK banners, MSBuild headers, progress lines, ANSI escape codes, duplicate error messages. DTK strips all of that and returns a compact, signal-only result. Fewer tokens in means lower cost and less context consumed.
 
