@@ -61,6 +61,19 @@ dtk dotnet clean
 dtk dotnet clean --configuration Release
 ```
 
+### `dtk integrate`
+
+Install dtk integration artifacts for an AI assistant provider:
+
+```sh
+dtk integrate claude           # install Claude Code skill and PreToolUse hook
+dtk integrate copilot          # install GitHub Copilot instructions section
+dtk integrate claude --dir /path/to/project   # target a specific directory
+dtk integrate claude --force   # overwrite existing files
+```
+
+See [AI Agent Setup](ai-agent-setup.md) for details on what each provider installs.
+
 ### `dtk gain`
 
 Display token savings analytics. See [Token Analytics](token-analytics.md) for details.

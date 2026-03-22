@@ -16,40 +16,41 @@ When you feed `dotnet build` or `dotnet test` output to an LLM, most of it is no
 dotnet tool install -g DotnetTokenKiller
 ```
 
-### AI Agent Setup (Claude Code)
+### AI Agent Setup
 
-If you use Claude Code, a pre-built hook automatically rewrites `dotnet build|test|restore|clean` commands to use `dtk`. Copy the hook into your project:
+DTK can install integration artifacts for AI coding agents automatically.
 
-It requires `curl` and `python3` to install; if you don't have those, you can create the hook file manually with the same content from [dotnet-to-dtk.py](https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.claude/hooks/dotnet-to-dtk.py).
+#### Claude Code
+
+From your project root, run:
 
 ```sh
-# From your project root
-mkdir -p .claude/hooks
-curl -sSL https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.claude/hooks/dotnet-to-dtk.py \
-  -o .claude/hooks/dotnet-to-dtk.py
+dtk integrate claude
 ```
 
-Then add the following to `.claude/settings.json`:
+This creates three files:
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 .claude/hooks/dotnet-to-dtk.py"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+- `.claude/skills/dotnet-token-killer/SKILL.md` — instructs Claude Code to prefer `dtk`
+- `.claude/hooks/dotnet-to-dtk.py` — a Python hook that rewrites `dotnet` commands
+- `.claude/settings.json` — registers the hook under `PreToolUse` (merges with any existing settings)
 
 With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, or `dotnet clean`, it is silently rewritten to `dtk dotnet ...` before execution.
+
+Re-running the command is safe: existing files are skipped. Use `--force` to overwrite:
+
+```sh
+dtk integrate claude --force
+```
+
+#### GitHub Copilot (VS Code)
+
+```sh
+dtk integrate copilot
+```
+
+This appends a `dtk` instructions section to `.github/copilot-instructions.md`, creating the file if it does not exist. Re-running is safe; use `--force` to refresh the section.
+
+See [AI Agent Setup](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html) in the docs for manual installation steps and details on what each provider installs.
 
 ## Usage
 
