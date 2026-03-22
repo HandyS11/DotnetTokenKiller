@@ -45,7 +45,10 @@ public sealed class GitHubCopilotIntegrator : IProviderIntegrator
             }
 
             // File exists but has no dtk section yet — append.
-            var appended = current.TrimEnd() + Environment.NewLine + Environment.NewLine + CopilotSection;
+            var trimmed = current.TrimEnd();
+            var appended = string.IsNullOrWhiteSpace(trimmed)
+                ? CopilotSection
+                : trimmed + Environment.NewLine + CopilotSection;
             await File.WriteAllTextAsync(path, appended, cancellationToken).ConfigureAwait(false);
             updated.Add(path);
         }
