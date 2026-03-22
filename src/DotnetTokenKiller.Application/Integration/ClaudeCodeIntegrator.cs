@@ -75,6 +75,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
     /// <param name="updated">Accumulator for updated file paths.</param>
     /// <param name="skipped">Accumulator for skipped file paths.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the settings file contains invalid JSON or an unexpected structure.</exception>
     private static async Task MergeSettingsJsonAsync(
         string path,
         List<string> created,
