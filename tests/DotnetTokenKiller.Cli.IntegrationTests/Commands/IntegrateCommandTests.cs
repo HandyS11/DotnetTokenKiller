@@ -147,6 +147,42 @@ public class IntegrateCommandTests
         console.Output.Should().NotContain("/project/");
     }
 
+    [Fact]
+    public async Task ExecuteAsync_EmptyDirectory_FallsBackToFullPath()
+    {
+        var result = new IntegrationResult(
+            ["/some/absolute/path/file.json"],
+            [],
+            []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        {
+            Directory = ""
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain("/some/absolute/path/file.json");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PathWithInvalidChars_FallsBackToFullPath()
+    {
+        const string dir = "/project";
+        const string invalidPath = "/result\0file.json";
+        var result = new IntegrationResult([invalidPath], [], []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        {
+            Directory = dir
+        }, CancellationToken.None);
+
+        // Path.GetFullPath throws on null-byte paths; the catch block returns the raw path
+        console.Output.Should().Contain("file.json");
+    }
+
     private static (ClaudeIntegrateCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)

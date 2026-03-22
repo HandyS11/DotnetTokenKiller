@@ -112,4 +112,24 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
         content.Should().Contain("<!-- dtk -->");
         content.Should().NotContain("Orphaned content");
     }
+
+    [Fact]
+    public void ProviderName_ReturnsCopilot()
+    {
+        _sut.ProviderName.Should().Be("copilot");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_WhitespaceOnlyFileWithoutMarker_CreatesCopilotSection()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
+        await File.WriteAllTextAsync(InstructionsPath, "   \n  \n  ");
+
+        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+
+        result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
+        var content = await File.ReadAllTextAsync(InstructionsPath);
+        content.Should().Contain("<!-- dtk -->");
+        content.Should().NotStartWith(Environment.NewLine);
+    }
 }

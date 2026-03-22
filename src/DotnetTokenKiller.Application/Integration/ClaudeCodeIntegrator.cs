@@ -33,7 +33,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
             force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
 
         await WriteFileAsync(
-            Path.Combine(directory, ".claude", "hooks", "dotnet-to-dtk.py"),
+            Path.Combine(directory, ".claude", HooksKey, "dotnet-to-dtk.py"),
             HookScript,
             force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
 
@@ -65,6 +65,8 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
         (exists ? updated : created).Add(path);
     }
+
+    private const string HooksKey = "hooks";
 
     /// <summary>
     /// Merges the dtk PreToolUse hook into <c>.claude/settings.json</c>.
@@ -115,7 +117,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         {
             root = [];
         }
-        root.TryGetPropertyValue("hooks", out var hooksNode);
+        root.TryGetPropertyValue(HooksKey, out var hooksNode);
         var hooks = hooksNode as JsonObject ?? [];
 
         hooks.TryGetPropertyValue("PreToolUse", out var preNode);
@@ -123,26 +125,16 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
 
         // If our exact hook command is already registered, leave the file alone.
         const string hookCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
-        foreach (var item in preToolUse)
+        if (IsHookAlreadyRegistered(preToolUse, hookCommand))
         {
-            if (item is not JsonObject entry) continue;
-            entry.TryGetPropertyValue("hooks", out var innerHooksNode);
-            if (innerHooksNode is not JsonArray innerHooks) continue;
-            foreach (var inner in innerHooks)
-            {
-                if (inner is JsonObject innerEntry &&
-                    innerEntry["command"]?.GetValue<string>() == hookCommand)
-                {
-                    skipped.Add(path);
-                    return;
-                }
-            }
+            skipped.Add(path);
+            return;
         }
 
         preToolUse.Add(new JsonObject
         {
             ["matcher"] = "Bash",
-            ["hooks"] = new JsonArray
+            [HooksKey] = new JsonArray
             {
                 new JsonObject
                 {
@@ -153,7 +145,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         });
 
         hooks["PreToolUse"] = preToolUse;
-        root["hooks"] = hooks;
+        root[HooksKey] = hooks;
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(
@@ -162,6 +154,25 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
             cancellationToken).ConfigureAwait(false);
 
         (exists ? updated : created).Add(path);
+    }
+
+    private static bool IsHookAlreadyRegistered(JsonArray preToolUse, string hookCommand)
+    {
+        foreach (var item in preToolUse)
+        {
+            if (item is not JsonObject entry) continue;
+            entry.TryGetPropertyValue(HooksKey, out var innerHooksNode);
+            if (innerHooksNode is not JsonArray innerHooks) continue;
+            foreach (var inner in innerHooks)
+            {
+                if (inner is JsonObject innerEntry &&
+                    innerEntry["command"]?.GetValue<string>() == hookCommand)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private const string SkillMarkdown =

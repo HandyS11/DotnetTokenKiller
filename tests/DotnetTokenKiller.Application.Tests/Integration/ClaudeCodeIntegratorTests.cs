@@ -88,7 +88,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         var root = JsonNode.Parse(json) as JsonObject;
 
         root.Should().NotBeNull();
-        root!["hooks"]!["PreToolUse"]!.AsArray().Should().NotBeEmpty();
+        root["hooks"]!["PreToolUse"]!.AsArray().Should().NotBeEmpty();
     }
 
     [Fact]
@@ -133,5 +133,63 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         var json = await File.ReadAllTextAsync(settingsPath);
         json.Should().Contain("PreToolUse");
         json.Should().Contain("dotnet-to-dtk.py");
+    }
+
+    [Fact]
+    public void ProviderName_ReturnsClaud()
+    {
+        _sut.ProviderName.Should().Be("claude");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_InvalidJsonSettings_ThrowsInvalidOperationException()
+    {
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath, "NOT VALID JSON {{{");
+
+        var act = () => _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Failed to parse JSON*");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_NonObjectJsonRoot_ThrowsInvalidOperationException()
+    {
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath, "[1, 2, 3]");
+
+        var act = () => _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*must contain a JSON object at the root*");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_SettingsWithDifferentHookInPreToolUse_AddsOurHook()
+    {
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath, """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": "Bash",
+                    "hooks": [{ "type": "command", "command": "some-other-hook.sh" }]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+
+        result.UpdatedFiles.Should().Contain(settingsPath);
+        var json = await File.ReadAllTextAsync(settingsPath);
+        json.Should().Contain("dotnet-to-dtk.py");
+        json.Should().Contain("some-other-hook.sh");
     }
 }
