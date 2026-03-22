@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application;
+using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
 using DotnetTokenKiller.Infrastructure.Execution;
@@ -11,46 +12,18 @@ using DtkTypeRegistrar = DotnetTokenKiller.Cli.Infrastructure.TypeRegistrar;
 
 Console.OutputEncoding = Encoding.UTF8;
 
-// Known filtered subcommands — keep in sync with the branch registration below
-HashSet<string> knownDotnetSubcommands = ["build", "test", "restore", "clean"];
-
-switch (args.Length)
+// Passthrough: run any unsupported dotnet subcommand directly without extra DI
+if (ArgumentPreprocessor.IsPassthrough(args))
 {
-    // Passthrough: run any unsupported dotnet subcommand directly without extra DI
-    case >= 2 when string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
-                   !knownDotnetSubcommands.Contains(args[1]):
-        var runner = new ProcessCommandRunner();
-        return await runner.RunPassthroughAsync("dotnet", args[1..]).ConfigureAwait(false);
-
-    // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
-    // forwarded via Spectre's Remaining.Raw without requiring the user to type "--".
-    // DTK flags are partitioned out first so they always land before "--" regardless
-    // of where the user placed them in the command line.
-    case > 2 when string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
-                  knownDotnetSubcommands.Contains(args[1]) &&
-                  !args.Contains("--"):
-        HashSet<string> dtkOptions = ["-v", "--verbose", "--show-log"];
-        var dtkFlags = new List<string>();
-        var dotnetArgs = new List<string>();
-        for (var i = 2; i < args.Length; i++)
-        {
-            if (dtkOptions.Contains(args[i]))
-                dtkFlags.Add(args[i]);
-            else
-                dotnetArgs.Add(args[i]);
-        }
-
-        if (dotnetArgs.Count > 0)
-        {
-            var updated = new List<string>(args.Length + 1) { args[0], args[1] };
-            updated.AddRange(dtkFlags);
-            updated.Add("--");
-            updated.AddRange(dotnetArgs);
-            args = [.. updated];
-        }
-
-        break;
+    var runner = new ProcessCommandRunner();
+    return await runner.RunPassthroughAsync("dotnet", args[1..]).ConfigureAwait(false);
 }
+
+// Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
+// forwarded via Spectre's Remaining.Raw without requiring the user to type "--".
+// DTK flags are partitioned out first so they always land before "--" regardless
+// of where the user placed them in the command line.
+args = ArgumentPreprocessor.InsertSeparator(args);
 
 try
 {

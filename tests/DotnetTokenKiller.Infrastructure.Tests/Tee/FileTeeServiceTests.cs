@@ -231,6 +231,8 @@ public sealed class FileTeeServiceTests : IDisposable
     /// <param name="config">The configuration to return from <see cref="LoadAsync"/>.</param>
     private sealed class FakeConfigProvider(DtkConfig config) : IConfigProvider
     {
+        public DtkConfig Load() => config;
+
         public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(config);
@@ -244,6 +246,8 @@ public sealed class FileTeeServiceTests : IDisposable
 
     private sealed class ThrowingConfigProvider : IConfigProvider
     {
+        public DtkConfig Load() => throw new InvalidOperationException("Simulated config failure");
+
         public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("Simulated config failure");

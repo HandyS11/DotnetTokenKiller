@@ -27,6 +27,29 @@ public sealed class JsonConfigProviderTests : IDisposable
     }
 
     [Fact]
+    public void Load_ReturnsDefaults_WhenNoFileExists()
+    {
+        var sut = CreateSut();
+
+        var config = sut.Load();
+
+        config.Should().Be(DtkConfig.Default);
+    }
+
+    [Fact]
+    public void Load_ReturnsMergedConfig_WhenFileExists()
+    {
+        Directory.CreateDirectory(_tempDir);
+        File.WriteAllText(ConfigPath, """{"Tracking":{"RetentionDays":45}}""");
+        var sut = CreateSut();
+
+        var config = sut.Load();
+
+        config.Tracking.RetentionDays.Should().Be(45);
+        config.Tracking.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task LoadAsync_ReturnsDefaults_WhenNoFileExists()
     {
         var sut = CreateSut();
