@@ -1,5 +1,7 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
+using DotnetTokenKiller.Domain.Integration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotnetTokenKiller.Application;
@@ -19,6 +21,11 @@ public static class ServiceCollectionExtensions
         services.AddTransient<DotnetRestoreFilter>();
         services.AddTransient<DotnetCleanFilter>();
         services.AddSingleton<TextWriter>(_ => Console.Out);
+
+        services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();
+        services.AddTransient<IProviderIntegrator, GitHubCopilotIntegrator>();
+        services.AddTransient<IntegrateUseCase>();
+
         return services;
     }
 }

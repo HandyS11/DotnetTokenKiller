@@ -52,6 +52,15 @@ try
             dotnet.AddCommand<DotnetCleanCommand>("clean").WithDescription("Run dotnet clean with filtered output");
         });
 
+        config.AddBranch("integrate", integrate =>
+        {
+            integrate.SetDescription("Install dtk integration artifacts for an AI assistant provider");
+            integrate.AddCommand<ClaudeIntegrateCommand>("claude")
+                .WithDescription("Install dtk skill and hook for Claude Code");
+            integrate.AddCommand<CopilotIntegrateCommand>("copilot")
+                .WithDescription("Install dtk instructions for GitHub Copilot");
+        });
+
         config.AddCommand<GainCommand>("gain").WithDescription("Show token savings analytics");
         config.AddCommand<ResetCommand>("reset").WithDescription("Clear all tracking data");
     });
