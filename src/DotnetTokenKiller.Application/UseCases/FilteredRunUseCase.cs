@@ -68,7 +68,7 @@ public sealed class FilteredRunUseCase(
             filtered = stripped;
         }
 
-        if (!config.Display.Emoji)
+        if (!config.Display.Emoji || Environment.GetEnvironmentVariable("NO_COLOR") is not null)
         {
             filtered = filtered.Replace("✓", "ok:", StringComparison.Ordinal);
         }
