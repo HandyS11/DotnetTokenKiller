@@ -50,6 +50,30 @@ public sealed class JsonConfigProviderTests : IDisposable
     }
 
     [Fact]
+    public void Load_ReturnsDefaults_WhenJsonIsInvalid()
+    {
+        Directory.CreateDirectory(_tempDir);
+        File.WriteAllText(ConfigPath, "not valid json {{ }}");
+        var sut = CreateSut();
+
+        var config = sut.Load();
+
+        config.Should().Be(DtkConfig.Default);
+    }
+
+    [Fact]
+    public void Load_ReturnsDefaults_WhenJsonIsNullLiteral()
+    {
+        Directory.CreateDirectory(_tempDir);
+        File.WriteAllText(ConfigPath, "null");
+        var sut = CreateSut();
+
+        var config = sut.Load();
+
+        config.Should().Be(DtkConfig.Default);
+    }
+
+    [Fact]
     public async Task LoadAsync_ReturnsDefaults_WhenNoFileExists()
     {
         var sut = CreateSut();
