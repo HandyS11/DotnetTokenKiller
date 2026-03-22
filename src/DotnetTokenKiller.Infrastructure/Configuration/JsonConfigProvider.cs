@@ -11,6 +11,26 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
     public JsonConfigProvider() : this(GetDefaultConfigPath()) { }
 
     /// <inheritdoc/>
+    public DtkConfig Load()
+    {
+        try
+        {
+            if (!File.Exists(configPath))
+            {
+                return DtkConfig.Default;
+            }
+
+            var json = File.ReadAllText(configPath);
+            var loaded = JsonSerializer.Deserialize(json, DtkConfigJsonContext.Default.DtkConfig);
+            return loaded is null ? DtkConfig.Default : Validate(Merge(loaded));
+        }
+        catch
+        {
+            return DtkConfig.Default;
+        }
+    }
+
+    /// <inheritdoc/>
     public async Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
     {
         try

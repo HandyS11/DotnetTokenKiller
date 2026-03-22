@@ -23,9 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITracker>(sp =>
         {
             var configProvider = sp.GetRequiredService<IConfigProvider>();
-#pragma warning disable VSTHRD002 // Sync-over-async; runs once at startup for local file I/O
-            var config = configProvider.LoadAsync().GetAwaiter().GetResult();
-#pragma warning restore VSTHRD002
+            var config = configProvider.Load();
             var dbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH")
                          ?? config.Tracking.DbPath
                          ?? SqliteTracker.GetDefaultDbPath();
