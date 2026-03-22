@@ -24,26 +24,28 @@ switch (args.Length)
 
     // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
     // forwarded via Spectre's Remaining.Raw without requiring the user to type "--".
+    // DTK flags are partitioned out first so they always land before "--" regardless
+    // of where the user placed them in the command line.
     case > 2 when string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
                   knownDotnetSubcommands.Contains(args[1]) &&
                   !args.Contains("--"):
         HashSet<string> dtkOptions = ["-v", "--verbose", "--show-log"];
-        var insertIndex = -1;
+        var dtkFlags = new List<string>();
+        var dotnetArgs = new List<string>();
         for (var i = 2; i < args.Length; i++)
         {
-            if (args[i].StartsWith('-') && !dtkOptions.Contains(args[i]))
-            {
-                insertIndex = i;
-                break;
-            }
+            if (dtkOptions.Contains(args[i]))
+                dtkFlags.Add(args[i]);
+            else
+                dotnetArgs.Add(args[i]);
         }
 
-        if (insertIndex >= 0)
+        if (dotnetArgs.Count > 0)
         {
-            var updated = new List<string>(args.Length + 1);
-            updated.AddRange(args[..insertIndex]);
+            var updated = new List<string>(args.Length + 1) { args[0], args[1] };
+            updated.AddRange(dtkFlags);
             updated.Add("--");
-            updated.AddRange(args[insertIndex..]);
+            updated.AddRange(dotnetArgs);
             args = [.. updated];
         }
 
