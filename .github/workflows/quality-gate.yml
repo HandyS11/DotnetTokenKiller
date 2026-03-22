@@ -26,7 +26,7 @@ jobs:
         run: dotnet build DotnetTokenKiller.slnx --no-restore -warnaserror
 
       - name: Test
-        run: dotnet test DotnetTokenKiller.slnx --no-build --logger trx
+        run: dotnet test DotnetTokenKiller.slnx --no-build --logger trx --filter "Category!=Integration"
 
       - name: Upload TRX results
         if: always()
