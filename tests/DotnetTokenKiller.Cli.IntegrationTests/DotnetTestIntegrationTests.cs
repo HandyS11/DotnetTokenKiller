@@ -26,10 +26,9 @@ public class DotnetTestIntegrationTests
     [Fact(Timeout = 60_000)]
     public async Task Test_SampleTests_AllPass_OutputStartsWithCheckmark()
     {
-        // Use -- to pass --filter through Spectre.Console's Remaining.Raw to dotnet test
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsCsproj,
-            "--", "--filter", "FullyQualifiedName!~IntentionallyFailing");
+            "--filter", "FullyQualifiedName!~IntentionallyFailing");
 
         exitCode.Should().Be(0);
         output.TrimEnd().Should().StartWith("✓ dotnet test: 3 passed");
@@ -41,7 +40,7 @@ public class DotnetTestIntegrationTests
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsCsproj,
-            "--", "--filter", "FullyQualifiedName!~IntentionallyFailing");
+            "--filter", "FullyQualifiedName!~IntentionallyFailing");
 
         output.Should().NotContain("Starting test execution");
         output.Should().NotContain("Microsoft (R) Test Execution Command Line Tool");
@@ -61,7 +60,7 @@ public class DotnetTestIntegrationTests
             "--verbosity", "normal");
         var (filteredOutput, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsCsproj,
-            "--", "--filter", "FullyQualifiedName!~IntentionallyFailing");
+            "--filter", "FullyQualifiedName!~IntentionallyFailing");
 
         var savings = IntegrationTestHelper.CalculateSavings(rawOutput, filteredOutput);
         savings.Should().BeGreaterThanOrEqualTo(90.0, "test all-pass should achieve ≥90% token savings");
@@ -189,7 +188,7 @@ public class DotnetTestIntegrationTests
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsNUnitCsproj,
-            "--", "--filter", "FullyQualifiedName~PassingTests");
+            "--filter", "FullyQualifiedName~PassingTests");
 
         exitCode.Should().Be(0);
         output.TrimEnd().Should().StartWith("✓ dotnet test: 5 passed");
@@ -233,7 +232,7 @@ public class DotnetTestIntegrationTests
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsMsTestCsproj,
-            "--", "--filter", "FullyQualifiedName~PassingTests");
+            "--filter", "FullyQualifiedName~PassingTests");
 
         exitCode.Should().Be(0);
         output.TrimEnd().Should().StartWith("✓ dotnet test: 5 passed");
@@ -277,7 +276,7 @@ public class DotnetTestIntegrationTests
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsReqnrollCsproj,
-            "--", "--filter", "FullyQualifiedName!~DivisionByZero&FullyQualifiedName!~IntentionallyWrong");
+            "--filter", "FullyQualifiedName!~DivisionByZero&FullyQualifiedName!~IntentionallyWrong");
 
         exitCode.Should().Be(0);
         output.TrimEnd().Should().StartWith("✓ dotnet test: 5 passed");
