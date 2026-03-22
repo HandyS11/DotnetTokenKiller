@@ -6,7 +6,7 @@ namespace DotnetTokenKiller.Cli;
 /// <remarks>
 /// Handles two cases:
 /// <list type="bullet">
-///   <item><description>Passthrough: <c>dotnet &lt;unknown-subcommand&gt;</c> should bypass the app entirely.</description></item>
+///   <item><description>Passthrough: <c>dotnet &lt;subcommand not handled by dtk&gt;</c> should bypass the app entirely.</description></item>
 ///   <item><description>Separator insertion: <c>dtk dotnet build &lt;args&gt;</c> needs <c>--</c> inserted so
 ///         Spectre forwards dotnet-specific args via <c>Remaining.Raw</c>.</description></item>
 /// </list>
