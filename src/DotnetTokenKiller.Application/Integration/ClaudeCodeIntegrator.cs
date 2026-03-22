@@ -83,10 +83,37 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         CancellationToken cancellationToken)
     {
         var exists = File.Exists(path);
-        var root = exists
-            ? JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false)) as JsonObject ?? []
-            : [];
+        JsonObject root;
+        if (exists)
+        {
+            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+            JsonNode? parsed;
+            try
+            {
+                parsed = JsonNode.Parse(json);
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to parse JSON settings file '{path}'. The file must contain a valid JSON object at the root.",
+                    ex);
+            }
 
+            if (parsed is JsonObject obj)
+            {
+                root = obj;
+            }
+            else
+            {
+                var actualType = parsed?.GetType().Name ?? "null";
+                throw new InvalidOperationException(
+                    $"The settings file '{path}' must contain a JSON object at the root, but found '{actualType}'.");
+            }
+        }
+        else
+        {
+            root = [];
+        }
         root.TryGetPropertyValue("hooks", out var hooksNode);
         var hooks = hooksNode as JsonObject ?? [];
 
