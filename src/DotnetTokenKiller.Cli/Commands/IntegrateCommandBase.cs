@@ -51,9 +51,22 @@ internal abstract class IntegrateCommandBase(
 
     private static string RelativePath(string baseDir, string fullPath)
     {
-        if (fullPath.StartsWith(baseDir, StringComparison.Ordinal))
-            return fullPath[(baseDir.Length + 1)..].Replace(Path.DirectorySeparatorChar, '/');
+        if (string.IsNullOrEmpty(fullPath) || string.IsNullOrEmpty(baseDir))
+            return fullPath;
 
-        return fullPath;
+        try
+        {
+            var normalizedBaseDir = Path.GetFullPath(
+                baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            var normalizedFullPath = Path.GetFullPath(fullPath);
+
+            var relative = Path.GetRelativePath(normalizedBaseDir, normalizedFullPath);
+            return relative.Replace(Path.DirectorySeparatorChar, '/');
+        }
+        catch
+        {
+            // If paths cannot be normalized or related, fall back to the full path.
+            return fullPath;
+        }
     }
 }
