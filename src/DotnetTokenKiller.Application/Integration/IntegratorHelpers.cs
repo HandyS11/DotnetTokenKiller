@@ -36,7 +36,7 @@ internal static class IntegratorHelpers
 
     /// <summary>
     /// Writes a file that uses begin/end section markers to track a dtk-managed block.
-    /// If the file already contains the section marker: replaces when <paramref name="context"/> force is <see langword="true"/>, skips otherwise.
+    /// If the file already contains the section marker: replaces when <c>context.Force</c> is <see langword="true"/>, skips otherwise.
     /// If the file exists but has no marker: appends the section.
     /// If the file does not exist: creates it with the section as the only content.
     /// </summary>
