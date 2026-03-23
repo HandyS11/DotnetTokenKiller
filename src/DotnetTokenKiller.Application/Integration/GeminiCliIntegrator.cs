@@ -1,5 +1,4 @@
 using DotnetTokenKiller.Domain.Integration;
-using System.Text.Json.Nodes;
 
 namespace DotnetTokenKiller.Application.Integration;
 
@@ -111,38 +110,23 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
         bool force,
         CancellationToken cancellationToken)
     {
-        var created = new List<string>();
-        var updated = new List<string>();
-        var skipped = new List<string>();
+        var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             Path.Combine(directory, "GEMINI.md"),
             SectionMarker, "<!-- /dtk -->", GeminiSection,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+            context, cancellationToken).ConfigureAwait(false);
 
-        await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(directory, ".gemini", "hooks", "dotnet-to-dtk.py"),
-            HookScript,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteHookAndSettingsAsync(
+            new HookSpec(
+                Path.Combine(directory, ".gemini", "hooks", "dotnet-to-dtk.py"),
+                HookScript,
+                Path.Combine(directory, ".gemini", "settings.json"),
+                "BeforeTool",
+                "run_shell_command",
+                HookCommand),
+            context, cancellationToken).ConfigureAwait(false);
 
-        await IntegratorHelpers.MergeJsonSettingsAsync(
-            Path.Combine(directory, ".gemini", "settings.json"),
-            "BeforeTool",
-            new JsonObject
-            {
-                ["matcher"] = "run_shell_command",
-                ["hooks"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["type"] = "command",
-                        ["command"] = HookCommand
-                    }
-                }
-            },
-            HookCommand,
-            created, updated, skipped, cancellationToken).ConfigureAwait(false);
-
-        return new IntegrationResult(created, updated, skipped);
+        return context.ToResult();
     }
 }

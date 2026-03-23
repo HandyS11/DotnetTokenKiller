@@ -51,15 +51,12 @@ public sealed class CursorIntegrator : IProviderIntegrator
         bool force,
         CancellationToken cancellationToken)
     {
-        var created = new List<string>();
-        var updated = new List<string>();
-        var skipped = new List<string>();
+        var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteFileAsync(
             Path.Combine(directory, ".cursor", "rules", "dtk.mdc"),
-            CursorRule,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+            CursorRule, context, cancellationToken).ConfigureAwait(false);
 
-        return new IntegrationResult(created, updated, skipped);
+        return context.ToResult();
     }
 }

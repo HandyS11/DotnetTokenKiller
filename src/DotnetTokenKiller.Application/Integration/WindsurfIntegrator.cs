@@ -41,15 +41,12 @@ public sealed class WindsurfIntegrator : IProviderIntegrator
         bool force,
         CancellationToken cancellationToken)
     {
-        var created = new List<string>();
-        var updated = new List<string>();
-        var skipped = new List<string>();
+        var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteFileAsync(
             Path.Combine(directory, ".windsurf", "rules", "dtk.md"),
-            WindsurfRule,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+            WindsurfRule, context, cancellationToken).ConfigureAwait(false);
 
-        return new IntegrationResult(created, updated, skipped);
+        return context.ToResult();
     }
 }

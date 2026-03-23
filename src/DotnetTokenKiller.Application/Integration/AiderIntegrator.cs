@@ -54,20 +54,17 @@ public sealed class AiderIntegrator : IProviderIntegrator
         bool force,
         CancellationToken cancellationToken)
     {
-        var created = new List<string>();
-        var updated = new List<string>();
-        var skipped = new List<string>();
+        var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteFileAsync(
             Path.Combine(directory, ".aider-dtk-instructions.md"),
-            InstructionsMarkdown,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+            InstructionsMarkdown, context, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             Path.Combine(directory, ".aider.conf.yml"),
             SectionMarker, SectionEndMarker, AiderConfSection,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+            context, cancellationToken).ConfigureAwait(false);
 
-        return new IntegrationResult(created, updated, skipped);
+        return context.ToResult();
     }
 }
