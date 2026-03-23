@@ -83,7 +83,9 @@ public sealed class DoctorUseCase(ICommandRunner runner, IConfigProvider configP
             }
 
             if (File.Exists(dbPath))
+            {
                 return new DiagnosticCheck(name, true, $"Found at {dbPath}");
+            }
 
             return new DiagnosticCheck(name, true,
                 $"No data yet — will be created at {dbPath}");

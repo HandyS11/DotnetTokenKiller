@@ -24,7 +24,7 @@ public class IntegrateUseCaseTests
     {
         var sut = new IntegrateUseCase([new StubIntegrator("claude")]);
 
-        var act = () => sut.RunAsync("copilot", "/some/dir", force: false, CancellationToken.None);
+        var act = () => sut.RunAsync("copilot", "/some/dir", false, CancellationToken.None);
 
         await act.Should().ThrowAsync<ArgumentException>()
             .WithMessage("*copilot*");
@@ -36,7 +36,7 @@ public class IntegrateUseCaseTests
         var stub = new StubIntegrator("claude");
         var sut = new IntegrateUseCase([stub]);
 
-        await sut.RunAsync("claude", "/some/dir", force: true, CancellationToken.None);
+        await sut.RunAsync("claude", "/some/dir", true, CancellationToken.None);
 
         stub.LastDirectory.Should().Be("/some/dir");
         stub.LastForce.Should().BeTrue();
@@ -48,7 +48,7 @@ public class IntegrateUseCaseTests
         var stub = new StubIntegrator("claude");
         var sut = new IntegrateUseCase([stub]);
 
-        var act = () => sut.RunAsync("CLAUDE", "/some/dir", force: false, CancellationToken.None);
+        var act = () => sut.RunAsync("CLAUDE", "/some/dir", false, CancellationToken.None);
 
         await act.Should().NotThrowAsync();
         stub.LastDirectory.Should().Be("/some/dir");
@@ -58,10 +58,13 @@ public class IntegrateUseCaseTests
     public async Task RunAsync_ReturnsResultFromIntegrator()
     {
         var expected = new IntegrationResult(["a.txt"], [], []);
-        var stub = new StubIntegrator("claude") { Result = expected };
+        var stub = new StubIntegrator("claude")
+        {
+            Result = expected
+        };
         var sut = new IntegrateUseCase([stub]);
 
-        var result = await sut.RunAsync("claude", "/some/dir", force: false, CancellationToken.None);
+        var result = await sut.RunAsync("claude", "/some/dir", false, CancellationToken.None);
 
         result.Should().Be(expected);
     }

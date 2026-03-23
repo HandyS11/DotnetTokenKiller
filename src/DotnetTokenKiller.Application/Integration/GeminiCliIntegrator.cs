@@ -116,7 +116,9 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
         var end = content.IndexOf(endMarker, start, StringComparison.Ordinal);
 
         if (end < 0)
+        {
             return content[..start] + GeminiSection;
+        }
 
         return content[..start] + GeminiSection + content[(end + endMarker.Length)..];
     }
@@ -205,7 +207,10 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(
             path,
-            root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
+            root.ToJsonString(new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            }),
             cancellationToken).ConfigureAwait(false);
 
         (exists ? updated : created).Add(path);
@@ -215,9 +220,17 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
     {
         foreach (var item in beforeTool)
         {
-            if (item is not JsonObject entry) continue;
+            if (item is not JsonObject entry)
+            {
+                continue;
+            }
+
             entry.TryGetPropertyValue(HooksKey, out var innerHooksNode);
-            if (innerHooksNode is not JsonArray innerHooks) continue;
+            if (innerHooksNode is not JsonArray innerHooks)
+            {
+                continue;
+            }
+
             foreach (var inner in innerHooks)
             {
                 if (inner is JsonObject innerEntry &&
@@ -227,6 +240,7 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
                 }
             }
         }
+
         return false;
     }
 
@@ -253,64 +267,64 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
 
     /// <summary>4-quote raw string literal so Python triple-quoted docstrings embed without escaping.</summary>
     private const string HookScript = """"
-        #!/usr/bin/env python3
-        """Gemini CLI BeforeTool hook: rewrites `dotnet build|test|restore|clean` to `dtk dotnet ...`.
+                                      #!/usr/bin/env python3
+                                      """Gemini CLI BeforeTool hook: rewrites `dotnet build|test|restore|clean` to `dtk dotnet ...`.
 
-        Reads the BeforeTool event from stdin (JSON with a "tool_input" field),
-        rewrites qualifying dotnet commands to use dtk, and prints the
-        modified JSON to stdout so Gemini CLI uses the rewritten command.
-        """
+                                      Reads the BeforeTool event from stdin (JSON with a "tool_input" field),
+                                      rewrites qualifying dotnet commands to use dtk, and prints the
+                                      modified JSON to stdout so Gemini CLI uses the rewritten command.
+                                      """
 
-        import json
-        import re
-        import sys
-
-
-        _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean"}
-
-        _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
+                                      import json
+                                      import re
+                                      import sys
 
 
-        def rewrite(command: str) -> str:
-            """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
+                                      _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean"}
 
-            def _replace(match: re.Match) -> str:
-                preceding = command[: match.start()].rstrip()
-                last_token = preceding.split()[-1] if preceding else ""
-                if last_token in ("dtk", "dtk.exe"):
-                    return match.group(0)
-                return f"dtk dotnet {match.group(1)}"
-
-            return _PATTERN.sub(_replace, command)
+                                      _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
 
 
-        def main() -> None:
-            try:
-                payload = json.load(sys.stdin)
-            except (json.JSONDecodeError, EOFError):
-                return
+                                      def rewrite(command: str) -> str:
+                                          """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
 
-            tool_input = payload.get("tool_input", {})
-            command = tool_input.get("command", "")
+                                          def _replace(match: re.Match) -> str:
+                                              preceding = command[: match.start()].rstrip()
+                                              last_token = preceding.split()[-1] if preceding else ""
+                                              if last_token in ("dtk", "dtk.exe"):
+                                                  return match.group(0)
+                                              return f"dtk dotnet {match.group(1)}"
 
-            if not command:
-                print(json.dumps({"decision": "allow"}))
-                return
-
-            rewritten = rewrite(command)
-
-            if rewritten != command:
-                print(json.dumps({
-                    "decision": "allow",
-                    "hookSpecificOutput": {
-                        "tool_input": {"command": rewritten}
-                    }
-                }))
-            else:
-                print(json.dumps({"decision": "allow"}))
+                                          return _PATTERN.sub(_replace, command)
 
 
-        if __name__ == "__main__":
-            main()
-        """";
+                                      def main() -> None:
+                                          try:
+                                              payload = json.load(sys.stdin)
+                                          except (json.JSONDecodeError, EOFError):
+                                              return
+
+                                          tool_input = payload.get("tool_input", {})
+                                          command = tool_input.get("command", "")
+
+                                          if not command:
+                                              print(json.dumps({"decision": "allow"}))
+                                              return
+
+                                          rewritten = rewrite(command)
+
+                                          if rewritten != command:
+                                              print(json.dumps({
+                                                  "decision": "allow",
+                                                  "hookSpecificOutput": {
+                                                      "tool_input": {"command": rewritten}
+                                                  }
+                                              }))
+                                          else:
+                                              print(json.dumps({"decision": "allow"}))
+
+
+                                      if __name__ == "__main__":
+                                          main()
+                                      """";
 }

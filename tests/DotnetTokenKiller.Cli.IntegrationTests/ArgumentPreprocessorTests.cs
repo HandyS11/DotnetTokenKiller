@@ -74,7 +74,10 @@ public sealed class ArgumentPreprocessorTests
     [Fact]
     public void InsertSeparator_ReturnsOriginal_WhenDoubleDashAlreadyPresent()
     {
-        var args = new[] { "dotnet", "build", "--", "MyProject.slnx" };
+        var args = new[]
+        {
+            "dotnet", "build", "--", "MyProject.slnx"
+        };
 
         var result = ArgumentPreprocessor.InsertSeparator(args);
 
@@ -84,7 +87,10 @@ public sealed class ArgumentPreprocessorTests
     [Fact]
     public void InsertSeparator_ReturnsOriginal_WhenOnlyDtkFlagsPresent()
     {
-        var args = new[] { "dotnet", "build", "-v" };
+        var args = new[]
+        {
+            "dotnet", "build", "-v"
+        };
 
         var result = ArgumentPreprocessor.InsertSeparator(args);
 
@@ -94,7 +100,10 @@ public sealed class ArgumentPreprocessorTests
     [Fact]
     public void InsertSeparator_ReturnsOriginal_WhenExactlyTwoArgs()
     {
-        var args = new[] { "dotnet", "build" };
+        var args = new[]
+        {
+            "dotnet", "build"
+        };
 
         var result = ArgumentPreprocessor.InsertSeparator(args);
 
@@ -104,7 +113,10 @@ public sealed class ArgumentPreprocessorTests
     [Fact]
     public void InsertSeparator_ReturnsOriginal_WhenUnknownSubcommand()
     {
-        var args = new[] { "dotnet", "publish", "MyProject.csproj" };
+        var args = new[]
+        {
+            "dotnet", "publish", "MyProject.csproj"
+        };
 
         var result = ArgumentPreprocessor.InsertSeparator(args);
 

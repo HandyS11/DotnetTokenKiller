@@ -69,7 +69,9 @@ public sealed class GitHubCopilotIntegrator : IProviderIntegrator
         var end = content.IndexOf(endMarker, start, StringComparison.Ordinal);
 
         if (end < 0)
+        {
             return content[..start] + CopilotSection;
+        }
 
         return content[..start] + CopilotSection + content[(end + endMarker.Length)..];
     }

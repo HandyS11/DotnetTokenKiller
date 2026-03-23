@@ -110,7 +110,9 @@ public sealed class AiderIntegrator : IProviderIntegrator
         var end = content.IndexOf(SectionEndMarker, start, StringComparison.Ordinal);
 
         if (end < 0)
+        {
             return content[..start] + AiderConfSection;
+        }
 
         return content[..start] + AiderConfSection + content[(end + SectionEndMarker.Length)..];
     }

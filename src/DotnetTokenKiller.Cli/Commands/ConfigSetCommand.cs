@@ -23,7 +23,8 @@ internal sealed class ConfigSetCommand(
         try
         {
             await configSet.ExecuteAsync(settings.Key, settings.Value, cancellationToken).ConfigureAwait(false);
-            console.MarkupLine($"[green]Set[/] [bold]{Markup.Escape(settings.Key)}[/] = [bold]{Markup.Escape(settings.Value)}[/]");
+            console.MarkupLine(
+                $"[green]Set[/] [bold]{Markup.Escape(settings.Key)}[/] = [bold]{Markup.Escape(settings.Value)}[/]");
             return 0;
         }
         catch (ArgumentException ex)

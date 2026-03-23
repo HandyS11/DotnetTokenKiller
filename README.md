@@ -2,7 +2,8 @@
 
 # DotnetTokenKiller
 
-A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands down to only what matters.
+A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands down to only what
+matters.
 
 [![CI](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml)
 [![CD](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml)
@@ -13,7 +14,9 @@ A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of
 
 </div>
 
-When you feed `dotnet build` or `dotnet test` output to an LLM, most of it is noise — SDK banners, MSBuild headers, progress lines, ANSI escape codes, duplicate messages. DTK strips all of that and returns a compact, signal-only result. Fewer tokens in means lower cost and less context consumed.
+When you feed `dotnet build` or `dotnet test` output to an LLM, most of it is noise — SDK banners, MSBuild headers,
+progress lines, ANSI escape codes, duplicate messages. DTK strips all of that and returns a compact, signal-only result.
+Fewer tokens in means lower cost and less context consumed.
 
 ## Installation
 
@@ -48,19 +51,20 @@ Unknown subcommands pass through to `dotnet` unchanged.
 
 Install integration artifacts with one command:
 
-| Provider | Command | What it creates |
-|----------|---------|-----------------|
-| **Claude Code** | `dtk integrate claude` | Skill file, PreToolUse hook, settings merge |
-| **GitHub Copilot** | `dtk integrate copilot` | Section in `.github/copilot-instructions.md` |
-| **Gemini CLI** | `dtk integrate gemini` | BeforeTool hook, settings merge, `GEMINI.md` section |
-| **Cursor** | `dtk integrate cursor` | `.cursor/rules/dtk.mdc` |
-| **Windsurf** | `dtk integrate windsurf` | `.windsurf/rules/dtk.md` |
-| **Aider** | `dtk integrate aider` | Instructions file, `.aider.conf.yml` section |
-| **JetBrains AI** | `dtk integrate jetbrains` | Section in `.junie/guidelines.md` |
+| Provider           | Command                   | What it creates                                      |
+|--------------------|---------------------------|------------------------------------------------------|
+| **Claude Code**    | `dtk integrate claude`    | Skill file, PreToolUse hook, settings merge          |
+| **GitHub Copilot** | `dtk integrate copilot`   | Section in `.github/copilot-instructions.md`         |
+| **Gemini CLI**     | `dtk integrate gemini`    | BeforeTool hook, settings merge, `GEMINI.md` section |
+| **Cursor**         | `dtk integrate cursor`    | `.cursor/rules/dtk.mdc`                              |
+| **Windsurf**       | `dtk integrate windsurf`  | `.windsurf/rules/dtk.md`                             |
+| **Aider**          | `dtk integrate aider`     | Instructions file, `.aider.conf.yml` section         |
+| **JetBrains AI**   | `dtk integrate jetbrains` | Section in `.junie/guidelines.md`                    |
 
 All commands are idempotent — re-running is safe. Pass `--force` to refresh existing files.
 
-See [AI Agent Setup](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html) for per-provider details and manual installation steps.
+See [AI Agent Setup](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html) for per-provider details
+and manual installation steps.
 
 ## Token Savings Analytics
 
@@ -100,9 +104,11 @@ dtk config set display.width 100
 dtk config set tee.mode Always
 ```
 
-Supported keys: `tracking.enabled`, `tracking.retentionDays`, `tracking.dbPath`, `tracking.tokenizer`, `display.colors`, `display.emoji`, `display.width`, `tee.mode`, `tee.directory`, `tee.maxFiles`, `tee.maxFileSizeBytes`.
+Supported keys: `tracking.enabled`, `tracking.retentionDays`, `tracking.dbPath`, `tracking.tokenizer`, `display.colors`,
+`display.emoji`, `display.width`, `tee.mode`, `tee.directory`, `tee.maxFiles`, `tee.maxFileSizeBytes`.
 
-See [Configuration](https://handys11.github.io/DotnetTokenKiller/articles/configuration.html) for defaults, valid values, and the full JSON schema.
+See [Configuration](https://handys11.github.io/DotnetTokenKiller/articles/configuration.html) for defaults, valid
+values, and the full JSON schema.
 
 ## Diagnostics
 
@@ -123,7 +129,8 @@ dtk completion powershell >> $PROFILE
 
 ## Log Files
 
-DTK saves raw command output to disk for failed runs by default (`tee.mode = failures`). Pass `--show-log` to print the log path after any run:
+DTK saves raw command output to disk for failed runs by default (`tee.mode = failures`). Pass `--show-log` to print the
+log path after any run:
 
 ```sh
 dtk dotnet test --show-log

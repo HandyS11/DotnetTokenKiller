@@ -15,13 +15,15 @@ public sealed class AiderIntegratorTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, true);
+        }
     }
 
     [Fact]
     public async Task IntegrateAsync_FreshDirectory_CreatesBothFiles()
     {
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().HaveCount(2);
         result.UpdatedFiles.Should().BeEmpty();
@@ -34,9 +36,9 @@ public sealed class AiderIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_NoForce_SkipsBothFiles()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.SkippedFiles.Should().HaveCount(2);
         result.CreatedFiles.Should().BeEmpty();
@@ -45,9 +47,9 @@ public sealed class AiderIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_WithForce_UpdatesBothFiles()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().HaveCount(2);
         result.CreatedFiles.Should().BeEmpty();
@@ -57,7 +59,7 @@ public sealed class AiderIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_InstructionsFile_ContainsDtkContent()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(InstructionsPath);
 
@@ -68,7 +70,7 @@ public sealed class AiderIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_ConfFile_ContainsDtkSection()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(ConfPath);
 
@@ -83,7 +85,7 @@ public sealed class AiderIntegratorTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(ConfPath, "auto-commits: false\n");
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(ConfPath);
         var content = await File.ReadAllTextAsync(ConfPath);
@@ -97,7 +99,7 @@ public sealed class AiderIntegratorTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(ConfPath, "# dtk\nold-content\n# /dtk\n");
 
-        await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(ConfPath);
         content.Should().NotContain("old-content");

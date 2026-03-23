@@ -128,9 +128,9 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task GetSummaryAsync_FiltersByCommandFilter()
     {
-        await _sut.RecordAsync(MakeRecord(command: "build"));
-        await _sut.RecordAsync(MakeRecord(command: "test"));
-        await _sut.RecordAsync(MakeRecord(command: "build"));
+        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord("test"));
+        await _sut.RecordAsync(MakeRecord("build"));
 
         var summary = await _sut.GetSummaryAsync(30, null, "build");
 
@@ -142,8 +142,8 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task GetHistoryAsync_FiltersByCommandFilter()
     {
-        await _sut.RecordAsync(MakeRecord(command: "build"));
-        await _sut.RecordAsync(MakeRecord(command: "test"));
+        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord("test"));
 
         var history = await _sut.GetHistoryAsync(30, null, "test");
 
@@ -231,7 +231,7 @@ public class SqliteTrackerTests : IAsyncDisposable
             var dir = Path.GetDirectoryName(tempPath);
             if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
-                Directory.Delete(dir, recursive: true);
+                Directory.Delete(dir, true);
             }
         }
     }

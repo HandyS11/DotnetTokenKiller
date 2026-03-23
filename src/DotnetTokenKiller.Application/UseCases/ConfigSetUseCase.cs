@@ -23,7 +23,7 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
             ["tee.mode"] = "Failures|Always|Never",
             ["tee.directory"] = "directory path (empty string to reset to default)",
             ["tee.maxFiles"] = "integer ≥ 1",
-            ["tee.maxFileSizeBytes"] = "integer ≥ 0",
+            ["tee.maxFileSizeBytes"] = "integer ≥ 0"
         };
 
     /// <summary>
@@ -49,47 +49,80 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
         {
             "tracking.enabled" => config with
             {
-                Tracking = config.Tracking with { Enabled = ParseBool(key, value) }
+                Tracking = config.Tracking with
+                {
+                    Enabled = ParseBool(key, value)
+                }
             },
             "tracking.retentiondays" => config with
             {
-                Tracking = config.Tracking with { RetentionDays = ParseInt(key, value, min: 1) }
+                Tracking = config.Tracking with
+                {
+                    RetentionDays = ParseInt(key, value, 1)
+                }
             },
             "tracking.dbpath" => config with
             {
-                Tracking = config.Tracking with { DbPath = NullableString(value) }
+                Tracking = config.Tracking with
+                {
+                    DbPath = NullableString(value)
+                }
             },
             "tracking.tokenizer" => config with
             {
-                Tracking = config.Tracking with { Tokenizer = ParseEnum<TokenizerModel>(key, value) }
+                Tracking = config.Tracking with
+                {
+                    Tokenizer = ParseEnum<TokenizerModel>(key, value)
+                }
             },
             "display.colors" => config with
             {
-                Display = config.Display with { Colors = ParseBool(key, value) }
+                Display = config.Display with
+                {
+                    Colors = ParseBool(key, value)
+                }
             },
             "display.emoji" => config with
             {
-                Display = config.Display with { Emoji = ParseBool(key, value) }
+                Display = config.Display with
+                {
+                    Emoji = ParseBool(key, value)
+                }
             },
             "display.width" => config with
             {
-                Display = config.Display with { Width = ParseInt(key, value, min: 40) }
+                Display = config.Display with
+                {
+                    Width = ParseInt(key, value, 40)
+                }
             },
             "tee.mode" => config with
             {
-                Tee = config.Tee with { Mode = ParseEnum<TeeMode>(key, value) }
+                Tee = config.Tee with
+                {
+                    Mode = ParseEnum<TeeMode>(key, value)
+                }
             },
             "tee.directory" => config with
             {
-                Tee = config.Tee with { Directory = NullableString(value) }
+                Tee = config.Tee with
+                {
+                    Directory = NullableString(value)
+                }
             },
             "tee.maxfiles" => config with
             {
-                Tee = config.Tee with { MaxFiles = ParseInt(key, value, min: 1) }
+                Tee = config.Tee with
+                {
+                    MaxFiles = ParseInt(key, value, 1)
+                }
             },
             "tee.maxfilesizebytes" => config with
             {
-                Tee = config.Tee with { MaxFileSizeBytes = ParseLong(key, value, min: 0) }
+                Tee = config.Tee with
+                {
+                    MaxFileSizeBytes = ParseLong(key, value, 0)
+                }
             },
             _ => throw new ArgumentException(
                 $"Unknown configuration key '{key}'. Supported keys: {string.Join(", ", SupportedKeys.Keys)}",
@@ -100,7 +133,10 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
     private static bool ParseBool(string key, string value)
     {
         if (bool.TryParse(value, out var result))
+        {
             return result;
+        }
+
         throw new FormatException(
             $"Invalid value '{value}' for '{key}'. Expected: true or false.");
     }
@@ -141,13 +177,18 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
 
     private static TEnum ParseEnum<TEnum>(string key, string value) where TEnum : struct, Enum
     {
-        if (Enum.TryParse<TEnum>(value, ignoreCase: true, out var result))
+        if (Enum.TryParse<TEnum>(value, true, out var result))
+        {
             return result;
+        }
+
         var names = string.Join("|", Enum.GetNames<TEnum>());
         throw new FormatException(
             $"Invalid value '{value}' for '{key}'. Expected one of: {names}.");
     }
 
-    private static string? NullableString(string value) =>
-        string.IsNullOrEmpty(value) ? null : value;
+    private static string? NullableString(string value)
+    {
+        return string.IsNullOrEmpty(value) ? null : value;
+    }
 }

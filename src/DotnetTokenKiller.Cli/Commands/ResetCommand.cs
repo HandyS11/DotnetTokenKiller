@@ -26,7 +26,7 @@ internal sealed class ResetCommand(
             ? "[yellow]This will delete all tracking data, tee logs, and the configuration file. Continue?[/]"
             : "[yellow]This will delete all tracking data. Continue?[/]";
 
-        if (!settings.Force && !await console.ConfirmAsync(prompt, defaultValue: false, cancellationToken).ConfigureAwait(false))
+        if (!settings.Force && !await console.ConfirmAsync(prompt, false, cancellationToken).ConfigureAwait(false))
         {
             console.MarkupLine("[grey]Aborted.[/]");
             return 0;

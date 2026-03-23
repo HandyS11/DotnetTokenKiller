@@ -37,9 +37,9 @@ try
     services.AddSingleton<IAnsiConsole>(_ => noColor
         ? AnsiConsole.Create(new AnsiConsoleSettings
         {
-            ColorSystem = (ColorSystemSupport)ColorSystem.NoColors,
+            ColorSystem = ColorSystemSupport.NoColors,
             Ansi = AnsiSupport.No,
-            Out = new AnsiConsoleOutput(Console.Out),
+            Out = new AnsiConsoleOutput(Console.Out)
         })
         : AnsiConsole.Console);
 
@@ -141,8 +141,13 @@ try
 catch (Exception ex)
 {
     if (noColor)
+    {
         await Console.Error.WriteLineAsync($"Error: {ex.Message}").ConfigureAwait(false);
+    }
     else
+    {
         AnsiConsole.MarkupLine($"[red]Error:[/] {ex.Message.EscapeMarkup()}");
+    }
+
     return 1;
 }

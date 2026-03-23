@@ -8,7 +8,8 @@ DotnetTokenKiller is a .NET CLI proxy that reduces LLM token usage through dotne
 
 ## Commands
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, and clean to reduce token usage. A PreToolUse hook in `.claude/settings.json` automatically rewrites these commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, and clean to reduce token usage. A PreToolUse hook in
+`.claude/settings.json` automatically rewrites these commands.
 
 ```bash
 # Build

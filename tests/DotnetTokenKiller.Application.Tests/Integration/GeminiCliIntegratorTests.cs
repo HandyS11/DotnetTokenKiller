@@ -16,13 +16,15 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, true);
+        }
     }
 
     [Fact]
     public async Task IntegrateAsync_FreshDirectory_CreatesAllThreeFiles()
     {
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().HaveCount(3);
         result.UpdatedFiles.Should().BeEmpty();
@@ -36,9 +38,9 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_NoForce_SkipsAllFiles()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
@@ -48,9 +50,9 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_WithForce_UpdatesGeminiMdAndHook()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         // GEMINI.md and hook are overwritten; settings.json is skipped because
         // MergeSettingsJsonAsync is idempotent and the hook entry is already present.
@@ -62,7 +64,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_GeminiMd_ContainsDtkSection()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(GeminiMdPath);
 
@@ -75,7 +77,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_HookScript_ContainsPythonRewriteLogic()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(HookPath);
 
@@ -87,7 +89,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SettingsJson_ContainsBeforeToolHook()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var json = await File.ReadAllTextAsync(SettingsPath);
         var root = JsonNode.Parse(json) as JsonObject;
@@ -102,7 +104,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await File.WriteAllTextAsync(SettingsPath, """{"theme": "dark"}""");
 
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var json = await File.ReadAllTextAsync(SettingsPath);
         var root = JsonNode.Parse(json) as JsonObject;
@@ -114,9 +116,9 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SettingsAlreadyHasHook_SkipsFile()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.SkippedFiles.Should().Contain(SettingsPath);
     }
@@ -127,7 +129,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await File.WriteAllTextAsync(SettingsPath, """{"theme": "dark"}""");
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(SettingsPath);
         var json = await File.ReadAllTextAsync(SettingsPath);
@@ -140,19 +142,19 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     {
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await File.WriteAllTextAsync(SettingsPath, """
-            {
-              "hooks": {
-                "BeforeTool": [
-                  {
-                    "matcher": "write_file",
-                    "hooks": [{ "type": "command", "command": "some-other-hook.sh" }]
-                  }
-                ]
-              }
-            }
-            """);
+                                                   {
+                                                     "hooks": {
+                                                       "BeforeTool": [
+                                                         {
+                                                           "matcher": "write_file",
+                                                           "hooks": [{ "type": "command", "command": "some-other-hook.sh" }]
+                                                         }
+                                                       ]
+                                                     }
+                                                   }
+                                                   """);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(SettingsPath);
         var json = await File.ReadAllTextAsync(SettingsPath);
@@ -166,7 +168,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await File.WriteAllTextAsync(SettingsPath, "NOT VALID JSON {{{");
 
-        var act = () => _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var act = () => _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Failed to parse JSON*");
@@ -178,7 +180,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
         await File.WriteAllTextAsync(SettingsPath, "[1, 2, 3]");
 
-        var act = () => _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var act = () => _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*must contain a JSON object at the root*");
@@ -190,7 +192,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(GeminiMdPath, "# My Project\n\nDo stuff.");
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(GeminiMdPath);
 
@@ -207,7 +209,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         await File.WriteAllTextAsync(GeminiMdPath,
             "# My Project\n\n<!-- dtk -->\nOLD CONTENT\n<!-- /dtk -->\n\n## Other");
 
-        await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(GeminiMdPath);
         content.Should().Contain("# My Project");
@@ -222,7 +224,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(GeminiMdPath, "   \n  \n  ");
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(GeminiMdPath);
         var content = await File.ReadAllTextAsync(GeminiMdPath);

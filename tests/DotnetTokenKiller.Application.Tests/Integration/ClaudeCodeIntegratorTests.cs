@@ -12,13 +12,15 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, true);
+        }
     }
 
     [Fact]
     public async Task IntegrateAsync_FreshDirectory_CreatesAllThreeFiles()
     {
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().HaveCount(3);
         result.UpdatedFiles.Should().BeEmpty();
@@ -32,9 +34,9 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_NoForce_SkipsAllFiles()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
@@ -44,9 +46,9 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_WithForce_UpdatesSkillAndHookFiles()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         // SKILL.md and the Python hook are overwritten; settings.json is skipped because
         // MergeSettingsJsonAsync is idempotent and the hook entry is already present.
@@ -58,7 +60,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SkillFile_ContainsDtkContent()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(
             Path.Combine(_tempDir, ".claude", "skills", "dotnet-token-killer", "SKILL.md"));
@@ -70,7 +72,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_HookScript_ContainsPythonRewriteLogic()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(
             Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py"));
@@ -82,7 +84,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SettingsJson_ContainsHookEntry()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var json = await File.ReadAllTextAsync(Path.Combine(_tempDir, ".claude", "settings.json"));
         var root = JsonNode.Parse(json) as JsonObject;
@@ -98,7 +100,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         await File.WriteAllTextAsync(settingsPath, """{"theme": "dark"}""");
 
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var json = await File.ReadAllTextAsync(settingsPath);
         var root = JsonNode.Parse(json) as JsonObject;
@@ -110,11 +112,11 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SettingsJsonAlreadyHasHook_SkipsFile()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         // First run created settings.json with the hook.
         // Second run should detect the hook and skip.
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
         result.SkippedFiles.Should().Contain(settingsPath);
@@ -127,7 +129,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         await File.WriteAllTextAsync(settingsPath, """{"theme": "dark"}""");
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(settingsPath);
         var json = await File.ReadAllTextAsync(settingsPath);
@@ -148,7 +150,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         await File.WriteAllTextAsync(settingsPath, "NOT VALID JSON {{{");
 
-        var act = () => _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var act = () => _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Failed to parse JSON*");
@@ -161,7 +163,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         await File.WriteAllTextAsync(settingsPath, "[1, 2, 3]");
 
-        var act = () => _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var act = () => _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*must contain a JSON object at the root*");
@@ -173,19 +175,19 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         await File.WriteAllTextAsync(settingsPath, """
-            {
-              "hooks": {
-                "PreToolUse": [
-                  {
-                    "matcher": "Bash",
-                    "hooks": [{ "type": "command", "command": "some-other-hook.sh" }]
-                  }
-                ]
-              }
-            }
-            """);
+                                                   {
+                                                     "hooks": {
+                                                       "PreToolUse": [
+                                                         {
+                                                           "matcher": "Bash",
+                                                           "hooks": [{ "type": "command", "command": "some-other-hook.sh" }]
+                                                         }
+                                                       ]
+                                                     }
+                                                   }
+                                                   """);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(settingsPath);
         var json = await File.ReadAllTextAsync(settingsPath);

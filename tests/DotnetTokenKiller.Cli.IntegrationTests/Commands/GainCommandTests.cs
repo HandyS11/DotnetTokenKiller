@@ -75,7 +75,10 @@ public class GainCommandTests
     [Fact]
     public async Task ExecuteAsync_CommandFilter_PassesCommandFilterToUseCase()
     {
-        var tracker = new StubTracker { Summary = EmptySummary };
+        var tracker = new StubTracker
+        {
+            Summary = EmptySummary
+        };
         var console = new TestConsole();
         var command = new GainCommand(new GainReportUseCase(tracker), console);
 
@@ -174,7 +177,10 @@ public class GainCommandTests
         };
         var command = new GainCommand(new GainReportUseCase(tracker), console);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings { Export = "csv" }, CancellationToken.None);
+        await command.ExecuteAsync(null!, new GainCommandSettings
+        {
+            Export = "csv"
+        }, CancellationToken.None);
 
         console.Output.Should().Contain("\"/path/with,comma\"");
     }

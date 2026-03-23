@@ -34,14 +34,20 @@ internal sealed class DoctorCommand(
             var icon = check.Passed ? "[green]✔[/]" : "[red]✘[/]";
             console.MarkupLine($"  {icon}  [bold]{Markup.Escape(check.Name)}[/]: {Markup.Escape(check.Message)}");
             if (!check.Passed)
+            {
                 allPassed = false;
+            }
         }
 
         console.WriteLine();
         if (allPassed)
+        {
             console.MarkupLine("[green]All checks passed.[/]");
+        }
         else
+        {
             console.MarkupLine("[red]Some checks failed. Review the output above.[/]");
+        }
 
         return allPassed ? 0 : 1;
     }

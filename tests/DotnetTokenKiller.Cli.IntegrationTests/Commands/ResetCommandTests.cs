@@ -105,7 +105,9 @@ public class ResetCommandTests
     }
 
     private static (StubTracker tracker, StubConfigProvider config, StubTeeService tee) CreateStubs()
-        => (new StubTracker(), new StubConfigProvider(), new StubTeeService());
+    {
+        return (new StubTracker(), new StubConfigProvider(), new StubTeeService());
+    }
 
     private static ResetCommand CreateCommand(
         StubTracker tracker,
@@ -126,19 +128,27 @@ public class ResetCommandTests
         public bool WasReset { get; private set; }
 
         public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            return Task.CompletedTask;
+        }
 
         public Task<GainSummary> GetSummaryAsync(int days, string? projectPath,
             string? commandFilter = null, CancellationToken cancellationToken = default)
-            => Task.FromResult(new GainSummary(0, 0, 0, 0, 0.0,
+        {
+            return Task.FromResult(new GainSummary(0, 0, 0, 0, 0.0,
                 new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)));
+        }
 
         public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(int days, string? projectPath,
             string? commandFilter = null, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<CommandRecord>>([]);
+        {
+            return Task.FromResult<IReadOnlyList<CommandRecord>>([]);
+        }
 
         public Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            return Task.CompletedTask;
+        }
 
         public Task ResetAsync(CancellationToken cancellationToken = default)
         {
@@ -151,13 +161,20 @@ public class ResetCommandTests
     {
         public bool WasDeleted { get; private set; }
 
-        public DtkConfig Load() => DtkConfig.Default;
+        public DtkConfig Load()
+        {
+            return DtkConfig.Default;
+        }
 
         public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(DtkConfig.Default);
+        {
+            return Task.FromResult(DtkConfig.Default);
+        }
 
         public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            return Task.CompletedTask;
+        }
 
         public Task DeleteAsync(CancellationToken cancellationToken = default)
         {
@@ -172,7 +189,9 @@ public class ResetCommandTests
 
         public Task<string?> TeeAndHintAsync(string rawOutput, string commandSlug, int exitCode,
             CancellationToken cancellationToken = default)
-            => Task.FromResult<string?>(null);
+        {
+            return Task.FromResult<string?>(null);
+        }
 
         public Task DeleteLogsAsync(CancellationToken cancellationToken = default)
         {

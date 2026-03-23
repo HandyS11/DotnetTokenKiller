@@ -16,14 +16,16 @@ public sealed class DoctorCommandTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, true);
+        }
     }
 
     [Fact]
     public async Task ExecuteAsync_AllChecksPassed_ReturnsZeroAndShowsAllPassed()
     {
         Directory.CreateDirectory(_tempDir);
-        var (command, console) = Create(dotnetExitCode: 0);
+        var (command, console) = Create(0);
 
         var exitCode = await command.ExecuteAsync(null!, CancellationToken.None);
 
@@ -35,7 +37,7 @@ public sealed class DoctorCommandTests : IDisposable
     public async Task ExecuteAsync_DotnetCheckFails_ReturnsOneAndShowsSomeFailed()
     {
         Directory.CreateDirectory(_tempDir);
-        var (command, console) = Create(dotnetExitCode: 1);
+        var (command, console) = Create(1);
 
         var exitCode = await command.ExecuteAsync(null!, CancellationToken.None);
 
@@ -47,7 +49,7 @@ public sealed class DoctorCommandTests : IDisposable
     public async Task ExecuteAsync_OutputContainsFourChecks()
     {
         Directory.CreateDirectory(_tempDir);
-        var (command, console) = Create(dotnetExitCode: 0);
+        var (command, console) = Create(0);
 
         await command.ExecuteAsync(null!, CancellationToken.None);
 
@@ -70,20 +72,35 @@ public sealed class DoctorCommandTests : IDisposable
 
     private sealed class StubConfigProvider(string teeDir) : IConfigProvider
     {
-        public DtkConfig Load() => DtkConfig.Default with
+        public DtkConfig Load()
         {
-            Tracking = DtkConfig.Default.Tracking with { DbPath = Path.Combine(teeDir, "tracking.db") },
-            Tee = DtkConfig.Default.Tee with { Directory = teeDir }
-        };
+            return DtkConfig.Default with
+            {
+                Tracking = DtkConfig.Default.Tracking with
+                {
+                    DbPath = Path.Combine(teeDir, "tracking.db")
+                },
+                Tee = DtkConfig.Default.Tee with
+                {
+                    Directory = teeDir
+                }
+            };
+        }
 
-        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Load());
+        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Load());
+        }
 
-        public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
 
-        public Task DeleteAsync(CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task DeleteAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class StubCommandRunner(int exitCode) : ICommandRunner
@@ -91,13 +108,17 @@ public sealed class DoctorCommandTests : IDisposable
         public Task<CommandResult> RunCapturedAsync(
             string command,
             IReadOnlyList<string> args,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new CommandResult("10.0.0", string.Empty, exitCode));
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CommandResult("10.0.0", string.Empty, exitCode));
+        }
 
         public Task<int> RunPassthroughAsync(
             string command,
             IReadOnlyList<string> args,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(exitCode);
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(exitCode);
+        }
     }
 }

@@ -235,7 +235,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, showLogHint: false);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, false);
 
         writer.ToString().Should().NotContain("[full output:");
     }
@@ -254,7 +254,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, showLogHint: true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
 
         writer.ToString().Should().Contain("[full output: 123_test.log]");
     }
@@ -273,7 +273,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 1);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
 
         writer.ToString().Should().Contain("$ dotnet build");
     }
@@ -292,7 +292,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 2);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
 
         var output = writer.ToString();
         output.Should().Contain("[raw output]");
@@ -314,7 +314,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 2);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
 
         writer.ToString().Should().Contain("[filter error — using raw output]");
     }
@@ -351,7 +351,7 @@ public class FilteredRunUseCaseTests
             .Returns((string?)null);
 
         // verbosityLevel=2 would normally print meta lines, but quiet overrides it
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 2, quiet: true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2, quiet: true);
 
         var result = writer.ToString();
         result.Should().NotContain("$ dotnet");
@@ -374,7 +374,7 @@ public class FilteredRunUseCaseTests
             .Returns("[full output: 123_test.log]");
 
         // showLogHint=true but quiet overrides it
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0, showLogHint: true, quiet: true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true, true);
 
         writer.ToString().Should().NotContain("[full output:");
     }
@@ -393,7 +393,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0, quiet: true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, quiet: true);
 
         writer.ToString().Should().Contain("filtered result");
     }

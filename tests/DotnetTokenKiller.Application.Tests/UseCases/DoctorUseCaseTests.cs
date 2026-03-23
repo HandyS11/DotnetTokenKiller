@@ -25,7 +25,9 @@ public sealed class DoctorUseCaseTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, true);
+        }
     }
 
     [Fact]

@@ -15,9 +15,11 @@ public class IntegrateCommandTests
     {
         const string dir = "/project";
         var result = new IntegrationResult(
-            [$"{dir}/.claude/skills/dotnet-token-killer/SKILL.md",
-             $"{dir}/.claude/hooks/dotnet-to-dtk.py",
-             $"{dir}/.claude/settings.json"],
+            [
+                $"{dir}/.claude/skills/dotnet-token-killer/SKILL.md",
+                $"{dir}/.claude/hooks/dotnet-to-dtk.py",
+                $"{dir}/.claude/settings.json"
+            ],
             [],
             []);
 
@@ -188,7 +190,10 @@ public class IntegrateCommandTests
         IntegrationResult result)
     {
         var console = new TestConsole();
-        var stub = new StubIntegrator(provider) { Result = result };
+        var stub = new StubIntegrator(provider)
+        {
+            Result = result
+        };
         var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), console);
         return (command, console);
     }

@@ -91,10 +91,15 @@ public sealed class ConfigCommandTests
     {
         public DtkConfig Current { get; set; } = DtkConfig.Default;
 
-        public DtkConfig Load() => Current;
+        public DtkConfig Load()
+        {
+            return Current;
+        }
 
-        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Current);
+        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Current);
+        }
 
         public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
         {
@@ -102,7 +107,9 @@ public sealed class ConfigCommandTests
             return Task.CompletedTask;
         }
 
-        public Task DeleteAsync(CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
+        public Task DeleteAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

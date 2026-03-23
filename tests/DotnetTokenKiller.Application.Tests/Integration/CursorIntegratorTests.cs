@@ -14,13 +14,15 @@ public sealed class CursorIntegratorTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, true);
+        }
     }
 
     [Fact]
     public async Task IntegrateAsync_FreshDirectory_CreatesRuleFile()
     {
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().ContainSingle().Which.Should().Be(RulePath);
         result.UpdatedFiles.Should().BeEmpty();
@@ -31,9 +33,9 @@ public sealed class CursorIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_NoForce_SkipsFile()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.SkippedFiles.Should().ContainSingle();
         result.CreatedFiles.Should().BeEmpty();
@@ -42,9 +44,9 @@ public sealed class CursorIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_SecondRun_WithForce_UpdatesFile()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().ContainSingle();
         result.CreatedFiles.Should().BeEmpty();
@@ -54,7 +56,7 @@ public sealed class CursorIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_RuleFile_ContainsDtkContent()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(RulePath);
 

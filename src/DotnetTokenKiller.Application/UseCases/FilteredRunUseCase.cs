@@ -97,7 +97,8 @@ public sealed class FilteredRunUseCase(
         // Tee: silent — errors never surface
         try
         {
-            var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken).ConfigureAwait(false);
+            var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken)
+                .ConfigureAwait(false);
             if (hint is not null && showLogHint)
             {
                 await output.WriteLineAsync(hint).ConfigureAwait(false);
@@ -108,7 +109,8 @@ public sealed class FilteredRunUseCase(
             // Intentional: tee errors must not surface to the user
         }
 
-        await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, cancellationToken).ConfigureAwait(false);
+        await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, cancellationToken)
+            .ConfigureAwait(false);
 
         return result.ExitCode;
     }

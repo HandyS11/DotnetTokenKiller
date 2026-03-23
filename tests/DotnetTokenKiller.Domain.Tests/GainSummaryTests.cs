@@ -11,8 +11,8 @@ public class GainSummaryTests
     {
         var commandDetails = new Dictionary<string, CommandGainDetail>
         {
-            ["build"] = new CommandGainDetail(5, 2500, 400, 850, 82.0),
-            ["test"] = new CommandGainDetail(5, 2500, 550, 1200, 80.0)
+            ["build"] = new(5, 2500, 400, 850, 82.0),
+            ["test"] = new(5, 2500, 550, 1200, 80.0)
         };
 
         var summary = new GainSummary(
