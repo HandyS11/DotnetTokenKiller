@@ -5,8 +5,8 @@ namespace DotnetTokenKiller.Application.Tests.Integration;
 
 public sealed class AiderIntegratorTests : IDisposable
 {
-    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-aider-test-{Guid.NewGuid()}");
     private readonly AiderIntegrator _sut = new();
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-aider-test-{Guid.NewGuid()}");
 
     private string InstructionsPath => Path.Combine(_tempDir, ".aider-dtk-instructions.md");
     private string ConfPath => Path.Combine(_tempDir, ".aider.conf.yml");
@@ -102,6 +102,20 @@ public sealed class AiderIntegratorTests : IDisposable
 
         var content = await File.ReadAllTextAsync(ConfPath);
         content.Should().NotContain("old-content");
+        content.Should().Contain(".aider-dtk-instructions.md");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_ExistingConfWithMarkerButNoEndMarker_WithForce_TruncatesAtMarker()
+    {
+        // Covers ReplaceDtkSection when end < 0 (endMarker not found) — lines 98-99 of IntegratorHelpers.cs
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfPath, "# dtk\nold-content-no-end-marker\n");
+
+        await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(ConfPath);
+        content.Should().NotContain("old-content-no-end-marker");
         content.Should().Contain(".aider-dtk-instructions.md");
     }
 

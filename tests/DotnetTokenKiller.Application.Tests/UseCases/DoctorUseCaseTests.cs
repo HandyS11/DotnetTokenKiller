@@ -3,14 +3,13 @@ using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
 using FluentAssertions;
 using NSubstitute;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
 public sealed class DoctorUseCaseTests : IDisposable
 {
-    private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
+    private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly DoctorUseCase _sut;
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-doctor-test-{Guid.NewGuid()}");
 
@@ -150,5 +149,31 @@ public sealed class DoctorUseCaseTests : IDisposable
         var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
 
         checks.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task RunAsync_ConfigLoadThrows_ConfigCheckFails()
+    {
+        // Covers CheckConfigAsync catch block (lines 68-70)
+        _configProvider.LoadAsync(default)
+            .ReturnsForAnyArgs(Task.FromException<DtkConfig>(new IOException("Config file corrupted")));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        var configCheck = checks.First(c => c.Name == "config file");
+        configCheck.Passed.Should().BeFalse();
+        configCheck.Message.Should().Contain("Config file corrupted");
+    }
+
+    [Fact]
+    public async Task RunAsync_DbPathWithNoDirectory_SkipsDirectoryExistenceCheck()
+    {
+        // Path.GetDirectoryName("tracking.db") returns "" → IsNullOrEmpty is true → skip dir check
+        // Covers the uncovered branch of the !string.IsNullOrEmpty(dir) condition (line 80)
+        var checks = await _sut.RunAsync("tracking.db", _tempDir);
+
+        var dbCheck = checks.First(c => c.Name == "tracking database");
+        dbCheck.Passed.Should().BeTrue();
+        dbCheck.Message.Should().Contain("will be created");
     }
 }

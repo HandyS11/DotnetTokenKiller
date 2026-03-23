@@ -130,6 +130,76 @@ public class IntegrateCommandTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_AiderProvider_UsesCorrectProviderName()
+    {
+        var stub = new StubIntegrator("aider");
+        var command = new AiderIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+
+        stub.LastDirectory.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CursorProvider_UsesCorrectProviderName()
+    {
+        var stub = new StubIntegrator("cursor");
+        var command = new CursorIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+
+        stub.LastDirectory.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_GeminiProvider_UsesCorrectProviderName()
+    {
+        var stub = new StubIntegrator("gemini");
+        var command = new GeminiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+
+        stub.LastDirectory.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_JetBrainsProvider_UsesCorrectProviderName()
+    {
+        var stub = new StubIntegrator("jetbrains");
+        var command = new JetBrainsAiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+
+        stub.LastDirectory.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WindsurfProvider_UsesCorrectProviderName()
+    {
+        var stub = new StubIntegrator("windsurf");
+        var command = new WindsurfIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+
+        stub.LastDirectory.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptyFilePath_HandledByRelativePath()
+    {
+        // Covers the string.IsNullOrEmpty(fullPath) branch in RelativePath
+        var result = new IntegrationResult([""], [], []);
+        var (command, console) = Create("claude", result);
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        {
+            Directory = "/project"
+        }, CancellationToken.None);
+
+        console.Output.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task ExecuteAsync_FilePaths_AreDisplayedRelativeToDirectory()
     {
         const string dir = "/project";
@@ -200,10 +270,10 @@ public class IntegrateCommandTests
 
     private sealed class StubIntegrator(string providerName) : IProviderIntegrator
     {
-        public string ProviderName => providerName;
         public string? LastDirectory { get; private set; }
         public bool LastForce { get; private set; }
         public IntegrationResult Result { get; set; } = new([], [], []);
+        public string ProviderName => providerName;
 
         public Task<IntegrationResult> IntegrateAsync(
             string directory,

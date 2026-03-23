@@ -10,6 +10,16 @@ public sealed class FileTeeServiceTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-test-{Guid.NewGuid()}");
 
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, true);
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
     private FileTeeService CreateSut(TeeConfig? teeConfig = null)
     {
         var config = DtkConfig.Default with
@@ -22,16 +32,6 @@ public sealed class FileTeeServiceTests : IDisposable
     private static string LargeOutput(int length = 600)
     {
         return new string('x', length);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_tempDir))
-        {
-            Directory.Delete(_tempDir, true);
-        }
-
-        GC.SuppressFinalize(this);
     }
 
     [Fact]
@@ -247,6 +247,17 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         var sut = CreateSut(new TeeConfig(TeeMode.Always));
         Directory.Exists(_tempDir).Should().BeFalse();
+
+        var act = () => sut.DeleteLogsAsync();
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task DeleteLogsAsync_ConfigProviderThrows_DoesNotThrow()
+    {
+        // Covers catch block in DeleteLogsAsync (lines 94-97): exceptions must never surface
+        var sut = new FileTeeService(new ThrowingConfigProvider(), _tempDir);
 
         var act = () => sut.DeleteLogsAsync();
 
