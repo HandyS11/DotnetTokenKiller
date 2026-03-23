@@ -72,6 +72,21 @@ public class GainCommandTests
         tracker.LastProjectPath.Should().Be(Environment.CurrentDirectory);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_CommandFilter_PassesCommandFilterToUseCase()
+    {
+        var tracker = new StubTracker { Summary = EmptySummary };
+        var console = new TestConsole();
+        var command = new GainCommand(new GainReportUseCase(tracker), console);
+
+        await command.ExecuteAsync(null!, new GainCommandSettings
+        {
+            Command = "build"
+        }, CancellationToken.None);
+
+        tracker.LastCommandFilter.Should().Be("build");
+    }
+
     private static (GainCommand command, TestConsole console) Create(GainSummary? summary = null)
     {
         var console = new TestConsole();
@@ -172,6 +187,7 @@ public class GainCommandTests
         public IReadOnlyList<CommandRecord> History { get; init; } = [];
 
         public string? LastProjectPath { get; private set; }
+        public string? LastCommandFilter { get; private set; }
 
         public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
         {
@@ -179,14 +195,15 @@ public class GainCommandTests
         }
 
         public Task<GainSummary> GetSummaryAsync(int days, string? projectPath,
-            CancellationToken cancellationToken = default)
+            string? commandFilter = null, CancellationToken cancellationToken = default)
         {
             LastProjectPath = projectPath;
+            LastCommandFilter = commandFilter;
             return Task.FromResult(Summary);
         }
 
         public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(int days, string? projectPath,
-            CancellationToken cancellationToken = default)
+            string? commandFilter = null, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(History);
         }

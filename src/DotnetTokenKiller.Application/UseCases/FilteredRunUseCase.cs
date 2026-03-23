@@ -27,6 +27,7 @@ public sealed class FilteredRunUseCase(
     /// <param name="args">Arguments to pass to the executable.</param>
     /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
     /// <param name="showLogHint">When <see langword="true"/>, prints the path to the full log file if one was written.</param>
+    /// <param name="quiet">When <see langword="true"/>, suppresses all DTK meta-output; overrides <paramref name="verbosityLevel"/> and <paramref name="showLogHint"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<int> RunAsync(
         IOutputFilter filter,
@@ -34,10 +35,17 @@ public sealed class FilteredRunUseCase(
         IReadOnlyList<string> args,
         int verbosityLevel,
         bool showLogHint = false,
+        bool quiet = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(args);
+
+        if (quiet)
+        {
+            verbosityLevel = 0;
+            showLogHint = false;
+        }
 
         var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
         var stopwatch = Stopwatch.StartNew();

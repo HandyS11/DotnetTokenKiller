@@ -16,6 +16,11 @@ internal sealed class DotnetCommandSettings : CommandSettings
     [Description("Print the path to the full log file when the output was saved")]
     public bool ShowLog { get; init; }
 
+    /// <summary>Gets a value indicating whether to suppress DTK decorative output.</summary>
+    [CommandOption("-q|--quiet")]
+    [Description("Suppress all DTK meta-output; forward only the filtered content")]
+    public bool Quiet { get; init; }
+
     /// <summary>Gets additional arguments forwarded to dotnet.</summary>
     [CommandArgument(0, "[args]")]
     [Description("Arguments to forward to the underlying dotnet process")]

@@ -126,6 +126,31 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetSummaryAsync_FiltersByCommandFilter()
+    {
+        await _sut.RecordAsync(MakeRecord(command: "build"));
+        await _sut.RecordAsync(MakeRecord(command: "test"));
+        await _sut.RecordAsync(MakeRecord(command: "build"));
+
+        var summary = await _sut.GetSummaryAsync(30, null, "build");
+
+        summary.TotalCommands.Should().Be(2);
+        summary.CommandDetails.Should().ContainKey("build");
+        summary.CommandDetails.Should().NotContainKey("test");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_FiltersByCommandFilter()
+    {
+        await _sut.RecordAsync(MakeRecord(command: "build"));
+        await _sut.RecordAsync(MakeRecord(command: "test"));
+
+        var history = await _sut.GetHistoryAsync(30, null, "test");
+
+        history.Should().ContainSingle(r => r.Command == "test");
+    }
+
+    [Fact]
     public async Task GetHistoryAsync_ReturnsRecordsInDescendingTimestampOrder()
     {
         var ts1 = DateTimeOffset.UtcNow.AddMinutes(-10);

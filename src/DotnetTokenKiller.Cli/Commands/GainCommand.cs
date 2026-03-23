@@ -28,6 +28,7 @@ internal sealed class GainCommand(
         ArgumentNullException.ThrowIfNull(settings);
 
         var projectPath = settings.Project ? Environment.CurrentDirectory : null;
+        var commandFilter = settings.Command;
 
         if (settings.Export is not null)
         {
@@ -37,7 +38,7 @@ internal sealed class GainCommand(
                 return 1;
             }
 
-            var records = await gainReport.GetHistoryAsync(settings.Days, projectPath, cancellationToken).ConfigureAwait(false);
+            var records = await gainReport.GetHistoryAsync(settings.Days, projectPath, commandFilter, cancellationToken).ConfigureAwait(false);
             var sb = new StringBuilder();
             sb.AppendLine(CsvHeader);
             foreach (var r in records)
@@ -50,7 +51,7 @@ internal sealed class GainCommand(
             return 0;
         }
 
-        var summary = await gainReport.GetSummaryAsync(settings.Days, projectPath, cancellationToken).ConfigureAwait(false);
+        var summary = await gainReport.GetSummaryAsync(settings.Days, projectPath, commandFilter, cancellationToken).ConfigureAwait(false);
 
         if (settings.Json)
         {

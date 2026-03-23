@@ -24,6 +24,7 @@ dtk dotnet build
 dtk dotnet build --configuration Release
 dtk dotnet build src/MyProject/MyProject.csproj
 dtk dotnet build --no-restore
+dtk dotnet build -q                  # quiet: filtered content only, no DTK meta-output
 ```
 
 On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths and top error codes.
@@ -37,6 +38,7 @@ dtk dotnet test
 dtk dotnet test --filter "Category=Unit"
 dtk dotnet test --configuration Release
 dtk dotnet test src/MyProject.Tests/MyProject.Tests.csproj
+dtk dotnet test -q                   # quiet mode
 ```
 
 Passing tests are summarized with counts. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths. xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
@@ -48,6 +50,7 @@ Run `dotnet restore` with filtered output:
 ```sh
 dtk dotnet restore
 dtk dotnet restore src/MyProject/MyProject.csproj
+dtk dotnet restore -q
 ```
 
 Restore errors include the error code, message, and workspace-relative project path.
@@ -59,6 +62,7 @@ Run `dotnet clean` with filtered output:
 ```sh
 dtk dotnet clean
 dtk dotnet clean --configuration Release
+dtk dotnet clean -q
 ```
 
 ### `dtk integrate`
@@ -84,11 +88,12 @@ See [AI Agent Setup](ai-agent-setup.md) for details on what each provider instal
 Display token savings analytics. See [Token Analytics](token-analytics.md) for details.
 
 ```sh
-dtk gain               # last 30 days
-dtk gain --days 7      # last 7 days
-dtk gain --project     # current project only
-dtk gain --json        # machine-readable JSON output
-dtk gain --export csv  # export raw records as CSV
+dtk gain                       # last 30 days
+dtk gain --days 7              # last 7 days
+dtk gain --project             # current project only
+dtk gain --command build       # filter to a specific command
+dtk gain --json                # machine-readable JSON output
+dtk gain --export csv          # export raw records as CSV
 ```
 
 ### `dtk reset`
@@ -145,6 +150,17 @@ dtk completion powershell   # also accepts: pwsh
 ```
 
 Pipe the output into your shell profile to enable tab completion for all `dtk` subcommands.
+
+## Quiet Mode
+
+Add `-q` / `--quiet` to any `dtk dotnet` command to suppress DTK meta-output and forward only the filtered content. This is useful when piping output into other tools:
+
+```sh
+dtk dotnet build -q | grep "error"
+dtk dotnet test -q > test-results.txt
+```
+
+In quiet mode, verbosity flags (`-v`, `-v -v`) and `--show-log` are ignored — only the filtered command output is written.
 
 ## Passthrough Behavior
 

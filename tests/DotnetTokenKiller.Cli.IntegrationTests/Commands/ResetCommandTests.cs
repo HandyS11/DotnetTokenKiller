@@ -129,12 +129,12 @@ public class ResetCommandTests
             => Task.CompletedTask;
 
         public Task<GainSummary> GetSummaryAsync(int days, string? projectPath,
-            CancellationToken cancellationToken = default)
+            string? commandFilter = null, CancellationToken cancellationToken = default)
             => Task.FromResult(new GainSummary(0, 0, 0, 0, 0.0,
                 new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)));
 
         public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(int days, string? projectPath,
-            CancellationToken cancellationToken = default)
+            string? commandFilter = null, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<CommandRecord>>([]);
 
         public Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)

@@ -337,6 +337,68 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_QuietMode_SuppressesVerbosityOutput()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        // verbosityLevel=2 would normally print meta lines, but quiet overrides it
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 2, quiet: true);
+
+        var result = writer.ToString();
+        result.Should().NotContain("$ dotnet");
+        result.Should().NotContain("[raw output]");
+        result.Should().NotContain("[elapsed:");
+    }
+
+    [Fact]
+    public async Task RunAsync_QuietMode_SuppressesLogHint()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 1));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("[full output: 123_test.log]");
+
+        // showLogHint=true but quiet overrides it
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0, showLogHint: true, quiet: true);
+
+        writer.ToString().Should().NotContain("[full output:");
+    }
+
+    [Fact]
+    public async Task RunAsync_QuietMode_StillWritesFilteredContent()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered result\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, verbosityLevel: 0, quiet: true);
+
+        writer.ToString().Should().Contain("filtered result");
+    }
+
+    [Fact]
     public async Task RunAsync_SkipsTracking_WhenTrackingDisabled()
     {
         var configProvider = Substitute.For<IConfigProvider>();

@@ -20,6 +20,6 @@ internal sealed class DotnetTestCommand(
         ArgumentNullException.ThrowIfNull(context);
 
         var args = settings.PositionalArgs.Prepend("test").Concat(context.Remaining.Raw).ToArray();
-        return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, settings.ShowLog, cancellationToken).ConfigureAwait(false);
+        return await filteredRun.RunAsync(filter, "dotnet", args, settings.Verbose.Length, settings.ShowLog, settings.Quiet, cancellationToken).ConfigureAwait(false);
     }
 }

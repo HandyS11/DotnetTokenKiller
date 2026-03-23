@@ -5,11 +5,12 @@ DTK tracks token counts for every run, comparing the raw `dotnet` output against
 ## Viewing Analytics
 
 ```sh
-dtk gain               # last 30 days (default)
-dtk gain --days 7      # last 7 days
-dtk gain --project     # current project only
-dtk gain --json        # machine-readable JSON output
-dtk gain --export csv  # export raw records as CSV
+dtk gain                       # last 30 days (default)
+dtk gain --days 7              # last 7 days
+dtk gain --project             # current project only
+dtk gain --command build       # filter to a specific command (build, test, restore, clean)
+dtk gain --json                # machine-readable JSON output
+dtk gain --export csv          # export raw records as CSV
 ```
 
 ### Example Output
@@ -37,6 +38,19 @@ dtk gain --export csv  # export raw records as CSV
 | **Used by Tool** | Total tokens in the filtered DTK output |
 | **Saved** | Tokens saved (Without Tool − Used by Tool) |
 | **Avg Savings** | Average percentage reduction across all runs |
+
+## Filtering by Command
+
+Use `--command` to see savings for a single `dotnet` subcommand:
+
+```sh
+dtk gain --command build        # build runs only
+dtk gain --command test --days 7
+dtk gain --command restore --project
+dtk gain --command build --export csv > build-savings.csv
+```
+
+The filter is exact-match on the command slug recorded at run time (`build`, `test`, `restore`, `clean`).
 
 ## JSON Output
 
