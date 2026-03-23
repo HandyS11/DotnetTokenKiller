@@ -95,7 +95,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         var root = JsonNode.Parse(json) as JsonObject;
 
         root.Should().NotBeNull();
-        root!["hooks"]!["BeforeTool"]!.AsArray().Should().NotBeEmpty();
+        root["hooks"]!["BeforeTool"]!.AsArray().Should().NotBeEmpty();
     }
 
     [Fact]

@@ -1,4 +1,3 @@
-using DotnetTokenKiller.Cli;
 using FluentAssertions;
 using Xunit;
 

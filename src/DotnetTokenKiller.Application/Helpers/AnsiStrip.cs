@@ -29,11 +29,15 @@ public static partial class AnsiStrip
     [GeneratedRegex(@"\x1b\[[0-9;]*[A-Za-z]")]
     private static partial Regex CsiPattern();
 
-    // Matches OSC sequences: ESC ] ... BEL  or  ESC ] ... ST (ESC \)
+    /// <summary>
+    /// Matches OSC sequences: ESC ] ... BEL  or  ESC ] ... ST (ESC \)
+    /// </summary>
     [GeneratedRegex(@"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")]
     private static partial Regex OscPattern();
 
-    // Matches any remaining bare ESC character (e.g. incomplete/truncated sequences)
+    /// <summary>
+    /// Matches any remaining bare ESC character (e.g. incomplete/truncated sequences)
+    /// </summary>
     [GeneratedRegex(@"\x1b")]
     private static partial Regex BareEscPattern();
 }

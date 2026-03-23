@@ -1,6 +1,5 @@
 using DotnetTokenKiller.Application.Integration;
 using FluentAssertions;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.Integration;
 
