@@ -72,6 +72,7 @@ public sealed class DoctorCommandTests : IDisposable
     {
         public DtkConfig Load() => DtkConfig.Default with
         {
+            Tracking = DtkConfig.Default.Tracking with { DbPath = Path.Combine(teeDir, "tracking.db") },
             Tee = DtkConfig.Default.Tee with { Directory = teeDir }
         };
 
