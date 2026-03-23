@@ -61,6 +61,26 @@ dtk integrate copilot
 
 This appends a `dtk` instructions section to `.github/copilot-instructions.md`, creating the file if it does not exist. Re-running is safe; use `--force` to refresh the section.
 
+#### Gemini CLI
+
+```sh
+dtk integrate gemini
+```
+
+This creates three files:
+
+- `GEMINI.md` — appends a `dtk` instructions section (creating the file if needed)
+- `.gemini/hooks/dotnet-to-dtk.py` — a Python hook that rewrites `dotnet` commands
+- `.gemini/settings.json` — registers the hook under `BeforeTool` (merges with any existing settings)
+
+With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, `dotnet restore`, or `dotnet clean`, it is silently rewritten to `dtk dotnet ...` before execution.
+
+Re-running the command is safe: existing files are skipped. Use `--force` to overwrite:
+
+```sh
+dtk integrate gemini --force
+```
+
 See [AI Agent Setup](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html) in the docs for manual installation steps and details on what each provider installs.
 
 ## Usage

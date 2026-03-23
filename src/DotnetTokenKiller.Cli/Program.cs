@@ -72,6 +72,8 @@ try
                 .WithDescription("Install dtk skill and hook for Claude Code");
             integrate.AddCommand<CopilotIntegrateCommand>("copilot")
                 .WithDescription("Install dtk instructions for GitHub Copilot");
+            integrate.AddCommand<GeminiIntegrateCommand>("gemini")
+                .WithDescription("Install dtk instructions and hook for Gemini CLI");
         });
 
         config.AddCommand<GainCommand>("gain").WithDescription("Show token savings analytics");

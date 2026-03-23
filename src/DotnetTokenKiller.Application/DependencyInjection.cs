@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();
         services.AddTransient<IProviderIntegrator, GitHubCopilotIntegrator>();
+        services.AddTransient<IProviderIntegrator, GeminiCliIntegrator>();
         services.AddTransient<IntegrateUseCase>();
 
         return services;
