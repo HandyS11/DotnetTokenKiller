@@ -16,11 +16,16 @@ Console.OutputEncoding = Encoding.UTF8;
 // (regardless of value), disable ANSI colors and emoji for all output.
 var noColor = Environment.GetEnvironmentVariable("NO_COLOR") is not null;
 
+const string dotnetCmd = "dotnet";
+const string integrateBranch = "integrate";
+const string configBranch = "config";
+const string completionCmd = "completion";
+
 // Passthrough: run any unsupported dotnet subcommand directly without extra DI
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
     var runner = new ProcessCommandRunner();
-    return await runner.RunPassthroughAsync("dotnet", args[1..]).ConfigureAwait(false);
+    return await runner.RunPassthroughAsync(dotnetCmd, args[1..]).ConfigureAwait(false);
 }
 
 // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
@@ -55,75 +60,75 @@ try
         config.SetApplicationVersion(version);
         config.Settings.StrictParsing = false;
 
-        config.AddBranch("dotnet", dotnet =>
+        config.AddBranch(dotnetCmd, dotnet =>
         {
             dotnet.SetDescription("Run dotnet commands with filtered output");
             dotnet.AddCommand<DotnetBuildCommand>("build")
                 .WithDescription("Run dotnet build with filtered output")
-                .WithExample("dotnet", "build", "MyApp.slnx")
-                .WithExample("dotnet", "build", "src/MyApp.csproj", "--no-restore");
+                .WithExample(dotnetCmd, "build", "MyApp.slnx")
+                .WithExample(dotnetCmd, "build", "src/MyApp.csproj", "--no-restore");
             dotnet.AddCommand<DotnetTestCommand>("test")
                 .WithDescription("Run dotnet test with filtered output")
-                .WithExample("dotnet", "test")
-                .WithExample("dotnet", "test", "--filter", "Category=Unit");
+                .WithExample(dotnetCmd, "test")
+                .WithExample(dotnetCmd, "test", "--filter", "Category=Unit");
             dotnet.AddCommand<DotnetRestoreCommand>("restore")
                 .WithDescription("Run dotnet restore with filtered output")
-                .WithExample("dotnet", "restore");
+                .WithExample(dotnetCmd, "restore");
             dotnet.AddCommand<DotnetCleanCommand>("clean")
                 .WithDescription("Run dotnet clean with filtered output")
-                .WithExample("dotnet", "clean");
+                .WithExample(dotnetCmd, "clean");
         });
 
-        config.AddBranch("integrate", integrate =>
+        config.AddBranch(integrateBranch, integrate =>
         {
             integrate.SetDescription("Install dtk integration artifacts for an AI assistant provider");
             integrate.AddCommand<ClaudeIntegrateCommand>("claude")
                 .WithDescription("Install dtk skill and hook for Claude Code")
-                .WithExample("integrate", "claude")
-                .WithExample("integrate", "claude", "--dir", "/path/to/project", "--force");
+                .WithExample(integrateBranch, "claude")
+                .WithExample(integrateBranch, "claude", "--dir", "/path/to/project", "--force");
             integrate.AddCommand<CopilotIntegrateCommand>("copilot")
                 .WithDescription("Install dtk instructions for GitHub Copilot")
-                .WithExample("integrate", "copilot");
+                .WithExample(integrateBranch, "copilot");
             integrate.AddCommand<GeminiIntegrateCommand>("gemini")
                 .WithDescription("Install dtk instructions and hook for Gemini CLI")
-                .WithExample("integrate", "gemini");
+                .WithExample(integrateBranch, "gemini");
             integrate.AddCommand<CursorIntegrateCommand>("cursor")
                 .WithDescription("Install dtk rules for Cursor")
-                .WithExample("integrate", "cursor");
+                .WithExample(integrateBranch, "cursor");
             integrate.AddCommand<WindsurfIntegrateCommand>("windsurf")
                 .WithDescription("Install dtk rules for Windsurf")
-                .WithExample("integrate", "windsurf");
+                .WithExample(integrateBranch, "windsurf");
             integrate.AddCommand<AiderIntegrateCommand>("aider")
                 .WithDescription("Install dtk rules for Aider")
-                .WithExample("integrate", "aider");
+                .WithExample(integrateBranch, "aider");
             integrate.AddCommand<JetBrainsAiIntegrateCommand>("jetbrains")
                 .WithDescription("Install dtk guidelines for JetBrains AI")
-                .WithExample("integrate", "jetbrains");
+                .WithExample(integrateBranch, "jetbrains");
         });
 
-        config.AddBranch("config", cfg =>
+        config.AddBranch(configBranch, cfg =>
         {
             cfg.SetDescription("View or modify dtk configuration");
             cfg.AddCommand<ConfigShowCommand>("show")
                 .WithDescription("Display the current configuration")
-                .WithExample("config", "show");
+                .WithExample(configBranch, "show");
             cfg.AddCommand<ConfigSetCommand>("set")
                 .WithDescription("Set a configuration value")
-                .WithExample("config", "set", "tracking.enabled", "false")
-                .WithExample("config", "set", "display.width", "100")
-                .WithExample("config", "set", "tee.mode", "Always");
+                .WithExample(configBranch, "set", "tracking.enabled", "false")
+                .WithExample(configBranch, "set", "display.width", "100")
+                .WithExample(configBranch, "set", "tee.mode", "Always");
         });
 
         config.AddCommand<DoctorCommand>("doctor")
             .WithDescription("Run diagnostics to verify dtk is set up correctly")
             .WithExample("doctor");
 
-        config.AddCommand<CompletionCommand>("completion")
+        config.AddCommand<CompletionCommand>(completionCmd)
             .WithDescription("Print shell completion script")
-            .WithExample("completion", "bash")
-            .WithExample("completion", "zsh")
-            .WithExample("completion", "fish")
-            .WithExample("completion", "powershell");
+            .WithExample(completionCmd, "bash")
+            .WithExample(completionCmd, "zsh")
+            .WithExample(completionCmd, "fish")
+            .WithExample(completionCmd, "powershell");
 
         config.AddCommand<GainCommand>("gain")
             .WithDescription("Show token savings analytics")

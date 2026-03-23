@@ -11,49 +11,6 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </remarks>
 public sealed class WindsurfIntegrator : IProviderIntegrator
 {
-    /// <inheritdoc/>
-    public string ProviderName => "windsurf";
-
-    /// <inheritdoc/>
-    public async Task<IntegrationResult> IntegrateAsync(
-        string directory,
-        bool force,
-        CancellationToken cancellationToken)
-    {
-        var created = new List<string>();
-        var updated = new List<string>();
-        var skipped = new List<string>();
-
-        await WriteFileAsync(
-            Path.Combine(directory, ".windsurf", "rules", "dtk.md"),
-            WindsurfRule,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
-
-        return new IntegrationResult(created, updated, skipped);
-    }
-
-    private static async Task WriteFileAsync(
-        string path,
-        string content,
-        bool force,
-        List<string> created,
-        List<string> updated,
-        List<string> skipped,
-        CancellationToken cancellationToken)
-    {
-        var exists = File.Exists(path);
-
-        if (exists && !force)
-        {
-            skipped.Add(path);
-            return;
-        }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
-        (exists ? updated : created).Add(path);
-    }
-
     private const string WindsurfRule =
         """
         # DotnetTokenKiller (dtk)
@@ -74,4 +31,25 @@ public sealed class WindsurfIntegrator : IProviderIntegrator
         - Exit codes are preserved — CI pipelines work correctly.
         - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
         """;
+
+    /// <inheritdoc/>
+    public string ProviderName => "windsurf";
+
+    /// <inheritdoc/>
+    public async Task<IntegrationResult> IntegrateAsync(
+        string directory,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        var created = new List<string>();
+        var updated = new List<string>();
+        var skipped = new List<string>();
+
+        await IntegratorHelpers.WriteFileAsync(
+            Path.Combine(directory, ".windsurf", "rules", "dtk.md"),
+            WindsurfRule,
+            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+
+        return new IntegrationResult(created, updated, skipped);
+    }
 }

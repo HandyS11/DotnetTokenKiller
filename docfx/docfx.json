@@ -53,7 +53,9 @@
     ],
     "globalMetadata": {
       "_appTitle": "DotnetTokenKiller",
-      "_appName": "DotnetTokenKiller",
+      "_appName": "\u00a0DotnetTokenKiller",
+      "_appFaviconPath": "images/icon.png",
+      "_appLogoPath": "images/icon.png",
       "_appFooter": "DotnetTokenKiller &mdash; Reduce LLM token usage from dotnet CLI output",
       "_enableSearch": true,
       "_enableNewTab": true,

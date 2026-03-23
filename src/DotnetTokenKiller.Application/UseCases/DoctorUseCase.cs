@@ -25,12 +25,13 @@ public sealed class DoctorUseCase(ICommandRunner runner, IConfigProvider configP
         string teeDirectory,
         CancellationToken cancellationToken = default)
     {
-        var checks = new List<DiagnosticCheck>();
-        checks.Add(await CheckDotnetSdkAsync(cancellationToken).ConfigureAwait(false));
-        checks.Add(await CheckConfigAsync(cancellationToken).ConfigureAwait(false));
-        checks.Add(CheckDbAccessible(dbPath));
-        checks.Add(CheckTeeWritable(teeDirectory));
-        return checks;
+        return
+        [
+            await CheckDotnetSdkAsync(cancellationToken).ConfigureAwait(false),
+            await CheckConfigAsync(cancellationToken).ConfigureAwait(false),
+            CheckDbAccessible(dbPath),
+            CheckTeeWritable(teeDirectory)
+        ];
     }
 
     private async Task<DiagnosticCheck> CheckDotnetSdkAsync(CancellationToken cancellationToken)

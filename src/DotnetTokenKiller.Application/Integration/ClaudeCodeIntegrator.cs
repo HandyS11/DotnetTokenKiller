@@ -14,179 +14,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </remarks>
 public sealed class ClaudeCodeIntegrator : IProviderIntegrator
 {
-    /// <inheritdoc/>
-    public string ProviderName => "claude";
-
-    /// <inheritdoc/>
-    public async Task<IntegrationResult> IntegrateAsync(
-        string directory,
-        bool force,
-        CancellationToken cancellationToken)
-    {
-        var created = new List<string>();
-        var updated = new List<string>();
-        var skipped = new List<string>();
-
-        await WriteFileAsync(
-            Path.Combine(directory, ".claude", "skills", "dotnet-token-killer", "SKILL.md"),
-            SkillMarkdown,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
-
-        await WriteFileAsync(
-            Path.Combine(directory, ".claude", HooksKey, "dotnet-to-dtk.py"),
-            HookScript,
-            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
-
-        await MergeSettingsJsonAsync(
-            Path.Combine(directory, ".claude", "settings.json"),
-            created, updated, skipped, cancellationToken).ConfigureAwait(false);
-
-        return new IntegrationResult(created, updated, skipped);
-    }
-
-    private static async Task WriteFileAsync(
-        string path,
-        string content,
-        bool force,
-        List<string> created,
-        List<string> updated,
-        List<string> skipped,
-        CancellationToken cancellationToken)
-    {
-        var exists = File.Exists(path);
-
-        if (exists && !force)
-        {
-            skipped.Add(path);
-            return;
-        }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
-        (exists ? updated : created).Add(path);
-    }
-
-    private const string HooksKey = "hooks";
-
-    /// <summary>
-    /// Merges the dtk PreToolUse hook into <c>.claude/settings.json</c>.
-    /// Existing content is preserved; the hook entry is only added if not already present.
-    /// </summary>
-    /// <param name="path">Path to the settings.json file.</param>
-    /// <param name="created">Accumulator for newly created file paths.</param>
-    /// <param name="updated">Accumulator for updated file paths.</param>
-    /// <param name="skipped">Accumulator for skipped file paths.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="InvalidOperationException">Thrown if the settings file contains invalid JSON or an unexpected structure.</exception>
-    private static async Task MergeSettingsJsonAsync(
-        string path,
-        List<string> created,
-        List<string> updated,
-        List<string> skipped,
-        CancellationToken cancellationToken)
-    {
-        var exists = File.Exists(path);
-        JsonObject root;
-        if (exists)
-        {
-            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-            JsonNode? parsed;
-            try
-            {
-                parsed = JsonNode.Parse(json);
-            }
-            catch (System.Text.Json.JsonException ex)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to parse JSON settings file '{path}'. The file must contain a valid JSON object at the root.",
-                    ex);
-            }
-
-            if (parsed is JsonObject obj)
-            {
-                root = obj;
-            }
-            else
-            {
-                var actualType = parsed?.GetType().Name ?? "null";
-                throw new InvalidOperationException(
-                    $"The settings file '{path}' must contain a JSON object at the root, but found '{actualType}'.");
-            }
-        }
-        else
-        {
-            root = [];
-        }
-
-        root.TryGetPropertyValue(HooksKey, out var hooksNode);
-        var hooks = hooksNode as JsonObject ?? [];
-
-        hooks.TryGetPropertyValue("PreToolUse", out var preNode);
-        var preToolUse = preNode as JsonArray ?? [];
-
-        // If our exact hook command is already registered, leave the file alone.
-        const string hookCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
-        if (IsHookAlreadyRegistered(preToolUse, hookCommand))
-        {
-            skipped.Add(path);
-            return;
-        }
-
-        preToolUse.Add(new JsonObject
-        {
-            ["matcher"] = "Bash",
-            [HooksKey] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = hookCommand
-                }
-            }
-        });
-
-        hooks["PreToolUse"] = preToolUse;
-        root[HooksKey] = hooks;
-
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(
-            path,
-            root.ToJsonString(new System.Text.Json.JsonSerializerOptions
-            {
-                WriteIndented = true
-            }),
-            cancellationToken).ConfigureAwait(false);
-
-        (exists ? updated : created).Add(path);
-    }
-
-    private static bool IsHookAlreadyRegistered(JsonArray preToolUse, string hookCommand)
-    {
-        foreach (var item in preToolUse)
-        {
-            if (item is not JsonObject entry)
-            {
-                continue;
-            }
-
-            entry.TryGetPropertyValue(HooksKey, out var innerHooksNode);
-            if (innerHooksNode is not JsonArray innerHooks)
-            {
-                continue;
-            }
-
-            foreach (var inner in innerHooks)
-            {
-                if (inner is JsonObject innerEntry &&
-                    innerEntry["command"]?.GetValue<string>() == hookCommand)
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
+    private const string HookCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
 
     private const string SkillMarkdown =
         """
@@ -301,4 +129,48 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
                                       if __name__ == "__main__":
                                           main()
                                       """";
+
+    /// <inheritdoc/>
+    public string ProviderName => "claude";
+
+    /// <inheritdoc/>
+    public async Task<IntegrationResult> IntegrateAsync(
+        string directory,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        var created = new List<string>();
+        var updated = new List<string>();
+        var skipped = new List<string>();
+
+        await IntegratorHelpers.WriteFileAsync(
+            Path.Combine(directory, ".claude", "skills", "dotnet-token-killer", "SKILL.md"),
+            SkillMarkdown,
+            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+
+        await IntegratorHelpers.WriteFileAsync(
+            Path.Combine(directory, ".claude", "hooks", "dotnet-to-dtk.py"),
+            HookScript,
+            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            Path.Combine(directory, ".claude", "settings.json"),
+            "PreToolUse",
+            new JsonObject
+            {
+                ["matcher"] = "Bash",
+                ["hooks"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["type"] = "command",
+                        ["command"] = HookCommand
+                    }
+                }
+            },
+            HookCommand,
+            created, updated, skipped, cancellationToken).ConfigureAwait(false);
+
+        return new IntegrationResult(created, updated, skipped);
+    }
 }
