@@ -169,6 +169,79 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
 `dtk` filters output to actionable signal only, reducing noise by 50-97%.
 ```
 
+## Cursor
+
+### Installation
+
+```sh
+dtk integrate cursor
+```
+
+This creates `.cursor/rules/dtk.mdc` — a Cursor rule file with `alwaysApply: false` that instructs the agent to use `dtk` for dotnet commands.
+
+Use `--force` to overwrite an existing file. Use `--dir` to target a specific project directory.
+
+## Windsurf
+
+### Installation
+
+```sh
+dtk integrate windsurf
+```
+
+This creates `.windsurf/rules/dtk.md` — a Windsurf rule file that instructs the agent to prefer `dtk` over raw `dotnet` commands.
+
+Use `--force` to overwrite. Use `--dir` to target a specific project directory.
+
+## Aider
+
+### Installation
+
+```sh
+dtk integrate aider
+```
+
+This creates two files:
+
+- `.aider-dtk-instructions.md` — standalone instructions file referenced by Aider
+- `.aider.conf.yml` — a `# dtk` / `# /dtk` section is appended (creating the file if needed)
+
+Re-running is safe; use `--force` to refresh the section.
+
+### Manual Installation
+
+Add to your `.aider.conf.yml`:
+
+```yaml
+# dtk
+read:
+  - .aider-dtk-instructions.md
+# /dtk
+```
+
+And create `.aider-dtk-instructions.md` instructing Aider to use `dtk dotnet build|test|restore|clean`.
+
+## JetBrains AI
+
+### Installation
+
+```sh
+dtk integrate jetbrains
+```
+
+This appends a `<!-- dtk -->` / `<!-- /dtk -->` instructions section to `.junie/guidelines.md`, creating the file if it does not exist. Re-running is safe; use `--force` to refresh the section.
+
+### Manual Installation
+
+Add to your `.junie/guidelines.md`:
+
+```markdown
+<!-- dtk -->
+Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
+`dtk` filters output to actionable signal only, reducing noise by 50-97%.
+<!-- /dtk -->
+```
+
 ## Other Agents
 
 For any AI agent that runs terminal commands, the general approach is:

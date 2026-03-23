@@ -55,11 +55,16 @@ dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 | `dtk dotnet clean`   | Clean with filtered output |
 | `dtk gain`           | Show token savings analytics |
 | `dtk reset`          | Clear all tracking data |
+| `dtk config show`    | Display current configuration |
+| `dtk config set`     | Update a configuration value |
+| `dtk doctor`         | Run self-diagnostic checks |
+| `dtk completion`     | Print a shell completion script |
+| `dtk integrate`      | Install AI agent integration artifacts |
 
 Any other `dotnet` subcommand (e.g., `dtk dotnet publish`) is passed through to `dotnet` unchanged.
 
 ## Next Steps
 
 - [Usage Guide](usage.md) — all flags and command details
-- [Configuration](configuration.md) — customize behavior via JSON config
-- [AI Agent Setup](ai-agent-setup.md) — integrate with Claude Code
+- [Configuration](configuration.md) — customize behavior via CLI or JSON config
+- [AI Agent Setup](ai-agent-setup.md) — integrate with Claude Code, Copilot, Gemini, Cursor, Windsurf, Aider, or JetBrains AI

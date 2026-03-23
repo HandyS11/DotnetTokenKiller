@@ -66,11 +66,16 @@ dtk dotnet clean --configuration Release
 Install dtk integration artifacts for an AI assistant provider:
 
 ```sh
-dtk integrate claude           # install Claude Code skill and PreToolUse hook
-dtk integrate copilot          # install GitHub Copilot instructions section
-dtk integrate claude --dir /path/to/project   # target a specific directory
-dtk integrate claude --force   # overwrite existing files
+dtk integrate claude      # Claude Code skill + PreToolUse hook
+dtk integrate copilot     # GitHub Copilot instructions section
+dtk integrate gemini      # Gemini CLI hook + settings merge
+dtk integrate cursor      # Cursor rules file
+dtk integrate windsurf    # Windsurf rules file
+dtk integrate aider       # Aider instructions + .aider.conf.yml section
+dtk integrate jetbrains   # JetBrains AI guidelines section
 ```
+
+All commands accept `--force` to overwrite existing files and `--dir <path>` to target a specific directory.
 
 See [AI Agent Setup](ai-agent-setup.md) for details on what each provider installs.
 
@@ -93,6 +98,50 @@ Clear all tracking data:
 dtk reset          # prompts for confirmation
 dtk reset --force  # skips confirmation
 ```
+
+### `dtk config`
+
+View or modify configuration without editing the JSON file directly:
+
+```sh
+dtk config show                          # display all keys and current values
+dtk config set <key> <value>             # update a single value and save
+```
+
+Examples:
+
+```sh
+dtk config set tracking.enabled false
+dtk config set tracking.retentionDays 30
+dtk config set display.width 100
+dtk config set tee.mode Always
+dtk config set tracking.tokenizer O200kBase
+```
+
+Returns exit code `1` with an error message if the key is unknown or the value is invalid. See [Configuration](configuration.md) for the full list of supported keys and valid values.
+
+### `dtk doctor`
+
+Run self-diagnostic checks:
+
+```sh
+dtk doctor
+```
+
+Reports pass/fail for four checks: dotnet SDK availability, config file load, tracking database path access, and tee directory writability. Exits `0` if all pass, `1` if any fail.
+
+### `dtk completion`
+
+Print a shell completion script:
+
+```sh
+dtk completion bash
+dtk completion zsh
+dtk completion fish
+dtk completion powershell   # also accepts: pwsh
+```
+
+Pipe the output into your shell profile to enable tab completion for all `dtk` subcommands.
 
 ## Passthrough Behavior
 
