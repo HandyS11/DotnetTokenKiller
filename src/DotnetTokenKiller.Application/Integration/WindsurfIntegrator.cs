@@ -1,0 +1,77 @@
+using DotnetTokenKiller.Domain.Integration;
+
+namespace DotnetTokenKiller.Application.Integration;
+
+/// <summary>Installs dtk integration artifacts for Windsurf.</summary>
+/// <remarks>
+/// Creates:
+/// <list type="bullet">
+///   <item><description><c>.windsurf/rules/dtk.md</c> (Windsurf project rule)</description></item>
+/// </list>
+/// </remarks>
+public sealed class WindsurfIntegrator : IProviderIntegrator
+{
+    /// <inheritdoc/>
+    public string ProviderName => "windsurf";
+
+    /// <inheritdoc/>
+    public async Task<IntegrationResult> IntegrateAsync(
+        string directory,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        var created = new List<string>();
+        var updated = new List<string>();
+        var skipped = new List<string>();
+
+        await WriteFileAsync(
+            Path.Combine(directory, ".windsurf", "rules", "dtk.md"),
+            WindsurfRule,
+            force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
+
+        return new IntegrationResult(created, updated, skipped);
+    }
+
+    private static async Task WriteFileAsync(
+        string path,
+        string content,
+        bool force,
+        List<string> created,
+        List<string> updated,
+        List<string> skipped,
+        CancellationToken cancellationToken)
+    {
+        var exists = File.Exists(path);
+
+        if (exists && !force)
+        {
+            skipped.Add(path);
+            return;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
+        (exists ? updated : created).Add(path);
+    }
+
+    private const string WindsurfRule =
+        """
+        # DotnetTokenKiller (dtk)
+
+        Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
+        `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+
+        ## Usage
+
+        ```sh
+        dtk dotnet build MyProject.slnx
+        dtk dotnet test --filter "Category=Unit"
+        dtk dotnet restore
+        dtk dotnet clean
+        ```
+
+        - All arguments and flags are forwarded to `dotnet` unchanged.
+        - Exit codes are preserved — CI pipelines work correctly.
+        - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
+        """;
+}

@@ -16,6 +16,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<FilteredRunUseCase>();
         services.AddTransient<GainReportUseCase>();
         services.AddTransient<ResetTrackingUseCase>();
+        services.AddTransient<ConfigSetUseCase>();
+        services.AddTransient<DoctorUseCase>();
         services.AddTransient<DotnetBuildFilter>();
         services.AddTransient<DotnetTestFilter>();
         services.AddTransient<DotnetRestoreFilter>();
@@ -25,6 +27,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();
         services.AddTransient<IProviderIntegrator, GitHubCopilotIntegrator>();
         services.AddTransient<IProviderIntegrator, GeminiCliIntegrator>();
+        services.AddTransient<IProviderIntegrator, CursorIntegrator>();
+        services.AddTransient<IProviderIntegrator, WindsurfIntegrator>();
+        services.AddTransient<IProviderIntegrator, AiderIntegrator>();
+        services.AddTransient<IProviderIntegrator, JetBrainsAiIntegrator>();
         services.AddTransient<IntegrateUseCase>();
 
         return services;
