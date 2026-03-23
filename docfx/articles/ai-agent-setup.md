@@ -96,6 +96,152 @@ dtk dotnet restore
 dtk dotnet clean
 ```
 
+## Gemini CLI
+
+A pre-built hook automatically rewrites `dotnet build|test|restore|clean` commands to use `dtk`.
+
+### Installation
+
+From your project root, run:
+
+```sh
+dtk integrate gemini
+```
+
+This creates three files:
+
+- `GEMINI.md` — appends a `dtk` instructions section (creating the file if it does not exist)
+- `.gemini/hooks/dotnet-to-dtk.py` — the Python rewrite hook
+- `.gemini/settings.json` — registers the hook under `BeforeTool` (merges with any existing settings)
+
+Re-running the command is safe: existing files are skipped. Use `--force` to overwrite:
+
+```sh
+dtk integrate gemini --force
+```
+
+To target a directory other than the current one:
+
+```sh
+dtk integrate gemini --dir /path/to/project
+```
+
+### How It Works
+
+With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, `dotnet restore`, or `dotnet clean`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
+
+### Manual Installation
+
+If you prefer not to use `dtk integrate`, it requires `curl` and `python3`. From your project root:
+
+```sh
+mkdir -p .gemini/hooks
+curl -sSL https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.gemini/hooks/dotnet-to-dtk.py \
+  -o .gemini/hooks/dotnet-to-dtk.py
+```
+
+Then add the following to `.gemini/settings.json`:
+
+```json
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .gemini/hooks/dotnet-to-dtk.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+And append the following to your `GEMINI.md`:
+
+```markdown
+## DotnetTokenKiller (dtk)
+
+Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
+`dtk` filters output to actionable signal only, reducing noise by 50-97%.
+```
+
+## Cursor
+
+### Installation
+
+```sh
+dtk integrate cursor
+```
+
+This creates `.cursor/rules/dtk.mdc` — a Cursor rule file with `alwaysApply: false` that instructs the agent to use `dtk` for dotnet commands.
+
+Use `--force` to overwrite an existing file. Use `--dir` to target a specific project directory.
+
+## Windsurf
+
+### Installation
+
+```sh
+dtk integrate windsurf
+```
+
+This creates `.windsurf/rules/dtk.md` — a Windsurf rule file that instructs the agent to prefer `dtk` over raw `dotnet` commands.
+
+Use `--force` to overwrite. Use `--dir` to target a specific project directory.
+
+## Aider
+
+### Installation
+
+```sh
+dtk integrate aider
+```
+
+This creates two files:
+
+- `.aider-dtk-instructions.md` — standalone instructions file referenced by Aider
+- `.aider.conf.yml` — a `# dtk` / `# /dtk` section is appended (creating the file if needed)
+
+Re-running is safe; use `--force` to refresh the section.
+
+### Manual Installation
+
+Add to your `.aider.conf.yml`:
+
+```yaml
+# dtk
+read:
+  - .aider-dtk-instructions.md
+# /dtk
+```
+
+And create `.aider-dtk-instructions.md` instructing Aider to use `dtk dotnet build|test|restore|clean`.
+
+## JetBrains AI
+
+### Installation
+
+```sh
+dtk integrate jetbrains
+```
+
+This appends a `<!-- dtk -->` / `<!-- /dtk -->` instructions section to `.junie/guidelines.md`, creating the file if it does not exist. Re-running is safe; use `--force` to refresh the section.
+
+### Manual Installation
+
+Add to your `.junie/guidelines.md`:
+
+```markdown
+<!-- dtk -->
+Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
+`dtk` filters output to actionable signal only, reducing noise by 50-97%.
+<!-- /dtk -->
+```
+
 ## Other Agents
 
 For any AI agent that runs terminal commands, the general approach is:

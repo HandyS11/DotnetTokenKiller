@@ -13,4 +13,8 @@ public interface ITeeService
         string commandSlug,
         int exitCode,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes all tee log files from the configured tee directory.</summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task DeleteLogsAsync(CancellationToken cancellationToken = default);
 }

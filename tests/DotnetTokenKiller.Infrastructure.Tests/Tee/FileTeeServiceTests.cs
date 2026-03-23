@@ -227,11 +227,40 @@ public sealed class FileTeeServiceTests : IDisposable
         act.Should().NotThrow();
     }
 
+    [Fact]
+    public async Task DeleteLogsAsync_DeletesLogFiles_LeavesNonLogFiles()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "a.log"), "log1");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "b.log"), "log2");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "notes.txt"), "keep");
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await sut.DeleteLogsAsync();
+
+        Directory.GetFiles(_tempDir, "*.log").Should().BeEmpty();
+        File.Exists(Path.Combine(_tempDir, "notes.txt")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task DeleteLogsAsync_NonExistentDirectory_DoesNotThrow()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        Directory.Exists(_tempDir).Should().BeFalse();
+
+        var act = () => sut.DeleteLogsAsync();
+
+        await act.Should().NotThrowAsync();
+    }
+
     /// <summary>Nested fake — avoids NSubstitute dependency (not referenced in this test csproj).</summary>
     /// <param name="config">The configuration to return from <see cref="LoadAsync"/>.</param>
     private sealed class FakeConfigProvider(DtkConfig config) : IConfigProvider
     {
-        public DtkConfig Load() => config;
+        public DtkConfig Load()
+        {
+            return config;
+        }
 
         public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
         {
@@ -242,11 +271,19 @@ public sealed class FileTeeServiceTests : IDisposable
         {
             return Task.CompletedTask;
         }
+
+        public Task DeleteAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class ThrowingConfigProvider : IConfigProvider
     {
-        public DtkConfig Load() => throw new InvalidOperationException("Simulated config failure");
+        public DtkConfig Load()
+        {
+            throw new InvalidOperationException("Simulated config failure");
+        }
 
         public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
         {
@@ -254,6 +291,11 @@ public sealed class FileTeeServiceTests : IDisposable
         }
 
         public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteAsync(CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }

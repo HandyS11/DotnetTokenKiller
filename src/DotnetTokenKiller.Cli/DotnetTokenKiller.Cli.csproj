@@ -13,6 +13,7 @@
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
     <Authors>HandyS11</Authors>
     <Copyright>Copyright (c) HandyS11</Copyright>
     <PackageProjectUrl>https://github.com/HandyS11/DotnetTokenKiller</PackageProjectUrl>
@@ -21,6 +22,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="\"/>
+    <None Include="../../icon.png" Pack="true" PackagePath="\"/>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Spectre.Console"/>

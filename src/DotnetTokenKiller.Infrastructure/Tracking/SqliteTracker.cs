@@ -122,6 +122,7 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
     public Task<GainSummary> GetSummaryAsync(
         int days,
         string? projectPath,
+        string? commandFilter = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -134,16 +135,18 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
                            FROM commands
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
+                             AND (@cmd IS NULL OR command = @cmd)
                            GROUP BY command
                            """;
 
-        return ExecuteWithFilterAsync(days, projectPath, sql, ReadSummaryAsync, cancellationToken);
+        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, cancellationToken);
     }
 
     /// <inheritdoc/>
     public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
         int days,
         string? projectPath,
+        string? commandFilter = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -152,15 +155,17 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
                            FROM commands
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
+                             AND (@cmd IS NULL OR command = @cmd)
                            ORDER BY timestamp DESC
                            """;
 
-        return ExecuteWithFilterAsync(days, projectPath, sql, ReadHistoryAsync, cancellationToken);
+        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadHistoryAsync, cancellationToken);
     }
 
     private async Task<T> ExecuteWithFilterAsync<T>(
         int days,
         string? projectPath,
+        string? commandFilter,
         string sql,
         Func<SqliteCommand, CancellationToken, Task<T>> readResultsAsync,
         CancellationToken cancellationToken)
@@ -179,6 +184,7 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
 #pragma warning restore CA2100
             cmd.Parameters.AddWithValue("@since", since);
             cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@cmd", (object?)commandFilter ?? DBNull.Value);
 
             return await readResultsAsync(cmd, cancellationToken).ConfigureAwait(false);
         }

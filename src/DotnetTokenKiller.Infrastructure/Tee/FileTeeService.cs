@@ -74,6 +74,29 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         }
     }
 
+    /// <inheritdoc/>
+    public async Task DeleteLogsAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
+            var teeDir = GetTeeDir(config.Tee, teeDirOverride);
+            if (!Directory.Exists(teeDir))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.GetFiles(teeDir, "*.log"))
+            {
+                File.Delete(file);
+            }
+        }
+        catch
+        {
+            // Intentional: cleanup errors must never surface to the user
+        }
+    }
+
     private static void RotateFiles(string teeDir, int maxFiles)
     {
         if (maxFiles <= 0)

@@ -29,13 +29,20 @@ internal abstract class IntegrateCommandBase(
             .ConfigureAwait(false);
 
         foreach (var file in result.CreatedFiles)
+        {
             console.MarkupLine($"[green]created[/]  {Markup.Escape(RelativePath(directory, file))}");
+        }
 
         foreach (var file in result.UpdatedFiles)
+        {
             console.MarkupLine($"[yellow]updated[/]  {Markup.Escape(RelativePath(directory, file))}");
+        }
 
         foreach (var file in result.SkippedFiles)
-            console.MarkupLine($"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))} [grey](use --force to overwrite)[/]");
+        {
+            console.MarkupLine(
+                $"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))} [grey](use --force to overwrite)[/]");
+        }
 
         if (result.CreatedFiles.Count == 0 && result.UpdatedFiles.Count == 0 && result.SkippedFiles.Count > 0)
         {
@@ -52,7 +59,9 @@ internal abstract class IntegrateCommandBase(
     private static string RelativePath(string baseDir, string fullPath)
     {
         if (string.IsNullOrEmpty(fullPath) || string.IsNullOrEmpty(baseDir))
+        {
             return fullPath;
+        }
 
         try
         {

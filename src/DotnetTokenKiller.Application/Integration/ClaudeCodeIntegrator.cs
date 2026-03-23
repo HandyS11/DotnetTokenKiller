@@ -33,7 +33,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
             force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
 
         await WriteFileAsync(
-            Path.Combine(directory, ".claude", "hooks", "dotnet-to-dtk.py"),
+            Path.Combine(directory, ".claude", HooksKey, "dotnet-to-dtk.py"),
             HookScript,
             force, created, updated, skipped, cancellationToken).ConfigureAwait(false);
 
@@ -65,6 +65,8 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
         (exists ? updated : created).Add(path);
     }
+
+    private const string HooksKey = "hooks";
 
     /// <summary>
     /// Merges the dtk PreToolUse hook into <c>.claude/settings.json</c>.
@@ -115,7 +117,8 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         {
             root = [];
         }
-        root.TryGetPropertyValue("hooks", out var hooksNode);
+
+        root.TryGetPropertyValue(HooksKey, out var hooksNode);
         var hooks = hooksNode as JsonObject ?? [];
 
         hooks.TryGetPropertyValue("PreToolUse", out var preNode);
@@ -123,26 +126,16 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
 
         // If our exact hook command is already registered, leave the file alone.
         const string hookCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
-        foreach (var item in preToolUse)
+        if (IsHookAlreadyRegistered(preToolUse, hookCommand))
         {
-            if (item is not JsonObject entry) continue;
-            entry.TryGetPropertyValue("hooks", out var innerHooksNode);
-            if (innerHooksNode is not JsonArray innerHooks) continue;
-            foreach (var inner in innerHooks)
-            {
-                if (inner is JsonObject innerEntry &&
-                    innerEntry["command"]?.GetValue<string>() == hookCommand)
-                {
-                    skipped.Add(path);
-                    return;
-                }
-            }
+            skipped.Add(path);
+            return;
         }
 
         preToolUse.Add(new JsonObject
         {
             ["matcher"] = "Bash",
-            ["hooks"] = new JsonArray
+            [HooksKey] = new JsonArray
             {
                 new JsonObject
                 {
@@ -153,15 +146,46 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         });
 
         hooks["PreToolUse"] = preToolUse;
-        root["hooks"] = hooks;
+        root[HooksKey] = hooks;
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(
             path,
-            root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }),
+            root.ToJsonString(new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            }),
             cancellationToken).ConfigureAwait(false);
 
         (exists ? updated : created).Add(path);
+    }
+
+    private static bool IsHookAlreadyRegistered(JsonArray preToolUse, string hookCommand)
+    {
+        foreach (var item in preToolUse)
+        {
+            if (item is not JsonObject entry)
+            {
+                continue;
+            }
+
+            entry.TryGetPropertyValue(HooksKey, out var innerHooksNode);
+            if (innerHooksNode is not JsonArray innerHooks)
+            {
+                continue;
+            }
+
+            foreach (var inner in innerHooks)
+            {
+                if (inner is JsonObject innerEntry &&
+                    innerEntry["command"]?.GetValue<string>() == hookCommand)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private const string SkillMarkdown =
@@ -221,60 +245,60 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
 
     /// <summary>4-quote raw string literal so Python triple-quoted docstrings embed without escaping.</summary>
     private const string HookScript = """"
-        #!/usr/bin/env python3
-        """Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean` to `dtk dotnet ...`.
+                                      #!/usr/bin/env python3
+                                      """Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean` to `dtk dotnet ...`.
 
-        Reads the Bash tool input from stdin (JSON with a "command" field),
-        rewrites qualifying dotnet commands to use dtk, and prints the
-        modified JSON to stdout so Claude Code uses the rewritten command.
-        """
+                                      Reads the Bash tool input from stdin (JSON with a "command" field),
+                                      rewrites qualifying dotnet commands to use dtk, and prints the
+                                      modified JSON to stdout so Claude Code uses the rewritten command.
+                                      """
 
-        import json
-        import re
-        import sys
-
-
-        _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean"}
-
-        _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
+                                      import json
+                                      import re
+                                      import sys
 
 
-        def rewrite(command: str) -> str:
-            """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
+                                      _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean"}
 
-            def _replace(match: re.Match) -> str:
-                preceding = command[: match.start()].rstrip()
-                last_token = preceding.split()[-1] if preceding else ""
-                if last_token in ("dtk", "dtk.exe"):
-                    return match.group(0)
-                return f"dtk dotnet {match.group(1)}"
-
-            return _PATTERN.sub(_replace, command)
+                                      _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
 
 
-        def main() -> None:
-            try:
-                payload = json.load(sys.stdin)
-            except (json.JSONDecodeError, EOFError):
-                return
+                                      def rewrite(command: str) -> str:
+                                          """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
 
-            tool_input = payload.get("tool_input", {})
-            command = tool_input.get("command", "")
+                                          def _replace(match: re.Match) -> str:
+                                              preceding = command[: match.start()].rstrip()
+                                              last_token = preceding.split()[-1] if preceding else ""
+                                              if last_token in ("dtk", "dtk.exe"):
+                                                  return match.group(0)
+                                              return f"dtk dotnet {match.group(1)}"
 
-            if not command:
-                return
-
-            rewritten = rewrite(command)
-
-            if rewritten != command:
-                tool_input["command"] = rewritten
-                payload["tool_input"] = tool_input
-                print(json.dumps({"decision": "proceed", "tool_input": tool_input}))
-            else:
-                print(json.dumps({"decision": "proceed"}))
+                                          return _PATTERN.sub(_replace, command)
 
 
-        if __name__ == "__main__":
-            main()
-        """";
+                                      def main() -> None:
+                                          try:
+                                              payload = json.load(sys.stdin)
+                                          except (json.JSONDecodeError, EOFError):
+                                              return
+
+                                          tool_input = payload.get("tool_input", {})
+                                          command = tool_input.get("command", "")
+
+                                          if not command:
+                                              return
+
+                                          rewritten = rewrite(command)
+
+                                          if rewritten != command:
+                                              tool_input["command"] = rewritten
+                                              payload["tool_input"] = tool_input
+                                              print(json.dumps({"decision": "proceed", "tool_input": tool_input}))
+                                          else:
+                                              print(json.dumps({"decision": "proceed"}))
+
+
+                                      if __name__ == "__main__":
+                                          main()
+                                      """";
 }

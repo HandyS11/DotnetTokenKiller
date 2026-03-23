@@ -1,5 +1,18 @@
 # Configuration
 
+Settings can be managed via CLI or by editing the JSON file directly.
+
+## CLI (recommended)
+
+```sh
+dtk config show                          # display all current values
+dtk config set <key> <value>             # update a value and save
+```
+
+See [Usage Guide — dtk config](usage.md#dtk-config) for examples and valid values per key.
+
+## JSON file
+
 DTK uses an optional JSON configuration file at:
 
 ```sh

@@ -24,6 +24,7 @@ dtk dotnet build
 dtk dotnet build --configuration Release
 dtk dotnet build src/MyProject/MyProject.csproj
 dtk dotnet build --no-restore
+dtk dotnet build -q                  # quiet: filtered content only, no DTK meta-output
 ```
 
 On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths and top error codes.
@@ -37,6 +38,7 @@ dtk dotnet test
 dtk dotnet test --filter "Category=Unit"
 dtk dotnet test --configuration Release
 dtk dotnet test src/MyProject.Tests/MyProject.Tests.csproj
+dtk dotnet test -q                   # quiet mode
 ```
 
 Passing tests are summarized with counts. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths. xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
@@ -48,6 +50,7 @@ Run `dotnet restore` with filtered output:
 ```sh
 dtk dotnet restore
 dtk dotnet restore src/MyProject/MyProject.csproj
+dtk dotnet restore -q
 ```
 
 Restore errors include the error code, message, and workspace-relative project path.
@@ -59,6 +62,7 @@ Run `dotnet clean` with filtered output:
 ```sh
 dtk dotnet clean
 dtk dotnet clean --configuration Release
+dtk dotnet clean -q
 ```
 
 ### `dtk integrate`
@@ -66,11 +70,16 @@ dtk dotnet clean --configuration Release
 Install dtk integration artifacts for an AI assistant provider:
 
 ```sh
-dtk integrate claude           # install Claude Code skill and PreToolUse hook
-dtk integrate copilot          # install GitHub Copilot instructions section
-dtk integrate claude --dir /path/to/project   # target a specific directory
-dtk integrate claude --force   # overwrite existing files
+dtk integrate claude      # Claude Code skill + PreToolUse hook
+dtk integrate copilot     # GitHub Copilot instructions section
+dtk integrate gemini      # Gemini CLI hook + settings merge
+dtk integrate cursor      # Cursor rules file
+dtk integrate windsurf    # Windsurf rules file
+dtk integrate aider       # Aider instructions + .aider.conf.yml section
+dtk integrate jetbrains   # JetBrains AI guidelines section
 ```
+
+All commands accept `--force` to overwrite existing files and `--dir <path>` to target a specific directory.
 
 See [AI Agent Setup](ai-agent-setup.md) for details on what each provider installs.
 
@@ -79,20 +88,79 @@ See [AI Agent Setup](ai-agent-setup.md) for details on what each provider instal
 Display token savings analytics. See [Token Analytics](token-analytics.md) for details.
 
 ```sh
-dtk gain               # last 30 days
-dtk gain --days 7      # last 7 days
-dtk gain --project     # current project only
-dtk gain --json        # machine-readable JSON output
+dtk gain                       # last 30 days
+dtk gain --days 7              # last 7 days
+dtk gain --project             # current project only
+dtk gain --command build       # filter to a specific command
+dtk gain --json                # machine-readable JSON output
+dtk gain --export csv          # export raw records as CSV
 ```
 
 ### `dtk reset`
 
-Clear all tracking data:
+Clear tracking data (and optionally all dtk state):
 
 ```sh
-dtk reset          # prompts for confirmation
-dtk reset --force  # skips confirmation
+dtk reset              # prompts for confirmation
+dtk reset --force      # skips confirmation
+dtk reset --all        # also removes tee logs and config file
+dtk reset --all --force  # full cleanup without confirmation
 ```
+
+### `dtk config`
+
+View or modify configuration without editing the JSON file directly:
+
+```sh
+dtk config show                          # display all keys and current values
+dtk config set <key> <value>             # update a single value and save
+```
+
+Examples:
+
+```sh
+dtk config set tracking.enabled false
+dtk config set tracking.retentionDays 30
+dtk config set display.width 100
+dtk config set tee.mode Always
+dtk config set tracking.tokenizer O200kBase
+```
+
+Returns exit code `1` with an error message if the key is unknown or the value is invalid. See [Configuration](configuration.md) for the full list of supported keys and valid values.
+
+### `dtk doctor`
+
+Run self-diagnostic checks:
+
+```sh
+dtk doctor
+```
+
+Reports pass/fail for four checks: dotnet SDK availability, config file load, tracking database path access, and tee directory writability. Exits `0` if all pass, `1` if any fail.
+
+### `dtk completion`
+
+Print a shell completion script:
+
+```sh
+dtk completion bash
+dtk completion zsh
+dtk completion fish
+dtk completion powershell   # also accepts: pwsh
+```
+
+Pipe the output into your shell profile to enable tab completion for all `dtk` subcommands.
+
+## Quiet Mode
+
+Add `-q` / `--quiet` to any `dtk dotnet` command to suppress DTK meta-output and forward only the filtered content. This is useful when piping output into other tools:
+
+```sh
+dtk dotnet build -q | grep "error"
+dtk dotnet test -q > test-results.txt
+```
+
+In quiet mode, verbosity flags (`-v`, `-v -v`) and `--show-log` are ignored — only the filtered command output is written.
 
 ## Passthrough Behavior
 

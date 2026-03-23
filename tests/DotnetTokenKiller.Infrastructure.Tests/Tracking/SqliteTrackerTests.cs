@@ -126,6 +126,31 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetSummaryAsync_FiltersByCommandFilter()
+    {
+        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord("test"));
+        await _sut.RecordAsync(MakeRecord("build"));
+
+        var summary = await _sut.GetSummaryAsync(30, null, "build");
+
+        summary.TotalCommands.Should().Be(2);
+        summary.CommandDetails.Should().ContainKey("build");
+        summary.CommandDetails.Should().NotContainKey("test");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_FiltersByCommandFilter()
+    {
+        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord("test"));
+
+        var history = await _sut.GetHistoryAsync(30, null, "test");
+
+        history.Should().ContainSingle(r => r.Command == "test");
+    }
+
+    [Fact]
     public async Task GetHistoryAsync_ReturnsRecordsInDescendingTimestampOrder()
     {
         var ts1 = DateTimeOffset.UtcNow.AddMinutes(-10);
@@ -206,7 +231,7 @@ public class SqliteTrackerTests : IAsyncDisposable
             var dir = Path.GetDirectoryName(tempPath);
             if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
-                Directory.Delete(dir, recursive: true);
+                Directory.Delete(dir, true);
             }
         }
     }

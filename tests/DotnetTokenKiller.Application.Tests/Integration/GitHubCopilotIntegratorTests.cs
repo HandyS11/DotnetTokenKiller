@@ -13,13 +13,15 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, true);
+        }
     }
 
     [Fact]
     public async Task IntegrateAsync_FreshDirectory_CreatesFile()
     {
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().ContainSingle();
         result.UpdatedFiles.Should().BeEmpty();
@@ -30,7 +32,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_CreatedFile_ContainsDtkSection()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(InstructionsPath);
 
@@ -42,9 +44,9 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_FileWithMarker_NoForce_SkipsFile()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
@@ -54,9 +56,9 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_FileWithMarker_WithForce_UpdatesFile()
     {
-        await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
@@ -70,7 +72,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
         await File.WriteAllTextAsync(InstructionsPath,
             "# My Rules\n\nDo stuff.\n\n<!-- dtk -->\nOLD CONTENT\n<!-- /dtk -->\n\n## Other");
 
-        await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(InstructionsPath);
 
@@ -86,7 +88,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "# My Rules\n\nDo stuff.");
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
         result.CreatedFiles.Should().BeEmpty();
@@ -103,7 +105,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "# My Rules\n\n<!-- dtk -->\nOrphaned content");
 
-        var result = await _sut.IntegrateAsync(_tempDir, force: true, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().ContainSingle();
 
@@ -111,5 +113,25 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
         content.Should().Contain("# My Rules");
         content.Should().Contain("<!-- dtk -->");
         content.Should().NotContain("Orphaned content");
+    }
+
+    [Fact]
+    public void ProviderName_ReturnsCopilot()
+    {
+        _sut.ProviderName.Should().Be("copilot");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_WhitespaceOnlyFileWithoutMarker_CreatesCopilotSection()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
+        await File.WriteAllTextAsync(InstructionsPath, "   \n  \n  ");
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
+        var content = await File.ReadAllTextAsync(InstructionsPath);
+        content.Should().Contain("<!-- dtk -->");
+        content.Should().NotStartWith(Environment.NewLine);
     }
 }

@@ -25,4 +25,8 @@ public interface IConfigProvider
     /// <param name="config">The configuration to save.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes the configuration file if it exists.</summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task DeleteAsync(CancellationToken cancellationToken = default);
 }

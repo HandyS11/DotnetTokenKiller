@@ -15,9 +15,11 @@ public class IntegrateCommandTests
     {
         const string dir = "/project";
         var result = new IntegrationResult(
-            [$"{dir}/.claude/skills/dotnet-token-killer/SKILL.md",
-             $"{dir}/.claude/hooks/dotnet-to-dtk.py",
-             $"{dir}/.claude/settings.json"],
+            [
+                $"{dir}/.claude/skills/dotnet-token-killer/SKILL.md",
+                $"{dir}/.claude/hooks/dotnet-to-dtk.py",
+                $"{dir}/.claude/settings.json"
+            ],
             [],
             []);
 
@@ -147,12 +149,51 @@ public class IntegrateCommandTests
         console.Output.Should().NotContain("/project/");
     }
 
+    [Fact]
+    public async Task ExecuteAsync_EmptyDirectory_FallsBackToFullPath()
+    {
+        var result = new IntegrationResult(
+            ["/some/absolute/path/file.json"],
+            [],
+            []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        {
+            Directory = ""
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain("/some/absolute/path/file.json");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_PathWithInvalidChars_FallsBackToFullPath()
+    {
+        const string dir = "/project";
+        const string invalidPath = "/result\0file.json";
+        var result = new IntegrationResult([invalidPath], [], []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        {
+            Directory = dir
+        }, CancellationToken.None);
+
+        // Path.GetFullPath throws on null-byte paths; the catch block returns the raw path
+        console.Output.Should().Contain("file.json");
+    }
+
     private static (ClaudeIntegrateCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)
     {
         var console = new TestConsole();
-        var stub = new StubIntegrator(provider) { Result = result };
+        var stub = new StubIntegrator(provider)
+        {
+            Result = result
+        };
         var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), console);
         return (command, console);
     }

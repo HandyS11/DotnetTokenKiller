@@ -20,4 +20,14 @@ internal sealed class GainCommandSettings : CommandSettings
     [CommandOption("--json")]
     [Description("Output raw JSON instead of table")]
     public bool Json { get; init; }
+
+    /// <summary>Gets the export format for raw tracking records (e.g. "csv").</summary>
+    [CommandOption("--export")]
+    [Description("Export raw tracking records in the given format (csv)")]
+    public string? Export { get; init; }
+
+    /// <summary>Gets the command name to filter results by (e.g. "build", "test").</summary>
+    [CommandOption("--command")]
+    [Description("Filter results to a specific command (e.g. build, test, restore, clean)")]
+    public string? Command { get; init; }
 }

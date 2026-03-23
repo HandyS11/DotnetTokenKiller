@@ -11,15 +11,19 @@ public sealed class ProcessCommandRunnerTests
 {
     private readonly ProcessCommandRunner _sut = new();
 
-    private static (string command, string[] args) LongRunningCommand() =>
-        RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? ("ping", ["-n", "5", "10.255.255.1"])   // non-routable: each ping times out ~4 s
+    private static (string command, string[] args) LongRunningCommand()
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ("ping", ["-n", "5", "10.255.255.1"]) // non-routable: each ping times out ~4 s
             : ("sleep", ["30"]);
+    }
 
-    private static (string command, string[] args) EchoCommand(string message) =>
-        RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+    private static (string command, string[] args) EchoCommand(string message)
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? ("cmd", ["/c", "echo", message])
             : ("echo", [message]);
+    }
 
     [Fact]
     public async Task RunCapturedAsync_BasicCommand_CapturesStdOut()
