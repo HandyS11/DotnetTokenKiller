@@ -190,10 +190,22 @@ internal static class IntegratorHelpers
         }
 
         root.TryGetPropertyValue(HooksKey, out var hooksNode);
-        var hooks = hooksNode as JsonObject ?? [];
+        var hooks = hooksNode switch
+        {
+            null => [],
+            JsonObject hooksObj => hooksObj,
+            _ => throw new InvalidOperationException(
+                $"The settings file '{path}' has a '{HooksKey}' property of unexpected type '{hooksNode.GetType().Name}'; expected a JSON object.")
+        };
 
         hooks.TryGetPropertyValue(hookEventKey, out var eventNode);
-        var hookArray = eventNode as JsonArray ?? [];
+        var hookArray = eventNode switch
+        {
+            null => [],
+            JsonArray arr => arr,
+            _ => throw new InvalidOperationException(
+                $"The settings file '{path}' has a '{HooksKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
+        };
 
         if (IsHookAlreadyRegistered(hookArray, hookCommand))
         {
