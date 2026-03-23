@@ -64,6 +64,17 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         await File.WriteAllTextAsync(configPath, json, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc/>
+    public Task DeleteAsync(CancellationToken cancellationToken = default)
+    {
+        if (File.Exists(configPath))
+        {
+            File.Delete(configPath);
+        }
+
+        return Task.CompletedTask;
+    }
+
     private static string GetDefaultConfigPath()
     {
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);

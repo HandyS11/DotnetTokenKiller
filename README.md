@@ -126,4 +126,10 @@ DTK saves raw command output to disk for failed runs by default (`tee.mode = fai
 dtk dotnet test --show-log
 ```
 
+## Inspiration
+
+Inspired by [rtk](https://github.com/rtk-ai/rtk).
+
+## Documentation
+
 For more details see the [full documentation](https://handys11.github.io/DotnetTokenKiller/).

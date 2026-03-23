@@ -88,15 +88,18 @@ dtk gain               # last 30 days
 dtk gain --days 7      # last 7 days
 dtk gain --project     # current project only
 dtk gain --json        # machine-readable JSON output
+dtk gain --export csv  # export raw records as CSV
 ```
 
 ### `dtk reset`
 
-Clear all tracking data:
+Clear tracking data (and optionally all dtk state):
 
 ```sh
-dtk reset          # prompts for confirmation
-dtk reset --force  # skips confirmation
+dtk reset              # prompts for confirmation
+dtk reset --force      # skips confirmation
+dtk reset --all        # also removes tee logs and config file
+dtk reset --all --force  # full cleanup without confirmation
 ```
 
 ### `dtk config`

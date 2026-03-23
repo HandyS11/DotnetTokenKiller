@@ -214,4 +214,27 @@ public sealed class JsonConfigProviderTests : IDisposable
             File.Delete(expectedPath);
         }
     }
+
+    [Fact]
+    public async Task DeleteAsync_DeletesFile_WhenFileExists()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, "{}");
+        var sut = CreateSut();
+
+        await sut.DeleteAsync();
+
+        File.Exists(ConfigPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DoesNotThrow_WhenFileDoesNotExist()
+    {
+        var sut = CreateSut();
+        File.Exists(ConfigPath).Should().BeFalse();
+
+        var act = () => sut.DeleteAsync();
+
+        await act.Should().NotThrowAsync();
+    }
 }

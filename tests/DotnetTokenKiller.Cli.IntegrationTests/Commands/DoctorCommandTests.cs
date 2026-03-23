@@ -80,6 +80,9 @@ public sealed class DoctorCommandTests : IDisposable
 
         public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+
+        public Task DeleteAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class StubCommandRunner(int exitCode) : ICommandRunner

@@ -101,5 +101,8 @@ public sealed class ConfigCommandTests
             Current = config;
             return Task.CompletedTask;
         }
+
+        public Task DeleteAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

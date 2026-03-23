@@ -2,6 +2,7 @@ using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Tracking;
 using FluentAssertions;
 using NSubstitute;
+using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
@@ -61,5 +62,28 @@ public class GainReportUseCaseTests
         var result = await _sut.GetSummaryAsync(30, null);
 
         result.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_DelegatesCorrectDaysToTracker()
+    {
+        IReadOnlyList<CommandRecord> expected = [];
+        _tracker.GetHistoryAsync(7, null, Arg.Any<CancellationToken>()).Returns(expected);
+
+        var result = await _sut.GetHistoryAsync(7, null);
+
+        await _tracker.Received(1).GetHistoryAsync(7, null, Arg.Any<CancellationToken>());
+        result.Should().BeSameAs(expected);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_PassesProjectPath_WhenProvided()
+    {
+        IReadOnlyList<CommandRecord> expected = [];
+        _tracker.GetHistoryAsync(Arg.Any<int>(), "/my/project", Arg.Any<CancellationToken>()).Returns(expected);
+
+        await _sut.GetHistoryAsync(30, "/my/project");
+
+        await _tracker.Received(1).GetHistoryAsync(Arg.Any<int>(), "/my/project", Arg.Any<CancellationToken>());
     }
 }

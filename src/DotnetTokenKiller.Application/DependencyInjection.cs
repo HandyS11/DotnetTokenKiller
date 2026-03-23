@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<FilteredRunUseCase>();
         services.AddTransient<GainReportUseCase>();
         services.AddTransient<ResetTrackingUseCase>();
+        services.AddTransient<FullResetUseCase>();
         services.AddTransient<ConfigSetUseCase>();
         services.AddTransient<DoctorUseCase>();
         services.AddTransient<DotnetBuildFilter>();

@@ -17,4 +17,16 @@ public sealed class GainReportUseCase(ITracker tracker)
     {
         return tracker.GetSummaryAsync(days, projectPath, cancellationToken);
     }
+
+    /// <summary>Returns the raw command history for the given time window.</summary>
+    /// <param name="days">Number of days of history to include.</param>
+    /// <param name="projectPath">Optional project path filter.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
+        int days,
+        string? projectPath,
+        CancellationToken cancellationToken = default)
+    {
+        return tracker.GetHistoryAsync(days, projectPath, cancellationToken);
+    }
 }
