@@ -265,6 +265,26 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_FailuresWithMultipleProjects_UsesPluralProjectInSummary()
+    {
+        // Covers (ProjectCount == 1 ? "" : "s") false branch in FormatFailures summary (line 206)
+        const string input = """
+                               Failed MyTests.FailingTest [1 ms]
+                               Error Message:
+                                 Assert failed
+                               Stack Trace:
+                                  at MyTests.FailingTest() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 2, Skipped: 0, Total: 3, Duration: 100 ms - Tests1.dll
+                             Failed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 50 ms - Tests2.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("2 projects");
+    }
+
+    [Fact]
     public void NormalizeDurationToMs_UnknownUnit_ReturnsValueUnchanged()
     {
         // Covers default arm (line 251) of NormalizeDurationToMs switch via reflection

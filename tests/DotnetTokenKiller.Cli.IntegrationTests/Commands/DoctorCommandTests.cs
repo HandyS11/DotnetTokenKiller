@@ -60,6 +60,35 @@ public sealed class DoctorCommandTests : IDisposable
         console.Output.Should().Contain("tee directory");
     }
 
+    [Fact]
+    public async Task ExecuteAsync_NullDbPathAndTeeDirectory_CallsResolveDefaultMethods()
+    {
+        // Covers ResolveDefaultDbPath() and ResolveDefaultTeeDir() private methods (lines 55-65)
+        // when config returns null for both fields and DTK_DB_PATH is not set
+        var savedEnv = Environment.GetEnvironmentVariable("DTK_DB_PATH");
+        Environment.SetEnvironmentVariable("DTK_DB_PATH", null);
+        try
+        {
+            var console = new TestConsole();
+            var configProvider = new NullPathsConfigProvider();
+            var runner = new StubCommandRunner(0);
+            var useCase = new DoctorUseCase(runner, configProvider);
+            var command = new DoctorCommand(useCase, configProvider, console);
+
+            await command.ExecuteAsync(null!, CancellationToken.None);
+
+            // ResolveDefaultDbPath returns LocalApplicationData/dtk/tracking.db
+            // ResolveDefaultTeeDir returns LocalApplicationData/dtk/tee
+            // The db directory likely won't exist → check fails, exitCode = 1
+            console.Output.Should().Contain("tracking database");
+            console.Output.Should().Contain("tee directory");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTK_DB_PATH", savedEnv);
+        }
+    }
+
     private (DoctorCommand command, TestConsole console) Create(int dotnetExitCode)
     {
         var console = new TestConsole();
@@ -119,6 +148,30 @@ public sealed class DoctorCommandTests : IDisposable
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(exitCode);
+        }
+    }
+
+    /// <summary>Config provider returning null for DbPath and Tee.Directory to trigger default path resolution.</summary>
+    private sealed class NullPathsConfigProvider : IConfigProvider
+    {
+        public DtkConfig Load()
+        {
+            return DtkConfig.Default;
+        }
+
+        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(DtkConfig.Default);
+        }
+
+        public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 }

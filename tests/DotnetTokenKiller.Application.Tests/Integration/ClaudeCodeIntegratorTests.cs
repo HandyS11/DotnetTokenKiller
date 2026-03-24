@@ -6,8 +6,8 @@ namespace DotnetTokenKiller.Application.Tests.Integration;
 
 public sealed class ClaudeCodeIntegratorTests : IDisposable
 {
-    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-claude-test-{Guid.NewGuid()}");
     private readonly ClaudeCodeIntegrator _sut = new();
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-claude-test-{Guid.NewGuid()}");
 
     public void Dispose()
     {
@@ -167,6 +167,32 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*must contain a JSON object at the root*");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_HooksIsNotJsonObject_ThrowsInvalidOperationException()
+    {
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath, """{"hooks": [1, 2, 3]}""");
+
+        var act = () => _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*'hooks' property of unexpected type*expected a JSON object*");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_HookEventKeyIsNotJsonArray_ThrowsInvalidOperationException()
+    {
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath, """{"hooks": {"PreToolUse": "not-an-array"}}""");
+
+        var act = () => _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*'hooks.PreToolUse' property of unexpected type*expected a JSON array*");
     }
 
     [Fact]

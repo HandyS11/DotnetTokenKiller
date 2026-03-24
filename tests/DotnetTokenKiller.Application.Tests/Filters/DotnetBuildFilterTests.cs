@@ -173,6 +173,21 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
+    public void Apply_MultipleWarningsWithErrors_UsesPlural()
+    {
+        // Covers (warnings.Count == 1 ? "" : "s") false branch at line 147 — plural "warnings suppressed"
+        const string input = """
+                             /path/File.cs(1,1): error CS0001: error message [Project.csproj]
+                             /path/File.cs(2,1): warning CS0002: warning one [Project.csproj]
+                             /path/File.cs(3,1): warning CS0003: warning two [Project.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input);
+
+        result.Should().Contain("2 warnings suppressed");
+    }
+
+    [Fact]
     public void Apply_FormatElapsed_WhenTimeSpanPatternDoesNotMatch_ReturnsEmpty()
     {
         // Covers FormatElapsed early return (lines 181-182) via reflection

@@ -2,7 +2,6 @@ using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using FluentAssertions;
 using NSubstitute;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
@@ -15,8 +14,8 @@ public sealed class ConfigSetUseCaseTests
     public ConfigSetUseCaseTests()
     {
         _sut = new ConfigSetUseCase(_configProvider);
-        _configProvider.LoadAsync(default).ReturnsForAnyArgs(DtkConfig.Default);
-        _configProvider.SaveAsync(default!, default)
+        _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
+        _configProvider.SaveAsync(null!)
             .ReturnsForAnyArgs(Task.CompletedTask)
             .AndDoes(call => _savedConfig = call.Arg<DtkConfig>());
     }
@@ -164,6 +163,26 @@ public sealed class ConfigSetUseCaseTests
     public async Task ExecuteAsync_RetentionDaysBelowMin_ThrowsFormatException()
     {
         var act = () => _sut.ExecuteAsync("tracking.retentionDays", "0");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*Minimum*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InvalidLongValue_ThrowsFormatException()
+    {
+        // Covers ParseLong parse failure (lines 164-166) — tee.maxFileSizeBytes uses ParseLong
+        var act = () => _sut.ExecuteAsync("tee.maxFileSizeBytes", "notanumber");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*integer*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_LongValueBelowMin_ThrowsFormatException()
+    {
+        // Covers ParseLong below-min check (lines 170-172)
+        var act = () => _sut.ExecuteAsync("tee.maxFileSizeBytes", "-1");
 
         await act.Should().ThrowAsync<FormatException>()
             .WithMessage("*Minimum*");
