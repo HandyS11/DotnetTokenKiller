@@ -94,10 +94,25 @@ public sealed class FilteredRunUseCase(
 
         var commandSlug = args.Count > 0 ? args[0] : command;
 
-        // Tee: silent — errors never surface
+        await TeeIfConfiguredAsync(stripped, commandSlug, result.ExitCode, showLogHint, cancellationToken)
+            .ConfigureAwait(false);
+
+        await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.ExitCode;
+    }
+
+    private async Task TeeIfConfiguredAsync(
+        string stripped,
+        string commandSlug,
+        int exitCode,
+        bool showLogHint,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken)
+            var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, exitCode, cancellationToken)
                 .ConfigureAwait(false);
             if (hint is not null && showLogHint)
             {
@@ -108,11 +123,6 @@ public sealed class FilteredRunUseCase(
         {
             // Intentional: tee errors must not surface to the user
         }
-
-        await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, cancellationToken)
-            .ConfigureAwait(false);
-
-        return result.ExitCode;
     }
 
     private async Task TrackIfEnabledAsync(

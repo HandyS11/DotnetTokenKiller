@@ -17,7 +17,7 @@ public sealed class TypeResolverTests
         var resolver = Activator.CreateInstance(resolverType, provider)!;
         var resolveMethod = resolverType.GetMethod("Resolve")!;
 
-        var result = resolveMethod.Invoke(resolver, [(Type?)null]);
+        var result = resolveMethod.Invoke(resolver, [null]);
 
         result.Should().BeNull();
         (resolver as IDisposable)?.Dispose();

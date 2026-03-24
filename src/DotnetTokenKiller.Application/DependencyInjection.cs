@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
+using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Integration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,10 +20,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<FullResetUseCase>();
         services.AddTransient<ConfigSetUseCase>();
         services.AddTransient<DoctorUseCase>();
-        services.AddTransient<DotnetBuildFilter>();
-        services.AddTransient<DotnetTestFilter>();
-        services.AddTransient<DotnetRestoreFilter>();
-        services.AddTransient<DotnetCleanFilter>();
+        services.AddKeyedTransient<IOutputFilter, DotnetBuildFilter>(FilterKeys.Build);
+        services.AddKeyedTransient<IOutputFilter, DotnetTestFilter>(FilterKeys.Test);
+        services.AddKeyedTransient<IOutputFilter, DotnetRestoreFilter>(FilterKeys.Restore);
+        services.AddKeyedTransient<IOutputFilter, DotnetCleanFilter>(FilterKeys.Clean);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();

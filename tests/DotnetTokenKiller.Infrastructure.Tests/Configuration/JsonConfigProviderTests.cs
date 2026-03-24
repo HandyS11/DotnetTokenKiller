@@ -11,19 +11,17 @@ public sealed class JsonConfigProviderTests : IDisposable
 
     private string ConfigPath => Path.Combine(_tempDir, "config.json");
 
-    private JsonConfigProvider CreateSut()
-    {
-        return new JsonConfigProvider(ConfigPath);
-    }
-
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
         {
             Directory.Delete(_tempDir, true);
         }
+    }
 
-        GC.SuppressFinalize(this);
+    private JsonConfigProvider CreateSut()
+    {
+        return new JsonConfigProvider(ConfigPath);
     }
 
     [Fact]

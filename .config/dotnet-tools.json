@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "docfx": {
+      "version": "2.78.5",
+      "commands": [
+        "docfx"
+      ],
+      "rollForward": true
+    },
+    "dotnettokenkiller": {
+      "version": "0.3.0",
+      "commands": [
+        "dtk"
+      ],
+      "rollForward": true
+    },
+    "jetbrains.resharper.globaltools": {
+      "version": "2025.3.3",
+      "commands": [
+        "jb"
+      ],
+      "rollForward": true
+    }
+  }
+}

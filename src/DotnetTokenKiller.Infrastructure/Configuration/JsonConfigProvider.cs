@@ -81,12 +81,22 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         return Path.Combine(appData, "dtk", "config.json");
     }
 
+    /// <summary>Passes <paramref name="value"/> through as nullable, breaking the NRT flow chain.
+    /// JSON deserialization can produce null for absent sub-objects even when annotated non-nullable.</summary>
+    /// <typeparam name="T">The reference type.</typeparam>
+    /// <param name="value">The value to treat as nullable.</param>
+    private static T? AsNullable<T>(T? value) where T : class
+    {
+        return value;
+    }
+
     private static DtkConfig Merge(DtkConfig loaded)
     {
         var defaults = DtkConfig.Default;
-        var tracking = loaded.Tracking;
-        var display = loaded.Display;
-        var tee = loaded.Tee;
+        // JSON deserialization may produce null for absent sub-objects despite non-nullable NRT annotations
+        var tracking = AsNullable(loaded.Tracking);
+        var display = AsNullable(loaded.Display);
+        var tee = AsNullable(loaded.Tee);
         return new DtkConfig(
             new TrackingConfig(
                 tracking?.Enabled ?? defaults.Tracking.Enabled,
@@ -119,11 +129,6 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
             MaxFiles = Math.Max(1, config.Tee.MaxFiles),
             MaxFileSizeBytes = Math.Max(0, config.Tee.MaxFileSizeBytes)
         };
-        return config with
-        {
-            Tracking = tracking,
-            Display = display,
-            Tee = tee
-        };
+        return new DtkConfig(tracking, display, tee);
     }
 }

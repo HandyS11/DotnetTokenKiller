@@ -13,13 +13,13 @@ namespace DotnetTokenKiller.Application.Tests.UseCases;
 public class FilteredRunUseCaseTests
 {
     private static readonly string[] BuildArgs = ["build"];
+    private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
+    private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
 
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
-    private readonly ITracker _tracker = Substitute.For<ITracker>();
-    private readonly ITeeService _teeService = Substitute.For<ITeeService>();
-    private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
-    private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly FilteredRunUseCase _sut;
+    private readonly ITeeService _teeService = Substitute.For<ITeeService>();
+    private readonly ITracker _tracker = Substitute.For<ITracker>();
 
     public FilteredRunUseCaseTests()
     {
@@ -235,7 +235,7 @@ public class FilteredRunUseCaseTests
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, false);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         writer.ToString().Should().NotContain("[full output:");
     }

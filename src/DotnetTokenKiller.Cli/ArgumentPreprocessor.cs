@@ -13,14 +13,29 @@ namespace DotnetTokenKiller.Cli;
 /// </remarks>
 internal static class ArgumentPreprocessor
 {
-    /// <summary>Dotnet subcommands handled by dtk. Keep in sync with the branch registrations in Program.cs.</summary>
+    /// <summary>Subcommand name for <c>dotnet build</c>. Used in both the command registration and passthrough detection.</summary>
+    internal const string BuildSubcommand = "build";
+
+    /// <summary>Subcommand name for <c>dotnet test</c>. Used in both the command registration and passthrough detection.</summary>
+    internal const string TestSubcommand = "test";
+
+    /// <summary>Subcommand name for <c>dotnet restore</c>. Used in both the command registration and passthrough detection.</summary>
+    internal const string RestoreSubcommand = "restore";
+
+    /// <summary>Subcommand name for <c>dotnet clean</c>. Used in both the command registration and passthrough detection.</summary>
+    internal const string CleanSubcommand = "clean";
+
+    /// <summary>
+    /// Dotnet subcommands handled by dtk. This set is the single source of truth — the command
+    /// registrations in Program.cs reference these constants to stay in sync automatically.
+    /// </summary>
     internal static readonly IReadOnlySet<string> KnownSubcommands =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "build",
-            "test",
-            "restore",
-            "clean"
+            BuildSubcommand,
+            TestSubcommand,
+            RestoreSubcommand,
+            CleanSubcommand
         };
 
     private static readonly HashSet<string> DtkOptions =

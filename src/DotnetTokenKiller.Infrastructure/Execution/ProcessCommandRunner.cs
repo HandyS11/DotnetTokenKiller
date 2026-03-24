@@ -29,7 +29,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
                             ?? throw new InvalidOperationException($"Failed to start process: {command}");
 
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
-        var registration = cancellationToken.Register(() => KillProcess(process));
+        var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
 #pragma warning restore CA2016
         try
         {
@@ -71,7 +71,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
                             ?? throw new InvalidOperationException($"Failed to start process: {command}");
 
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
-        var registration = cancellationToken.Register(() => KillProcess(process));
+        var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
 #pragma warning restore CA2016
         try
         {

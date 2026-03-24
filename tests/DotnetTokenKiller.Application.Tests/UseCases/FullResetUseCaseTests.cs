@@ -3,16 +3,15 @@ using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
 using NSubstitute;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
 public class FullResetUseCaseTests
 {
-    private readonly ITracker _tracker = Substitute.For<ITracker>();
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
-    private readonly ITeeService _teeService = Substitute.For<ITeeService>();
     private readonly FullResetUseCase _sut;
+    private readonly ITeeService _teeService = Substitute.For<ITeeService>();
+    private readonly ITracker _tracker = Substitute.For<ITracker>();
 
     public FullResetUseCaseTests()
     {

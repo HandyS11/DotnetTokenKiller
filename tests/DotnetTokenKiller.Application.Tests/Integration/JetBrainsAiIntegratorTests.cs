@@ -1,13 +1,12 @@
 using DotnetTokenKiller.Application.Integration;
 using FluentAssertions;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.Integration;
 
 public sealed class JetBrainsAiIntegratorTests : IDisposable
 {
-    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-jetbrains-test-{Guid.NewGuid()}");
     private readonly JetBrainsAiIntegrator _sut = new();
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-jetbrains-test-{Guid.NewGuid()}");
 
     private string GuidelinesPath => Path.Combine(_tempDir, ".junie", "guidelines.md");
 

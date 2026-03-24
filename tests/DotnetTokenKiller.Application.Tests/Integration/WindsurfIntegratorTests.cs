@@ -1,13 +1,12 @@
 using DotnetTokenKiller.Application.Integration;
 using FluentAssertions;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.Integration;
 
 public sealed class WindsurfIntegratorTests : IDisposable
 {
-    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-windsurf-test-{Guid.NewGuid()}");
     private readonly WindsurfIntegrator _sut = new();
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-windsurf-test-{Guid.NewGuid()}");
 
     private string RulePath => Path.Combine(_tempDir, ".windsurf", "rules", "dtk.md");
 

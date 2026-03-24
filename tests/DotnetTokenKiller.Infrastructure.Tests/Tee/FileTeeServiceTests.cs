@@ -16,8 +16,6 @@ public sealed class FileTeeServiceTests : IDisposable
         {
             Directory.Delete(_tempDir, true);
         }
-
-        GC.SuppressFinalize(this);
     }
 
     private FileTeeService CreateSut(TeeConfig? teeConfig = null)
@@ -121,7 +119,7 @@ public sealed class FileTeeServiceTests : IDisposable
         const long maxBytes = 100L;
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
 
-        await sut.TeeAndHintAsync(LargeOutput(600), "build", 0);
+        await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
 
         var file = Directory.GetFiles(_tempDir).Single();
         var content = await File.ReadAllTextAsync(file);
@@ -265,17 +263,17 @@ public sealed class FileTeeServiceTests : IDisposable
     }
 
     /// <summary>Nested fake — avoids NSubstitute dependency (not referenced in this test csproj).</summary>
-    /// <param name="config">The configuration to return from <see cref="LoadAsync"/>.</param>
-    private sealed class FakeConfigProvider(DtkConfig config) : IConfigProvider
+    /// <param name="initialConfig">The configuration to return from <see cref="LoadAsync"/>.</param>
+    private sealed class FakeConfigProvider(DtkConfig initialConfig) : IConfigProvider
     {
         public DtkConfig Load()
         {
-            return config;
+            return initialConfig;
         }
 
         public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(config);
+            return Task.FromResult(initialConfig);
         }
 
         public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
