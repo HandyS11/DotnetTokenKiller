@@ -11,7 +11,8 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <param name="filter">The restore output filter.</param>
 internal sealed class DotnetRestoreCommand(
     FilteredRunUseCase filteredRun,
-    [FromKeyedServices("restore")] IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
+    [FromKeyedServices(FilterKeys.Restore)]
+    IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
     /// <inheritdoc/>
     public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,

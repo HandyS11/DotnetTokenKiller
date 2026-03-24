@@ -20,10 +20,10 @@ public static class ServiceCollectionExtensions
         services.AddTransient<FullResetUseCase>();
         services.AddTransient<ConfigSetUseCase>();
         services.AddTransient<DoctorUseCase>();
-        services.AddKeyedTransient<IOutputFilter, DotnetBuildFilter>("build");
-        services.AddKeyedTransient<IOutputFilter, DotnetTestFilter>("test");
-        services.AddKeyedTransient<IOutputFilter, DotnetRestoreFilter>("restore");
-        services.AddKeyedTransient<IOutputFilter, DotnetCleanFilter>("clean");
+        services.AddKeyedTransient<IOutputFilter, DotnetBuildFilter>(FilterKeys.Build);
+        services.AddKeyedTransient<IOutputFilter, DotnetTestFilter>(FilterKeys.Test);
+        services.AddKeyedTransient<IOutputFilter, DotnetRestoreFilter>(FilterKeys.Restore);
+        services.AddKeyedTransient<IOutputFilter, DotnetCleanFilter>(FilterKeys.Clean);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();

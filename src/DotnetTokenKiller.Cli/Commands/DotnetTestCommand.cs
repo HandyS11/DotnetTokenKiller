@@ -11,7 +11,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <param name="filter">The test output filter.</param>
 internal sealed class DotnetTestCommand(
     FilteredRunUseCase filteredRun,
-    [FromKeyedServices("test")] IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
+    [FromKeyedServices(FilterKeys.Test)] IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
     /// <inheritdoc/>
     public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,

@@ -35,7 +35,7 @@ internal abstract class IntegrateCommandBase(
         }
         catch (InvalidOperationException ex)
         {
-            console.MarkupLine($"[red]error:[/] {Markup.Escape(ex.Message)}");
+            console.MarkupLine($"[red]Error:[/] {Markup.Escape(ex.Message)}");
             return 1;
         }
 
