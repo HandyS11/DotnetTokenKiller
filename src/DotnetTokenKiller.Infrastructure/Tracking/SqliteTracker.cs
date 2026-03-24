@@ -6,15 +6,147 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 
 /// <summary>Persists command tracking records in a SQLite database.</summary>
 /// <param name="connectionString">The SQLite connection string.</param>
-/// <param name="retentionDays">Number of days to retain records before automatic cleanup.</param>
-public sealed class SqliteTracker(string connectionString, int retentionDays = 90)
+/// <param name="defaultRetentionDays">Number of days to retain records before automatic cleanup.</param>
+public sealed class SqliteTracker(string connectionString, int defaultRetentionDays = 90)
     : ITracker, IDisposable, IAsyncDisposable
 {
     private const int CleanupIntervalInserts = 50;
-    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private readonly SqliteConnection _connection = new(connectionString);
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
     private bool _initialized;
     private int _insertsSinceCleanup;
+
+    /// <summary>Asynchronously releases managed resources.</summary>
+    public async ValueTask DisposeAsync()
+    {
+        _semaphore.Dispose();
+        await _connection.DisposeAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Releases managed resources.</summary>
+    public void Dispose()
+    {
+        _semaphore.Dispose();
+        _connection.Dispose();
+    }
+
+    /// <inheritdoc/>
+    public async Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+            await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
+            cmd.CommandText = """
+                              INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
+                                  saved_tokens, savings_percentage, execution_time_ms)
+                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms)
+                              """;
+            cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("O", CultureInfo.InvariantCulture));
+            cmd.Parameters.AddWithValue("@cmd", record.Command);
+            cmd.Parameters.AddWithValue("@path", record.ProjectPath);
+            cmd.Parameters.AddWithValue("@in", record.InputTokens);
+            cmd.Parameters.AddWithValue("@out", record.OutputTokens);
+            cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
+            cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
+            cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
+            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+            _insertsSinceCleanup++;
+            if (_insertsSinceCleanup >= CleanupIntervalInserts)
+            {
+                _insertsSinceCleanup = 0;
+                await CleanupCoreAsync(defaultRetentionDays, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public Task<GainSummary> GetSummaryAsync(
+        int days,
+        string? projectPath,
+        string? commandFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+                           SELECT command,
+                                  COUNT(*) as run_count,
+                                  SUM(input_tokens) as total_input,
+                                  SUM(output_tokens) as total_output,
+                                  SUM(saved_tokens) as total_saved,
+                                  AVG(savings_percentage) as avg_pct
+                           FROM commands
+                           WHERE timestamp >= @since
+                             AND (@path IS NULL OR project_path = @path)
+                             AND (@cmd IS NULL OR command = @cmd)
+                           GROUP BY command
+                           """;
+
+        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
+        int days,
+        string? projectPath,
+        string? commandFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+                           SELECT timestamp, command, project_path, input_tokens, output_tokens,
+                                  saved_tokens, savings_percentage, execution_time_ms
+                           FROM commands
+                           WHERE timestamp >= @since
+                             AND (@path IS NULL OR project_path = @path)
+                             AND (@cmd IS NULL OR command = @cmd)
+                           ORDER BY timestamp DESC
+                           """;
+
+        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadHistoryAsync, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)
+    {
+        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            await CleanupCoreAsync(retentionDays, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task ResetAsync(CancellationToken cancellationToken = default)
+    {
+        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+            await using var cmd = _connection.CreateCommand();
+#pragma warning restore CA2007
+            cmd.CommandText = "DELETE FROM commands";
+            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
 
     internal static string GetDefaultDbPath()
     {
@@ -76,90 +208,6 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
                           CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
                           """;
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
-    public async Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(record);
-
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = _connection.CreateCommand();
-#pragma warning restore CA2007
-            cmd.CommandText = """
-                              INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms)
-                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms)
-                              """;
-            cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("O", CultureInfo.InvariantCulture));
-            cmd.Parameters.AddWithValue("@cmd", record.Command);
-            cmd.Parameters.AddWithValue("@path", record.ProjectPath);
-            cmd.Parameters.AddWithValue("@in", record.InputTokens);
-            cmd.Parameters.AddWithValue("@out", record.OutputTokens);
-            cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
-            cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
-            cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
-            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-            _insertsSinceCleanup++;
-            if (_insertsSinceCleanup >= CleanupIntervalInserts)
-            {
-                _insertsSinceCleanup = 0;
-                await CleanupCoreAsync(retentionDays, cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    /// <inheritdoc/>
-    public Task<GainSummary> GetSummaryAsync(
-        int days,
-        string? projectPath,
-        string? commandFilter = null,
-        CancellationToken cancellationToken = default)
-    {
-        const string sql = """
-                           SELECT command,
-                                  COUNT(*) as run_count,
-                                  SUM(input_tokens) as total_input,
-                                  SUM(output_tokens) as total_output,
-                                  SUM(saved_tokens) as total_saved,
-                                  AVG(savings_percentage) as avg_pct
-                           FROM commands
-                           WHERE timestamp >= @since
-                             AND (@path IS NULL OR project_path = @path)
-                             AND (@cmd IS NULL OR command = @cmd)
-                           GROUP BY command
-                           """;
-
-        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, cancellationToken);
-    }
-
-    /// <inheritdoc/>
-    public Task<IReadOnlyList<CommandRecord>> GetHistoryAsync(
-        int days,
-        string? projectPath,
-        string? commandFilter = null,
-        CancellationToken cancellationToken = default)
-    {
-        const string sql = """
-                           SELECT timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms
-                           FROM commands
-                           WHERE timestamp >= @since
-                             AND (@path IS NULL OR project_path = @path)
-                             AND (@cmd IS NULL OR command = @cmd)
-                           ORDER BY timestamp DESC
-                           """;
-
-        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadHistoryAsync, cancellationToken);
     }
 
     private async Task<T> ExecuteWithFilterAsync<T>(
@@ -246,40 +294,6 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
         return results;
     }
 
-    /// <inheritdoc/>
-    public async Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)
-    {
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            await CleanupCoreAsync(retentionDays, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    /// <inheritdoc/>
-    public async Task ResetAsync(CancellationToken cancellationToken = default)
-    {
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = _connection.CreateCommand();
-#pragma warning restore CA2007
-            cmd.CommandText = "DELETE FROM commands";
-            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
     private async Task CleanupCoreAsync(int days, CancellationToken cancellationToken)
     {
         var cutoff = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
@@ -289,19 +303,5 @@ public sealed class SqliteTracker(string connectionString, int retentionDays = 9
         cmd.CommandText = "DELETE FROM commands WHERE timestamp < @cutoff";
         cmd.Parameters.AddWithValue("@cutoff", cutoff);
         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Releases managed resources.</summary>
-    public void Dispose()
-    {
-        _semaphore.Dispose();
-        _connection.Dispose();
-    }
-
-    /// <summary>Asynchronously releases managed resources.</summary>
-    public async ValueTask DisposeAsync()
-    {
-        _semaphore.Dispose();
-        await _connection.DisposeAsync().ConfigureAwait(false);
     }
 }

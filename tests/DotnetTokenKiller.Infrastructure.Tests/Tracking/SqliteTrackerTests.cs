@@ -128,9 +128,9 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task GetSummaryAsync_FiltersByCommandFilter()
     {
-        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord());
         await _sut.RecordAsync(MakeRecord("test"));
-        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord());
 
         var summary = await _sut.GetSummaryAsync(30, null, "build");
 
@@ -142,7 +142,7 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task GetHistoryAsync_FiltersByCommandFilter()
     {
-        await _sut.RecordAsync(MakeRecord("build"));
+        await _sut.RecordAsync(MakeRecord());
         await _sut.RecordAsync(MakeRecord("test"));
 
         var history = await _sut.GetHistoryAsync(30, null, "test");

@@ -1,14 +1,13 @@
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Tracking;
 using NSubstitute;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
 public class ResetTrackingUseCaseTests
 {
-    private readonly ITracker _tracker = Substitute.For<ITracker>();
     private readonly ResetTrackingUseCase _sut;
+    private readonly ITracker _tracker = Substitute.For<ITracker>();
 
     public ResetTrackingUseCaseTests()
     {

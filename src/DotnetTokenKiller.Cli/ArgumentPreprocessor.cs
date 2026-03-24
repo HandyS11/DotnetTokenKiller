@@ -15,10 +15,13 @@ internal static class ArgumentPreprocessor
 {
     /// <summary>Subcommand name for <c>dotnet build</c>. Used in both the command registration and passthrough detection.</summary>
     internal const string BuildSubcommand = "build";
+
     /// <summary>Subcommand name for <c>dotnet test</c>. Used in both the command registration and passthrough detection.</summary>
     internal const string TestSubcommand = "test";
+
     /// <summary>Subcommand name for <c>dotnet restore</c>. Used in both the command registration and passthrough detection.</summary>
     internal const string RestoreSubcommand = "restore";
+
     /// <summary>Subcommand name for <c>dotnet clean</c>. Used in both the command registration and passthrough detection.</summary>
     internal const string CleanSubcommand = "clean";
 

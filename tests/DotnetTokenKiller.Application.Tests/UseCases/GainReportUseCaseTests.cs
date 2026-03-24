@@ -2,14 +2,13 @@ using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Tracking;
 using FluentAssertions;
 using NSubstitute;
-using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
 public class GainReportUseCaseTests
 {
-    private readonly ITracker _tracker = Substitute.For<ITracker>();
     private readonly GainReportUseCase _sut;
+    private readonly ITracker _tracker = Substitute.For<ITracker>();
 
     public GainReportUseCaseTests()
     {

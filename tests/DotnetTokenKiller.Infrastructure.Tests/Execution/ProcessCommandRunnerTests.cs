@@ -50,8 +50,9 @@ public sealed class ProcessCommandRunnerTests
         // Covers KillProcess when process has not exited (lines 90-93)
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         var (cmd, args) = LongRunningCommand();
+        var token = cts.Token;
 
-        var act = async () => await _sut.RunCapturedAsync(cmd, args, cts.Token);
+        var act = async () => await _sut.RunCapturedAsync(cmd, args, token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -62,8 +63,9 @@ public sealed class ProcessCommandRunnerTests
         // Covers KillProcess for RunPassthroughAsync path
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         var (cmd, args) = LongRunningCommand();
+        var token = cts.Token;
 
-        var act = async () => await _sut.RunPassthroughAsync(cmd, args, cts.Token);
+        var act = async () => await _sut.RunPassthroughAsync(cmd, args, token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -75,10 +77,7 @@ public sealed class ProcessCommandRunnerTests
             .GetMethod("KillProcess", BindingFlags.NonPublic | BindingFlags.Static)!;
 
         using var unstarted = new Process();
-
-        var act = () => killMethod.Invoke(null, [unstarted]);
-
-        act.Should().NotThrow();
+        killMethod.Invoke(null, [unstarted]).Should().BeNull(); // void method returns null on success
     }
 
     [Fact]
@@ -102,9 +101,6 @@ public sealed class ProcessCommandRunnerTests
 
         using var exited = Process.Start(psi)!;
         await exited.WaitForExitAsync();
-
-        var act = () => killMethod.Invoke(null, [exited]);
-
-        act.Should().NotThrow();
+        killMethod.Invoke(null, [exited]).Should().BeNull(); // void method returns null on success
     }
 }

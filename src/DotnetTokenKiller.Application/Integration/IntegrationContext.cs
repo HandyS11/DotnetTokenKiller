@@ -15,10 +15,13 @@ internal sealed class IntegrationContext
 
     /// <summary>Gets a value indicating whether existing files should be overwritten.</summary>
     internal bool Force { get; }
+
     /// <summary>Gets the list of file paths created during this integration run.</summary>
     internal List<string> Created { get; } = [];
+
     /// <summary>Gets the list of file paths updated during this integration run.</summary>
     internal List<string> Updated { get; } = [];
+
     /// <summary>Gets the list of file paths skipped because they already existed and <see cref="Force"/> is <see langword="false"/>.</summary>
     internal List<string> Skipped { get; } = [];
 

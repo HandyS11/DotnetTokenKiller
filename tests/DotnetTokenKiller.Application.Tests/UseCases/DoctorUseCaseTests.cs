@@ -16,8 +16,8 @@ public sealed class DoctorUseCaseTests : IDisposable
     public DoctorUseCaseTests()
     {
         _sut = new DoctorUseCase(_runner, _configProvider);
-        _configProvider.LoadAsync(default).ReturnsForAnyArgs(DtkConfig.Default);
-        _runner.RunCapturedAsync(default!, default!, default)
+        _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
+        _runner.RunCapturedAsync(default!, default!)
             .ReturnsForAnyArgs(new CommandResult("10.0.0", string.Empty, 0));
     }
 
@@ -32,7 +32,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     [Fact]
     public async Task RunAsync_DotnetAvailable_DotnetCheckPasses()
     {
-        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), default)
+        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
             .ReturnsForAnyArgs(new CommandResult("10.0.100", string.Empty, 0));
 
         var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
@@ -45,7 +45,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     [Fact]
     public async Task RunAsync_DotnetNotFound_DotnetCheckFails()
     {
-        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), default)
+        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
             .ReturnsForAnyArgs(Task.FromException<CommandResult>(
                 new InvalidOperationException("dotnet not found")));
 
@@ -59,7 +59,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     [Fact]
     public async Task RunAsync_DotnetExitsNonZero_DotnetCheckFails()
     {
-        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), default)
+        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
             .ReturnsForAnyArgs(new CommandResult(string.Empty, string.Empty, 1));
 
         var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
@@ -71,7 +71,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     [Fact]
     public async Task RunAsync_ConfigLoadsSuccessfully_ConfigCheckPasses()
     {
-        _configProvider.LoadAsync(default).ReturnsForAnyArgs(DtkConfig.Default);
+        _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
 
         var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
 
@@ -155,7 +155,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     public async Task RunAsync_ConfigLoadThrows_ConfigCheckFails()
     {
         // Covers CheckConfigAsync catch block (lines 68-70)
-        _configProvider.LoadAsync(default)
+        _configProvider.LoadAsync()
             .ReturnsForAnyArgs(Task.FromException<DtkConfig>(new IOException("Config file corrupted")));
 
         var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
