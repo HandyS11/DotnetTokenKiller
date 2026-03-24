@@ -1,5 +1,6 @@
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Domain.Integration;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -24,9 +25,19 @@ internal abstract class IntegrateCommandBase(
         ArgumentNullException.ThrowIfNull(settings);
 
         var directory = settings.Directory ?? Environment.CurrentDirectory;
-        var result = await integrateUseCase
-            .RunAsync(ProviderName, directory, settings.Force, cancellationToken)
-            .ConfigureAwait(false);
+
+        IntegrationResult result;
+        try
+        {
+            result = await integrateUseCase
+                .RunAsync(ProviderName, directory, settings.Force, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            console.MarkupLine($"[red]error:[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
 
         foreach (var file in result.CreatedFiles)
         {

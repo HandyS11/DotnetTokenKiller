@@ -1,6 +1,7 @@
-using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Domain.Filters;
+using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands;
@@ -10,7 +11,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <param name="filter">The test output filter.</param>
 internal sealed class DotnetTestCommand(
     FilteredRunUseCase filteredRun,
-    DotnetTestFilter filter) : AsyncCommand<DotnetCommandSettings>
+    [FromKeyedServices("test")] IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
     /// <inheritdoc/>
     public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,

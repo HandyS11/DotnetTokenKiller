@@ -63,18 +63,18 @@ try
         config.AddBranch(dotnetCmd, dotnet =>
         {
             dotnet.SetDescription("Run dotnet commands with filtered output");
-            dotnet.AddCommand<DotnetBuildCommand>("build")
+            dotnet.AddCommand<DotnetBuildCommand>(ArgumentPreprocessor.BuildSubcommand)
                 .WithDescription("Run dotnet build with filtered output")
                 .WithExample(dotnetCmd, "build", "MyApp.slnx")
                 .WithExample(dotnetCmd, "build", "src/MyApp.csproj", "--no-restore");
-            dotnet.AddCommand<DotnetTestCommand>("test")
+            dotnet.AddCommand<DotnetTestCommand>(ArgumentPreprocessor.TestSubcommand)
                 .WithDescription("Run dotnet test with filtered output")
                 .WithExample(dotnetCmd, "test")
                 .WithExample(dotnetCmd, "test", "--filter", "Category=Unit");
-            dotnet.AddCommand<DotnetRestoreCommand>("restore")
+            dotnet.AddCommand<DotnetRestoreCommand>(ArgumentPreprocessor.RestoreSubcommand)
                 .WithDescription("Run dotnet restore with filtered output")
                 .WithExample(dotnetCmd, "restore");
-            dotnet.AddCommand<DotnetCleanCommand>("clean")
+            dotnet.AddCommand<DotnetCleanCommand>(ArgumentPreprocessor.CleanSubcommand)
                 .WithDescription("Run dotnet clean with filtered output")
                 .WithExample(dotnetCmd, "clean");
         });
