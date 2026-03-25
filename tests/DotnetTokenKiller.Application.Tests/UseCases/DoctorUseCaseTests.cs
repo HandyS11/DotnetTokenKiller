@@ -17,7 +17,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         _sut = new DoctorUseCase(_runner, _configProvider);
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
-        _runner.RunCapturedAsync(default!, default!)
+        _runner.RunCapturedAsync(null!, null!)
             .ReturnsForAnyArgs(new CommandResult("10.0.0", string.Empty, 0));
     }
 

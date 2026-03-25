@@ -71,10 +71,10 @@ public class IntegrateUseCaseTests
 
     private sealed class StubIntegrator(string providerName) : IProviderIntegrator
     {
-        public string ProviderName => providerName;
         public string? LastDirectory { get; private set; }
         public bool LastForce { get; private set; }
-        public IntegrationResult Result { get; set; } = new([], [], []);
+        public IntegrationResult Result { get; init; } = new([], [], []);
+        public string ProviderName => providerName;
 
         public Task<IntegrationResult> IntegrateAsync(
             string directory,

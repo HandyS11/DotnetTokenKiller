@@ -26,6 +26,12 @@ dotnet format DotnetTokenKiller.slnx --no-restore
 
 # Verify formatting without making changes
 dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
+
+# Inspect code quality with ReSharper CLT (jb is a local dotnet tool)
+jb inspectcode DotnetTokenKiller.slnx --output=artifacts/inspectcode.xml --format=Xml
+
+# Apply ReSharper cleanup (reformat + syntax style) — run after build
+jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Syntax Style"
 ```
 
 ## Git Hooks
