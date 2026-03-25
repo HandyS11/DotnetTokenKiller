@@ -130,4 +130,48 @@ public sealed class ArgumentPreprocessorTests
 
         result.Should().Equal("DOTNET", "BUILD", "--", "MyProject.slnx");
     }
+
+    [Fact]
+    public void InsertSeparator_ReturnsOriginal_WhenOnlyQuietFlagPresent()
+    {
+        var args = new[]
+        {
+            "dotnet", "test", "-q"
+        };
+
+        var result = ArgumentPreprocessor.InsertSeparator(args);
+
+        result.Should().BeSameAs(args);
+    }
+
+    [Fact]
+    public void InsertSeparator_ReturnsOriginal_WhenOnlyQuietLongFlagPresent()
+    {
+        var args = new[]
+        {
+            "dotnet", "test", "--quiet"
+        };
+
+        var result = ArgumentPreprocessor.InsertSeparator(args);
+
+        result.Should().BeSameAs(args);
+    }
+
+    [Fact]
+    public void InsertSeparator_PartitionsQuietFlagBeforeDoubleDash()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(
+            ["dotnet", "test", "-q", "--filter", "Category=Unit"]);
+
+        result.Should().Equal("dotnet", "test", "-q", "--", "--filter", "Category=Unit");
+    }
+
+    [Fact]
+    public void InsertSeparator_PartitionsQuietLongFlagBeforeDoubleDash()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(
+            ["dotnet", "test", "--quiet", "--filter", "Category=Unit"]);
+
+        result.Should().Equal("dotnet", "test", "--quiet", "--", "--filter", "Category=Unit");
+    }
 }

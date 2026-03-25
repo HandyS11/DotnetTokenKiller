@@ -43,7 +43,9 @@ internal static class ArgumentPreprocessor
         {
             "-v",
             "--verbose",
-            "--show-log"
+            "--show-log",
+            "-q",
+            "--quiet"
         };
 
     /// <summary>
