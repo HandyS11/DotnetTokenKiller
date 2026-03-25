@@ -21,7 +21,7 @@ Fewer tokens in means lower cost and less context consumed.
 ## Installation
 
 ```sh
-dotnet tool install -g DotnetTokenKiller   # requires .NET 10 SDK
+dotnet tool install -g DotnetTokenKiller   # requires .NET 10 SDK (full SDK, not just runtime)
 ```
 
 ## Usage

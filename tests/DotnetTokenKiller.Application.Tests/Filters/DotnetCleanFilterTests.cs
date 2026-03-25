@@ -37,7 +37,7 @@ public class DotnetCleanFilterTests
     }
 
     [Fact]
-    public void Apply_FailedBuild_ShowsUpToFiveErrorLines()
+    public void Apply_FailedBuild_ShowsUpToFiveErrorLinesAndTruncationNotice()
     {
         const string input = """
                              MSBuild version 17.11.9+a69bbaaf5 for .NET
@@ -53,9 +53,14 @@ public class DotnetCleanFilterTests
                              Time Elapsed 00:00:00.10
                              """;
         var result = _sut.Apply(input);
-        var errorLines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var outputLines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var errorLines = outputLines.Where(l =>
+                l.Contains("error", StringComparison.OrdinalIgnoreCase) &&
+                !l.StartsWith("...", StringComparison.Ordinal))
+            .ToArray();
         errorLines.Length.Should().BeLessThanOrEqualTo(5, "only up to 5 error lines should be shown");
         result.Should().Contain("error MSB4057");
+        result.Should().Contain("... and 1 more error");
     }
 
     [Fact]

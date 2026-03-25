@@ -272,7 +272,7 @@ public class IntegrateCommandTests
     {
         public string? LastDirectory { get; private set; }
         public bool LastForce { get; private set; }
-        public IntegrationResult Result { get; set; } = new([], [], []);
+        public IntegrationResult Result { get; init; } = new([], [], []);
         public string ProviderName => providerName;
 
         public Task<IntegrationResult> IntegrateAsync(

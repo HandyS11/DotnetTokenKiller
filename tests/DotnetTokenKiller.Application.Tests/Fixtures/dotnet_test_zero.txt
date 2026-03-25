@@ -1,12 +1,12 @@
 MSBuild version 17.11.9+a69bbaaf5 for .NET
   Determining projects to restore...
   All projects are up-to-date for restore.
-  DotnetTokenKiller.Domain.Tests -> /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll
+  DotnetTokenKiller.Domain.Tests -> /test/project/root/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll
 
-Test run for /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll (.NETCoreApp,Version=v10.0)
+Test run for /test/project/root/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll (.NETCoreApp,Version=v10.0)
 Microsoft (R) Test Execution Command Line Tool Version 17.11.9 (x64)
 Copyright (c) Microsoft Corporation.  All rights reserved.
 
 Starting test execution, please wait...
 A total of 1 test files matched the specified pattern.
-No test matches the given testcase filter `FullyQualifiedName~NonExistentTest` in /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll
+No test matches the given testcase filter `FullyQualifiedName~NonExistentTest` in /test/project/root/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll

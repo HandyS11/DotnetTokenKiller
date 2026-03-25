@@ -8,7 +8,7 @@ namespace DotnetTokenKiller.Application.Tests.Filters;
 
 public class DotnetTestFilterTests
 {
-    private readonly DotnetTestFilter _sut = new("/home/handys11/Dev/DotnetTokenKiller");
+    private readonly DotnetTestFilter _sut = new("/test/project/root");
 
     [Fact]
     public Task Apply_AllPassFixture_MatchesSnapshot()

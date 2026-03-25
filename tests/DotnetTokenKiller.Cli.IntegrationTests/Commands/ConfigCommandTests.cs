@@ -89,7 +89,7 @@ public sealed class ConfigCommandTests
 
     private sealed class StubConfigProvider : IConfigProvider
     {
-        public DtkConfig Current { get; set; } = DtkConfig.Default;
+        private DtkConfig Current { get; set; } = DtkConfig.Default;
 
         public DtkConfig Load()
         {

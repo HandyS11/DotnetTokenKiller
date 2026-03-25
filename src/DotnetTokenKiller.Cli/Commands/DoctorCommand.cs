@@ -40,14 +40,9 @@ internal sealed class DoctorCommand(
         }
 
         console.WriteLine();
-        if (allPassed)
-        {
-            console.MarkupLine("[green]All checks passed.[/]");
-        }
-        else
-        {
-            console.MarkupLine("[red]Some checks failed. Review the output above.[/]");
-        }
+        console.MarkupLine(allPassed
+            ? "[green]All checks passed.[/]"
+            : "[red]Some checks failed. Review the output above.[/]");
 
         return allPassed ? 0 : 1;
     }

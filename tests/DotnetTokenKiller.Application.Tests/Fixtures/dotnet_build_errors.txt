@@ -1,23 +1,23 @@
 MSBuild version 17.11.9+a69bbaaf5 for .NET
 Build started 3/9/2026 10:00:00.000 AM.
   Determining projects to restore...
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 152 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 201 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 180 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 213 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 122 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 131 ms).
-  /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(10,5): error CS1002: ; expected [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
-  /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(12,18): error CS0103: The name 'undeclared' does not exist in the current context [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
-  /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10): error CS1002: ; expected [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
-  /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(3,5): warning CS0169: The field '_unused' is never used [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj]
+  Restored /test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 152 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 201 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 180 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 213 ms).
+  Restored /test/project/root/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 122 ms).
+  Restored /test/project/root/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 131 ms).
+  /test/project/root/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(10,5): error CS1002: ; expected [/test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
+  /test/project/root/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(12,18): error CS0103: The name 'undeclared' does not exist in the current context [/test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
+  /test/project/root/src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10): error CS1002: ; expected [/test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
+  /test/project/root/src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(3,5): warning CS0169: The field '_unused' is never used [/test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj]
 
 Build FAILED.
 
-/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(10,5): error CS1002: ; expected [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
-/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(12,18): error CS0103: The name 'undeclared' does not exist in the current context [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
-/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10): error CS1002: ; expected [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
-/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(3,5): warning CS0169: The field '_unused' is never used [/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj]
+/test/project/root/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(10,5): error CS1002: ; expected [/test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
+/test/project/root/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs(12,18): error CS0103: The name 'undeclared' does not exist in the current context [/test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
+/test/project/root/src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10): error CS1002: ; expected [/test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj]
+/test/project/root/src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(3,5): warning CS0169: The field '_unused' is never used [/test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj]
 
     3 Error(s)
     1 Warning(s)

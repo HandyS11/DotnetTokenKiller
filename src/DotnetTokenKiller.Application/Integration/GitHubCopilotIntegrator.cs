@@ -9,72 +9,7 @@ namespace DotnetTokenKiller.Application.Integration;
 public sealed class GitHubCopilotIntegrator : IProviderIntegrator
 {
     private const string SectionMarker = "<!-- dtk -->";
-
-    /// <inheritdoc/>
-    public string ProviderName => "copilot";
-
-    /// <inheritdoc/>
-    public async Task<IntegrationResult> IntegrateAsync(
-        string directory,
-        bool force,
-        CancellationToken cancellationToken)
-    {
-        var created = new List<string>();
-        var updated = new List<string>();
-        var skipped = new List<string>();
-
-        var path = Path.Combine(directory, ".github", "copilot-instructions.md");
-        var exists = File.Exists(path);
-
-        if (exists)
-        {
-            var current = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-            if (current.Contains(SectionMarker, StringComparison.Ordinal))
-            {
-                if (!force)
-                {
-                    skipped.Add(path);
-                    return new IntegrationResult(created, updated, skipped);
-                }
-
-                // Replace the dtk section in-place.
-                var replaced = ReplaceDtkSection(current);
-                await File.WriteAllTextAsync(path, replaced, cancellationToken).ConfigureAwait(false);
-                updated.Add(path);
-                return new IntegrationResult(created, updated, skipped);
-            }
-
-            // File exists but has no dtk section yet — append.
-            var trimmed = current.TrimEnd();
-            var appended = string.IsNullOrWhiteSpace(trimmed)
-                ? CopilotSection
-                : trimmed + Environment.NewLine + CopilotSection;
-            await File.WriteAllTextAsync(path, appended, cancellationToken).ConfigureAwait(false);
-            updated.Add(path);
-        }
-        else
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await File.WriteAllTextAsync(path, CopilotSection, cancellationToken).ConfigureAwait(false);
-            created.Add(path);
-        }
-
-        return new IntegrationResult(created, updated, skipped);
-    }
-
-    private static string ReplaceDtkSection(string content)
-    {
-        const string endMarker = "<!-- /dtk -->";
-        var start = content.IndexOf(SectionMarker, StringComparison.Ordinal);
-        var end = content.IndexOf(endMarker, start, StringComparison.Ordinal);
-
-        if (end < 0)
-        {
-            return content[..start] + CopilotSection;
-        }
-
-        return content[..start] + CopilotSection + content[(end + endMarker.Length)..];
-    }
+    private const string SectionEndMarker = "<!-- /dtk -->";
 
     private const string CopilotSection =
         """
@@ -96,4 +31,23 @@ public sealed class GitHubCopilotIntegrator : IProviderIntegrator
         - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
         <!-- /dtk -->
         """;
+
+    /// <inheritdoc/>
+    public string ProviderName => "copilot";
+
+    /// <inheritdoc/>
+    public async Task<IntegrationResult> IntegrateAsync(
+        string directory,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        var context = new IntegrationContext(force);
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            Path.Combine(directory, ".github", "copilot-instructions.md"),
+            SectionMarker, SectionEndMarker, CopilotSection,
+            context, cancellationToken).ConfigureAwait(false);
+
+        return context.ToResult();
+    }
 }
