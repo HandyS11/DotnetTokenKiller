@@ -13,4 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj"/>
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotnetTokenKiller.Application.Tests"/>
+  </ItemGroup>
 </Project>

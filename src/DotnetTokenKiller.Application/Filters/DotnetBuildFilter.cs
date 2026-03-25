@@ -13,7 +13,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     private const string Separator = "---";
     private const int MessageMaxLen = 120;
 
-    private readonly string _rootPath = rootPath ?? Environment.CurrentDirectory;
+    private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the raw build output.</summary>
     /// <param name="rawOutput">The raw build output to filter.</param>
@@ -113,7 +113,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         if (seen.Add(key))
         {
             diagnostics.Add(new Diagnostic(
-                TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), _rootPath),
+                TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), RootPath),
                 diagMatch.Groups["line"].Value,
                 diagMatch.Groups["col"].Value,
                 diagMatch.Groups["level"].Value,
@@ -151,8 +151,6 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
         return sb.ToString();
     }
-
-    private sealed record Diagnostic(string File, string Line, string Col, string Level, string Code, string Message);
 
     private static string BuildContext(int projectCount, string elapsed)
     {
@@ -259,8 +257,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>.+?)(?:\s*\[.+?\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
 
-    // Matches: "  MyProject -> /path/to/bin/MyProject.dll"
-    [GeneratedRegex(@"^\s+\S+ -> .+\.dll\s*$")]
+    // Matches: "  MyProject -> /path/to/bin/MyProject.dll" (or .exe)
+    [GeneratedRegex(@"^\s+\S+ -> .+\.(dll|exe)\s*$")]
     private static partial Regex ProjectOutputPattern();
 
     // Matches "Time Elapsed HH:MM:SS.ff"
@@ -302,4 +300,6 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     // Noise: project output redirect (-> dll/exe) - fallback for IsNoiseLine
     [GeneratedRegex(@"^\s+\S+ -> .+\.(dll|exe)\s*$")]
     private static partial Regex NoiseProjectOutputPattern();
+
+    private sealed record Diagnostic(string File, string Line, string Col, string Level, string Code, string Message);
 }

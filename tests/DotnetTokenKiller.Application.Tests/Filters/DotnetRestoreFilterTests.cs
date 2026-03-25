@@ -5,7 +5,7 @@ namespace DotnetTokenKiller.Application.Tests.Filters;
 
 public class DotnetRestoreFilterTests
 {
-    private readonly DotnetRestoreFilter _sut = new("/home/handys11/Dev/DotnetTokenKiller");
+    private readonly DotnetRestoreFilter _sut = new("/test/project/root");
 
     [Fact]
     public Task Apply_SuccessFixture_MatchesSnapshot()

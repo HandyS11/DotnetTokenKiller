@@ -1,12 +1,12 @@
 MSBuild version 17.11.9+a69bbaaf5 for .NET
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj".
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj".
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj".
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj".
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj".
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj".
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Infrastructure.Tests/DotnetTokenKiller.Infrastructure.Tests.csproj".
-  Cleaning configuration "Debug" of project "/home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Cli.IntegrationTests/DotnetTokenKiller.Cli.IntegrationTests.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/tests/DotnetTokenKiller.Infrastructure.Tests/DotnetTokenKiller.Infrastructure.Tests.csproj".
+  Cleaning configuration "Debug" of project "/test/project/root/tests/DotnetTokenKiller.Cli.IntegrationTests/DotnetTokenKiller.Cli.IntegrationTests.csproj".
 Build succeeded.
     0 Warning(s)
     0 Error(s)

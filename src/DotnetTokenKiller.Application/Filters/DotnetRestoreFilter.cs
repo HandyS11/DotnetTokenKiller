@@ -12,7 +12,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
 {
     private const int MessageMaxLen = 200;
 
-    private readonly string _rootPath = rootPath ?? Environment.CurrentDirectory;
+    private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the raw restore output.</summary>
     /// <param name="rawOutput">The raw restore output to filter.</param>
@@ -79,7 +79,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             return false;
         }
 
-        var proj = TextHelpers.ShortenPath(match.Groups["proj"].Value.Trim(), _rootPath);
+        var proj = TextHelpers.ShortenPath(match.Groups["proj"].Value.Trim(), RootPath);
         errors.Add(new NuGetError(
             match.Groups["code"].Value,
             TextHelpers.Truncate(match.Groups["message"].Value.Trim(), MessageMaxLen),
@@ -99,7 +99,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         var projRaw = match.Groups["proj"].Value.Trim();
         var proj = string.IsNullOrEmpty(projRaw)
             ? string.Empty
-            : TextHelpers.ShortenPath(projRaw, _rootPath);
+            : TextHelpers.ShortenPath(projRaw, RootPath);
         errors.Add(new NuGetError(
             match.Groups["code"].Value,
             TextHelpers.Truncate(match.Groups["message"].Value.Trim(), MessageMaxLen),
@@ -149,17 +149,6 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         return sb.ToString();
     }
 
-    private sealed class ParseState
-    {
-        public List<NuGetError> Errors { get; } = [];
-        public int RestoredCount { get; set; }
-        public int UpToDateCount { get; set; }
-        public bool AllUpToDate { get; set; }
-        public double TotalDurationMs { get; set; }
-    }
-
-    private sealed record NuGetError(string Code, string Message, string Project);
-
     // "  Restored /path/Project.csproj (in 123 ms)."
     [GeneratedRegex(@"^\s*Restored .+\.[a-z]+proj \(in (?<ms>[\d.]+) ms\)", RegexOptions.IgnoreCase)]
     private static partial Regex RestoredPattern();
@@ -181,4 +170,15 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
     [GeneratedRegex(@"error\s+(?<code>NU\d+):\s+(?<message>[^\[]+)(?:\s*\[(?<proj>[^\]]+)\])?\s*$",
         RegexOptions.IgnoreCase)]
     private static partial Regex NuGetErrorStandardPattern();
+
+    private sealed class ParseState
+    {
+        public List<NuGetError> Errors { get; } = [];
+        public int RestoredCount { get; set; }
+        public int UpToDateCount { get; set; }
+        public bool AllUpToDate { get; set; }
+        public double TotalDurationMs { get; set; }
+    }
+
+    private sealed record NuGetError(string Code, string Message, string Project);
 }

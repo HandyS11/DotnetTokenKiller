@@ -13,7 +13,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private const int MaxFailures = 15;
     private const int MessageMaxLen = 200;
 
-    private readonly string _rootPath = rootPath ?? Environment.CurrentDirectory;
+    private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the raw test output.</summary>
     /// <param name="rawOutput">The raw test output to filter.</param>
@@ -135,7 +135,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
                 if (frameMatch.Success)
                 {
                     sourceRef =
-                        $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, _rootPath)}:line {frameMatch.Groups["line"].Value}";
+                        $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, RootPath)}:line {frameMatch.Groups["line"].Value}";
                 }
             }
 
@@ -209,19 +209,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         return sb.ToString();
     }
 
-    private sealed class ParseState
-    {
-        public List<FailureInfo> Failures { get; } = [];
-        public int TotalPassed { get; set; }
-        public int TotalFailed { get; set; }
-        public int TotalSkipped { get; set; }
-        public int ProjectCount { get; set; }
-        public double TotalDurationMs { get; set; }
-        public bool ZeroTestsFound { get; set; }
-    }
-
-    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);
-
     private static string CompactMessage(List<string> lines)
     {
         if (lines.Count == 0)
@@ -278,4 +265,17 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     // Zero tests: "No test matches the given testcase filter" or "No test is available"
     [GeneratedRegex("No test matches the given testcase filter|No test is available", RegexOptions.IgnoreCase)]
     private static partial Regex NoTestsPattern();
+
+    private sealed class ParseState
+    {
+        public List<FailureInfo> Failures { get; } = [];
+        public int TotalPassed { get; set; }
+        public int TotalFailed { get; set; }
+        public int TotalSkipped { get; set; }
+        public int ProjectCount { get; set; }
+        public double TotalDurationMs { get; set; }
+        public bool ZeroTestsFound { get; set; }
+    }
+
+    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);
 }

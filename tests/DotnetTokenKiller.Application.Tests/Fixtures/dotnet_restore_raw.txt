@@ -1,18 +1,18 @@
 MSBuild version 17.11.9+a69bbaaf5 for .NET
   Determining projects to restore...
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 123 ms).
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 456 ms).
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 234 ms).
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 89 ms).
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 67 ms).
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 301 ms).
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Infrastructure.Tests/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Infrastructure.Tests/DotnetTokenKiller.Infrastructure.Tests.csproj (in 45 ms).
-  Writing assets file to disk. Path: /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Cli.IntegrationTests/obj/project.assets.json
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Cli.IntegrationTests/DotnetTokenKiller.Cli.IntegrationTests.csproj (in 112 ms).
+  Writing assets file to disk. Path: /test/project/root/src/DotnetTokenKiller.Domain/obj/project.assets.json
+  Restored /test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 123 ms).
+  Writing assets file to disk. Path: /test/project/root/src/DotnetTokenKiller.Application/obj/project.assets.json
+  Restored /test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 456 ms).
+  Writing assets file to disk. Path: /test/project/root/src/DotnetTokenKiller.Infrastructure/obj/project.assets.json
+  Restored /test/project/root/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 234 ms).
+  Writing assets file to disk. Path: /test/project/root/src/DotnetTokenKiller.Cli/obj/project.assets.json
+  Restored /test/project/root/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 89 ms).
+  Writing assets file to disk. Path: /test/project/root/tests/DotnetTokenKiller.Domain.Tests/obj/project.assets.json
+  Restored /test/project/root/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 67 ms).
+  Writing assets file to disk. Path: /test/project/root/tests/DotnetTokenKiller.Application.Tests/obj/project.assets.json
+  Restored /test/project/root/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 301 ms).
+  Writing assets file to disk. Path: /test/project/root/tests/DotnetTokenKiller.Infrastructure.Tests/obj/project.assets.json
+  Restored /test/project/root/tests/DotnetTokenKiller.Infrastructure.Tests/DotnetTokenKiller.Infrastructure.Tests.csproj (in 45 ms).
+  Writing assets file to disk. Path: /test/project/root/tests/DotnetTokenKiller.Cli.IntegrationTests/obj/project.assets.json
+  Restored /test/project/root/tests/DotnetTokenKiller.Cli.IntegrationTests/DotnetTokenKiller.Cli.IntegrationTests.csproj (in 112 ms).

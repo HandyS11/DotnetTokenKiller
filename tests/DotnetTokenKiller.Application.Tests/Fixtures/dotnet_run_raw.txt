@@ -1,8 +1,8 @@
 MSBuild version 17.11.9+a69bbaaf5 for .NET
   Determining projects to restore...
   All projects are up-to-date for restore.
-  DotnetTokenKiller.Application -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
-  DotnetTokenKiller.Cli -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/DotnetTokenKiller.Cli.dll
+  DotnetTokenKiller.Application -> /test/project/root/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
+  DotnetTokenKiller.Cli -> /test/project/root/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/DotnetTokenKiller.Cli.dll
 Build succeeded.
     0 Warning(s)
     0 Error(s)

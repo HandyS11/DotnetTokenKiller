@@ -1,18 +1,18 @@
 MSBuild version 17.11.9+a69bbaaf5 for .NET
   Determining projects to restore...
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 42 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 38 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 35 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 40 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 31 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 36 ms).
-  DotnetTokenKiller.Domain -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/bin/Debug/net10.0/DotnetTokenKiller.Domain.dll
-  DotnetTokenKiller.Application -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
-  DotnetTokenKiller.Infrastructure -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.dll
-  DotnetTokenKiller.Cli -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/dtk.dll
-  DotnetTokenKiller.Application.Tests -> /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll
+  Restored /test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 42 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 38 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 35 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 40 ms).
+  Restored /test/project/root/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 31 ms).
+  Restored /test/project/root/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 36 ms).
+  DotnetTokenKiller.Domain -> /test/project/root/src/DotnetTokenKiller.Domain/bin/Debug/net10.0/DotnetTokenKiller.Domain.dll
+  DotnetTokenKiller.Application -> /test/project/root/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
+  DotnetTokenKiller.Infrastructure -> /test/project/root/src/DotnetTokenKiller.Infrastructure/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.dll
+  DotnetTokenKiller.Cli -> /test/project/root/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/dtk.dll
+  DotnetTokenKiller.Application.Tests -> /test/project/root/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll
 
-Test run for /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll (.NETCoreApp,Version=v10.0)
+Test run for /test/project/root/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll (.NETCoreApp,Version=v10.0)
 Microsoft (R) Test Execution Command Line Tool Version 17.11.9 (x64)
 Copyright (c) Microsoft Corporation.  All rights reserved.
 
@@ -23,7 +23,7 @@ A total of 1 test files matched the specified pattern.
   Error Message:
    Expected the actual value to be greater than or equal to 85.0 because build success filter should achieve ≥85% savings, but found 70.0.
   Stack Trace:
-     at DotnetTokenKiller.Application.Tests.Filters.DotnetBuildFilterTests.Apply_SuccessFixture_SavingsAtLeast85Percent() in /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/Filters/DotnetBuildFilterTests.cs:line 43
+     at DotnetTokenKiller.Application.Tests.Filters.DotnetBuildFilterTests.Apply_SuccessFixture_SavingsAtLeast85Percent() in /test/project/root/tests/DotnetTokenKiller.Application.Tests/Filters/DotnetBuildFilterTests.cs:line 43
      at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
 
   Failed DotnetTokenKiller.Application.Tests.Helpers.TokenEstimatorTests.Estimate_KnownText_ReturnsExpected [5 ms]
@@ -32,7 +32,7 @@ A total of 1 test files matched the specified pattern.
    Expected: 42
    Actual:   38
   Stack Trace:
-     at DotnetTokenKiller.Application.Tests.Helpers.TokenEstimatorTests.Estimate_KnownText_ReturnsExpected() in /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/Helpers/TokenEstimatorTests.cs:line 15
+     at DotnetTokenKiller.Application.Tests.Helpers.TokenEstimatorTests.Estimate_KnownText_ReturnsExpected() in /test/project/root/tests/DotnetTokenKiller.Application.Tests/Helpers/TokenEstimatorTests.cs:line 15
      at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
 
 Failed!  - Failed:     2, Passed:    41, Skipped:     0, Total:    43, Duration: 234 ms - DotnetTokenKiller.Application.Tests.dll (net10.0)

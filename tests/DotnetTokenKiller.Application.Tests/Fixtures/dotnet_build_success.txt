@@ -1,18 +1,18 @@
 MSBuild version 17.11.9+a69bbaaf5 for .NET
 Build started 3/9/2026 10:00:00.000 AM.
   Determining projects to restore...
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 152 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 201 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 180 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 213 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 122 ms).
-  Restored /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 131 ms).
-  DotnetTokenKiller.Domain -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Domain/bin/Debug/net10.0/DotnetTokenKiller.Domain.dll
-  DotnetTokenKiller.Application -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
-  DotnetTokenKiller.Infrastructure -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Infrastructure/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.dll
-  DotnetTokenKiller.Cli -> /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/DotnetTokenKiller.Cli.dll
-  DotnetTokenKiller.Domain.Tests -> /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll
-  DotnetTokenKiller.Application.Tests -> /home/handys11/Dev/DotnetTokenKiller/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll
+  Restored /test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 152 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 201 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 180 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 213 ms).
+  Restored /test/project/root/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 122 ms).
+  Restored /test/project/root/tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj (in 131 ms).
+  DotnetTokenKiller.Domain -> /test/project/root/src/DotnetTokenKiller.Domain/bin/Debug/net10.0/DotnetTokenKiller.Domain.dll
+  DotnetTokenKiller.Application -> /test/project/root/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
+  DotnetTokenKiller.Infrastructure -> /test/project/root/src/DotnetTokenKiller.Infrastructure/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.dll
+  DotnetTokenKiller.Cli -> /test/project/root/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/DotnetTokenKiller.Cli.dll
+  DotnetTokenKiller.Domain.Tests -> /test/project/root/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll
+  DotnetTokenKiller.Application.Tests -> /test/project/root/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll
 
 Build succeeded.
     0 Warning(s)
