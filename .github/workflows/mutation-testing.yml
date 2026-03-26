@@ -1,0 +1,43 @@
+name: Mutation Testing
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'  # Every Monday at 03:00 UTC
+  workflow_dispatch:       # Allow manual runs
+
+jobs:
+  stryker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore dependencies
+        run: dotnet restore DotnetTokenKiller.slnx
+
+      - name: Restore local tools
+        run: dotnet tool restore
+
+      - name: Build
+        run: dotnet build DotnetTokenKiller.slnx --no-restore --configuration Release
+
+      - name: Run Stryker
+        run: dotnet stryker --reporter "json" --reporter "html"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-${{ github.run_number }}
+          path: StrykerOutput/**/reports/
+          retention-days: 90
