@@ -32,7 +32,7 @@ jobs:
         run: dotnet build DotnetTokenKiller.slnx --no-restore --configuration Release
 
       - name: Run Stryker
-        run: dotnet stryker --reporter "json" --reporter "html"
+        run: dotnet stryker
 
       - name: Upload mutation report
         if: always()
