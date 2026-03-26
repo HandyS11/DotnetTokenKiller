@@ -222,4 +222,146 @@ public sealed class ConfigSetUseCaseTests
     {
         ConfigSetUseCase.SupportedKeys.Should().ContainKey(key);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_TrackingEnabled_True_SavesTrue()
+    {
+        // Kills boolean mutation on ParseBool return (line 128)
+        await _sut.ExecuteAsync("tracking.enabled", "true");
+
+        _savedConfig.Tracking.Enabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RetentionDaysAtMin_Succeeds()
+    {
+        // Kills equality mutation: result <= min instead of result < min (line 152)
+        await _sut.ExecuteAsync("tracking.retentionDays", "1");
+
+        _savedConfig.Tracking.RetentionDays.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MaxFileSizeBytesAtMin_Succeeds()
+    {
+        // Kills equality mutation: result <= min instead of result < min (line 169)
+        await _sut.ExecuteAsync("tee.maxFileSizeBytes", "0");
+
+        _savedConfig.Tee.MaxFileSizeBytes.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DisplayWidthAtMin_Succeeds()
+    {
+        // Kills equality mutation on min bound (ParseInt)
+        await _sut.ExecuteAsync("display.width", "40");
+
+        _savedConfig.Display.Width.Should().Be(40);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_TeeMaxFilesAtMin_Succeeds()
+    {
+        // Kills equality mutation on min bound (ParseInt)
+        await _sut.ExecuteAsync("tee.maxFiles", "1");
+
+        _savedConfig.Tee.MaxFiles.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NullableString_NonEmpty_ReturnsValue()
+    {
+        // Kills boolean mutation on NullableString (line 180): string.IsNullOrEmpty check
+        await _sut.ExecuteAsync("tracking.dbPath", "/my/db.sqlite");
+
+        _savedConfig.Tracking.DbPath.Should().Be("/my/db.sqlite");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownKey_ErrorMessageContainsKey()
+    {
+        // Kills string mutation on unknown key error message (line 185)
+        var act = () => _sut.ExecuteAsync("bad.key", "value");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*bad.key*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NullKey_ThrowsArgumentNullException()
+    {
+        // Kills statement mutation on ThrowIfNull(key) — line 39
+        var act = () => _sut.ExecuteAsync(null!, "value");
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NullValue_ThrowsArgumentNullException()
+    {
+        // Kills statement mutation on ThrowIfNull(value) — line 40
+        var act = () => _sut.ExecuteAsync("tracking.enabled", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownKey_ErrorListsSupportedKeys()
+    {
+        // Kills string mutation on "Supported keys:" in error message
+        var act = () => _sut.ExecuteAsync("x.y", "z");
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*tracking.enabled*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InvalidBool_ErrorIncludesValueAndKey()
+    {
+        // Kills string mutations on ParseBool error format
+        var act = () => _sut.ExecuteAsync("tracking.enabled", "nope");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*nope*tracking.enabled*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InvalidEnum_ErrorListsValidValues()
+    {
+        // Kills string mutations on ParseEnum error format
+        var act = () => _sut.ExecuteAsync("tracking.tokenizer", "bad");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*bad*tracking.tokenizer*Cl100kBase*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InvalidInt_ErrorIncludesValueAndKey()
+    {
+        // Kills string mutations on ParseInt error format
+        var act = () => _sut.ExecuteAsync("display.width", "abc");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*abc*display.width*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_IntBelowMin_ErrorIncludesMinimum()
+    {
+        // Kills string/arithmetic mutations on "Minimum allowed value is {min}" format
+        var act = () => _sut.ExecuteAsync("display.width", "5");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*Minimum allowed value is 40*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_LongBelowMin_ErrorIncludesMinimum()
+    {
+        // Kills string/arithmetic mutations on ParseLong "Minimum allowed value is {min}" format
+        var act = () => _sut.ExecuteAsync("tee.maxFileSizeBytes", "-5");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*Minimum allowed value is 0*");
+    }
 }

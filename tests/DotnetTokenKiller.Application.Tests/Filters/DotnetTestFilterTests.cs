@@ -73,15 +73,15 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_NullInput_ReturnsNonNull()
+    public void Apply_NullInput_ReturnsEmpty()
     {
-        _sut.Apply(null!).Should().NotBeNull();
+        _sut.Apply(null!).Should().BeEmpty();
     }
 
     [Fact]
-    public void Apply_EmptyInput_ReturnsNonNull()
+    public void Apply_EmptyInput_ReturnsEmpty()
     {
-        _sut.Apply(string.Empty).Should().NotBeNull();
+        _sut.Apply(string.Empty).Should().BeEmpty();
     }
 
     [Fact]
@@ -305,6 +305,350 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input);
 
         result.Should().Be("✓ dotnet test: 0 tests found\n");
+    }
+
+    [Fact]
+    public void Apply_DefaultRootPath_UsesEnvironmentCurrentDirectory()
+    {
+        // Kills null coalescing mutation (line 16): rootPath ?? Environment.CurrentDirectory
+        var filter = new DotnetTestFilter();
+        const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 10 ms - T.dll";
+
+        var result = filter.Apply(input);
+
+        result.Should().Contain("passed");
+    }
+
+    [Fact]
+    public void Apply_FailureParseLoop_IncrementMutationKilled()
+    {
+        // Kills i-- mutation (line 86) and loop condition mutation (line 84):
+        // Stack trace with multiple frames — ensures loop increments forward
+        const string input = """
+                               Failed MyTests.MultiStackTest [5 ms]
+                               Error Message:
+                                 Assert.Equal() Failure
+                               Stack Trace:
+                                  at Internal.Method() in /path/to/Internal.cs:line 5
+                                  at MyTests.MultiStackTest() in /path/to/Test.cs:line 42
+                                  at MoreStack() in /path/to/Other.cs:line 99
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 5 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        // Verifies the first stack frame file reference is captured (Internal.cs:line 5)
+        result.Should().Contain("line 5");
+    }
+
+    [Fact]
+    public void Apply_FailureWithSourceRef_IncludesAtPrefix()
+    {
+        // Kills string mutation on sourceRef format (line 132)
+        const string input = """
+                               Failed MyTests.SourceRefTest [1 ms]
+                               Error Message:
+                                 Something failed
+                               Stack Trace:
+                                  at MyTests.SourceRefTest() in /test/project/root/Tests/Test.cs:line 42
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("at Tests/Test.cs:line 42");
+    }
+
+    [Fact]
+    public void Apply_FailureDurationDisplayedInBrackets()
+    {
+        // Kills string mutation on duration format (line 155)
+        const string input = """
+                               Failed MyTests.DurationTest [42 ms]
+                               Error Message:
+                                 Boom
+                               Stack Trace:
+                                  at MyTests.DurationTest() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 42 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("[42 ms]");
+    }
+
+    [Fact]
+    public void Apply_FailureHeaderLine_ContainsFailuresCount()
+    {
+        // Kills string mutation on "FAILURES ({count})" (line 216)
+        const string input = """
+                               Failed MyTests.Test1 [1 ms]
+                               Error Message:
+                                 boom
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().StartWith("FAILURES (1):");
+    }
+
+    [Fact]
+    public void Apply_CompactMessage_OnlyExpected_NoCompaction()
+    {
+        // Kills logical mutation: expectedLine != null || actualLine != null (line 222)
+        // When only Expected: exists but no Actual:, falls through to join path
+        const string input = """
+                               Failed MyTests.OnlyExpected [1 ms]
+                               Error Message:
+                                 Expected: 42
+                               Stack Trace:
+                                  at MyTests.OnlyExpected() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        // Should just join the message, not the compacted Expected/Actual form
+        result.Should().Contain("Expected: 42");
+        result.Should().NotContain("Actual:");
+    }
+
+    [Fact]
+    public void Apply_CompactMessage_BothExpectedAndActual_CompactedFormat()
+    {
+        // Kills logical mutation on expectedLine && actualLine (line 222)
+        const string input = """
+                               Failed MyTests.AssertEqual [1 ms]
+                               Error Message:
+                                 Expected: "hello"
+                                 Actual:   "world"
+                               Stack Trace:
+                                  at MyTests.AssertEqual() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("Expected:");
+        result.Should().Contain("Actual:");
+    }
+
+    [Fact]
+    public void Apply_ExactlyMaxFailures_NoMoreFailuresLine()
+    {
+        // Kills equality mutation: Failures.Count >= MaxFailures (line 201)
+        var sb = new StringBuilder();
+        for (var i = 0; i < 15; i++)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  Failed MyTests.TestMethod{i} [1 ms]")
+                .AppendLine("  Error Message:")
+                .AppendLine(CultureInfo.InvariantCulture, $"    Assertion {i}")
+                .AppendLine("  Stack Trace:")
+                .AppendLine(CultureInfo.InvariantCulture,
+                    $"    at MyTests.TestMethod{i}() in /path/Test.cs:line {i + 1}");
+        }
+
+        sb.AppendLine("Failed!  - Failed: 15, Passed: 0, Skipped: 0, Total: 15, Duration: 100 ms - Tests.dll");
+
+        var result = _sut.Apply(sb.ToString());
+
+        result.Should().NotContain("more failures");
+    }
+
+    [Fact]
+    public void Apply_NormalizeDuration_Seconds_CorrectConversion()
+    {
+        // Kills arithmetic mutation: value * 1_000 → value / 1_000 (line 235)
+        const string input =
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 2 s - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("2.00s");
+    }
+
+    [Fact]
+    public void Apply_NormalizeDuration_Minutes_CorrectConversion()
+    {
+        // Kills arithmetic mutation: value * 60_000 → value / 60_000 (line 236)
+        const string input =
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("60.00s");
+    }
+
+    [Fact]
+    public void Apply_NormalizeDuration_Hours_CorrectConversion()
+    {
+        // Kills arithmetic mutation: value * 3_600_000 → value / 3_600_000 (line 237)
+        const string input =
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 h - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("3600.00s");
+    }
+
+    [Fact]
+    public void Apply_NormalizeDuration_Ms_ReturnsUnchanged()
+    {
+        // Kills string mutation on "ms" unit (line 234)
+        const string input =
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 500 ms - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("0.50s");
+    }
+
+    [Fact]
+    public void Apply_FailureSummaryLine_ContainsExactFormat()
+    {
+        // Kills string mutations in FormatFailures summary line (line 227)
+        const string input = """
+                               Failed MyTests.Fail [1 ms]
+                               Error Message:
+                                 boom
+
+                             Failed!  - Failed: 1, Passed: 2, Skipped: 0, Total: 3, Duration: 100 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("dotnet test: 1 failed, 2 passed");
+    }
+
+    [Fact]
+    public void Apply_PassOutput_ContainsExactFormat()
+    {
+        // Kills string mutation on passed output format (line 180)
+        const string input =
+            "Passed!  - Failed: 0, Passed: 10, Skipped: 0, Total: 10, Duration: 200 ms - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("dotnet test: 10 passed");
+    }
+
+    [Fact]
+    public void Apply_FailedTestWithNoStackTraceLabel_StillParsesNextFailure()
+    {
+        // Kills statement mutation on loop index increment after missing StackTraceLabel (line 86)
+        const string input = """
+                               Failed MyTests.NoStack1 [1 ms]
+                               Error Message:
+                                 First error
+
+                               Failed MyTests.NoStack2 [2 ms]
+                               Error Message:
+                                 Second error
+
+                             Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("NoStack1");
+        result.Should().Contain("NoStack2");
+    }
+
+    [Fact]
+    public void Apply_NoTestsPattern_SetsZeroTestsFlag()
+    {
+        // Kills statement mutation on state.ZeroTestsFound = true (line 52)
+        // "No test matches" pattern triggers the zero-tests path
+        const string input = "No test matches the given testcase filter";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("0 tests found");
+    }
+
+    [Fact]
+    public void Apply_StackTraceLoopProcessesAllFrames()
+    {
+        // Kills equality mutation: i > lines.Length (line 84) and i-- mutation (line 86)
+        // Multiple stack frames followed by a second failure — ensures loop exits correctly
+        const string input = """
+                               Failed MyTests.First [1 ms]
+                               Error Message:
+                                 First error
+                               Stack Trace:
+                                  at Layer1() in /path/L1.cs:line 10
+                                  at Layer2() in /path/L2.cs:line 20
+                                  at Layer3() in /path/L3.cs:line 30
+
+                               Failed MyTests.Second [2 ms]
+                               Error Message:
+                                 Second error
+                               Stack Trace:
+                                  at MyTests.Second() in /path/T.cs:line 5
+
+                             Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("First");
+        result.Should().Contain("Second");
+    }
+
+    [Fact]
+    public void Apply_PassedSingleProject_ContainsCheckmark()
+    {
+        // Kills string mutation on pass format (line 180) — verify ✓ prefix
+        const string input =
+            "Passed!  - Failed: 0, Passed: 5, Skipped: 0, Total: 5, Duration: 100 ms - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().StartWith("\u2713");
+    }
+
+    [Fact]
+    public void Apply_CompactMessage_OnlyActual_UsesJoinedFormat()
+    {
+        // Kills logical mutation: expectedLine != null || actualLine != null (line 222)
+        // Only "Actual:" present without "Expected:" — should use joined format
+        const string input = """
+                               Failed MyTests.OnlyActual [1 ms]
+                               Error Message:
+                                 Actual: 99
+                               Stack Trace:
+                                  at MyTests.OnlyActual() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("Actual: 99");
+    }
+
+    [Fact]
+    public void Apply_FailuresSummaryLine_ContainsDotnetTestPrefix()
+    {
+        // Kills string mutation on summary format (line 227)
+        const string input = """
+                               Failed MyTests.Fail [1 ms]
+                               Error Message:
+                                 boom
+
+                             Failed!  - Failed: 1, Passed: 3, Skipped: 0, Total: 4, Duration: 50 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("dotnet test:");
     }
 
     private static string LoadFixture(string resourceName)

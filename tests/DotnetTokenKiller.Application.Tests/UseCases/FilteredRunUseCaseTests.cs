@@ -320,6 +320,173 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_NullFilter_ThrowsArgumentNullException()
+    {
+        // Kills statement mutation on ArgumentNullException.ThrowIfNull(filter) (line 41)
+        var act = () => _sut.RunAsync(null!, "dotnet", BuildArgs, 0);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task RunAsync_NullArgs_ThrowsArgumentNullException()
+    {
+        // Kills statement mutation on ArgumentNullException.ThrowIfNull(args) (line 42)
+        var act = () => _sut.RunAsync(_filter, "dotnet", null!, 0);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task RunAsync_QuietTrue_OverridesVerbosityLevel()
+    {
+        // Kills boolean mutation on quiet check (line 50) and verbosity overrides (lines 55, 58)
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        // verbosityLevel=2 would normally print command line and raw output, but quiet overrides
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2, quiet: true);
+
+        var output = writer.ToString();
+        output.Should().NotContain("$ dotnet build");
+        output.Should().NotContain("[raw output]");
+    }
+
+    [Fact]
+    public async Task RunAsync_ZeroTokens_RecordsZeroPercentSavings()
+    {
+        // Kills boolean mutation on inputTokens > 0 check (line 146) and arithmetic mutations
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r =>
+                r.InputTokens == 0 &&
+                r.OutputTokens == 0 &&
+                Math.Abs(r.SavingsPercentage) < 0.01),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_VerifiesSavingsPercentageCalculation()
+    {
+        // Kills arithmetic mutations: savedTokens / inputTokens * 100.0 (line 146)
+        // "Hello world" = 2 tokens; "Hello" = 1 token; saved = 1; pct = 50%
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("Hello world", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("Hello");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r =>
+                r.InputTokens == 2 &&
+                r.OutputTokens == 1 &&
+                r.SavedTokens == 1 &&
+                Math.Abs(r.SavingsPercentage - 50.0) < 0.01),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_VerbosityLevel0_DoesNotPrintCommandLine()
+    {
+        // Kills boolean mutation on verbosityLevel >= 1 (line 55)
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        writer.ToString().Should().NotContain("$ dotnet");
+    }
+
+    [Fact]
+    public async Task RunAsync_VerbosityLevel1_DoesNotPrintRawOutput()
+    {
+        // Kills boolean mutation on verbosityLevel >= 2 (line 86)
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw stuff", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
+
+        var output = writer.ToString();
+        output.Should().Contain("$ dotnet build");
+        output.Should().NotContain("[raw output]");
+        output.Should().NotContain("[elapsed:");
+    }
+
+    [Fact]
+    public async Task RunAsync_EmojiEnabled_KeepsCheckmark()
+    {
+        // Kills boolean mutation on !config.Display.Emoji (line 79)
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("✓ build ok\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        writer.ToString().Should().Contain("✓");
+        writer.ToString().Should().NotContain("ok:");
+    }
+
+    [Fact]
+    public async Task RunAsync_TeeHintNull_DoesNotPrintHint()
+    {
+        // Kills boolean mutation on hint is not null (line 116)
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
+
+        writer.ToString().Should().Be("filtered\n");
+    }
+
+    [Fact]
     public async Task RunAsync_EmptyRawOutput_RecordsZeroSavingsPct()
     {
         // Covers inputTokens == 0 → savingsPct = 0.0 branch (line 126)
@@ -418,6 +585,82 @@ public class FilteredRunUseCaseTests
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.DidNotReceive().RecordAsync(
+            Arg.Any<CommandRecord>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_FilterThrows_Verbosity0_NoFilterErrorMessage()
+    {
+        // Kills boolean mutation on verbosity check inside the filter catch block (line 73)
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Throws(new InvalidOperationException("boom"));
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        writer.ToString().Should().NotContain("[filter error");
+    }
+
+    [Fact]
+    public async Task RunAsync_FilterThrows_OutputContainsRawStrippedContent()
+    {
+        // Kills statement mutation on filtered = stripped fallback (line 76)
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("\x1b[32mraw fallback\x1b[0m", "", 0));
+        _filter.Apply(Arg.Any<string>()).Throws(new InvalidOperationException("boom"));
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        writer.ToString().Should().Contain("raw fallback");
+    }
+
+    [Fact]
+    public async Task RunAsync_TeeCalledWithCorrectSlugAndExitCode()
+    {
+        // Kills statement mutations on tee invocation (line 97-98)
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 7));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _teeService.Received(1).TeeAndHintAsync(
+            Arg.Any<string>(),
+            "build",
+            7,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_TrackingEnabled_RecordAsyncCalled()
+    {
+        // Kills boolean mutation on config.Tracking.Enabled (line 138)
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
             Arg.Any<CommandRecord>(),
             Arg.Any<CancellationToken>());
     }
