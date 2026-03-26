@@ -6,3 +6,5 @@
   href: test.md
 - name: Restore
   href: restore.md
+- name: Format
+  href: format.md

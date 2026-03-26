@@ -9,6 +9,7 @@ These pages show side-by-side comparisons of raw `dotnet` output versus the filt
 - [Build & Clean](build.md) — single project, multi-project, errors, warnings
 - [Test](test.md) — xUnit single failure, multi-failure with FluentAssertions
 - [Restore](restore.md) — missing package errors
+- [Format](format.md) — nothing to format, verify-no-changes violations
 
 ## Typical Token Savings
 
@@ -20,3 +21,4 @@ These pages show side-by-side comparisons of raw `dotnet` output versus the filt
 | test (12 failures) | ~250 lines → compact summary |
 | clean | ~98% reduction |
 | restore errors | Absolute paths → relative paths, cleaner formatting |
+| format violations | Absolute paths + noise → relative paths only |
