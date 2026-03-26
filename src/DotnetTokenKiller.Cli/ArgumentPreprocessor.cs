@@ -25,6 +25,9 @@ internal static class ArgumentPreprocessor
     /// <summary>Subcommand name for <c>dotnet clean</c>. Used in both the command registration and passthrough detection.</summary>
     internal const string CleanSubcommand = "clean";
 
+    /// <summary>Subcommand name for <c>dotnet format</c>. Used in both the command registration and passthrough detection.</summary>
+    internal const string FormatSubcommand = "format";
+
     /// <summary>
     /// Dotnet subcommands handled by dtk. This set is the single source of truth — the command
     /// registrations in Program.cs reference these constants to stay in sync automatically.
@@ -35,7 +38,8 @@ internal static class ArgumentPreprocessor
             BuildSubcommand,
             TestSubcommand,
             RestoreSubcommand,
-            CleanSubcommand
+            CleanSubcommand,
+            FormatSubcommand
         };
 
     private static readonly HashSet<string> DtkOptions =

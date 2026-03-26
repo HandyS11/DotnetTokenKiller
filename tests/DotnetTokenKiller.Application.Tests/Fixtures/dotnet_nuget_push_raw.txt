@@ -1,4 +1,0 @@
-Pushing DotnetTokenKiller.1.0.0.nupkg to 'https://api.nuget.org/v3/index.json'...
-  PUT https://api.nuget.org/v3/index.json
-  Created https://api.nuget.org/v3/index.json 1523ms
-Your package was pushed.

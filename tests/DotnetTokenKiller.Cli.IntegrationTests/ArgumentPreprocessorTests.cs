@@ -22,6 +22,7 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet", "test")]
     [InlineData("dotnet", "restore")]
     [InlineData("dotnet", "clean")]
+    [InlineData("dotnet", "format")]
     [InlineData("DOTNET", "BUILD")]
     public void IsPassthrough_ReturnsFalse_ForKnownSubcommand(string exe, string sub)
     {

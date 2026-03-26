@@ -1,0 +1,3 @@
+dotnet format: 2 violations
+src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(1,1): error whitespace: Fix whitespace formatting.
+src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs(5,10): error whitespace: Fix whitespace formatting.

@@ -1,6 +1,0 @@
-  Determining projects to restore...
-  All projects are up-to-date for restore.
-/test/project/root/src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs formatted.
-/test/project/root/src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs formatted.
-/test/project/root/src/DotnetTokenKiller.Cli/Commands/DotnetCleanCommand.cs formatted.
-Format complete in 0.21s.

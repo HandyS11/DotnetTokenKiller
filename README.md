@@ -33,6 +33,8 @@ dtk dotnet build
 dtk dotnet test --filter "Category=Unit"
 dtk dotnet restore
 dtk dotnet clean
+dtk dotnet format
+dtk dotnet format --verify-no-changes
 ```
 
 A full test run reduces to:

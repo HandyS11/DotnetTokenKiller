@@ -1,0 +1,18 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Application/DependencyInjection.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Application/Filters/DotnetTestFilter.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Application/Filters/DotnetRestoreFilter.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Application/Filters/DotnetCleanFilter.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Application/UseCases/FilteredRunUseCase.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Cli/Program.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Cli/ArgumentPreprocessor.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Cli/Commands/DotnetBuildCommand.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Cli/Commands/DotnetTestCommand.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Cli/Commands/DotnetRestoreCommand.cs' from '/test/project/root/.editorconfig'.
+  Loading configuration for '/test/project/root/src/DotnetTokenKiller.Cli/Commands/DotnetCleanCommand.cs' from '/test/project/root/.editorconfig'.
+  Formatted 0 of 14 files.
+Format complete in 3000ms.

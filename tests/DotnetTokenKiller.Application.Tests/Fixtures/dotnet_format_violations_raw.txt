@@ -1,0 +1,3 @@
+  /test/project/root/src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(1,1): error whitespace: Fix whitespace formatting.
+  /test/project/root/src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs(5,10): error whitespace: Fix whitespace formatting.
+Format complete in 1000ms.

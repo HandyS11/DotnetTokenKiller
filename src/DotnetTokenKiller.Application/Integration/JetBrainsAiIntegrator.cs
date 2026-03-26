@@ -19,7 +19,7 @@ public sealed class JetBrainsAiIntegrator : IProviderIntegrator
         <!-- dtk -->
         ## DotnetTokenKiller (dtk)
 
-        Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
+        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
         `dtk` filters output to actionable signal only, reducing noise by 50-97%.
 
         ```sh
@@ -27,6 +27,8 @@ public sealed class JetBrainsAiIntegrator : IProviderIntegrator
         dtk dotnet test --filter "Category=Unit"
         dtk dotnet restore
         dtk dotnet clean
+        dtk dotnet format
+        dtk dotnet format --verify-no-changes
         ```
 
         - All arguments and flags are forwarded to `dotnet` unchanged.

@@ -1,0 +1,4 @@
+  Formatted code file '/test/project/root/src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs'.
+  Formatted code file '/test/project/root/src/DotnetTokenKiller.Application/Filters/DotnetBuildFilter.cs'.
+  Formatted code file '/test/project/root/src/DotnetTokenKiller.Cli/Commands/DotnetBuildCommand.cs'.
+Format complete in 2000ms.

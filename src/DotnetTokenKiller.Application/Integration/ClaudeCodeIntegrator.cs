@@ -19,7 +19,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         """
         ---
         name: dotnet-token-killer
-        description: 'Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage when building, testing, restoring, or cleaning .NET projects.'
+        description: 'Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage when building, testing, restoring, cleaning, or formatting .NET projects.'
         ---
 
         # DotnetTokenKiller (dtk)
@@ -34,13 +34,15 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
 
         ## Usage
 
-        Drop-in replacement for `dotnet build`, `test`, `restore`, and `clean`. All arguments and flags are forwarded unchanged:
+        Drop-in replacement for `dotnet build`, `test`, `restore`, `clean`, and `format`. All arguments and flags are forwarded unchanged:
 
         ```sh
         dtk dotnet build MyProject.slnx
         dtk dotnet test --filter "Category=Unit"
         dtk dotnet restore
         dtk dotnet clean
+        dtk dotnet format
+        dtk dotnet format --verify-no-changes
         ```
 
         Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
@@ -73,7 +75,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
     /// <summary>4-quote raw string literal so Python triple-quoted docstrings embed without escaping.</summary>
     private const string HookScript = """"
                                       #!/usr/bin/env python3
-                                      """Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean` to `dtk dotnet ...`.
+                                      """Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
 
                                       Reads the Bash tool input from stdin (JSON with a "command" field),
                                       rewrites qualifying dotnet commands to use dtk, and prints the
@@ -85,7 +87,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
                                       import sys
 
 
-                                      _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean"}
+                                      _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean", "format"}
 
                                       _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
 

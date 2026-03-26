@@ -65,6 +65,19 @@ dtk dotnet clean --configuration Release
 dtk dotnet clean -q
 ```
 
+### `dtk dotnet format`
+
+Run `dotnet format` with filtered output:
+
+```sh
+dtk dotnet format
+dtk dotnet format MyApp.slnx
+dtk dotnet format --verify-no-changes
+dtk dotnet format -q
+```
+
+When nothing needs formatting, the raw command produces no output at all. dtk synthesises a `✓ dotnet format (nothing to format)` confirmation so AI agents receive an explicit positive signal. When `--verify-no-changes` finds violations, the file paths and violation types are shown with workspace-relative paths.
+
 ### `dtk integrate`
 
 Install dtk integration artifacts for an AI assistant provider:
@@ -164,7 +177,7 @@ In quiet mode, verbosity flags (`-v`, `-v -v`) and `--show-log` are ignored — 
 
 ## Passthrough Behavior
 
-Any `dotnet` subcommand not in the supported list (build, test, restore, clean) is passed through to `dotnet` unchanged:
+Any `dotnet` subcommand not in the supported list (build, test, restore, clean, format) is passed through to `dotnet` unchanged:
 
 ```sh
 dtk dotnet publish    # runs: dotnet publish

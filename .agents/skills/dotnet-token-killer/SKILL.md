@@ -15,13 +15,15 @@ dotnet tool install -g DotnetTokenKiller  # requires .NET 10 SDK
 
 ## Usage
 
-Drop-in replacement for `dotnet build`, `test`, `restore`, and `clean`. All arguments and flags are forwarded unchanged:
+Drop-in replacement for `dotnet build`, `test`, `restore`, `clean`, and `format`. All arguments and flags are forwarded unchanged:
 
 ```sh
 dtk dotnet build DotnetTokenKiller.slnx
 dtk dotnet test --filter "Category=Unit"
 dtk dotnet restore
 dtk dotnet clean
+dtk dotnet format
+dtk dotnet format --verify-no-changes
 ```
 
 Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.

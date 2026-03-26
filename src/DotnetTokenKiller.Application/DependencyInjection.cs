@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetTestFilter>(FilterKeys.Test);
         services.AddKeyedTransient<IOutputFilter, DotnetRestoreFilter>(FilterKeys.Restore);
         services.AddKeyedTransient<IOutputFilter, DotnetCleanFilter>(FilterKeys.Clean);
+        services.AddKeyedTransient<IOutputFilter, DotnetFormatFilter>(FilterKeys.Format);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();

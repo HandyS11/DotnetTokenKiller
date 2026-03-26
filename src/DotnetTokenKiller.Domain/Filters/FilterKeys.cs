@@ -14,4 +14,7 @@ public static class FilterKeys
 
     /// <summary>Key for the <c>dotnet clean</c> output filter.</summary>
     public const string Clean = "clean";
+
+    /// <summary>Key for the <c>dotnet format</c> output filter.</summary>
+    public const string Format = "format";
 }

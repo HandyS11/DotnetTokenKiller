@@ -77,6 +77,10 @@ try
             dotnet.AddCommand<DotnetCleanCommand>(ArgumentPreprocessor.CleanSubcommand)
                 .WithDescription("Run dotnet clean with filtered output")
                 .WithExample(dotnetCmd, "clean");
+            dotnet.AddCommand<DotnetFormatCommand>(ArgumentPreprocessor.FormatSubcommand)
+                .WithDescription("Run dotnet format with filtered output")
+                .WithExample(dotnetCmd, "format")
+                .WithExample(dotnetCmd, "format", "--verify-no-changes");
         });
 
         config.AddBranch(integrateBranch, integrate =>
