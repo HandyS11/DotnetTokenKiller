@@ -531,6 +531,72 @@ public class DotnetBuildFilterTests
         result.Should().Contain("1 project, 2.00s");
     }
 
+    [Fact]
+    public void Apply_TwoWarnings_UsesPluralWarningForm()
+    {
+        // Kills line 141 conditional (true?""  :"s") and string mutations
+        // — always returning "" would produce "2 warning" not "2 warnings"
+        const string input = """
+                             /path/A.cs(1,1): warning CS0168: unused var [P.csproj]
+                             /path/B.cs(2,1): warning CS0219: unused value [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input);
+
+        result.Should().Contain("0 errors, 2 warnings");
+    }
+
+    [Fact]
+    public void Apply_OneWarning_UsesSingularWarningForm()
+    {
+        // Kills line 141 — with (true?""  :"s") always-empty mutation "1 warning" stays correct,
+        // but with (false?""  :"s") mutation it would produce "1 warnings" — this kills the inverse
+        const string input = "/path/A.cs(1,1): warning CS0168: unused [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input);
+
+        result.Should().Contain("0 errors, 1 warning");
+        result.Should().NotContain("1 warnings");
+    }
+
+    [Fact]
+    public void Apply_SimpleDiagnostic_OutputContainsLevelInErrors()
+    {
+        // Kills string mutation on level field (line 93)
+        // When level becomes "", the diagnostic is not classified as error → output is success ✓
+        const string input = "MSBUILD : error MSB1001: Something went wrong.";
+
+        var result = new DotnetBuildFilter().Apply(input);
+
+        result.Should().Contain("1 error");
+        result.Should().NotStartWith("\u2713");
+    }
+
+    [Fact]
+    public void Apply_SimpleDiagnosticCode_AppearsInTopCodes()
+    {
+        // Kills string mutation on code field (line 94)
+        // When code becomes "", Top codes line would show empty code instead of MSB1001
+        const string input = "MSBUILD : error MSB1001: Something went wrong.";
+
+        var result = new DotnetBuildFilter().Apply(input);
+
+        result.Should().Contain("MSB1001");
+        result.Should().Contain("Top codes: MSB1001");
+    }
+
+    [Fact]
+    public void Apply_DefaultRootPath_DoesNotThrow()
+    {
+        // Kills null coalescing mutation on line 16: rootPath ?? Environment.CurrentDirectory
+        var filter = new DotnetBuildFilter();
+        const string input = "Build succeeded.";
+
+        var result = filter.Apply(input);
+
+        result.Should().Be("\u2713 dotnet build\n");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetBuildFilterTests).Assembly;

@@ -651,6 +651,133 @@ public class DotnetTestFilterTests
         result.Should().Contain("dotnet test:");
     }
 
+    [Fact]
+    public void Apply_TwoProjectsPass_UsesPluralProjectForm()
+    {
+        // Kills line 180 conditional (state.ProjectCount == 1 ? "" : "s") and string mutations
+        // — always returning "" produces "2 project" without the "s"
+        const string input = """
+                             Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 100 ms - Tests1.dll
+                             Passed!  - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 50 ms - Tests2.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("2 projects");
+        result.Should().NotContain("1 project");
+    }
+
+    [Fact]
+    public void Apply_FailureWithNoMessageContent_MessageIsEmpty()
+    {
+        // Kills string mutation on CompactMessage early return (line 216)
+        // — mutation returns "Stryker was here!" instead of string.Empty
+        const string input = """
+                               Failed MyTests.NoContent [1 ms]
+                               Error Message:
+                               Stack Trace:
+                                  at MyTests.NoContent() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("NoContent");
+        result.Should().NotContain("Stryker was here!");
+    }
+
+    [Fact]
+    public void Apply_CompactMessage_BothExpectedAndActual_BothAppearInOutput()
+    {
+        // Kills string mutation on line 227: $"{expectedLine}, {actualLine}" → ""
+        // — mutation returns empty string instead of the combined message
+        const string input = """
+                               Failed MyTests.EqualityFail [1 ms]
+                               Error Message:
+                                 Expected: 42
+                                 Actual:   99
+                               Stack Trace:
+                                  at MyTests.EqualityFail() in /path/Test.cs:line 10
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 5 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("Expected: 42");
+        result.Should().Contain("Actual:   99");
+    }
+
+    [Fact]
+    public void Apply_CompactMessage_OnlyActual_NoLeadingComma()
+    {
+        // Kills line 222 logical mutation: && → ||
+        // With || mutation: $"{null}, Actual: 99" = ", Actual: 99" — test verifies no leading comma
+        const string input = """
+                               Failed MyTests.OnlyActualTest [1 ms]
+                               Error Message:
+                                 Actual: 99
+                               Stack Trace:
+                                  at MyTests.OnlyActualTest() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("Actual: 99");
+        result.Should().NotContain(", Actual: 99");
+    }
+
+    [Fact]
+    public void Apply_FailureRegularMessage_ContentAppearsInOutput()
+    {
+        // Kills string mutation on CompactMessage fallback join (line 234)
+        // — mutation returns "" from Truncate("") instead of the joined message lines
+        const string input = """
+                               Failed MyTests.RegularFail [1 ms]
+                               Error Message:
+                                 The quick brown fox assertion failed
+                               Stack Trace:
+                                  at MyTests.RegularFail() in /path/Test.cs:line 5
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 2 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("quick brown fox assertion failed");
+    }
+
+    [Fact]
+    public void Apply_OneProjectPass_UsesSingularProjectForm()
+    {
+        // Kills line 180 string mutation "" on the "s" branch — ensures "1 project" (not "1 projects")
+        const string input =
+            "Passed!  - Failed: 0, Passed: 7, Skipped: 0, Total: 7, Duration: 200 ms - Tests.dll";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("1 project,");
+        result.Should().NotContain("1 projects");
+    }
+
+    [Fact]
+    public void Apply_TwoProjectsPassWithElapsed_ContainsElapsedTime()
+    {
+        // Kills string mutation on elapsed format inside FormatOutput (line 180 area)
+        const string input = """
+                             Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1000 ms - Tests1.dll
+                             Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 500 ms - Tests2.dll
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("1.50s");
+        result.Should().Contain("2 projects");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetTestFilterTests).Assembly;
