@@ -49,15 +49,15 @@ public class DotnetRestoreFilterTests
     }
 
     [Fact]
-    public void Apply_NullInput_ReturnsNonNull()
+    public void Apply_NullInput_ReturnsEmpty()
     {
-        _sut.Apply(null!).Should().NotBeNull();
+        _sut.Apply(null!).Should().BeEmpty();
     }
 
     [Fact]
-    public void Apply_EmptyInput_ReturnsNonNull()
+    public void Apply_EmptyInput_ReturnsEmpty()
     {
-        _sut.Apply(string.Empty).Should().NotBeNull();
+        _sut.Apply(string.Empty).Should().BeEmpty();
     }
 
     [Fact]
@@ -126,6 +126,184 @@ public class DotnetRestoreFilterTests
         var result = _sut.Apply(input);
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_DefaultRootPath_UsesEnvironmentCurrentDirectory()
+    {
+        // Kills null coalescing mutations (line 15): rootPath ?? Environment.CurrentDirectory
+        var filter = new DotnetRestoreFilter();
+        const string input = "  Restored /some/Proj.csproj (in 50 ms).";
+
+        var result = filter.Apply(input);
+
+        result.Should().Contain("project");
+    }
+
+    [Fact]
+    public void Apply_SingleProject_UsesSingularForm()
+    {
+        // Kills conditional mutation (false/true) on plural form (line 136)
+        const string input = "  Restored /path/Proj.csproj (in 100 ms).";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("1 project,");
+        result.Should().NotContain("projects");
+    }
+
+    [Fact]
+    public void Apply_AllUpToDate_ReturnsUpToDateMessage()
+    {
+        // Kills totalProjects == 0 && AllUpToDate path (line 118-120)
+        const string input = "All projects are up-to-date for restore.";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Be("✓ dotnet restore (all up-to-date)\n");
+    }
+
+    [Fact]
+    public void Apply_ErrorWithProject_ShowsProjectInParentheses()
+    {
+        // Kills string mutations on FormatErrors format (lines 99-105)
+        const string input =
+            "/test/project/root/src/App/App.csproj : error NU1101: Unable to find package";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("NU1101:");
+        result.Should().Contain("(src/App/App.csproj)");
+    }
+
+    [Fact]
+    public void Apply_StandardErrorWithEmptyProject_ShortenPathHandlesEmpty()
+    {
+        // Kills string mutation on projRaw check (line 100)
+        const string input = "error NU1101: Unable to find package 'Foo'";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("NU1101: Unable to find package 'Foo'");
+    }
+
+    [Fact]
+    public void Apply_RestoredDuration_IncludedInElapsed()
+    {
+        // Kills statement mutation on TotalDurationMs accumulation (line 64)
+        const string input = """
+                               Restored /path/A.csproj (in 200 ms).
+                               Restored /path/B.csproj (in 300 ms).
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("0.50s");
+    }
+
+    [Fact]
+    public void Apply_SingleError_UsesSingularForm()
+    {
+        // Kills conditional mutation on (errors.Count == 1) at line 136
+        const string input =
+            "/path/proj.csproj : error NU1101: Not found";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("1 error");
+        result.Should().NotContain("1 errors");
+    }
+
+    [Fact]
+    public void Apply_RestoredCountTracks_EachRestoredLine()
+    {
+        // Kills statement mutation on restored-count increment (line 47)
+        const string input = """
+                               Restored /path/A.csproj (in 100 ms).
+                               Restored /path/B.csproj (in 200 ms).
+                               Restored /path/C.csproj (in 300 ms).
+                             """;
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("3 projects");
+    }
+
+    [Fact]
+    public void Apply_PartialUpToDate_CountIsParsed()
+    {
+        // Kills statement mutation on UpToDateCount parse (line 53)
+        const string input = "5 of 10 projects are up-to-date for restore.";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("5 projects");
+    }
+
+    [Fact]
+    public void Apply_ProjectFirstError_ProjectPathIncluded()
+    {
+        // Kills statement mutations on proj assignment and return true (line 64)
+        const string input = "/test/project/root/src/App/App.csproj : error NU1101: Package not found";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("(src/App/App.csproj)");
+    }
+
+    [Fact]
+    public void Apply_StandardError_ProjectShortenedPath()
+    {
+        // Kills string mutations on proj processing (lines 99-100)
+        const string input = "error NU1101: Unable to find package [/test/project/root/src/App/App.csproj]";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("src/App/App.csproj");
+    }
+
+    [Fact]
+    public void Apply_ErrorFormat_ContainsCodeColonMessage()
+    {
+        // Kills string mutations on error format (line 85)
+        const string input = "error NU1101: Unable to find package 'Foo'";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("NU1101: Unable to find package");
+    }
+
+    [Fact]
+    public void Apply_TotalProjects_ZeroWithNoUpToDate_ReturnsEmpty()
+    {
+        // Kills equality mutation on totalProjects != 0 (line 118)
+        const string input = "Some unrelated output line";
+
+        var result = _sut.Apply(input);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_RestoreOutput_ContainsCheckmark()
+    {
+        // Kills string mutation on "✓ dotnet restore" prefix
+        const string input = "  Restored /path/Proj.csproj (in 50 ms).";
+
+        var result = _sut.Apply(input);
+
+        result.Should().StartWith("\u2713 dotnet restore");
+    }
+
+    [Fact]
+    public void Apply_MultipleErrorsFormat_ContainsDotnetRestore()
+    {
+        // Kills string mutations on header format (line 136)
+        const string input = "error NU1101: p1\nerror NU1102: p2";
+
+        var result = _sut.Apply(input);
+
+        result.Should().StartWith("dotnet restore:");
     }
 
     private static string LoadFixture(string resourceName)

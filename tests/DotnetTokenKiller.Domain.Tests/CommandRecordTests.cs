@@ -55,4 +55,31 @@ public class CommandRecordTests
         updated.Command.Should().Be("test");
         original.Command.Should().Be("build");
     }
+
+    [Fact]
+    public void CommandRecord_NullCommand_ThrowsArgumentException()
+    {
+        var act = () => new CommandRecord(
+            DateTimeOffset.UtcNow, null!, "/app", new TokenStatistics(100, 10, 90, 90.0), TimeSpan.Zero);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void CommandRecord_WhitespaceCommand_ThrowsArgumentException()
+    {
+        var act = () => new CommandRecord(
+            DateTimeOffset.UtcNow, "  ", "/app", new TokenStatistics(100, 10, 90, 90.0), TimeSpan.Zero);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void CommandRecord_NullTokens_ThrowsArgumentNullException()
+    {
+        var act = () => new CommandRecord(
+            DateTimeOffset.UtcNow, "build", "/app", null!, TimeSpan.Zero);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
 }

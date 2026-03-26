@@ -87,15 +87,80 @@ public class DotnetCleanFilterTests
     }
 
     [Fact]
-    public void Apply_NullInput_ReturnsNonNull()
+    public void Apply_NullInput_ReturnsEmpty()
     {
-        _sut.Apply(null!).Should().NotBeNull();
+        _sut.Apply(null!).Should().BeEmpty();
     }
 
     [Fact]
-    public void Apply_EmptyInput_ReturnsNonNull()
+    public void Apply_EmptyInput_ReturnsEmpty()
     {
-        _sut.Apply(string.Empty).Should().NotBeNull();
+        _sut.Apply(string.Empty).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_DefaultRootPath_UsesEnvironmentCurrentDirectory()
+    {
+        // Kills null coalescing mutations (line 15)
+        var filter = new DotnetCleanFilter();
+        const string input = "Build succeeded.";
+
+        var result = filter.Apply(input);
+
+        result.Should().Be("✓ dotnet clean\n");
+    }
+
+    [Fact]
+    public void Apply_SuccessOutput_ReturnsCheckmarkMessage()
+    {
+        // Kills string mutation on "✓ dotnet clean" (line 23)
+        const string input = "Build succeeded.\n    0 Warning(s)\n    0 Error(s)";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Be("✓ dotnet clean\n");
+    }
+
+    [Fact]
+    public void Apply_ExactlyMaxErrorLines_NoTruncationNotice()
+    {
+        // Kills equality mutation: totalErrors >= MaxErrorLines → totalErrors > MaxErrorLines (line 62)
+        var lines = string.Join("\n",
+            Enumerable.Range(1, 5).Select(i => $"error MSB400{i}: Error {i}"));
+        var input = $"{lines}\nBuild FAILED.";
+
+        var result = _sut.Apply(input);
+
+        result.Should().NotContain("... and");
+        result.Should().Contain("error MSB4001");
+        result.Should().Contain("error MSB4005");
+    }
+
+    [Fact]
+    public void Apply_SixErrors_ShowsTruncationWithSingularForm()
+    {
+        // Kills conditional/equality/arithmetic/string mutations on "more error(s)" line (line 65)
+        var lines = string.Join("\n",
+            Enumerable.Range(1, 6).Select(i => $"error MSB400{i}: Error {i}"));
+        var input = $"{lines}\nBuild FAILED.";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("... and 1 more error");
+        result.Should().NotContain("more errors");
+    }
+
+    [Fact]
+    public void Apply_SevenErrors_ShowsTruncationWithPluralForm()
+    {
+        // Kills conditional mutations on plural form (line 65)
+        var lines = string.Join("\n",
+            Enumerable.Range(1, 7).Select(i => $"error MSB40{i:D2}: Error {i}"));
+        var input = $"{lines}\nBuild FAILED.";
+
+        var result = _sut.Apply(input);
+
+        result.Should().Contain("... and 2 more errors");
     }
 
     private static string LoadFixture(string resourceName)

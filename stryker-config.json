@@ -1,0 +1,9 @@
+{
+  "stryker-config": {
+    "solution": "DotnetTokenKiller.slnx",
+    "reporters": [
+      "json",
+      "html"
+    ]
+  }
+}

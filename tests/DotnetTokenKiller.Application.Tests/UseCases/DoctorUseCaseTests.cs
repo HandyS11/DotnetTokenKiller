@@ -176,4 +176,134 @@ public sealed class DoctorUseCaseTests : IDisposable
         dbCheck.Passed.Should().BeTrue();
         dbCheck.Message.Should().Contain("will be created");
     }
+
+    [Fact]
+    public async Task RunAsync_DotnetExitsNonZero_MessageContainsExitCode()
+    {
+        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
+            .ReturnsForAnyArgs(new CommandResult(string.Empty, string.Empty, 42));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
+        dotnetCheck.Message.Should().Contain("exited with code").And.Contain("42");
+    }
+
+    [Fact]
+    public async Task RunAsync_ConfigLoadsSuccessfully_MessageContainsLoadedSuccessfully()
+    {
+        _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        var configCheck = checks.First(c => c.Name == "config file");
+        configCheck.Message.Should().Contain("Loaded successfully");
+    }
+
+    [Fact]
+    public async Task RunAsync_DbDirectoryMissing_MessageContainsDoesNotExist()
+    {
+        var dbPath = Path.Combine(_tempDir, "missing-dir", "tracking.db");
+
+        var checks = await _sut.RunAsync(dbPath, _tempDir);
+
+        var dbCheck = checks.First(c => c.Name == "tracking database");
+        dbCheck.Message.Should().Contain("does not exist");
+    }
+
+    [Fact]
+    public async Task RunAsync_ConfigLoadThrows_MessageContainsFailedToLoad()
+    {
+        _configProvider.LoadAsync()
+            .ReturnsForAnyArgs(Task.FromException<DtkConfig>(new IOException("boom")));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        var configCheck = checks.First(c => c.Name == "config file");
+        configCheck.Message.Should().StartWith("Failed to load config:");
+    }
+
+    [Fact]
+    public async Task RunAsync_DotnetSdkCheckMessage_StartsWithFoundDotnet()
+    {
+        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
+            .ReturnsForAnyArgs(new CommandResult("9.0.200", string.Empty, 0));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
+        dotnetCheck.Message.Should().StartWith("Found dotnet ");
+    }
+
+    [Fact]
+    public async Task RunAsync_DotnetNotFound_MessageStartsWithCouldNotRun()
+    {
+        _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
+            .ReturnsForAnyArgs(Task.FromException<CommandResult>(
+                new InvalidOperationException("not installed")));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
+        dotnetCheck.Message.Should().StartWith("Could not run dotnet:");
+    }
+
+    [Fact]
+    public async Task RunAsync_TeeDirectoryWritable_ProbeFileIsCleanedUp()
+    {
+        Directory.CreateDirectory(_tempDir);
+
+        await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        // After the check, no .dtk-probe-* files should remain
+        var probeFiles = Directory.GetFiles(_tempDir, ".dtk-probe-*");
+        probeFiles.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RunAsync_TeeDirectoryWritable_MessageContainsWritableAt()
+    {
+        Directory.CreateDirectory(_tempDir);
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+        var teeCheck = checks.First(c => c.Name == "tee directory");
+        teeCheck.Message.Should().StartWith("Writable at ");
+    }
+
+    [Fact]
+    public async Task RunAsync_TeeDirectoryAbsent_MessageContainsDoesNotExistYet()
+    {
+        var nonExistent = Path.Combine(_tempDir, "tee");
+
+        var checks = await _sut.RunAsync("/tmp/test.db", nonExistent);
+
+        var teeCheck = checks.First(c => c.Name == "tee directory");
+        teeCheck.Message.Should().Contain("Does not exist yet");
+    }
+
+    [Fact]
+    public async Task RunAsync_DbFileExists_MessageStartsWithFoundAt()
+    {
+        var dbPath = Path.Combine(_tempDir, "tracking.db");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(dbPath, string.Empty);
+
+        var checks = await _sut.RunAsync(dbPath, _tempDir);
+
+        var dbCheck = checks.First(c => c.Name == "tracking database");
+        dbCheck.Message.Should().StartWith("Found at ");
+    }
+
+    [Fact]
+    public async Task RunAsync_DbFileAbsent_MessageContainsNoDataYet()
+    {
+        Directory.CreateDirectory(_tempDir);
+        var dbPath = Path.Combine(_tempDir, "nonexistent.db");
+
+        var checks = await _sut.RunAsync(dbPath, _tempDir);
+
+        var dbCheck = checks.First(c => c.Name == "tracking database");
+        dbCheck.Message.Should().Contain("No data yet");
+    }
 }
