@@ -178,10 +178,34 @@ values, and the full JSON schema.
 
 ## Shell Completion
 
+**bash**
+
 ```sh
-dtk completion bash       >> ~/.bashrc
-dtk completion zsh        >> ~/.zshrc
-dtk completion fish       > ~/.config/fish/completions/dtk.fish
+dtk completion bash >> ~/.bashrc
+```
+
+**zsh** — the script must live in `$fpath`, not be sourced inline:
+
+```sh
+mkdir -p ~/.zfunc && dtk completion zsh > ~/.zfunc/_dtk
+```
+
+Then add these two lines to `~/.zshrc` (before any existing `compinit` call):
+
+```sh
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+**fish**
+
+```sh
+dtk completion fish > ~/.config/fish/completions/dtk.fish
+```
+
+**PowerShell**
+
+```pwsh
 dtk completion powershell >> $PROFILE
 ```
 

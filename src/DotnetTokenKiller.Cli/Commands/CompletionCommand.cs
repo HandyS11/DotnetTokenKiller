@@ -8,35 +8,6 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <param name="console">The Spectre.Console output sink.</param>
 internal sealed class CompletionCommand(IAnsiConsole console) : AsyncCommand<CompletionCommandSettings>
 {
-    /// <inheritdoc/>
-    public override Task<int> ExecuteAsync(
-        CommandContext context,
-        CompletionCommandSettings settings,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(settings);
-
-        var script = settings.Shell.ToLowerInvariant() switch
-        {
-            "bash" => BashCompletion,
-            "zsh" => ZshCompletion,
-            "fish" => FishCompletion,
-            "powershell" or "pwsh" => PowerShellCompletion,
-            _ => null
-        };
-
-        if (script is null)
-        {
-            console.MarkupLine(
-                $"[red]Error:[/] Unknown shell '[bold]{Markup.Escape(settings.Shell)}[/]'. " +
-                "Supported shells: bash, zsh, fish, powershell");
-            return Task.FromResult(1);
-        }
-
-        console.WriteLine(script);
-        return Task.FromResult(0);
-    }
-
     private const string BashCompletion =
         """
         # dtk bash completion
@@ -83,7 +54,16 @@ internal sealed class CompletionCommand(IAnsiConsole console) : AsyncCommand<Com
         """
         #compdef dtk
         # dtk zsh completion
-        # To install: dtk completion zsh > "${fpath[1]}/_dtk"
+        #
+        # To install:
+        #   mkdir -p ~/.zfunc && dtk completion zsh > ~/.zfunc/_dtk
+        #
+        # Then add these lines to ~/.zshrc (before any compinit call):
+        #   fpath=(~/.zfunc $fpath)
+        #   autoload -Uz compinit && compinit
+        #
+        # Do NOT source this file directly in ~/.zshrc — the #compdef directive
+        # requires the file to be autoloaded by zsh's completion system.
 
         _dtk() {
             local -a top_cmds
@@ -143,8 +123,6 @@ internal sealed class CompletionCommand(IAnsiConsole console) : AsyncCommand<Com
                     ;;
             esac
         }
-
-        _dtk
         """;
 
     private const string FishCompletion =
@@ -219,4 +197,33 @@ internal sealed class CompletionCommand(IAnsiConsole console) : AsyncCommand<Com
                 }
         }
         """;
+
+    /// <inheritdoc/>
+    public override Task<int> ExecuteAsync(
+        CommandContext context,
+        CompletionCommandSettings settings,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var script = settings.Shell.ToLowerInvariant() switch
+        {
+            "bash" => BashCompletion,
+            "zsh" => ZshCompletion,
+            "fish" => FishCompletion,
+            "powershell" or "pwsh" => PowerShellCompletion,
+            _ => null
+        };
+
+        if (script is null)
+        {
+            console.MarkupLine(
+                $"[red]Error:[/] Unknown shell '[bold]{Markup.Escape(settings.Shell)}[/]'. " +
+                "Supported shells: bash, zsh, fish, powershell");
+            return Task.FromResult(1);
+        }
+
+        console.WriteLine(script);
+        return Task.FromResult(0);
+    }
 }
