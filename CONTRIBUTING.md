@@ -16,6 +16,9 @@ cd DotnetTokenKiller
 # Install the Git hooks (auto-formats staged .cs files and validates .csproj/.props files on commit)
 git config core.hooksPath .githooks
 
+# Install local .NET tools (includes dtk itself)
+dotnet tool restore
+
 # Restore dependencies
 dtk dotnet restore DotnetTokenKiller.slnx
 
