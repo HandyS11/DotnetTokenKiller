@@ -10,14 +10,14 @@
       "rollForward": true
     },
     "dotnettokenkiller": {
-      "version": "0.3.1",
+      "version": "0.4.0",
       "commands": [
         "dtk"
       ],
       "rollForward": true
     },
     "jetbrains.resharper.globaltools": {
-      "version": "2025.3.3",
+      "version": "2025.3.4",
       "commands": [
         "jb"
       ],
