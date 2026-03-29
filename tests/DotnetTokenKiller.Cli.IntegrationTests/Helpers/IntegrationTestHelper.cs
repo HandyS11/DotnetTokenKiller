@@ -16,6 +16,31 @@ internal static class IntegrationTestHelper
     private static readonly string TestDataDir =
         Path.Combine(Path.GetTempPath(), $"dtk-tests-{Guid.NewGuid():N}");
 
+    static IntegrationTestHelper()
+    {
+        // Best-effort cleanup: delete the isolated temp directory when the test
+        // runner process exits so repeated local/CI runs don't accumulate dtk-tests-*
+        // directories under the system temp folder.
+        AppDomain.CurrentDomain.ProcessExit += static (_, _) =>
+        {
+            try
+            {
+                if (Directory.Exists(TestDataDir))
+                {
+                    Directory.Delete(TestDataDir, true);
+                }
+            }
+            catch (IOException)
+            {
+                /* best-effort */
+            }
+            catch (UnauthorizedAccessException)
+            {
+                /* best-effort */
+            }
+        };
+    }
+
     internal static string SamplePath(string project)
     {
         return Path.Combine(RepoRoot, "samples", project);

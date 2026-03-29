@@ -78,9 +78,9 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
     private static string GetDefaultConfigPath()
     {
         var envPath = Environment.GetEnvironmentVariable("DTK_CONFIG_PATH");
-        if (!string.IsNullOrEmpty(envPath))
+        if (!string.IsNullOrWhiteSpace(envPath))
         {
-            return envPath;
+            return envPath.Trim();
         }
 
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
