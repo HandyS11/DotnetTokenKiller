@@ -41,9 +41,11 @@ public class GainCommandTests
     [Fact]
     public async Task ExecuteAsync_WithData_WritesTable()
     {
+        var successDetail = new CommandGainDetail(3, 1500, 250, 1250, 83.3);
+        var failureDetail = new CommandGainDetail(2, 1000, 150, 850, 85.0);
         var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
         {
-            ["build"] = new(5, 2500, 400, 2100, 84.0)
+            ["build"] = new(5, 2500, 400, 2100, 84.0, successDetail, failureDetail)
         };
         var summary = new GainSummary(5, 2500, 400, 2100, 84.0, details);
         var (command, console) = Create(summary);
@@ -51,7 +53,8 @@ public class GainCommandTests
         var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
 
         exitCode.Should().Be(0);
-        console.Output.Should().Contain("build");
+        console.Output.Should().Contain("build (ok)");
+        console.Output.Should().Contain("build (fail)");
     }
 
     [Fact]
@@ -112,7 +115,7 @@ public class GainCommandTests
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("timestamp,command,project_path");
-        console.Output.Should().Contain("execution_time_ms");
+        console.Output.Should().Contain("execution_time_ms,success");
     }
 
     [Fact]
@@ -143,6 +146,7 @@ public class GainCommandTests
         console.Output.Should().Contain("/my/project");
         console.Output.Should().Contain("1000");
         console.Output.Should().Contain("850");
+        console.Output.Should().Contain(",1"); // success=1
     }
 
     [Fact]

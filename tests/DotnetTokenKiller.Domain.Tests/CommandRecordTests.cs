@@ -17,7 +17,8 @@ public class CommandRecordTests
             "build",
             "/home/user/MyApp",
             new TokenStatistics(1000, 150, 850, 85.0),
-            executionTime);
+            executionTime,
+            false);
 
         record.Timestamp.Should().Be(timestamp);
         record.Command.Should().Be("build");
@@ -27,6 +28,16 @@ public class CommandRecordTests
         record.SavedTokens.Should().Be(850);
         record.SavingsPercentage.Should().Be(85.0);
         record.ExecutionTime.Should().Be(executionTime);
+        record.Success.Should().BeFalse();
+    }
+
+    [Fact]
+    public void CommandRecord_DefaultSuccess_IsTrue()
+    {
+        var record = new CommandRecord(
+            DateTimeOffset.UtcNow, "build", "/app", new TokenStatistics(100, 10, 90, 90.0), TimeSpan.Zero);
+
+        record.Success.Should().BeTrue();
     }
 
     [Fact]

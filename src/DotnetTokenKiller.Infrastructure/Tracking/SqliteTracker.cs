@@ -44,8 +44,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 #pragma warning restore CA2007
             cmd.CommandText = """
                               INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms)
-                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms)
+                                  saved_tokens, savings_percentage, execution_time_ms, success)
+                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success)
                               """;
             cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("O", CultureInfo.InvariantCulture));
             cmd.Parameters.AddWithValue("@cmd", record.Command);
@@ -55,6 +55,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
             cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
             cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
+            cmd.Parameters.AddWithValue("@success", record.Success ? 1 : 0);
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
 
             _insertsSinceCleanup++;
@@ -78,7 +79,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-                           SELECT command,
+                           SELECT command, success,
                                   COUNT(*) as run_count,
                                   SUM(input_tokens) as total_input,
                                   SUM(output_tokens) as total_output,
@@ -88,7 +89,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
                              AND (@cmd IS NULL OR command = @cmd)
-                           GROUP BY command
+                           GROUP BY command, success
+                           ORDER BY command, success DESC
                            """;
 
         return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, cancellationToken);
@@ -103,7 +105,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     {
         const string sql = """
                            SELECT timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms
+                                  saved_tokens, savings_percentage, execution_time_ms, success
                            FROM commands
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
@@ -190,24 +192,39 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     private async Task InitializeSchemaAsync(CancellationToken ct)
     {
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var cmd = _connection.CreateCommand();
+        await using var createCmd = _connection.CreateCommand();
 #pragma warning restore CA2007
-        cmd.CommandText = """
-                          CREATE TABLE IF NOT EXISTS commands (
-                              id INTEGER PRIMARY KEY AUTOINCREMENT,
-                              timestamp TEXT NOT NULL,
-                              command TEXT NOT NULL,
-                              project_path TEXT NOT NULL,
-                              input_tokens INTEGER NOT NULL,
-                              output_tokens INTEGER NOT NULL,
-                              saved_tokens INTEGER NOT NULL,
-                              savings_percentage REAL NOT NULL,
-                              execution_time_ms REAL NOT NULL
-                          );
-                          CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
-                          CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
-                          """;
-        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        createCmd.CommandText = """
+                                CREATE TABLE IF NOT EXISTS commands (
+                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    timestamp TEXT NOT NULL,
+                                    command TEXT NOT NULL,
+                                    project_path TEXT NOT NULL,
+                                    input_tokens INTEGER NOT NULL,
+                                    output_tokens INTEGER NOT NULL,
+                                    saved_tokens INTEGER NOT NULL,
+                                    savings_percentage REAL NOT NULL,
+                                    execution_time_ms REAL NOT NULL
+                                );
+                                CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
+                                CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
+                                """;
+        await createCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+
+        // Migration: add success column for existing databases (old records default to success=1)
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var checkCmd = _connection.CreateCommand();
+#pragma warning restore CA2007
+        checkCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('commands') WHERE name='success'";
+        var columnExists = (long)(await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false))! > 0;
+        if (!columnExists)
+        {
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+            await using var alterCmd = _connection.CreateCommand();
+#pragma warning restore CA2007
+            alterCmd.CommandText = "ALTER TABLE commands ADD COLUMN success INTEGER NOT NULL DEFAULT 1";
+            await alterCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
     }
 
     private async Task<T> ExecuteWithFilterAsync<T>(
@@ -248,7 +265,11 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         var totalInput = 0;
         var totalOutput = 0;
         var totalSaved = 0;
-        var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
+
+        // Accumulate per-command, per-status rows before building CommandGainDetail
+        var grouped =
+            new Dictionary<string, List<(bool Success, int RunCount, int SumInput, int SumOutput, int SumSaved, double
+                AvgPct)>>(StringComparer.Ordinal);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -256,17 +277,62 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
             var cmdName = reader.GetString(0);
-            var runCount = reader.GetInt32(1);
-            var sumInput = reader.GetInt32(2);
-            var sumOutput = reader.GetInt32(3);
-            var sumSaved = reader.GetInt32(4);
-            var avgPct = reader.GetDouble(5);
+            var success = reader.GetInt32(1) != 0;
+            var runCount = reader.GetInt32(2);
+            var sumInput = reader.GetInt32(3);
+            var sumOutput = reader.GetInt32(4);
+            var sumSaved = reader.GetInt32(5);
+            var avgPct = reader.GetDouble(6);
 
             totalCommands += runCount;
             totalInput += sumInput;
             totalOutput += sumOutput;
             totalSaved += sumSaved;
-            commandDetails[cmdName] = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct);
+
+            if (!grouped.TryGetValue(cmdName, out var rows))
+            {
+                rows = [];
+                grouped[cmdName] = rows;
+            }
+
+            rows.Add((success, runCount, sumInput, sumOutput, sumSaved, avgPct));
+        }
+
+        var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
+        foreach (var (cmdName, rows) in grouped)
+        {
+            CommandGainDetail? successDetail = null;
+            CommandGainDetail? failureDetail = null;
+            var totalRunsCmd = 0;
+            var totalInputCmd = 0;
+            var totalOutputCmd = 0;
+            var totalSavedCmd = 0;
+            var weightedPctSum = 0.0;
+
+            foreach (var (success, runCount, sumInput, sumOutput, sumSaved, avgPct) in rows)
+            {
+                var statusDetail = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct);
+                if (success)
+                {
+                    successDetail = statusDetail;
+                }
+                else
+                {
+                    failureDetail = statusDetail;
+                }
+
+                totalRunsCmd += runCount;
+                totalInputCmd += sumInput;
+                totalOutputCmd += sumOutput;
+                totalSavedCmd += sumSaved;
+                weightedPctSum += runCount * avgPct;
+            }
+
+            // Run-count-weighted average of the per-status SQL AVG(savings_percentage) values,
+            // keeping the same per-run-average semantics as SuccessDetail/FailureDetail.
+            var avgPctCmd = totalRunsCmd > 0 ? weightedPctSum / totalRunsCmd : 0.0;
+            commandDetails[cmdName] = new CommandGainDetail(totalRunsCmd, totalInputCmd, totalOutputCmd, totalSavedCmd,
+                avgPctCmd, successDetail, failureDetail);
         }
 
         var averagePct = totalInput > 0 ? (double)totalSaved / totalInput * 100.0 : 0.0;
@@ -288,7 +354,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 reader.GetString(1),
                 reader.GetString(2),
                 new TokenStatistics(reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetDouble(6)),
-                TimeSpan.FromMilliseconds(reader.GetDouble(7))));
+                TimeSpan.FromMilliseconds(reader.GetDouble(7)),
+                reader.GetInt32(8) != 0));
         }
 
         return results;
