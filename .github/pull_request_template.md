@@ -12,10 +12,10 @@
 
 ## Checklist
 
-- [ ] `dotnet build DotnetTokenKiller.slnx` passes with no warnings
-- [ ] `dotnet test DotnetTokenKiller.slnx` passes
+- [ ] `dtk dotnet build DotnetTokenKiller.slnx` passes with no warnings
+- [ ] `dtk dotnet test DotnetTokenKiller.slnx` passes
 - [ ] New behaviour is covered by tests
-- [ ] `dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` passes
+- [ ] `dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes` passes
 
 ## Related issues
 

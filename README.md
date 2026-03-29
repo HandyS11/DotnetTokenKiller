@@ -14,14 +14,80 @@ matters.
 
 </div>
 
-When you feed `dotnet build` or `dotnet test` output to an LLM, most of it is noise — SDK banners, MSBuild headers,
-progress lines, ANSI escape codes, duplicate messages. DTK strips all of that and returns a compact, signal-only result.
-Fewer tokens in means lower cost and less context consumed.
+## The Problem
+
+When AI coding agents run `dotnet build` or `dotnet test`, the output is packed with noise — SDK banners, MSBuild
+headers, progress indicators, ANSI escape codes, duplicate messages, and framework internals. A typical `dotnet test`
+run can produce **200+ lines** where only 5–10 actually matter. Every extra line burns tokens, inflates cost, and
+wastes precious context window space.
+
+<details>
+<summary><strong>Example: 27 lines of raw <code>dotnet test</code> output → 5 lines with dtk</strong></summary>
+
+**Before (raw `dotnet test`):**
+
+```sh
+Restore complete (0.4s)
+  SampleApp.Tests succeeded (0.1s) → bin/Debug/net10.0/SampleApp.Tests.dll
+  SampleApp succeeded (0.1s) → bin/Debug/net10.0/SampleApp.dll
+  Build succeeded in 0.8s
+Test run for /home/user/samples/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 17.13.0 (x64)
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+  Failed AlwaysFails [5 ms]
+  Error Message:
+   Intentional failure
+  Stack Trace:
+     at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails() in /home/user/samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
+
+Failed!  - Failed:     1, Passed:     3, Skipped:     0, Total:     4, Duration: 42 ms
+```
+
+**After (`dtk dotnet test`):**
+
+```sh
+FAILURES (1):
+  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [5 ms]
+    Intentional failure
+    at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
+dotnet test: 1 failed, 3 passed (1 project, 0.07s)
+```
+
+</details>
+
+DTK strips all the noise and returns a compact, signal-only result. Fewer tokens in means lower cost and less
+context consumed.
+
+## Features at a Glance
+
+- **Build filtering** — strips MSBuild noise, keeps only errors, warnings, and a compact summary (~78% savings)
+- **Test filtering** — removes adapter banners, license warnings, and reflection stack frames (~84% savings)
+- **Restore/Clean filtering** — condenses output to essentials (~47–98% savings)
+- **Format filtering** — shows only violations with workspace-relative paths
+- **7 AI agent integrations** — Claude Code, GitHub Copilot, Gemini CLI, Cursor, Windsurf, Aider, JetBrains AI
+- **Token analytics** — tracks per-command savings over time with `dtk gain`
+- **Self-diagnostics** — `dtk doctor` validates your setup in one command
+- **Shell completion** — bash, zsh, fish, and PowerShell
+- **Log teeing** — optionally saves raw output to disk for post-mortem inspection
 
 ## Installation
 
 ```sh
-dotnet tool install -g DotnetTokenKiller   # requires .NET 10 SDK (full SDK, not just runtime)
+# Requires .NET 10 SDK (https://dotnet.microsoft.com/download) — full SDK, not just runtime
+dotnet tool install -g DotnetTokenKiller
+```
+
+To update an existing installation:
+
+```sh
+dotnet tool update -g DotnetTokenKiller
+```
+
+To uninstall:
+
+```sh
+dotnet tool uninstall -g DotnetTokenKiller
 ```
 
 ## Usage
@@ -35,16 +101,6 @@ dtk dotnet restore
 dtk dotnet clean
 dtk dotnet format
 dtk dotnet format --verify-no-changes
-```
-
-A full test run reduces to:
-
-```sh
-FAILURES (1):
-  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [5 ms]
-    Intentional failure
-    at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
-dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 ```
 
 Unknown subcommands pass through to `dotnet` unchanged.
@@ -94,6 +150,14 @@ Example:
 
 To reset tracking data: `dtk reset` (or `dtk reset --force` to skip confirmation).
 
+## Diagnostics
+
+```sh
+dtk doctor
+```
+
+Checks dotnet SDK, config file, tracking database, and tee directory. Exits `1` if any check fails.
+
 ## Configuration
 
 Manage settings via CLI or edit `~/.config/dtk/config.json` directly:
@@ -111,14 +175,6 @@ Supported keys: `tracking.enabled`, `tracking.retentionDays`, `tracking.dbPath`,
 
 See [Configuration](https://handys11.github.io/DotnetTokenKiller/articles/configuration.html) for defaults, valid
 values, and the full JSON schema.
-
-## Diagnostics
-
-```sh
-dtk doctor
-```
-
-Checks dotnet SDK, config file, tracking database, and tee directory. Exits `1` if any check fails.
 
 ## Shell Completion
 
@@ -140,7 +196,9 @@ dtk dotnet test --show-log
 
 ## Inspiration
 
-Inspired by [rtk](https://github.com/rtk-ai/rtk).
+Inspired by [rtk](https://github.com/rtk-ai/rtk). DTK takes the same idea — filtering noisy CLI output for AI
+agents — and rebuilds it natively in .NET with per-command filters, a richer feature set (token analytics, shell
+completion, multi-agent integration), and first-class support for the full `dotnet` CLI surface.
 
 ## Documentation
 
