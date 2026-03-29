@@ -26,4 +26,25 @@ public class CommandGainDetailTests
 
         a.Should().Be(b);
     }
+
+    [Fact]
+    public void CommandGainDetail_DefaultSubDetails_AreNull()
+    {
+        var detail = new CommandGainDetail(5, 2500, 400, 2100, 84.0);
+
+        detail.SuccessDetail.Should().BeNull();
+        detail.FailureDetail.Should().BeNull();
+    }
+
+    [Fact]
+    public void CommandGainDetail_StoresSuccessAndFailureDetail()
+    {
+        var successDetail = new CommandGainDetail(3, 1500, 250, 1250, 83.3);
+        var failureDetail = new CommandGainDetail(2, 1000, 150, 850, 85.0);
+
+        var detail = new CommandGainDetail(5, 2500, 400, 2100, 84.0, successDetail, failureDetail);
+
+        detail.SuccessDetail.Should().Be(successDetail);
+        detail.FailureDetail.Should().Be(failureDetail);
+    }
 }

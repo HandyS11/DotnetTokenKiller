@@ -24,14 +24,16 @@ public class SqliteTrackerTests : IAsyncDisposable
         int outputTokens = 150,
         int savedTokens = 850,
         double savingsPct = 85.0,
-        DateTimeOffset? timestamp = null)
+        DateTimeOffset? timestamp = null,
+        bool success = true)
     {
         return new CommandRecord(
             timestamp ?? DateTimeOffset.UtcNow,
             command,
             projectPath,
             new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
-            TimeSpan.FromMilliseconds(500));
+            TimeSpan.FromMilliseconds(500),
+            success);
     }
 
     [Fact]
@@ -55,7 +57,8 @@ public class SqliteTrackerTests : IAsyncDisposable
             200,
             1800,
             90.0,
-            ts);
+            ts,
+            false);
 
         await _sut.RecordAsync(record);
         var history = await _sut.GetHistoryAsync(365, null);
@@ -68,6 +71,7 @@ public class SqliteTrackerTests : IAsyncDisposable
         stored.SavedTokens.Should().Be(1800);
         stored.SavingsPercentage.Should().BeApproximately(90.0, 0.001);
         stored.Timestamp.Should().BeCloseTo(ts, TimeSpan.FromSeconds(1));
+        stored.Success.Should().BeFalse();
     }
 
     [Fact]
@@ -101,6 +105,25 @@ public class SqliteTrackerTests : IAsyncDisposable
         summary.TotalSavedTokens.Should().Be(2200);
         summary.CommandDetails["build"].TotalSavedTokens.Should().Be(1700);
         summary.CommandDetails["test"].TotalSavedTokens.Should().Be(500);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_SplitsSuccessAndFailureIntoSubDetails()
+    {
+        await _sut.RecordAsync(MakeRecord(savedTokens: 800, success: true));
+        await _sut.RecordAsync(MakeRecord(savedTokens: 900, success: true));
+        await _sut.RecordAsync(MakeRecord(savedTokens: 500, success: false));
+
+        var summary = await _sut.GetSummaryAsync(30, null);
+
+        var buildDetail = summary.CommandDetails["build"];
+        buildDetail.RunCount.Should().Be(3);
+        buildDetail.SuccessDetail.Should().NotBeNull();
+        buildDetail.SuccessDetail!.RunCount.Should().Be(2);
+        buildDetail.SuccessDetail.TotalSavedTokens.Should().Be(1700);
+        buildDetail.FailureDetail.Should().NotBeNull();
+        buildDetail.FailureDetail!.RunCount.Should().Be(1);
+        buildDetail.FailureDetail.TotalSavedTokens.Should().Be(500);
     }
 
     [Fact]

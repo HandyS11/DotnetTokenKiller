@@ -17,7 +17,7 @@ internal sealed class GainCommand(
     IAnsiConsole console) : AsyncCommand<GainCommandSettings>
 {
     internal const string CsvHeader =
-        "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms";
+        "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms,success";
 
     /// <inheritdoc/>
     public override async Task<int> ExecuteAsync(
@@ -45,7 +45,7 @@ internal sealed class GainCommand(
             foreach (var r in records)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)}");
+                    $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)},{(r.Success ? 1 : 0)}");
             }
 
             console.Write(sb.ToString());
@@ -79,13 +79,27 @@ internal sealed class GainCommand(
 
         foreach (var (cmd, detail) in summary.CommandDetails)
         {
-            table.AddRow(
-                new Text(cmd),
-                new Text(detail.RunCount.ToString(CultureInfo.InvariantCulture)),
-                new Text(detail.TotalInputTokens.ToString(CultureInfo.InvariantCulture)),
-                new Text(detail.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)),
-                new Text(detail.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)),
-                new Text(detail.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture) + "%"));
+            if (detail.SuccessDetail is { } sd)
+            {
+                table.AddRow(
+                    new Markup($"[green]{cmd.EscapeMarkup()} (ok)[/]"),
+                    new Text(sd.RunCount.ToString(CultureInfo.InvariantCulture)),
+                    new Text(sd.TotalInputTokens.ToString(CultureInfo.InvariantCulture)),
+                    new Text(sd.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)),
+                    new Text(sd.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)),
+                    new Text(sd.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture) + "%"));
+            }
+
+            if (detail.FailureDetail is { } fd)
+            {
+                table.AddRow(
+                    new Markup($"[red]{cmd.EscapeMarkup()} (fail)[/]"),
+                    new Text(fd.RunCount.ToString(CultureInfo.InvariantCulture)),
+                    new Text(fd.TotalInputTokens.ToString(CultureInfo.InvariantCulture)),
+                    new Text(fd.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)),
+                    new Text(fd.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)),
+                    new Text(fd.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture) + "%"));
+            }
         }
 
         table.AddEmptyRow();

@@ -97,7 +97,8 @@ public sealed class FilteredRunUseCase(
         await TeeIfConfiguredAsync(stripped, commandSlug, result.ExitCode, showLogHint, cancellationToken)
             .ConfigureAwait(false);
 
-        await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, cancellationToken)
+        await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, result.ExitCode,
+                cancellationToken)
             .ConfigureAwait(false);
 
         return result.ExitCode;
@@ -131,6 +132,7 @@ public sealed class FilteredRunUseCase(
         string stripped,
         string filtered,
         TimeSpan elapsed,
+        int exitCode,
         CancellationToken cancellationToken)
     {
         if (!config.Tracking.Enabled)
@@ -150,7 +152,8 @@ public sealed class FilteredRunUseCase(
                 commandSlug,
                 Environment.CurrentDirectory,
                 new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
-                elapsed);
+                elapsed,
+                exitCode == 0);
 
             await tracker.RecordAsync(record, cancellationToken).ConfigureAwait(false);
         }
