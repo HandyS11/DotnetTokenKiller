@@ -336,6 +336,25 @@ public sealed class ConfigSetUseCaseTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_NumericEnumInput_ThrowsFormatException()
+    {
+        // Enum.TryParse accepts numeric strings like "2" and produces undefined enum values — must be rejected
+        var act = () => _sut.ExecuteAsync("tracking.tokenizer", "2");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*Expected one of*");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NumericEnumInput_TeeMode_ThrowsFormatException()
+    {
+        var act = () => _sut.ExecuteAsync("tee.mode", "99");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*Expected one of*");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_InvalidInt_ErrorIncludesValueAndKey()
     {
         // Kills string mutations on ParseInt error format
