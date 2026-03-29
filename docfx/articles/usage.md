@@ -153,7 +153,7 @@ Reports pass/fail for four checks: dotnet SDK availability, config file load, tr
 
 ### `dtk completion`
 
-Print a shell completion script:
+Print a shell completion script for the given shell:
 
 ```sh
 dtk completion bash
@@ -162,7 +162,38 @@ dtk completion fish
 dtk completion powershell   # also accepts: pwsh
 ```
 
-Pipe the output into your shell profile to enable tab completion for all `dtk` subcommands.
+**bash** — write to a dedicated file (preferred) or to the system-wide completions directory:
+
+```sh
+dtk completion bash > ~/.bash_completion
+# or system-wide:
+dtk completion bash > /etc/bash_completion.d/dtk
+```
+
+**zsh** — the script must be autoloaded from `$fpath`; do not source it inline in `~/.zshrc`:
+
+```sh
+mkdir -p ~/.zfunc && dtk completion zsh > ~/.zfunc/_dtk
+```
+
+Then add these two lines to `~/.zshrc` before any existing `compinit` call:
+
+```sh
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+**fish** — write to the completions directory:
+
+```sh
+dtk completion fish > ~/.config/fish/completions/dtk.fish
+```
+
+**PowerShell** — append to your profile:
+
+```pwsh
+dtk completion powershell >> $PROFILE
+```
 
 ## Quiet Mode
 

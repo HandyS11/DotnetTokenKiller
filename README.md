@@ -178,10 +178,36 @@ values, and the full JSON schema.
 
 ## Shell Completion
 
+**bash** — write to a dedicated file (preferred) or to the system-wide completions directory:
+
 ```sh
-dtk completion bash       >> ~/.bashrc
-dtk completion zsh        >> ~/.zshrc
-dtk completion fish       > ~/.config/fish/completions/dtk.fish
+dtk completion bash > ~/.bash_completion
+# or system-wide:
+dtk completion bash > /etc/bash_completion.d/dtk
+```
+
+**zsh** — the script must live in `$fpath`, not be sourced inline:
+
+```sh
+mkdir -p ~/.zfunc && dtk completion zsh > ~/.zfunc/_dtk
+```
+
+Then add these two lines to `~/.zshrc` (before any existing `compinit` call):
+
+```sh
+fpath=(~/.zfunc $fpath)
+autoload -Uz compinit && compinit
+```
+
+**fish**
+
+```sh
+dtk completion fish > ~/.config/fish/completions/dtk.fish
+```
+
+**PowerShell**
+
+```pwsh
 dtk completion powershell >> $PROFILE
 ```
 
