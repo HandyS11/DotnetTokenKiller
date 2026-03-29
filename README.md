@@ -178,10 +178,12 @@ values, and the full JSON schema.
 
 ## Shell Completion
 
-**bash**
+**bash** — write to a dedicated file (preferred) or to the system-wide completions directory:
 
 ```sh
-dtk completion bash >> ~/.bashrc
+dtk completion bash > ~/.bash_completion
+# or system-wide:
+dtk completion bash > /etc/bash_completion.d/dtk
 ```
 
 **zsh** — the script must live in `$fpath`, not be sourced inline:

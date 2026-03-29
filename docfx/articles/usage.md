@@ -162,10 +162,12 @@ dtk completion fish
 dtk completion powershell   # also accepts: pwsh
 ```
 
-**bash** — append to your profile:
+**bash** — write to a dedicated file (preferred) or to the system-wide completions directory:
 
 ```sh
-dtk completion bash >> ~/.bashrc
+dtk completion bash > ~/.bash_completion
+# or system-wide:
+dtk completion bash > /etc/bash_completion.d/dtk
 ```
 
 **zsh** — the script must be autoloaded from `$fpath`; do not source it inline in `~/.zshrc`:
