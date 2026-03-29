@@ -1,3 +1,3 @@
 [!INCLUDE[](../../../samples/examples/FORMAT.md)]
 
-<!-- If viewing on GitHub, the content above may not render. See the source file: [samples/examples/FORMAT.md](../../../samples/examples/FORMAT.md) -->
+> **Note for GitHub readers:** The included content above may not render here. View it directly at [`samples/examples/FORMAT.md`](../../../samples/examples/FORMAT.md).
