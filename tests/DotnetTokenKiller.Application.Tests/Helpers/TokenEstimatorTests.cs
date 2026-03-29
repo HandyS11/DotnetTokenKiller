@@ -42,9 +42,6 @@ public class TokenEstimatorTests
     [Theory]
     [InlineData(TokenizerModel.Cl100kBase)]
     [InlineData(TokenizerModel.O200kBase)]
-    [InlineData(TokenizerModel.P50kBase)]
-    [InlineData(TokenizerModel.R50kBase)]
-    [InlineData(TokenizerModel.P50kEdit)]
     public void Estimate_AllModels_ReturnPositiveForNonEmptyText(TokenizerModel model)
     {
         TokenEstimator.Estimate("Hello world, this is a test.", model).Should().BeGreaterThan(0);

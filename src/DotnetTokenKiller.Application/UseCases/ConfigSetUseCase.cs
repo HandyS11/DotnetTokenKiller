@@ -16,7 +16,7 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
             ["tracking.enabled"] = "true|false",
             ["tracking.retentionDays"] = "integer ≥ 1",
             ["tracking.dbPath"] = "file path (empty string to reset to default)",
-            ["tracking.tokenizer"] = "Cl100kBase|O200kBase|P50kBase|R50kBase|P50kEdit",
+            ["tracking.tokenizer"] = "Cl100kBase|O200kBase",
             ["display.colors"] = "true|false",
             ["display.emoji"] = "true|false",
             ["display.width"] = "integer ≥ 40",

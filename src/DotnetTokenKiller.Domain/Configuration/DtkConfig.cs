@@ -42,17 +42,8 @@ public enum TokenizerModel
     /// <summary>OpenAI cl100k_base encoding (GPT-4, GPT-3.5-turbo).</summary>
     Cl100kBase = 0,
 
-    /// <summary>OpenAI o200k_base encoding (GPT-4o).</summary>
+    /// <summary>OpenAI o200k_base encoding (GPT-4o, o1, o3).</summary>
     O200kBase = 1,
-
-    /// <summary>OpenAI p50k_base encoding (Codex, text-davinci).</summary>
-    P50kBase = 2,
-
-    /// <summary>OpenAI r50k_base encoding (GPT-3).</summary>
-    R50kBase = 3,
-
-    /// <summary>OpenAI p50k_edit encoding (text-davinci-edit, code-davinci-edit).</summary>
-    P50kEdit = 4
 }
 
 /// <summary>Supported tee output modes.</summary>

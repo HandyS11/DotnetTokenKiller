@@ -87,9 +87,6 @@ The `tokenizer` field accepts one of the following values:
 | Value | Encoding | Typical Models |
 |-------|----------|----------------|
 | `Cl100kBase` | `cl100k_base` | GPT-4, GPT-3.5-turbo |
-| `O200kBase` | `o200k_base` | GPT-4o |
-| `P50kBase` | `p50k_base` | Codex, text-davinci |
-| `P50kEdit` | `p50k_edit` | text-davinci-edit, code-davinci-edit |
-| `R50kBase` | `r50k_base` | GPT-3 |
+| `O200kBase` | `o200k_base` | GPT-4o, o1, o3 |
 
 Token counting uses the [Microsoft.ML.Tokenizers](https://www.nuget.org/packages/Microsoft.ML.Tokenizers) library, which provides accurate BPE tokenization matching the selected model's encoding.
