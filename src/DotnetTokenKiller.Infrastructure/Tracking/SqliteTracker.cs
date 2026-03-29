@@ -307,6 +307,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             var totalInputCmd = 0;
             var totalOutputCmd = 0;
             var totalSavedCmd = 0;
+            var weightedPctSum = 0.0;
 
             foreach (var (success, runCount, sumInput, sumOutput, sumSaved, avgPct) in rows)
             {
@@ -324,9 +325,12 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 totalInputCmd += sumInput;
                 totalOutputCmd += sumOutput;
                 totalSavedCmd += sumSaved;
+                weightedPctSum += runCount * avgPct;
             }
 
-            var avgPctCmd = totalInputCmd > 0 ? (double)totalSavedCmd / totalInputCmd * 100.0 : 0.0;
+            // Run-count-weighted average of the per-status SQL AVG(savings_percentage) values,
+            // keeping the same per-run-average semantics as SuccessDetail/FailureDetail.
+            var avgPctCmd = totalRunsCmd > 0 ? weightedPctSum / totalRunsCmd : 0.0;
             commandDetails[cmdName] = new CommandGainDetail(totalRunsCmd, totalInputCmd, totalOutputCmd, totalSavedCmd,
                 avgPctCmd, successDetail, failureDetail);
         }

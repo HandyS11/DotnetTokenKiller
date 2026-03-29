@@ -110,9 +110,12 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task GetSummaryAsync_SplitsSuccessAndFailureIntoSubDetails()
     {
-        await _sut.RecordAsync(MakeRecord(savedTokens: 800, success: true));
-        await _sut.RecordAsync(MakeRecord(savedTokens: 900, success: true));
-        await _sut.RecordAsync(MakeRecord(savedTokens: 500, success: false));
+        // Two success rows at 80 %, one failure row at 50 % — deliberately different so
+        // the combined AverageSavingsPercentage asserts the run-count-weighted average:
+        //   (2 × 80.0 + 1 × 50.0) / 3 = 70.0
+        await _sut.RecordAsync(MakeRecord(savedTokens: 800, savingsPct: 80.0, success: true));
+        await _sut.RecordAsync(MakeRecord(savedTokens: 900, savingsPct: 80.0, success: true));
+        await _sut.RecordAsync(MakeRecord(savedTokens: 500, savingsPct: 50.0, success: false));
 
         var summary = await _sut.GetSummaryAsync(30, null);
 
@@ -121,9 +124,13 @@ public class SqliteTrackerTests : IAsyncDisposable
         buildDetail.SuccessDetail.Should().NotBeNull();
         buildDetail.SuccessDetail!.RunCount.Should().Be(2);
         buildDetail.SuccessDetail.TotalSavedTokens.Should().Be(1700);
+        buildDetail.SuccessDetail.AverageSavingsPercentage.Should().BeApproximately(80.0, 0.001);
         buildDetail.FailureDetail.Should().NotBeNull();
         buildDetail.FailureDetail!.RunCount.Should().Be(1);
         buildDetail.FailureDetail.TotalSavedTokens.Should().Be(500);
+        buildDetail.FailureDetail.AverageSavingsPercentage.Should().BeApproximately(50.0, 0.001);
+        // Combined: run-count-weighted average of per-status SQL AVG values
+        buildDetail.AverageSavingsPercentage.Should().BeApproximately(70.0, 0.001);
     }
 
     [Fact]
