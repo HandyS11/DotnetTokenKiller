@@ -14,16 +14,17 @@ src/
 
 ## Layer Diagram
 
-```sh
-┌─────────────────────────────────────┐
-│            CLI (Spectre.Console)    │  Commands, Settings, DI setup
-├─────────────────────────────────────┤
-│            Application              │  Use cases, Output filters
-├─────────────────────────────────────┤
-│            Infrastructure           │  SQLite, JSON config, Process
-├─────────────────────────────────────┤
-│            Domain                   │  Interfaces, Models, Value objects
-└─────────────────────────────────────┘
+```mermaid
+graph TD
+    CLI["CLI<br/><small>Spectre.Console — Commands, Settings, DI setup</small>"]
+    APP["Application<br/><small>Use cases, Output filters</small>"]
+    INFRA["Infrastructure<br/><small>SQLite, JSON config, Process</small>"]
+    DOM["Domain<br/><small>Interfaces, Models, Value objects</small>"]
+
+    CLI --> APP
+    CLI --> INFRA
+    APP --> DOM
+    INFRA --> DOM
 ```
 
 Dependencies flow inward: CLI → Application → Domain, and Infrastructure → Domain. The CLI layer wires everything together via dependency injection.
@@ -62,6 +63,7 @@ Each supported `dotnet` subcommand has a dedicated filter implementing `IOutputF
 | `DotnetTestFilter` | `dotnet test` |
 | `DotnetRestoreFilter` | `dotnet restore` |
 | `DotnetCleanFilter` | `dotnet clean` |
+| `DotnetFormatFilter` | `dotnet format` |
 
 These filters parse the raw `dotnet` output and produce compact, LLM-friendly summaries — stripping MSBuild noise, adapter banners, absolute paths, and duplicate information.
 

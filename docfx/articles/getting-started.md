@@ -4,7 +4,10 @@ DotnetTokenKiller (DTK) is a .NET CLI proxy that reduces LLM token usage by filt
 
 ## Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download) or later
+- [.NET 10 SDK](https://dotnet.microsoft.com/download) or later (full SDK, not just the runtime)
+- **OS**: Windows, macOS, or Linux — any platform supported by the .NET SDK
+- **Shell**: Works with bash, zsh, fish, PowerShell, and cmd
+- **Python 3** (optional): Required only if you use `dtk integrate claude` or `dtk integrate gemini`, which install Python-based hooks
 
 ## Installation
 
@@ -18,6 +21,12 @@ To update an existing installation:
 
 ```sh
 dotnet tool update -g DotnetTokenKiller
+```
+
+To uninstall:
+
+```sh
+dotnet tool uninstall -g DotnetTokenKiller
 ```
 
 ## First Use
@@ -62,6 +71,52 @@ dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 | `dtk integrate`      | Install AI agent integration artifacts |
 
 Any other `dotnet` subcommand (e.g., `dtk dotnet publish`) is passed through to `dotnet` unchanged.
+
+## Troubleshooting
+
+### `dtk: command not found`
+
+The .NET global tools directory is not on your `PATH`. Add it:
+
+```sh
+# Linux / macOS (bash/zsh)
+export PATH="$PATH:$HOME/.dotnet/tools"
+
+# Windows (PowerShell)
+$env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+```
+
+Add the line to your shell profile (`~/.bashrc`, `~/.zshrc`, or `$PROFILE`) to make it permanent.
+
+### `dtk` is installed but outdated
+
+```sh
+dotnet tool update -g DotnetTokenKiller
+```
+
+### Proxy or corporate firewall errors during install
+
+If `dotnet tool install` fails behind a proxy, configure NuGet to use your proxy:
+
+```sh
+# Linux / macOS
+export HTTP_PROXY=http://proxy:port
+export HTTPS_PROXY=http://proxy:port
+
+# Windows (PowerShell)
+$env:HTTP_PROXY = "http://proxy:port"
+$env:HTTPS_PROXY = "http://proxy:port"
+```
+
+Then retry the install command.
+
+### `dtk integrate claude` / `dtk integrate gemini` fails
+
+These commands generate Python-based hooks that require `python3` to be available on your `PATH` at runtime. Verify with:
+
+```sh
+python3 --version
+```
 
 ## Next Steps
 

@@ -22,7 +22,20 @@ DTK uses an optional JSON configuration file at:
 # - Linux:  ~/.config/dtk/config.json
 ```
 
-All settings have sensible defaults — no configuration is required to get started.
+> [!TIP]
+> **Zero-config by default** — DTK works out of the box without any configuration file. All settings have sensible defaults. You only need to create or edit the config file if you want to customize behavior.
+
+A minimal config that only changes the display width would be:
+
+```json
+{
+  "display": {
+    "width": 100
+  }
+}
+```
+
+Any omitted keys use their defaults.
 
 ## Full Configuration File
 
@@ -90,3 +103,6 @@ The `tokenizer` field accepts one of the following values:
 | `O200kBase` | `o200k_base` | GPT-4o, o1, o3 |
 
 Token counting uses the [Microsoft.ML.Tokenizers](https://www.nuget.org/packages/Microsoft.ML.Tokenizers) library, which provides accurate BPE tokenization matching the selected model's encoding.
+
+> [!NOTE]
+> **Which tokenizer should I pick?** Claude, Gemini, and other non-OpenAI models use their own tokenizers, but no public BPE files are available for them. The `Cl100kBase` default provides a close-enough token estimate for any model and is the recommended choice unless you specifically need `O200kBase` for GPT-4o/o1/o3 accuracy.

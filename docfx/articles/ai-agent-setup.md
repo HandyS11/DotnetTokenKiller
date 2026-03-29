@@ -2,6 +2,9 @@
 
 DTK integrates with AI coding agents to automatically reduce token usage from `dotnet` commands.
 
+> [!IMPORTANT]
+> **Python 3 requirement**: The Claude Code and Gemini CLI integrations install Python-based hooks that run at command interception time. Make sure `python3` is available on your `PATH` before using `dtk integrate claude` or `dtk integrate gemini`. Other providers (Copilot, Cursor, Windsurf, Aider, JetBrains) do not require Python.
+
 ## Claude Code
 
 A pre-built hook automatically rewrites `dotnet build|test|restore|clean` commands to use `dtk`.
@@ -181,6 +184,23 @@ This creates `.cursor/rules/dtk.mdc` — a Cursor rule file with `alwaysApply: f
 
 Use `--force` to overwrite an existing file. Use `--dir` to target a specific project directory.
 
+### How It Works
+
+Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format` over raw `dotnet` commands. No hook or Python dependency is needed — it's a plain text instruction file.
+
+### Manual Installation
+
+Create `.cursor/rules/dtk.mdc`:
+
+````markdown
+---
+alwaysApply: false
+---
+
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+`dtk` filters output to actionable signal only, reducing noise by 50–97%.
+````
+
 ## Windsurf
 
 ### Installation
@@ -192,6 +212,19 @@ dtk integrate windsurf
 This creates `.windsurf/rules/dtk.md` — a Windsurf rule file that instructs the agent to prefer `dtk` over raw `dotnet` commands.
 
 Use `--force` to overwrite. Use `--dir` to target a specific project directory.
+
+### How It Works
+
+Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format` to reduce token usage. No hook or Python dependency is needed.
+
+### Manual Installation
+
+Create `.windsurf/rules/dtk.md`:
+
+```markdown
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+`dtk` filters output to actionable signal only, reducing noise by 50–97%.
+```
 
 ## Aider
 
@@ -219,7 +252,16 @@ read:
 # /dtk
 ```
 
-And create `.aider-dtk-instructions.md` instructing Aider to use `dtk dotnet build|test|restore|clean`.
+And create `.aider-dtk-instructions.md`:
+
+```markdown
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+`dtk` filters output to actionable signal only, reducing noise by 50–97%.
+```
+
+### How It Works
+
+Aider reads configuration from `.aider.conf.yml`, which can reference additional instruction files via the `read:` key. The integration adds a reference to `.aider-dtk-instructions.md`, which tells Aider to prefer `dtk` over raw `dotnet` commands. No hook or Python dependency is needed beyond Aider's own Python runtime.
 
 ## JetBrains AI
 
@@ -231,16 +273,30 @@ dtk integrate jetbrains
 
 This appends a `<!-- dtk -->` / `<!-- /dtk -->` instructions section to `.junie/guidelines.md`, creating the file if it does not exist. Re-running is safe; use `--force` to refresh the section.
 
+### How It Works
+
+JetBrains AI (including Junie) reads project guidelines from `.junie/guidelines.md`. The integrated section instructs the agent to use `dtk` for all supported dotnet commands. The `<!-- dtk -->` markers allow safe re-generation without affecting other content in the guidelines file.
+
 ### Manual Installation
 
 Add to your `.junie/guidelines.md`:
 
-```markdown
+````markdown
 <!-- dtk -->
-Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
-`dtk` filters output to actionable signal only, reducing noise by 50-97%.
-<!-- /dtk -->
+## DotnetTokenKiller (dtk)
+
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+`dtk` filters output to actionable signal only, reducing noise by 50–97%.
+
+```sh
+dtk dotnet build
+dtk dotnet test
+dtk dotnet restore
+dtk dotnet clean
+dtk dotnet format
 ```
+<!-- /dtk -->
+````
 
 ## Other Agents
 
