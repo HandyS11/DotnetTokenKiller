@@ -7,8 +7,6 @@
     <PackageReference Include="Microsoft.ML.Tokenizers"/>
     <PackageReference Include="Microsoft.ML.Tokenizers.Data.Cl100kBase"/>
     <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase"/>
-    <PackageReference Include="Microsoft.ML.Tokenizers.Data.P50kBase"/>
-    <PackageReference Include="Microsoft.ML.Tokenizers.Data.R50kBase"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj"/>

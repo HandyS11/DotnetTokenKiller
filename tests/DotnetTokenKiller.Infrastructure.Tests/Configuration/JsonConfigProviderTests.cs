@@ -163,13 +163,13 @@ public sealed class JsonConfigProviderTests : IDisposable
         var sut = CreateSut();
         var modified = DtkConfig.Default with
         {
-            Tracking = new TrackingConfig(Tokenizer: TokenizerModel.P50kBase)
+            Tracking = new TrackingConfig(Tokenizer: TokenizerModel.O200kBase)
         };
 
         await sut.SaveAsync(modified);
         var loaded = await sut.LoadAsync();
 
-        loaded.Tracking.Tokenizer.Should().Be(TokenizerModel.P50kBase);
+        loaded.Tracking.Tokenizer.Should().Be(TokenizerModel.O200kBase);
     }
 
     [Fact]

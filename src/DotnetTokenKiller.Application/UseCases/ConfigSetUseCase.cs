@@ -16,7 +16,7 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
             ["tracking.enabled"] = "true|false",
             ["tracking.retentionDays"] = "integer ≥ 1",
             ["tracking.dbPath"] = "file path (empty string to reset to default)",
-            ["tracking.tokenizer"] = "Cl100kBase|O200kBase|P50kBase|R50kBase|P50kEdit",
+            ["tracking.tokenizer"] = "Cl100kBase|O200kBase",
             ["display.colors"] = "true|false",
             ["display.emoji"] = "true|false",
             ["display.width"] = "integer ≥ 40",
@@ -177,14 +177,21 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
 
     private static TEnum ParseEnum<TEnum>(string key, string value) where TEnum : struct, Enum
     {
-        if (Enum.TryParse<TEnum>(value, true, out var result))
+        if (!char.IsLetter(value[0]))
+        {
+            var names = string.Join("|", Enum.GetNames<TEnum>());
+            throw new FormatException(
+                $"Invalid value '{value}' for '{key}'. Expected one of: {names}.");
+        }
+
+        if (Enum.TryParse<TEnum>(value, true, out var result) && Enum.IsDefined(result))
         {
             return result;
         }
 
-        var names = string.Join("|", Enum.GetNames<TEnum>());
+        var validNames = string.Join("|", Enum.GetNames<TEnum>());
         throw new FormatException(
-            $"Invalid value '{value}' for '{key}'. Expected one of: {names}.");
+            $"Invalid value '{value}' for '{key}'. Expected one of: {validNames}.");
     }
 
     private static string? NullableString(string value)

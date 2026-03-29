@@ -31,9 +31,6 @@ public static class TokenEstimator
         {
             TokenizerModel.Cl100kBase => "cl100k_base",
             TokenizerModel.O200kBase => "o200k_base",
-            TokenizerModel.P50kBase => "p50k_base",
-            TokenizerModel.R50kBase => "r50k_base",
-            TokenizerModel.P50kEdit => "p50k_edit",
             _ => "cl100k_base"
         };
     }
