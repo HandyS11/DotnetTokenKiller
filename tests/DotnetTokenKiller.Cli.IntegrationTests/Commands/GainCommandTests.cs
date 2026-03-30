@@ -251,30 +251,14 @@ public class GainCommandTests
 
     private sealed class StubTracker : ITracker
     {
-        public GainSummary Summary
-        {
-            get;
-            init;
-        } = new(0, 0, 0, 0, 0.0,
+        public GainSummary Summary { get; init; } = new(0, 0, 0, 0, 0.0,
             new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal));
 
-        public IReadOnlyList<CommandRecord> History
-        {
-            get;
-            init;
-        } = [];
+        public IReadOnlyList<CommandRecord> History { get; init; } = [];
 
-        public string? LastProjectPath
-        {
-            get;
-            private set;
-        }
+        public string? LastProjectPath { get; private set; }
 
-        public string? LastCommandFilter
-        {
-            get;
-            private set;
-        }
+        public string? LastCommandFilter { get; private set; }
 
         public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
         {

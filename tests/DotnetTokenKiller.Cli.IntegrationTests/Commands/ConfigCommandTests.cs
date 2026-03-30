@@ -131,11 +131,7 @@ public sealed class ConfigCommandTests
 
     private sealed class StubConfigProvider(DtkConfig? config = null) : IConfigProvider
     {
-        private DtkConfig Current
-        {
-            get;
-            set;
-        } = config ?? DtkConfig.Default;
+        private DtkConfig Current { get; set; } = config ?? DtkConfig.Default;
 
         public DtkConfig Load()
         {
