@@ -87,9 +87,55 @@ public sealed class ConfigCommandTests
         console.Output.Should().Contain("Error");
     }
 
-    private sealed class StubConfigProvider : IConfigProvider
+    [Fact]
+    public async Task ConfigShow_AllRowKeysPresentInOutput()
     {
-        private DtkConfig Current { get; set; } = DtkConfig.Default;
+        // Kills statement mutations (removing AddRow calls) and string mutations on row key literals
+        var console = new TestConsole();
+        var command = new ConfigShowCommand(new StubConfigProvider(), console);
+
+        await command.ExecuteAsync(null!, CancellationToken.None);
+
+        console.Output.Should().Contain("tracking.dbPath");
+        console.Output.Should().Contain("tracking.tokenizer");
+        console.Output.Should().Contain("display.emoji");
+        console.Output.Should().Contain("display.width");
+        console.Output.Should().Contain("tee.directory");
+        console.Output.Should().Contain("tee.maxFiles");
+        console.Output.Should().Contain("tee.maxFileSizeBytes");
+        // Column headers
+        console.Output.Should().Contain("Key");
+        console.Output.Should().Contain("Value");
+        // Default config has null DbPath and null Tee.Directory → rendered as "(default)"
+        console.Output.Should().Contain("(default)");
+    }
+
+    [Fact]
+    public async Task ConfigShow_NonNullDbPath_DisplaysActualPathNotDefault()
+    {
+        // Kills null-coalescing remove-left mutation: config.Tracking.DbPath ?? "(default)" → always "(default)"
+        var console = new TestConsole();
+        var config = DtkConfig.Default with
+        {
+            Tracking = DtkConfig.Default.Tracking with
+            {
+                DbPath = "/custom/path.db"
+            }
+        };
+        var command = new ConfigShowCommand(new StubConfigProvider(config), console);
+
+        await command.ExecuteAsync(null!, CancellationToken.None);
+
+        console.Output.Should().Contain("/custom/path.db");
+    }
+
+    private sealed class StubConfigProvider(DtkConfig? config = null) : IConfigProvider
+    {
+        private DtkConfig Current
+        {
+            get;
+            set;
+        } = config ?? DtkConfig.Default;
 
         public DtkConfig Load()
         {

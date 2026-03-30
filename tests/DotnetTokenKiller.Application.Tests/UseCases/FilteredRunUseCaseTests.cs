@@ -664,4 +664,70 @@ public class FilteredRunUseCaseTests
             Arg.Any<CommandRecord>(),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task RunAsync_ZeroExitCode_RecordsSuccessTrue()
+    {
+        // Kills equality mutation: exitCode == 0 → exitCode != 0
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 0));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.Success),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_NonZeroExitCode_RecordsSuccessFalse()
+    {
+        // Kills equality mutation: exitCode == 0 → exitCode != 0
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 1));
+        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => !r.Success),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_NoColorEnvVar_ReplacesCheckmarkWithOk()
+    {
+        // Kills string mutation: "NO_COLOR" → ""
+        var saved = Environment.GetEnvironmentVariable("NO_COLOR");
+        Environment.SetEnvironmentVariable("NO_COLOR", "1");
+        try
+        {
+            await using var writer = new StringWriter();
+            var configProvider = Substitute.For<IConfigProvider>();
+            configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+            var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+            _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+                .Returns(new CommandResult("output", "", 0));
+            _filter.Apply(Arg.Any<string>()).Returns("✓ build ok\n");
+            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+                    Arg.Any<CancellationToken>())
+                .Returns((string?)null);
+
+            await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+            var output = writer.ToString();
+            output.Should().NotContain("✓");
+            output.Should().Contain("ok: build ok");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", saved);
+        }
+    }
 }

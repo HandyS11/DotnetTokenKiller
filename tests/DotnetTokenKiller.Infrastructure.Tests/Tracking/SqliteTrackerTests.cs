@@ -306,4 +306,116 @@ public class SqliteTrackerTests : IAsyncDisposable
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public async Task GetSummaryAsync_AggregatesInputAndOutputTokensCorrectly()
+    {
+        // Kills AddAssignmentExpression → SubtractAssignmentExpression mutations on totalInput/totalOutput
+        await _sut.RecordAsync(MakeRecord(inputTokens: 1000, outputTokens: 150, savedTokens: 850));
+        await _sut.RecordAsync(MakeRecord(inputTokens: 2000, outputTokens: 300, savedTokens: 1700));
+
+        var summary = await _sut.GetSummaryAsync(30, null);
+
+        summary.TotalInputTokens.Should().Be(3000);
+        summary.TotalOutputTokens.Should().Be(450);
+        summary.TotalSavedTokens.Should().Be(2550);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_CommandDetail_AggregatesInputAndOutputTokensCorrectly()
+    {
+        // Kills += → -= mutations on per-command totalInputCmd/totalOutputCmd aggregation
+        await _sut.RecordAsync(MakeRecord(inputTokens: 500, outputTokens: 100, savedTokens: 400));
+        await _sut.RecordAsync(MakeRecord(inputTokens: 1500, outputTokens: 200, savedTokens: 1300));
+
+        var summary = await _sut.GetSummaryAsync(30, null);
+
+        var detail = summary.CommandDetails["build"];
+        detail.TotalInputTokens.Should().Be(2000);
+        detail.TotalOutputTokens.Should().Be(300);
+        detail.TotalSavedTokens.Should().Be(1700);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_AverageSavingsPct_IsComputedFromTotalSavedOverTotalInput()
+    {
+        // Kills arithmetic mutations: totalSaved / totalInput * 100.0 vs / 100.0 vs * totalInput
+        // totalSaved = 400 + 900 = 1300; totalInput = 1000 + 3000 = 4000; pct = 1300/4000*100 = 32.5%
+        await _sut.RecordAsync(MakeRecord(inputTokens: 1000, outputTokens: 600, savedTokens: 400, savingsPct: 40.0));
+        await _sut.RecordAsync(MakeRecord(inputTokens: 3000, outputTokens: 2100, savedTokens: 900, savingsPct: 30.0));
+
+        var summary = await _sut.GetSummaryAsync(30, null);
+
+        summary.AverageSavingsPercentage.Should().BeApproximately(32.5, 0.01);
+    }
+
+    [Fact]
+    public async Task RecordAsync_JustBeforeCleanupThreshold_OldRecordIsPreserved()
+    {
+        // Kills < mutation: with < mutation cleanup runs on every insert, deleting the old record immediately.
+        // With original >=: 49 total inserts never reaches 50, so no cleanup.
+        var old = MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-100));
+        await _sut.RecordAsync(old);
+        for (var i = 0; i < 48; i++)
+        {
+            await _sut.RecordAsync(MakeRecord());
+        }
+
+        var history = await _sut.GetHistoryAsync(365, null);
+
+        history.Should().HaveCount(49); // 1 old + 48 new, no cleanup triggered yet
+    }
+
+    [Fact]
+    public async Task RecordAsync_OldRecordInsertedAfterCleanupReset_IsPreserved()
+    {
+        // Kills > mutation: with > mutation the 51st insert triggers cleanup which deletes the old record.
+        // With original >=: cleanup resets at the 50th insert; old record at insert 51 is safe (counter = 1).
+        for (var i = 0; i < 50; i++)
+        {
+            await _sut.RecordAsync(MakeRecord());
+        }
+
+        // Insert old record as the 51st insert — cleanup counter reset to 0 at insert 50, now at 1
+        var old = MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-100));
+        await _sut.RecordAsync(old);
+
+        var history = await _sut.GetHistoryAsync(365, null);
+
+        history.Should().HaveCount(51); // 50 recent + 1 old
+    }
+
+    [Fact]
+    public async Task RecordAsync_OnDatabaseWithExistingSuccessColumn_DoesNotThrow()
+    {
+        // Kills equality mutation: (long)count > 0 → (long)count < 0
+        // With < 0 mutation, columnExists is always false and ALTER TABLE always runs,
+        // which fails with "duplicate column name: success" on the second initialization.
+        var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "tracking.db");
+        try
+        {
+            await using (var firstTracker = new SqliteTracker($"Data Source={tempPath}"))
+            {
+                await firstTracker.RecordAsync(MakeRecord());
+            }
+
+            SqliteConnection.ClearAllPools();
+
+            // Second tracker opens same DB where success column already exists
+            await using var secondTracker = new SqliteTracker($"Data Source={tempPath}");
+            await secondTracker.RecordAsync(MakeRecord());
+
+            var history = await secondTracker.GetHistoryAsync(1, null);
+            history.Should().NotBeEmpty();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            var dir = Path.GetDirectoryName(tempPath);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
 }
