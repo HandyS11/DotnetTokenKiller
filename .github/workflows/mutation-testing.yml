@@ -32,6 +32,8 @@ jobs:
         run: dotnet build DotnetTokenKiller.slnx --no-restore --configuration Release
 
       - name: Run Stryker
+        env:
+          STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
         run: dotnet stryker
 
       - name: Upload mutation report
