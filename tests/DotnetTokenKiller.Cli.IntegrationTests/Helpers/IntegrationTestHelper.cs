@@ -11,23 +11,24 @@ internal static class IntegrationTestHelper
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    /// <summary>Isolated temp directory for test data so that integration tests
-    /// never pollute the user's real tracking database, config, or tee logs.</summary>
-    private static readonly string TestDataDir =
+    /// <summary>Root temp directory shared by all invocations in this test run.
+    /// Each <see cref="RunProcessAsync"/> call creates a unique subdirectory so
+    /// that parallel test collections never share SQLite databases or tee logs.</summary>
+    private static readonly string TestDataRoot =
         Path.Combine(Path.GetTempPath(), $"dtk-tests-{Guid.NewGuid():N}");
 
     static IntegrationTestHelper()
     {
-        // Best-effort cleanup: delete the isolated temp directory when the test
+        // Best-effort cleanup: delete the root temp directory when the test
         // runner process exits so repeated local/CI runs don't accumulate dtk-tests-*
         // directories under the system temp folder.
         AppDomain.CurrentDomain.ProcessExit += static (_, _) =>
         {
             try
             {
-                if (Directory.Exists(TestDataDir))
+                if (Directory.Exists(TestDataRoot))
                 {
-                    Directory.Delete(TestDataDir, true);
+                    Directory.Delete(TestDataRoot, true);
                 }
             }
             catch (IOException)
@@ -71,6 +72,10 @@ internal static class IntegrationTestHelper
     private static async Task<(string Output, int ExitCode)> RunProcessAsync(
         string executable, IEnumerable<string> args)
     {
+        // Each invocation gets its own subdirectory so parallel test collections
+        // never share SQLite databases, tee logs, or config files.
+        var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
+
         var psi = new ProcessStartInfo(executable)
         {
             RedirectStandardOutput = true,
@@ -87,9 +92,9 @@ internal static class IntegrationTestHelper
 
                 // Redirect all dtk persistence to an isolated temp directory so that
                 // integration tests never write into the user's real database/config.
-                ["DTK_DB_PATH"] = Path.Combine(TestDataDir, "tracking.db"),
-                ["DTK_TEE_DIR"] = Path.Combine(TestDataDir, "tee"),
-                ["DTK_CONFIG_PATH"] = Path.Combine(TestDataDir, "config.json")
+                ["DTK_DB_PATH"] = Path.Combine(isolatedDir, "tracking.db"),
+                ["DTK_TEE_DIR"] = Path.Combine(isolatedDir, "tee"),
+                ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
             }
         };
         foreach (var arg in args)
