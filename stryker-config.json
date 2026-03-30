@@ -3,7 +3,12 @@
     "solution": "DotnetTokenKiller.slnx",
     "reporters": [
       "json",
-      "html"
-    ]
+      "html",
+      "dashboard"
+    ],
+    "dashboard": {
+      "project": "github.com/HandyS11/DotnetTokenKiller",
+      "version": "develop"
+    }
   }
 }

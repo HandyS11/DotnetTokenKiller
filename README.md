@@ -9,6 +9,9 @@ matters.
 [![CD](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml)
 [![License](https://img.shields.io/github/license/HandyS11/DotnetTokenKiller)](./LICENSE)
 
+[![codecov](https://codecov.io/github/HandyS11/DotnetTokenKiller/graph/badge.svg?token=AP66I96X3E)](https://codecov.io/github/HandyS11/DotnetTokenKiller)
+[![Mutation testing badge](https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FHandyS11%2FDotnetTokenKiller%2Fdevelop)](https://dashboard.stryker-mutator.io/reports/github.com/HandyS11/DotnetTokenKiller/develop)
+
 [![DotnetTokenKiller NuGet](https://img.shields.io/nuget/v/DotnetTokenKiller?label=CLI&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
 [![DotnetTokenKiller Downloads](https://img.shields.io/nuget/dt/DotnetTokenKiller?label=CLI%20downloads&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
 
