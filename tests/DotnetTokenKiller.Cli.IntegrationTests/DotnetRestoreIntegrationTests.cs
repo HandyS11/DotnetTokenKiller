@@ -4,7 +4,7 @@ using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests;
 
-[Collection("Integration")]
+[Collection("Integration.SampleApp")]
 [Trait("Category", "Integration")]
 public class DotnetRestoreIntegrationTests
 {
