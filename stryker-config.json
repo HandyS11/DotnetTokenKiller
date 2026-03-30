@@ -6,8 +6,8 @@
       "html",
       "dashboard"
     ],
-    "dashboard": {
-      "project": "github.com/HandyS11/DotnetTokenKiller",
+    "project-info": {
+      "name": "github.com/HandyS11/DotnetTokenKiller",
       "version": "develop"
     }
   }
