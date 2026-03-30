@@ -43,7 +43,7 @@ public enum TokenizerModel
     Cl100kBase = 0,
 
     /// <summary>OpenAI o200k_base encoding (GPT-4o, o1, o3).</summary>
-    O200kBase = 1,
+    O200kBase = 1
 }
 
 /// <summary>Supported tee output modes.</summary>

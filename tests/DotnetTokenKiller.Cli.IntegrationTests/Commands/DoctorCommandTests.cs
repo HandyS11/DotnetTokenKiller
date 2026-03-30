@@ -89,6 +89,66 @@ public sealed class DoctorCommandTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task ExecuteAsync_AllChecksPassed_OutputContainsCheckmark()
+    {
+        // Kills conditional mutations: always ✔ or always ✘ instead of using check.Passed
+        Directory.CreateDirectory(_tempDir);
+        var (command, console) = Create(0);
+
+        await command.ExecuteAsync(null!, CancellationToken.None);
+
+        console.Output.Should().Contain("✔");
+        console.Output.Should().NotContain("✘");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DotnetCheckFails_OutputContainsCross()
+    {
+        // Kills conditional mutations: always ✔ or always ✘ instead of using check.Passed
+        Directory.CreateDirectory(_tempDir);
+        var (command, console) = Create(1);
+
+        await command.ExecuteAsync(null!, CancellationToken.None);
+
+        console.Output.Should().Contain("✘");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DtkDbPathEnvVar_TakesPrecedenceOverConfigDbPath()
+    {
+        // Kills null-coalescing mutations on the DbPath resolution chain (lines 22-24):
+        //   remove-left: DTK_DB_PATH is ignored, config.DbPath is used instead
+        //   string mutation: env var name becomes "" so GetEnvironmentVariable always returns null
+        // Strategy: env var points to an existing db file (pass), config.DbPath is null (would use default, fail).
+        // With original code: env var wins → db exists → tracking database check passes.
+        // With remove-left mutation: config.DbPath (null) → default path (non-existent) → check fails.
+        Directory.CreateDirectory(_tempDir);
+        var envDbPath = Path.Combine(_tempDir, "env-tracking.db");
+        await File.WriteAllTextAsync(envDbPath, string.Empty); // create file so check passes
+
+        var savedEnv = Environment.GetEnvironmentVariable("DTK_DB_PATH");
+        Environment.SetEnvironmentVariable("DTK_DB_PATH", envDbPath);
+        try
+        {
+            var console = new TestConsole();
+            // Config has null DbPath — so env var is the only way to resolve a valid path
+            var configProvider = new NullPathsConfigProvider();
+            var runner = new StubCommandRunner(0);
+            var useCase = new DoctorUseCase(runner, configProvider);
+            var command = new DoctorCommand(useCase, configProvider, console);
+
+            await command.ExecuteAsync(null!, CancellationToken.None);
+
+            // DTK_DB_PATH was used (file exists) → tracking database check passes
+            console.Output.Should().Contain("✔");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTK_DB_PATH", savedEnv);
+        }
+    }
+
     private (DoctorCommand command, TestConsole console) Create(int dotnetExitCode)
     {
         var console = new TestConsole();

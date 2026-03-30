@@ -189,6 +189,66 @@ public class GainCommandTests
         console.Output.Should().Contain("\"/path/with,comma\"");
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WithData_DisplaysAllColumnHeaders()
+    {
+        // Kills string mutations on column header literals ("Command", "Runs", etc.)
+        var successDetail = new CommandGainDetail(2, 1000, 150, 850, 85.0);
+        var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
+        {
+            ["build"] = new(2, 1000, 150, 850, 85.0, successDetail)
+        };
+        var summary = new GainSummary(2, 1000, 150, 850, 85.0, details);
+        var (command, console) = Create(summary);
+
+        await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+
+        console.Output.Should().Contain("Command");
+        console.Output.Should().Contain("Runs");
+        console.Output.Should().Contain("Without Tool");
+        console.Output.Should().Contain("Used by Tool");
+        console.Output.Should().Contain("Saved");
+        console.Output.Should().Contain("Avg Savings");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithData_DisplaysTotalRowWithCorrectValues()
+    {
+        // Kills string mutations on "TOTAL" markup and statement mutations on AddRow calls
+        var successDetail = new CommandGainDetail(3, 1500, 300, 1200, 80.0);
+        var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
+        {
+            ["build"] = new(3, 1500, 300, 1200, 80.0, successDetail)
+        };
+        var summary = new GainSummary(3, 1500, 300, 1200, 80.0, details);
+        var (command, console) = Create(summary);
+
+        await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+
+        console.Output.Should().Contain("TOTAL");
+        console.Output.Should().Contain("1500"); // TotalInputTokens
+        console.Output.Should().Contain("300"); // TotalOutputTokens
+        console.Output.Should().Contain("1200"); // TotalSavedTokens
+        console.Output.Should().Contain("80.0%"); // AverageSavingsPercentage formatted as F1
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithSuccessDetail_DisplaysFormattedPercentage()
+    {
+        // Kills string mutation on "F1" format specifier and "%" literal in AverageSavingsPercentage display
+        var successDetail = new CommandGainDetail(1, 1000, 167, 833, 83.3);
+        var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
+        {
+            ["build"] = new(1, 1000, 167, 833, 83.3, successDetail)
+        };
+        var summary = new GainSummary(1, 1000, 167, 833, 83.3, details);
+        var (command, console) = Create(summary);
+
+        await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+
+        console.Output.Should().Contain("83.3%");
+    }
+
     private sealed class StubTracker : ITracker
     {
         public GainSummary Summary { get; init; } = new(0, 0, 0, 0, 0.0,
@@ -197,6 +257,7 @@ public class GainCommandTests
         public IReadOnlyList<CommandRecord> History { get; init; } = [];
 
         public string? LastProjectPath { get; private set; }
+
         public string? LastCommandFilter { get; private set; }
 
         public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)

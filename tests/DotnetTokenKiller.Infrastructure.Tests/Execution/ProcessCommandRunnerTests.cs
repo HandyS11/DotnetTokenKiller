@@ -103,4 +103,64 @@ public sealed class ProcessCommandRunnerTests
         await exited.WaitForExitAsync();
         killMethod.Invoke(null, [exited]).Should().BeNull(); // void method returns null on success
     }
+
+    [Fact]
+    public async Task RunCapturedAsync_NullArgs_ThrowsArgumentNullException()
+    {
+        var act = async () => await _sut.RunCapturedAsync("echo", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task RunPassthroughAsync_NullArgs_ThrowsArgumentNullException()
+    {
+        var act = async () => await _sut.RunPassthroughAsync("echo", null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    private static (string command, string[] args) StdErrCommand()
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ("cmd", ["/c", "echo stderr_content 1>&2"])
+            : ("sh", ["-c", "echo stderr_content >&2"]);
+    }
+
+    private static (string command, string[] args) ExitCodeCommand(int code)
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ("cmd", ["/c", $"exit {code}"])
+            : ("sh", ["-c", $"exit {code}"]);
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_CommandWritesToStdErr_CapturesStdErr()
+    {
+        var (cmd, args) = StdErrCommand();
+
+        var result = await _sut.RunCapturedAsync(cmd, args);
+
+        result.StdErr.Should().Contain("stderr_content");
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_NonZeroExitCode_ReturnsCorrectExitCode()
+    {
+        var (cmd, args) = ExitCodeCommand(42);
+
+        var result = await _sut.RunCapturedAsync(cmd, args);
+
+        result.ExitCode.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task RunPassthroughAsync_NonZeroExitCode_ReturnsCorrectExitCode()
+    {
+        var (cmd, args) = ExitCodeCommand(7);
+
+        var exitCode = await _sut.RunPassthroughAsync(cmd, args);
+
+        exitCode.Should().Be(7);
+    }
 }
