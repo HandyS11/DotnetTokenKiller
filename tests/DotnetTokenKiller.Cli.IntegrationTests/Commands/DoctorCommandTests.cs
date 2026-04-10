@@ -27,7 +27,7 @@ public sealed class DoctorCommandTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var (command, console) = Create(0);
 
-        var exitCode = await command.ExecuteAsync(null!, CancellationToken.None);
+        var exitCode = await command.RunAsync(CancellationToken.None);
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("All checks passed");
@@ -39,7 +39,7 @@ public sealed class DoctorCommandTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var (command, console) = Create(1);
 
-        var exitCode = await command.ExecuteAsync(null!, CancellationToken.None);
+        var exitCode = await command.RunAsync(CancellationToken.None);
 
         exitCode.Should().Be(1);
         console.Output.Should().Contain("Some checks failed");
@@ -51,7 +51,7 @@ public sealed class DoctorCommandTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var (command, console) = Create(0);
 
-        await command.ExecuteAsync(null!, CancellationToken.None);
+        await command.RunAsync(CancellationToken.None);
 
         // Each check has a named label
         console.Output.Should().Contain("dotnet SDK");
@@ -75,7 +75,7 @@ public sealed class DoctorCommandTests : IDisposable
             var useCase = new DoctorUseCase(runner, configProvider);
             var command = new DoctorCommand(useCase, configProvider, console);
 
-            await command.ExecuteAsync(null!, CancellationToken.None);
+            await command.RunAsync(CancellationToken.None);
 
             // ResolveDefaultDbPath returns LocalApplicationData/dtk/tracking.db
             // ResolveDefaultTeeDir returns LocalApplicationData/dtk/tee
@@ -96,7 +96,7 @@ public sealed class DoctorCommandTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var (command, console) = Create(0);
 
-        await command.ExecuteAsync(null!, CancellationToken.None);
+        await command.RunAsync(CancellationToken.None);
 
         console.Output.Should().Contain("✔");
         console.Output.Should().NotContain("✘");
@@ -109,7 +109,7 @@ public sealed class DoctorCommandTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var (command, console) = Create(1);
 
-        await command.ExecuteAsync(null!, CancellationToken.None);
+        await command.RunAsync(CancellationToken.None);
 
         console.Output.Should().Contain("✘");
     }
@@ -138,7 +138,7 @@ public sealed class DoctorCommandTests : IDisposable
             var useCase = new DoctorUseCase(runner, configProvider);
             var command = new DoctorCommand(useCase, configProvider, console);
 
-            await command.ExecuteAsync(null!, CancellationToken.None);
+            await command.RunAsync(CancellationToken.None);
 
             // DTK_DB_PATH was used (file exists) → tracking database check passes
             console.Output.Should().Contain("✔");

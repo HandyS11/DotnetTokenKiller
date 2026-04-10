@@ -18,7 +18,7 @@ public sealed class ConfigCommandTests
         var console = new TestConsole();
         var command = new ConfigShowCommand(new StubConfigProvider(), console);
 
-        await command.ExecuteAsync(null!, CancellationToken.None);
+        await command.RunAsync(CancellationToken.None);
 
         console.Output.Should().Contain("tracking.enabled");
         console.Output.Should().Contain("tracking.retentionDays");
@@ -31,7 +31,7 @@ public sealed class ConfigCommandTests
     {
         var command = new ConfigShowCommand(new StubConfigProvider(), new TestConsole());
 
-        var exitCode = await command.ExecuteAsync(null!, CancellationToken.None);
+        var exitCode = await command.RunAsync(CancellationToken.None);
 
         exitCode.Should().Be(0);
     }
@@ -44,7 +44,7 @@ public sealed class ConfigCommandTests
         var console = new TestConsole();
         var command = new ConfigSetCommand(new ConfigSetUseCase(new StubConfigProvider()), console);
 
-        var exitCode = await command.ExecuteAsync(null!, new ConfigSetCommandSettings
+        var exitCode = await command.RunAsync(new ConfigSetCommandSettings
         {
             Key = "display.width",
             Value = "100"
@@ -61,7 +61,7 @@ public sealed class ConfigCommandTests
         var console = new TestConsole();
         var command = new ConfigSetCommand(new ConfigSetUseCase(new StubConfigProvider()), console);
 
-        var exitCode = await command.ExecuteAsync(null!, new ConfigSetCommandSettings
+        var exitCode = await command.RunAsync(new ConfigSetCommandSettings
         {
             Key = "unknown.key",
             Value = "value"
@@ -77,7 +77,7 @@ public sealed class ConfigCommandTests
         var console = new TestConsole();
         var command = new ConfigSetCommand(new ConfigSetUseCase(new StubConfigProvider()), console);
 
-        var exitCode = await command.ExecuteAsync(null!, new ConfigSetCommandSettings
+        var exitCode = await command.RunAsync(new ConfigSetCommandSettings
         {
             Key = "tracking.enabled",
             Value = "notabool"
@@ -94,7 +94,7 @@ public sealed class ConfigCommandTests
         var console = new TestConsole();
         var command = new ConfigShowCommand(new StubConfigProvider(), console);
 
-        await command.ExecuteAsync(null!, CancellationToken.None);
+        await command.RunAsync(CancellationToken.None);
 
         console.Output.Should().Contain("tracking.dbPath");
         console.Output.Should().Contain("tracking.tokenizer");
@@ -124,7 +124,7 @@ public sealed class ConfigCommandTests
         };
         var command = new ConfigShowCommand(new StubConfigProvider(config), console);
 
-        await command.ExecuteAsync(null!, CancellationToken.None);
+        await command.RunAsync(CancellationToken.None);
 
         console.Output.Should().Contain("/custom/path.db");
     }

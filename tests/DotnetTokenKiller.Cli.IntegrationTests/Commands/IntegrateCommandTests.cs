@@ -25,7 +25,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = dir
         }, CancellationToken.None);
@@ -47,7 +47,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = dir
         }, CancellationToken.None);
@@ -69,7 +69,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = dir
         }, CancellationToken.None);
@@ -85,7 +85,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("claude");
         var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
 
         stub.LastDirectory.Should().Be(Environment.CurrentDirectory);
     }
@@ -96,7 +96,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("claude");
         var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = "/custom/dir"
         }, CancellationToken.None);
@@ -110,7 +110,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("claude");
         var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        await command.RunAsync(new IntegrateCommandSettings
         {
             Force = true
         }, CancellationToken.None);
@@ -124,7 +124,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("copilot");
         var command = new CopilotIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
 
         stub.LastDirectory.Should().NotBeNull();
     }
@@ -135,7 +135,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("aider");
         var command = new AiderIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
 
         stub.LastDirectory.Should().NotBeNull();
     }
@@ -146,7 +146,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("cursor");
         var command = new CursorIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
 
         stub.LastDirectory.Should().NotBeNull();
     }
@@ -157,7 +157,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("gemini");
         var command = new GeminiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
 
         stub.LastDirectory.Should().NotBeNull();
     }
@@ -168,7 +168,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("jetbrains");
         var command = new JetBrainsAiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
 
         stub.LastDirectory.Should().NotBeNull();
     }
@@ -179,7 +179,7 @@ public class IntegrateCommandTests
         var stub = new StubIntegrator("windsurf");
         var command = new WindsurfIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
 
         stub.LastDirectory.Should().NotBeNull();
     }
@@ -191,7 +191,7 @@ public class IntegrateCommandTests
         var result = new IntegrationResult([""], [], []);
         var (command, console) = Create("claude", result);
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = "/project"
         }, CancellationToken.None);
@@ -210,7 +210,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = dir
         }, CancellationToken.None);
@@ -229,7 +229,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = ""
         }, CancellationToken.None);
@@ -246,7 +246,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.ExecuteAsync(null!, new IntegrateCommandSettings
+        await command.RunAsync(new IntegrateCommandSettings
         {
             Directory = dir
         }, CancellationToken.None);

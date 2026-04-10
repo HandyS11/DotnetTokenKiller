@@ -18,7 +18,7 @@ public class GainCommandTests
     {
         var (command, console) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings
+        var exitCode = await command.RunAsync(new GainCommandSettings
         {
             Json = true
         }, CancellationToken.None);
@@ -32,7 +32,7 @@ public class GainCommandTests
     {
         var (command, console) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+        var exitCode = await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("No data yet");
@@ -50,7 +50,7 @@ public class GainCommandTests
         var summary = new GainSummary(5, 2500, 400, 2100, 84.0, details);
         var (command, console) = Create(summary);
 
-        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+        var exitCode = await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("build (ok)");
@@ -67,7 +67,7 @@ public class GainCommandTests
         var console = new TestConsole();
         var command = new GainCommand(new GainReportUseCase(tracker), console);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings
+        await command.RunAsync(new GainCommandSettings
         {
             Project = true
         }, CancellationToken.None);
@@ -85,7 +85,7 @@ public class GainCommandTests
         var console = new TestConsole();
         var command = new GainCommand(new GainReportUseCase(tracker), console);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings
+        await command.RunAsync(new GainCommandSettings
         {
             Command = "build"
         }, CancellationToken.None);
@@ -108,7 +108,7 @@ public class GainCommandTests
     {
         var (command, console) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings
+        var exitCode = await command.RunAsync(new GainCommandSettings
         {
             Export = "csv"
         }, CancellationToken.None);
@@ -136,7 +136,7 @@ public class GainCommandTests
         };
         var command = new GainCommand(new GainReportUseCase(tracker), console);
 
-        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings
+        var exitCode = await command.RunAsync(new GainCommandSettings
         {
             Export = "csv"
         }, CancellationToken.None);
@@ -154,7 +154,7 @@ public class GainCommandTests
     {
         var (command, console) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new GainCommandSettings
+        var exitCode = await command.RunAsync(new GainCommandSettings
         {
             Export = "xml"
         }, CancellationToken.None);
@@ -181,7 +181,7 @@ public class GainCommandTests
         };
         var command = new GainCommand(new GainReportUseCase(tracker), console);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings
+        await command.RunAsync(new GainCommandSettings
         {
             Export = "csv"
         }, CancellationToken.None);
@@ -201,7 +201,7 @@ public class GainCommandTests
         var summary = new GainSummary(2, 1000, 150, 850, 85.0, details);
         var (command, console) = Create(summary);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
         console.Output.Should().Contain("Command");
         console.Output.Should().Contain("Runs");
@@ -223,7 +223,7 @@ public class GainCommandTests
         var summary = new GainSummary(3, 1500, 300, 1200, 80.0, details);
         var (command, console) = Create(summary);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
         console.Output.Should().Contain("TOTAL");
         console.Output.Should().Contain("1500"); // TotalInputTokens
@@ -244,7 +244,7 @@ public class GainCommandTests
         var summary = new GainSummary(1, 1000, 167, 833, 83.3, details);
         var (command, console) = Create(summary);
 
-        await command.ExecuteAsync(null!, new GainCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
         console.Output.Should().Contain("83.3%");
     }

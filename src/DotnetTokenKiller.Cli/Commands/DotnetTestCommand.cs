@@ -14,7 +14,7 @@ internal sealed class DotnetTestCommand(
     [FromKeyedServices(FilterKeys.Test)] IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
+    protected override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);

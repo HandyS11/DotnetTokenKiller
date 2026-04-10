@@ -15,7 +15,10 @@ internal sealed class DoctorCommand(
     IAnsiConsole console) : AsyncCommand
 {
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    protected override Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+        => RunAsync(cancellationToken);
+
+    internal async Task<int> RunAsync(CancellationToken cancellationToken)
     {
         var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
 

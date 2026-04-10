@@ -17,8 +17,13 @@ internal abstract class IntegrateCommandBase(
     protected abstract string ProviderName { get; }
 
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(
+    protected override Task<int> ExecuteAsync(
         CommandContext context,
+        IntegrateCommandSettings settings,
+        CancellationToken cancellationToken)
+        => RunAsync(settings, cancellationToken);
+
+    internal async Task<int> RunAsync(
         IntegrateCommandSettings settings,
         CancellationToken cancellationToken)
     {
