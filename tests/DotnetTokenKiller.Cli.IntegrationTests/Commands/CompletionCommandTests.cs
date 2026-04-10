@@ -18,7 +18,7 @@ public sealed class CompletionCommandTests
     {
         var (command, console) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new CompletionCommandSettings
+        var exitCode = await command.RunAsync(new CompletionCommandSettings
         {
             Shell = shell
         }, CancellationToken.None);
@@ -32,7 +32,7 @@ public sealed class CompletionCommandTests
     {
         var (command, console) = Create();
 
-        await command.ExecuteAsync(null!, new CompletionCommandSettings
+        await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "bash"
         }, CancellationToken.None);
@@ -47,7 +47,7 @@ public sealed class CompletionCommandTests
     {
         var (command, console) = Create();
 
-        await command.ExecuteAsync(null!, new CompletionCommandSettings
+        await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "zsh"
         }, CancellationToken.None);
@@ -62,7 +62,7 @@ public sealed class CompletionCommandTests
     {
         var (command, console) = Create();
 
-        await command.ExecuteAsync(null!, new CompletionCommandSettings
+        await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "fish"
         }, CancellationToken.None);
@@ -77,7 +77,7 @@ public sealed class CompletionCommandTests
     {
         var (command, console) = Create();
 
-        await command.ExecuteAsync(null!, new CompletionCommandSettings
+        await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "powershell"
         }, CancellationToken.None);
@@ -92,7 +92,7 @@ public sealed class CompletionCommandTests
     {
         var (command, console) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new CompletionCommandSettings
+        var exitCode = await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "unknownshell"
         }, CancellationToken.None);
@@ -107,7 +107,7 @@ public sealed class CompletionCommandTests
     {
         var (command, _) = Create();
 
-        var exitCode = await command.ExecuteAsync(null!, new CompletionCommandSettings
+        var exitCode = await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "BASH"
         }, CancellationToken.None);

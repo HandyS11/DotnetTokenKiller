@@ -15,10 +15,13 @@ internal sealed class ResetCommand(
     IAnsiConsole console) : AsyncCommand<ResetCommandSettings>
 {
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(
+    protected override Task<int> ExecuteAsync(
         CommandContext context,
         ResetCommandSettings settings,
         CancellationToken cancellationToken)
+        => RunAsync(settings, cancellationToken);
+
+    internal async Task<int> RunAsync(ResetCommandSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
 

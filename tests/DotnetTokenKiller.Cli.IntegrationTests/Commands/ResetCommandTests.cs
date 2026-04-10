@@ -19,7 +19,7 @@ public class ResetCommandTests
         var console = new TestConsole();
         var command = CreateCommand(tracker, console);
 
-        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings
+        var exitCode = await command.RunAsync(new ResetCommandSettings
         {
             Force = true
         }, CancellationToken.None);
@@ -37,7 +37,7 @@ public class ResetCommandTests
         console.Input.PushTextWithEnter("n");
         var command = CreateCommand(tracker, console);
 
-        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings
+        var exitCode = await command.RunAsync(new ResetCommandSettings
         {
             Force = false
         }, CancellationToken.None);
@@ -54,7 +54,7 @@ public class ResetCommandTests
         var console = new TestConsole();
         var command = CreateCommand(tracker, console, config, tee);
 
-        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings
+        var exitCode = await command.RunAsync(new ResetCommandSettings
         {
             Force = true,
             All = true
@@ -75,7 +75,7 @@ public class ResetCommandTests
         console.Input.PushTextWithEnter("n");
         var command = CreateCommand(tracker, console, config, tee);
 
-        var exitCode = await command.ExecuteAsync(null!, new ResetCommandSettings
+        var exitCode = await command.RunAsync(new ResetCommandSettings
         {
             Force = false,
             All = true
@@ -95,7 +95,7 @@ public class ResetCommandTests
         console.Input.PushTextWithEnter("n");
         var command = CreateCommand(tracker, console, config, tee);
 
-        await command.ExecuteAsync(null!, new ResetCommandSettings
+        await command.RunAsync(new ResetCommandSettings
         {
             Force = false,
             All = true

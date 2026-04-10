@@ -20,10 +20,13 @@ internal sealed class GainCommand(
         "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms,success";
 
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(
+    protected override Task<int> ExecuteAsync(
         CommandContext context,
         GainCommandSettings settings,
         CancellationToken cancellationToken)
+        => RunAsync(settings, cancellationToken);
+
+    internal async Task<int> RunAsync(GainCommandSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
 

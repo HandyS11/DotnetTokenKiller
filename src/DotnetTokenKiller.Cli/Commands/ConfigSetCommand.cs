@@ -13,10 +13,13 @@ internal sealed class ConfigSetCommand(
     IAnsiConsole console) : AsyncCommand<ConfigSetCommandSettings>
 {
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(
+    protected override Task<int> ExecuteAsync(
         CommandContext context,
         ConfigSetCommandSettings settings,
         CancellationToken cancellationToken)
+        => RunAsync(settings, cancellationToken);
+
+    internal async Task<int> RunAsync(ConfigSetCommandSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
 

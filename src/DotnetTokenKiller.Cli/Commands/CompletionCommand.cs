@@ -199,10 +199,15 @@ internal sealed class CompletionCommand(IAnsiConsole console) : AsyncCommand<Com
         """;
 
     /// <inheritdoc/>
-    public override Task<int> ExecuteAsync(
+    protected override Task<int> ExecuteAsync(
         CommandContext context,
         CompletionCommandSettings settings,
         CancellationToken cancellationToken)
+        => RunAsync(settings, cancellationToken);
+
+    internal Task<int> RunAsync(
+        CompletionCommandSettings settings,
+        CancellationToken _)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
