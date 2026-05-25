@@ -52,7 +52,7 @@ jobs:
       - name: Build and analyze
         shell: powershell
         run: |
-          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin /k:"HandyS11_DotnetTokenKiller_6927cee3-67ea-41d1-bf39-3c8d90c7e68f" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" /d:sonar.exclusions="_bmad/**/*,samples/**/*,.claude/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,_bmad/**/*,samples/**/*,src/DotnetTokenKiller.Cli/Program.cs"
+          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin /k:"${{ secrets.SONAR_PROJECT_KEY }}" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" /d:sonar.exclusions="_bmad/**/*,samples/**/*,.claude/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,_bmad/**/*,samples/**/*,src/DotnetTokenKiller.Cli/Program.cs"
           dotnet build DotnetTokenKiller.slnx
           dotnet test DotnetTokenKiller.slnx --no-build --collect:"XPlat Code Coverage" --logger trx -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
           ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
