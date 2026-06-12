@@ -24,7 +24,7 @@
     <PackageVersion Include="NUnit" Version="4.3.2"/>
     <PackageVersion Include="NUnit3TestAdapter" Version="5.0.0"/>
     <PackageVersion Include="Reqnroll.xUnit" Version="2.4.1"/>
-    <PackageVersion Include="Spectre.Console" Version="0.55.2"/>
+    <PackageVersion Include="Spectre.Console" Version="0.56.0"/>
     <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0"/>
     <PackageVersion Include="Spectre.Console.Testing" Version="0.55.2"/>
     <PackageVersion Include="Verify.Xunit" Version="31.12.5"/>
