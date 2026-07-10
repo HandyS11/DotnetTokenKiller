@@ -1,6 +1,6 @@
+using System.Globalization;
 using DotnetTokenKiller.Domain.Tracking;
 using Microsoft.Data.Sqlite;
-using System.Globalization;
 
 namespace DotnetTokenKiller.Infrastructure.Tracking;
 

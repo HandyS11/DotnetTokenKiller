@@ -1,8 +1,8 @@
-using DotnetTokenKiller.Infrastructure.Execution;
-using FluentAssertions;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using DotnetTokenKiller.Infrastructure.Execution;
+using FluentAssertions;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Execution;

@@ -1,5 +1,5 @@
-using DotnetTokenKiller.Domain.Configuration;
 using System.Text.Json.Serialization;
+using DotnetTokenKiller.Domain.Configuration;
 
 namespace DotnetTokenKiller.Infrastructure.Configuration;
 

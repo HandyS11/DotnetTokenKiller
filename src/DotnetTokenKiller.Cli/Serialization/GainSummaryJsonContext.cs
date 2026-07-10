@@ -1,5 +1,5 @@
-using DotnetTokenKiller.Domain.Tracking;
 using System.Text.Json.Serialization;
+using DotnetTokenKiller.Domain.Tracking;
 
 namespace DotnetTokenKiller.Cli.Serialization;
 

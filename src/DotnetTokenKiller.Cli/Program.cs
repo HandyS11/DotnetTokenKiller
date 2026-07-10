@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Text;
 using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Commands;
@@ -6,8 +8,6 @@ using DotnetTokenKiller.Infrastructure.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using System.Reflection;
-using System.Text;
 using DtkTypeRegistrar = DotnetTokenKiller.Cli.Infrastructure.TypeRegistrar;
 
 Console.OutputEncoding = Encoding.UTF8;

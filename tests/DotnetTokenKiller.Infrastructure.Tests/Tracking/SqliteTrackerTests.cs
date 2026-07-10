@@ -1,8 +1,8 @@
+using System.Reflection;
 using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tracking;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
-using System.Reflection;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tracking;

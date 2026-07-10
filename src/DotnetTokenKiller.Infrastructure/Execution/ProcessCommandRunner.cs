@@ -1,5 +1,5 @@
-using DotnetTokenKiller.Domain.Execution;
 using System.Diagnostics;
+using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Infrastructure.Execution;
 

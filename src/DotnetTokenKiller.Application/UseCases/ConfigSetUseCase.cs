@@ -1,5 +1,5 @@
-using DotnetTokenKiller.Domain.Configuration;
 using System.Globalization;
+using DotnetTokenKiller.Domain.Configuration;
 
 namespace DotnetTokenKiller.Application.UseCases;
 

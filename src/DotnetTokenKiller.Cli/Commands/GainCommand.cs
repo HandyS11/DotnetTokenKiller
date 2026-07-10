@@ -1,11 +1,11 @@
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands.Settings;
 using DotnetTokenKiller.Cli.Serialization;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using System.Globalization;
-using System.Text;
-using System.Text.Json;
 
 namespace DotnetTokenKiller.Cli.Commands;
 

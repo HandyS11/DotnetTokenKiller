@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Tee;
-using System.Text.RegularExpressions;
 
 namespace DotnetTokenKiller.Infrastructure.Tee;
 

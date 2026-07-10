@@ -1,6 +1,6 @@
+using System.Reflection;
 using DotnetTokenKiller.Cli.Commands;
 using FluentAssertions;
-using System.Reflection;
 using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests;

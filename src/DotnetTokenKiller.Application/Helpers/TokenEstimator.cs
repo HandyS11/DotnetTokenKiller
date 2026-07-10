@@ -1,6 +1,6 @@
+using System.Collections.Concurrent;
 using DotnetTokenKiller.Domain.Configuration;
 using Microsoft.ML.Tokenizers;
-using System.Collections.Concurrent;
 
 namespace DotnetTokenKiller.Application.Helpers;
 

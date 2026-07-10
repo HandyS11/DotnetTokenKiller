@@ -1,7 +1,7 @@
+using System.Reflection;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Infrastructure.Tee;
 using FluentAssertions;
-using System.Reflection;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tee;

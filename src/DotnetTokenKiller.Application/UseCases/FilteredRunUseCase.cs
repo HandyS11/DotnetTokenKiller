@@ -1,10 +1,10 @@
+using System.Diagnostics;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
-using System.Diagnostics;
 
 namespace DotnetTokenKiller.Application.UseCases;
 

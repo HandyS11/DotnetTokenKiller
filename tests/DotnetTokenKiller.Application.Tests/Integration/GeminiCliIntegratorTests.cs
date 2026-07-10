@@ -1,6 +1,6 @@
+using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration;
 using FluentAssertions;
-using System.Text.Json.Nodes;
 
 namespace DotnetTokenKiller.Application.Tests.Integration;
 

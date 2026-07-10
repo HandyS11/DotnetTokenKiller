@@ -1,6 +1,6 @@
+using System.Reflection;
 using DotnetTokenKiller.Application.Filters;
 using FluentAssertions;
-using System.Reflection;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
 

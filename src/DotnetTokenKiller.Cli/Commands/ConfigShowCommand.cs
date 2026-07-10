@@ -1,7 +1,7 @@
+using System.Globalization;
 using DotnetTokenKiller.Domain.Configuration;
 using Spectre.Console;
 using Spectre.Console.Cli;
-using System.Globalization;
 
 namespace DotnetTokenKiller.Cli.Commands;
 

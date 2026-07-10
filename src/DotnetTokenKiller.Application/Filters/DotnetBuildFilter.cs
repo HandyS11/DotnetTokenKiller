@@ -1,8 +1,8 @@
-using DotnetTokenKiller.Application.Helpers;
-using DotnetTokenKiller.Domain.Filters;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using DotnetTokenKiller.Application.Helpers;
+using DotnetTokenKiller.Domain.Filters;
 
 namespace DotnetTokenKiller.Application.Filters;
 

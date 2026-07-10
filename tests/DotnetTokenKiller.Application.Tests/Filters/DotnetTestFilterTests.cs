@@ -1,8 +1,8 @@
-using DotnetTokenKiller.Application.Filters;
-using FluentAssertions;
 using System.Globalization;
 using System.Reflection;
 using System.Text;
+using DotnetTokenKiller.Application.Filters;
+using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
 
