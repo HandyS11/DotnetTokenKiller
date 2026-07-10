@@ -6,6 +6,8 @@ namespace DotnetTokenKiller.Application.Tests.Integration;
 
 public sealed class ClaudeCodeIntegratorTests : IDisposable
 {
+    private const string RepoMarkerFileName = "DotnetTokenKiller.slnx";
+
     private readonly ClaudeCodeIntegrator _sut = new();
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-claude-test-{Guid.NewGuid()}");
 
@@ -79,6 +81,20 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         content.Should().Contain("def rewrite");
         content.Should().Contain("def main");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_WritesHookEmittingUpdatedInputSchemaAsync()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var script = await File.ReadAllTextAsync(
+            Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py"));
+
+        script.Should().Contain("hookSpecificOutput");
+        script.Should().Contain("updatedInput");
+        script.Should().NotContain("\"decision\"");
+        script.Should().Contain("format");
     }
 
     [Fact]
@@ -193,6 +209,42 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*'hooks.PreToolUse' property of unexpected type*expected a JSON array*");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_HookScript_MatchesCommittedRepoHook()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var shippedHook = await File.ReadAllTextAsync(
+            Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py"));
+
+        var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
+        var committedHook = await File.ReadAllTextAsync(
+            Path.Combine(repoRoot, ".claude", "hooks", "dotnet-to-dtk.py"));
+
+        string.Equals(shippedHook, committedHook, StringComparison.Ordinal).Should().BeTrue(
+            "HookScriptTemplates.ClaudeHook must stay byte-for-byte in sync with the repo's own " +
+            ".claude/hooks/dotnet-to-dtk.py; update whichever one drifted.");
+    }
+
+    private static string FindRepoRoot(string startDirectory)
+    {
+        var current = new DirectoryInfo(startDirectory);
+
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, RepoMarkerFileName)))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new InvalidOperationException(
+            $"Could not locate repo root (a directory containing '{RepoMarkerFileName}') " +
+            $"walking up from '{startDirectory}'.");
     }
 
     [Fact]

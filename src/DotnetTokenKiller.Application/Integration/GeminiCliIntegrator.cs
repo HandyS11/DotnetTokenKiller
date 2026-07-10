@@ -40,69 +40,6 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
         <!-- /dtk -->
         """;
 
-    /// <summary>4-quote raw string literal so Python triple-quoted docstrings embed without escaping.</summary>
-    private const string HookScript = """"
-                                      #!/usr/bin/env python3
-                                      """Gemini CLI BeforeTool hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
-
-                                      Reads the BeforeTool event from stdin (JSON with a "tool_input" field),
-                                      rewrites qualifying dotnet commands to use dtk, and prints the
-                                      modified JSON to stdout so Gemini CLI uses the rewritten command.
-                                      """
-
-                                      import json
-                                      import re
-                                      import sys
-
-
-                                      _DTK_SUBCOMMANDS = {"build", "test", "restore", "clean", "format"}
-
-                                      _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
-
-
-                                      def rewrite(command: str) -> str:
-                                          """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
-
-                                          def _replace(match: re.Match) -> str:
-                                              preceding = command[: match.start()].rstrip()
-                                              last_token = preceding.split()[-1] if preceding else ""
-                                              if last_token in ("dtk", "dtk.exe"):
-                                                  return match.group(0)
-                                              return f"dtk dotnet {match.group(1)}"
-
-                                          return _PATTERN.sub(_replace, command)
-
-
-                                      def main() -> None:
-                                          try:
-                                              payload = json.load(sys.stdin)
-                                          except (json.JSONDecodeError, EOFError):
-                                              return
-
-                                          tool_input = payload.get("tool_input", {})
-                                          command = tool_input.get("command", "")
-
-                                          if not command:
-                                              print(json.dumps({"decision": "allow"}))
-                                              return
-
-                                          rewritten = rewrite(command)
-
-                                          if rewritten != command:
-                                              print(json.dumps({
-                                                  "decision": "allow",
-                                                  "hookSpecificOutput": {
-                                                      "tool_input": {"command": rewritten}
-                                                  }
-                                              }))
-                                          else:
-                                              print(json.dumps({"decision": "allow"}))
-
-
-                                      if __name__ == "__main__":
-                                          main()
-                                      """";
-
     /// <inheritdoc/>
     public string ProviderName => "gemini";
 
@@ -122,7 +59,7 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
         await IntegratorHelpers.WriteHookAndSettingsAsync(
             new HookSpec(
                 Path.Combine(directory, ".gemini", "hooks", "dotnet-to-dtk.py"),
-                HookScript,
+                HookScriptTemplates.GeminiHook,
                 Path.Combine(directory, ".gemini", "settings.json"),
                 "BeforeTool",
                 "run_shell_command",

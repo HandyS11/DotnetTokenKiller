@@ -1,0 +1,175 @@
+namespace DotnetTokenKiller.Application.Integration;
+
+/// <summary>
+/// Shared Python source for the pre-tool-execution hooks shipped by <see cref="ClaudeCodeIntegrator"/> and
+/// <see cref="GeminiCliIntegrator"/>.
+/// </summary>
+/// <remarks>
+/// Both hooks rewrite qualifying <c>dotnet &lt;sub&gt;</c> invocations to <c>dtk dotnet &lt;sub&gt;</c> using the
+/// identical subcommand pattern, quote-aware boundary scanner, and <c>rewrite()</c> function. They differ only in
+/// how the host CLI's payload is read and in the shape of the JSON printed back:
+/// <list type="bullet">
+///   <item><description>Claude Code expects <c>hookSpecificOutput.updatedInput</c>.</description></item>
+///   <item><description>Gemini CLI expects <c>hookSpecificOutput.tool_input</c> alongside a <c>decision</c> field.</description></item>
+/// </list>
+/// </remarks>
+internal static class HookScriptTemplates
+{
+    /// <summary>4-quote raw string literals so embedded Python triple-quoted docstrings need no escaping.</summary>
+    private const string ClaudeHeader = """"
+        #!/usr/bin/env python3
+        """Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
+
+        Reads the Bash tool input from stdin (JSON with a "tool_input" object whose
+        "command" field holds the shell command) and, when a qualifying dotnet command
+        is found, emits the PreToolUse `updatedInput` payload so Claude Code executes
+        the rewritten command. Prints nothing when no rewrite is needed.
+        """
+
+
+        """";
+
+    private const string GeminiHeader = """"
+        #!/usr/bin/env python3
+        """Gemini CLI BeforeTool hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
+
+        Reads the BeforeTool event from stdin (JSON with a "tool_input" field) and, when a
+        qualifying dotnet command is found, emits the BeforeTool `hookSpecificOutput.tool_input`
+        payload so Gemini CLI executes the rewritten command.
+        """
+
+
+        """";
+
+    /// <summary>
+    /// Imports, the subcommand pattern, the quote-aware boundary scanner, and <c>rewrite()</c> — identical for
+    /// both hooks.
+    /// </summary>
+    private const string SharedCore = """"
+        import json
+        import re
+        import sys
+
+        _DTK_SUBCOMMANDS = ("build", "clean", "format", "restore", "test")
+
+        _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
+
+        # Characters that may legitimately precede the `dotnet` token at a command
+        # boundary. Anything else (a slash, a quote, a letter) means we are inside a
+        # path, a string literal, or another word — do not rewrite.
+        _BOUNDARY_CHARS = " \t;&|({`\n"
+
+
+        def _inside_quotes(command: str, index: int) -> bool:
+            """Whether `index` falls inside a shell quote region, honoring nesting and backslash escapes.
+
+            A single-quoted region does not process backslash escapes and cannot be
+            ended by a double quote; a double-quoted region cannot be ended by a single
+            quote. Good enough to keep `dotnet <sub>` inside quoted arguments untouched.
+            """
+            in_single = False
+            in_double = False
+            i = 0
+            while i < index:
+                char = command[i]
+                if char == "\\" and not in_single:
+                    i += 2  # backslash escapes the next character outside single quotes
+                    continue
+                if char == "'" and not in_double:
+                    in_single = not in_single
+                elif char == '"' and not in_single:
+                    in_double = not in_double
+                i += 1
+            return in_single or in_double
+
+
+        def rewrite(command: str) -> str:
+            """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
+
+            def _replace(match: re.Match) -> str:
+                start = match.start()
+                if start > 0 and command[start - 1] not in _BOUNDARY_CHARS:
+                    return match.group(0)  # path like /usr/lib64/dotnet/dotnet or ./dotnet
+                if _inside_quotes(command, start):
+                    return match.group(0)  # e.g. git commit -m "fix dotnet build"
+                preceding = command[:start].rstrip()
+                last_token = preceding.split()[-1] if preceding else ""
+                if last_token in ("dtk", "dtk.exe"):
+                    return match.group(0)
+                return f"dtk dotnet {match.group(1)}"
+
+            return _PATTERN.sub(_replace, command)
+
+
+
+        """";
+
+    private const string ClaudeMain = """
+        def main() -> None:
+            try:
+                payload = json.load(sys.stdin)
+            except (json.JSONDecodeError, EOFError):
+                return
+
+            tool_input = payload.get("tool_input", {})
+            command = tool_input.get("command", "")
+
+            if not command:
+                return
+
+            rewritten = rewrite(command)
+
+            if rewritten != command:
+                tool_input["command"] = rewritten
+                print(json.dumps({
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "updatedInput": tool_input,
+                    }
+                }))
+            # No output on the no-change path: Claude Code proceeds normally.
+
+
+        if __name__ == "__main__":
+            main()
+
+        """;
+
+    private const string GeminiMain = """
+        def main() -> None:
+            try:
+                payload = json.load(sys.stdin)
+            except (json.JSONDecodeError, EOFError):
+                return
+
+            tool_input = payload.get("tool_input", {})
+            command = tool_input.get("command", "")
+
+            if not command:
+                print(json.dumps({"decision": "allow"}))
+                return
+
+            rewritten = rewrite(command)
+
+            if rewritten != command:
+                print(json.dumps({
+                    "decision": "allow",
+                    "hookSpecificOutput": {
+                        "tool_input": {"command": rewritten}
+                    }
+                }))
+            else:
+                print(json.dumps({"decision": "allow"}))
+
+
+        if __name__ == "__main__":
+            main()
+
+        """;
+
+    /// <summary>Claude Code PreToolUse hook, verbatim identical to <c>.claude/hooks/dotnet-to-dtk.py</c> in this repo.</summary>
+    internal static string ClaudeHook { get; } = ClaudeHeader + SharedCore + ClaudeMain;
+
+    /// <summary>Gemini CLI BeforeTool hook, preserving Gemini's existing <c>hookSpecificOutput.tool_input</c> schema.</summary>
+    internal static string GeminiHook { get; } = GeminiHeader + SharedCore + GeminiMain;
+}

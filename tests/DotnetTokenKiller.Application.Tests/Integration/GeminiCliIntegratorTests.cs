@@ -87,6 +87,21 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_HookScript_KeepsGeminiSchemaDistinctFromClaude()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(HookPath);
+
+        content.Contains("\"tool_input\"", StringComparison.Ordinal).Should().BeTrue(
+            "Gemini must keep emitting its own hookSpecificOutput.tool_input payload field.");
+        content.Contains("\"decision\"", StringComparison.Ordinal).Should().BeTrue(
+            "Gemini must keep emitting its own top-level decision field.");
+        content.Contains("\"updatedInput\"", StringComparison.Ordinal).Should().BeFalse(
+            "Gemini must keep its own output schema; updatedInput belongs to Claude's schema only.");
+    }
+
+    [Fact]
     public async Task IntegrateAsync_SettingsJson_ContainsBeforeToolHook()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
