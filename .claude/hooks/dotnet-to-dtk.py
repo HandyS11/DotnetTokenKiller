@@ -1,29 +1,41 @@
 #!/usr/bin/env python3
-"""Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean` to `dtk dotnet ...`.
+"""Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
 
-Reads the Bash tool input from stdin (JSON with a "command" field),
-rewrites qualifying dotnet commands to use dtk, and prints the
-modified JSON to stdout so Claude Code uses the rewritten command.
+Reads the Bash tool input from stdin (JSON with a "command" field) and, when a
+qualifying dotnet command is found, emits the PreToolUse `updatedInput` payload
+so Claude Code executes the rewritten command. Prints nothing when no rewrite
+is needed.
 """
 
 import json
 import re
 import sys
 
+_DTK_SUBCOMMANDS = ("build", "clean", "format", "restore", "test")
 
-_DTK_SUBCOMMANDS = {"build", "test", "restore", "clean"}
-
-# Matches `dotnet <subcommand>` anywhere in the command; the replacement function
-# checks the actual preceding token (ignoring any amount of whitespace) so that
-# `dtk  dotnet build`, `dtk\tdotnet build`, etc. are all treated as already-prefixed.
 _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
+
+# Characters that may legitimately precede the `dotnet` token at a command
+# boundary. Anything else (a slash, a quote, a letter) means we are inside a
+# path, a string literal, or another word — do not rewrite.
+_BOUNDARY_CHARS = " \t;&|({`\n"
+
+
+def _inside_quotes(command: str, index: int) -> bool:
+    """Best-effort check: is `index` inside an unclosed ' or " region?"""
+    return (command.count('"', 0, index) % 2 == 1) or (command.count("'", 0, index) % 2 == 1)
 
 
 def rewrite(command: str) -> str:
     """Prefix matching `dotnet <sub>` invocations with `dtk`, unless already prefixed."""
 
     def _replace(match: re.Match) -> str:
-        preceding = command[: match.start()].rstrip()
+        start = match.start()
+        if start > 0 and command[start - 1] not in _BOUNDARY_CHARS:
+            return match.group(0)  # path like /usr/lib64/dotnet/dotnet or ./dotnet
+        if _inside_quotes(command, start):
+            return match.group(0)  # e.g. git commit -m "fix dotnet build"
+        preceding = command[:start].rstrip()
         last_token = preceding.split()[-1] if preceding else ""
         if last_token in ("dtk", "dtk.exe"):
             return match.group(0)
@@ -48,12 +60,13 @@ def main() -> None:
 
     if rewritten != command:
         tool_input["command"] = rewritten
-        payload["tool_input"] = tool_input
-        # Output decision: proceed with the rewritten command
-        print(json.dumps({"decision": "proceed", "tool_input": tool_input}))
-    else:
-        # No change needed — let it proceed as-is
-        print(json.dumps({"decision": "proceed"}))
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "updatedInput": tool_input,
+            }
+        }))
+    # No output on the no-change path: Claude Code proceeds normally.
 
 
 if __name__ == "__main__":
