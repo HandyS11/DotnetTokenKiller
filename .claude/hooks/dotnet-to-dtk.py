@@ -22,8 +22,26 @@ _BOUNDARY_CHARS = " \t;&|({`\n"
 
 
 def _inside_quotes(command: str, index: int) -> bool:
-    """Best-effort check: is `index` inside an unclosed ' or " region?"""
-    return (command.count('"', 0, index) % 2 == 1) or (command.count("'", 0, index) % 2 == 1)
+    """Whether `index` falls inside a shell quote region, honoring nesting and backslash escapes.
+
+    A single-quoted region does not process backslash escapes and cannot be
+    ended by a double quote; a double-quoted region cannot be ended by a single
+    quote. Good enough to keep `dotnet <sub>` inside quoted arguments untouched.
+    """
+    in_single = False
+    in_double = False
+    i = 0
+    while i < index:
+        char = command[i]
+        if char == "\\" and not in_single:
+            i += 2  # backslash escapes the next character outside single quotes
+            continue
+        if char == "'" and not in_double:
+            in_single = not in_single
+        elif char == '"' and not in_single:
+            in_double = not in_double
+        i += 1
+    return in_single or in_double
 
 
 def rewrite(command: str) -> str:
