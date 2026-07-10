@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
 
-Reads the Bash tool input from stdin (JSON with a "command" field) and, when a
-qualifying dotnet command is found, emits the PreToolUse `updatedInput` payload
-so Claude Code executes the rewritten command. Prints nothing when no rewrite
-is needed.
+Reads the Bash tool input from stdin (JSON with a "tool_input" object whose
+"command" field holds the shell command) and, when a qualifying dotnet command
+is found, emits the PreToolUse `updatedInput` payload so Claude Code executes
+the rewritten command. Prints nothing when no rewrite is needed.
 """
 
 import json
