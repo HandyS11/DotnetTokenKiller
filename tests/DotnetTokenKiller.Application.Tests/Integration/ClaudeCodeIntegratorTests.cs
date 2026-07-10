@@ -82,6 +82,20 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_WritesHookEmittingUpdatedInputSchemaAsync()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var script = await File.ReadAllTextAsync(
+            Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py"));
+
+        script.Should().Contain("hookSpecificOutput");
+        script.Should().Contain("updatedInput");
+        script.Should().NotContain("\"decision\"");
+        script.Should().Contain("format");
+    }
+
+    [Fact]
     public async Task IntegrateAsync_SettingsJson_ContainsHookEntry()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
