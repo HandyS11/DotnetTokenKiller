@@ -65,7 +65,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             var filePath = Path.Combine(teeDir, fileName);
             await File.WriteAllTextAsync(filePath, content, cancellationToken).ConfigureAwait(false);
 
-            return $"[full output: {Path.GetFileName(filePath)}]";
+            return $"[full output: {filePath}]";
         }
         catch
         {
