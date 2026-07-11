@@ -712,6 +712,18 @@ public class FilteredRunUseCaseTests
         output.Should().Contain("exit 1");
     }
 
+    [Fact]
+    public async Task RunAsync_FailedCommandWithCrlfOutput_RawTailHasNoStrayCarriageReturnsAsync()
+    {
+        // On Windows the captured output uses CRLF. Splitting the raw tail on '\n' alone would
+        // leave a trailing '\r' on every line (as the other filters guard against with TrimEnd('\r')).
+        var output = await RunUseCaseAsync(exitCode: 1,
+            rawOutput: "MSBUILD : error MSB1009: line one\r\nsecond error line\r\n");
+
+        output.Should().Contain("MSB1009");
+        output.Should().NotContain("\r");
+    }
+
     private async Task<string> RunUseCaseAsync(int exitCode, string rawOutput)
     {
         await using var writer = new StringWriter();

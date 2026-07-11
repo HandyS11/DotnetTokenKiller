@@ -128,7 +128,7 @@ public sealed class FilteredRunUseCase(
     private static string BuildRawTailFallback(string command, int exitCode, string rawOutput, string? logHint)
     {
         var lines = rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var tail = string.Join('\n', lines.TakeLast(40));
+        var tail = string.Join('\n', lines.TakeLast(40).Select(line => line.TrimEnd('\r')));
         var sb = new StringBuilder();
         sb.AppendLine(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})")
             .AppendLine(tail);
