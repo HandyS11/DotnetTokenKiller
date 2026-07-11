@@ -204,7 +204,7 @@ dtk dotnet build -q | grep "error"
 dtk dotnet test -q > test-results.txt
 ```
 
-In quiet mode, verbosity flags (`-v`, `-v -v`) and `--show-log` are ignored — only the filtered command output is written.
+In quiet mode, verbosity flags (`-v`, `--vv`) and `--show-log` are ignored — only the filtered command output is written.
 
 ## Passthrough Behavior
 

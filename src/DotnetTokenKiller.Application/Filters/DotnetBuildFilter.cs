@@ -163,7 +163,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             if (warnings.Count > 0)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use -v -v to see)");
+                    $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use --vv to see)");
             }
         }
 

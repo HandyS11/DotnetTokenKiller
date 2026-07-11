@@ -47,6 +47,7 @@ internal static class ArgumentPreprocessor
         {
             "-v",
             "--verbose",
+            "--vv",
             "--show-log",
             "-q",
             "--quiet"
@@ -67,7 +68,10 @@ internal static class ArgumentPreprocessor
     /// <summary>
     /// Inserts <c>--</c> before dotnet-specific args so Spectre.Console forwards them
     /// as <c>Remaining.Raw</c> without treating them as its own options.
-    /// DTK flags (<c>-v</c>, <c>--verbose</c>, <c>--show-log</c>) are partitioned before <c>--</c>.
+    /// DTK flags (<c>-v</c>, <c>--verbose</c>, <c>--vv</c>, <c>--show-log</c>, <c>-q</c>, <c>--quiet</c>)
+    /// are partitioned ahead of the inserted <c>--</c>. A user's own <c>--</c> and everything after it
+    /// is forwarded verbatim: Spectre consumes only the first (inserted) separator, so the user's
+    /// separator survives into <c>Remaining.Raw</c> (e.g. <c>dotnet test -- RunConfiguration.X=1</c>).
     /// Returns the same array unchanged when no modification is needed.
     /// </summary>
     /// <param name="args">The raw CLI arguments.</param>
@@ -75,17 +79,24 @@ internal static class ArgumentPreprocessor
     {
         if (args.Length <= 2 ||
             !string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) ||
-            !KnownSubcommands.Contains(args[1]) ||
-            args.Contains("--"))
+            !KnownSubcommands.Contains(args[1]))
         {
             return args;
         }
 
         var dtkFlags = new List<string>();
         var dotnetArgs = new List<string>();
+        var sawUserSeparator = false;
         for (var i = 2; i < args.Length; i++)
         {
-            if (DtkOptions.Contains(args[i]))
+            // Once the user's own "--" is seen, it and everything after it is forwarded
+            // verbatim — never reinterpreted as a dtk flag.
+            if (!sawUserSeparator && string.Equals(args[i], "--", StringComparison.Ordinal))
+            {
+                sawUserSeparator = true;
+            }
+
+            if (!sawUserSeparator && DtkOptions.Contains(args[i]))
             {
                 dtkFlags.Add(args[i]);
             }
