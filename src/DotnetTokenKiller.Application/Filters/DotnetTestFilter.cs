@@ -17,7 +17,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
     /// <summary>Applies the filter to the raw test output.</summary>
     /// <param name="rawOutput">The raw test output to filter.</param>
-    public string Apply(string rawOutput)
+    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    public string Apply(string rawOutput, int exitCode)
     {
         if (string.IsNullOrEmpty(rawOutput))
         {
@@ -26,7 +27,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         var lines = AnsiStrip.Strip(rawOutput).Split('\n');
         var state = ParseLines(lines);
-        return FormatOutput(state);
+        return FormatOutput(state, exitCode);
     }
 
     private ParseState ParseLines(string[] lines)
@@ -156,10 +157,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.ProjectCount++;
     }
 
-    private static string FormatOutput(ParseState state)
+    private static string FormatOutput(ParseState state, int exitCode)
     {
-        // Zero tests: explicit no-tests pattern or all summaries showed 0 tests
-        if (state.ZeroTestsFound || state is { ProjectCount: > 0, TotalPassed: 0, TotalFailed: 0 })
+        // Zero tests: explicit no-tests pattern or all summaries showed 0 tests.
+        // Only a zero exit code confirms this was a genuine "nothing to run" success.
+        var zeroTestsSignal = state.ZeroTestsFound || state is { ProjectCount: > 0, TotalPassed: 0, TotalFailed: 0 };
+        if (exitCode == 0 && zeroTestsSignal)
         {
             return "✓ dotnet test: 0 tests found\n";
         }
@@ -171,7 +174,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
 
-        if (state.TotalFailed == 0)
+        if (exitCode == 0 && state.TotalFailed == 0)
         {
             var skippedSuffix = state.TotalSkipped > 0
                 ? $", {state.TotalSkipped} skipped"

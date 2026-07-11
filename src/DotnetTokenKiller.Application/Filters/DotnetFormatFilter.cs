@@ -9,9 +9,9 @@ namespace DotnetTokenKiller.Application.Filters;
 /// <summary>Condenses dotnet format output to a concise summary.</summary>
 /// <remarks>
 /// When <c>dotnet format</c> finds nothing to change, it produces no output at all.
-/// This filter treats empty or whitespace-only input as a confirmed success signal and
-/// synthesises a <c>✓ dotnet format (nothing to format)</c> confirmation line so that
-/// AI agents receive an explicit positive signal instead of silence.
+/// This filter treats empty or whitespace-only input on a zero exit code as a confirmed
+/// success signal and synthesises a <c>✓ dotnet format (nothing to format)</c> confirmation
+/// line so that AI agents receive an explicit positive signal instead of silence.
 /// </remarks>
 /// <param name="rootPath">Optional root path used to shorten file paths in violation messages.</param>
 public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutputFilter
@@ -22,30 +22,27 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
 
     /// <summary>Applies the filter to the raw format output.</summary>
     /// <param name="rawOutput">The raw format output to filter.</param>
-    public string Apply(string rawOutput)
+    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    public string Apply(string rawOutput, int exitCode)
     {
-        // Heuristic: dotnet format produces no output when nothing needs formatting.
-        // Synthesise a positive confirmation so agents receive an explicit success signal.
-        if (string.IsNullOrEmpty(rawOutput))
-        {
-            return "✓ dotnet format (nothing to format)\n";
-        }
+        var stripped = string.IsNullOrEmpty(rawOutput) ? string.Empty : AnsiStrip.Strip(rawOutput);
 
-        var stripped = AnsiStrip.Strip(rawOutput);
+        // Heuristic: dotnet format produces no output when nothing needs formatting.
+        // Synthesise a positive confirmation so agents receive an explicit success signal —
+        // but only when the process actually exited successfully.
         if (string.IsNullOrWhiteSpace(stripped))
         {
-            return "✓ dotnet format (nothing to format)\n";
+            return exitCode == 0 ? "✓ dotnet format (nothing to format)\n" : string.Empty;
         }
 
         var lines = stripped.Split('\n');
-        var elapsedStr = ParseElapsedStr(lines);
-
         var violations = Array.FindAll(lines, l => ViolationPattern().IsMatch(l));
-        if (violations.Length > 0)
+        if (violations.Length > 0 || exitCode != 0)
         {
             return BuildViolationOutput(violations);
         }
 
+        var elapsedStr = ParseElapsedStr(lines);
         var formattedCount = Array.FindAll(lines, l => FormattedFilePattern().IsMatch(l)).Length;
         if (formattedCount > 0)
         {

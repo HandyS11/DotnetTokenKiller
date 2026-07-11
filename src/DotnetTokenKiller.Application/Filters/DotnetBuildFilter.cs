@@ -17,7 +17,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
     /// <summary>Applies the filter to the raw build output.</summary>
     /// <param name="rawOutput">The raw build output to filter.</param>
-    public string Apply(string rawOutput)
+    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    public string Apply(string rawOutput, int exitCode)
     {
         if (string.IsNullOrEmpty(rawOutput))
         {
@@ -29,7 +30,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
         var context = BuildContext(projectCount, elapsed);
 
-        if (errors.Count == 0 && warnings.Count == 0)
+        if (exitCode == 0 && errors.Count == 0 && warnings.Count == 0)
         {
             return $"✓ dotnet build{context}\n";
         }

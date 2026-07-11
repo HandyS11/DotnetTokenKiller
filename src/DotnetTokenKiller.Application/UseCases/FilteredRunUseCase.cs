@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
@@ -59,11 +61,12 @@ public sealed class FilteredRunUseCase(
 
         var raw = result.StdOut + result.StdErr;
         var stripped = AnsiStrip.Strip(raw);
+        var commandSlug = args.Count > 0 ? args[0] : command;
 
         string filtered;
         try
         {
-            filtered = filter.Apply(stripped);
+            filtered = filter.Apply(stripped, result.ExitCode);
         }
         catch
         {
@@ -74,6 +77,17 @@ public sealed class FilteredRunUseCase(
             }
 
             filtered = stripped;
+        }
+
+        var logHint = await GetTeeHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken)
+            .ConfigureAwait(false);
+
+        var usedRawTailFallback = false;
+        if (result.ExitCode != 0 && string.IsNullOrWhiteSpace(filtered))
+        {
+            var commandLine = args.Count > 0 ? $"{command} {string.Join(' ', args)}" : command;
+            filtered = BuildRawTailFallback(commandLine, result.ExitCode, stripped, showLogHint ? logHint : null);
+            usedRawTailFallback = true;
         }
 
         if (!config.Display.Emoji || Environment.GetEnvironmentVariable("NO_COLOR") is not null)
@@ -90,12 +104,12 @@ public sealed class FilteredRunUseCase(
 
         await output.WriteAsync(filtered).ConfigureAwait(false);
 
+        if (!usedRawTailFallback && logHint is not null && showLogHint)
+        {
+            await output.WriteLineAsync(logHint).ConfigureAwait(false);
+        }
+
         stopwatch.Stop();
-
-        var commandSlug = args.Count > 0 ? args[0] : command;
-
-        await TeeIfConfiguredAsync(stripped, commandSlug, result.ExitCode, showLogHint, cancellationToken)
-            .ConfigureAwait(false);
 
         await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, result.ExitCode,
                 cancellationToken)
@@ -104,25 +118,41 @@ public sealed class FilteredRunUseCase(
         return result.ExitCode;
     }
 
-    private async Task TeeIfConfiguredAsync(
+    /// <summary>Builds a fallback message for failed commands whose output the filter could not parse.</summary>
+    /// <param name="command">The command line that was run, for display purposes.</param>
+    /// <param name="exitCode">The non-zero process exit code.</param>
+    /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
+    /// <param name="logHint">An optional tee log hint to append when present.</param>
+    private static string BuildRawTailFallback(string command, int exitCode, string rawOutput, string? logHint)
+    {
+        var lines = rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var tail = string.Join('\n', lines.TakeLast(40));
+        var sb = new StringBuilder();
+        sb.AppendLine(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})")
+            .AppendLine(tail);
+        if (logHint is not null)
+        {
+            sb.AppendLine(logHint);
+        }
+
+        return sb.ToString();
+    }
+
+    private async Task<string?> GetTeeHintAsync(
         string stripped,
         string commandSlug,
         int exitCode,
-        bool showLogHint,
         CancellationToken cancellationToken)
     {
         try
         {
-            var hint = await teeService.TeeAndHintAsync(stripped, commandSlug, exitCode, cancellationToken)
+            return await teeService.TeeAndHintAsync(stripped, commandSlug, exitCode, cancellationToken)
                 .ConfigureAwait(false);
-            if (hint is not null && showLogHint)
-            {
-                await output.WriteLineAsync(hint).ConfigureAwait(false);
-            }
         }
         catch
         {
             // Intentional: tee errors must not surface to the user
+            return null;
         }
     }
 

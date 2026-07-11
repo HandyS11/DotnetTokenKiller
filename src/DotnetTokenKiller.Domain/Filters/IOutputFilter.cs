@@ -5,5 +5,6 @@ public interface IOutputFilter
 {
     /// <summary>Applies the filter to the raw output and returns the condensed result.</summary>
     /// <param name="rawOutput">The raw output to filter.</param>
-    string Apply(string rawOutput);
+    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    string Apply(string rawOutput, int exitCode);
 }

@@ -16,7 +16,8 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
 
     /// <summary>Applies the filter to the raw restore output.</summary>
     /// <param name="rawOutput">The raw restore output to filter.</param>
-    public string Apply(string rawOutput)
+    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    public string Apply(string rawOutput, int exitCode)
     {
         if (string.IsNullOrEmpty(rawOutput))
         {
@@ -30,7 +31,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             ProcessLine(rawLine.Trim(), state);
         }
 
-        return FormatOutput(state);
+        return FormatOutput(state, exitCode);
     }
 
     private void ProcessLine(string line, ParseState state)
@@ -106,9 +107,9 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             proj));
     }
 
-    private static string FormatOutput(ParseState state)
+    private static string FormatOutput(ParseState state, int exitCode)
     {
-        if (state.Errors.Count > 0)
+        if (state.Errors.Count > 0 || exitCode != 0)
         {
             return FormatErrors(state.Errors);
         }

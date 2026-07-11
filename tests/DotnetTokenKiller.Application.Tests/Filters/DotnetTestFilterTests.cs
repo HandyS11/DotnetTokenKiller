@@ -14,7 +14,7 @@ public class DotnetTestFilterTests
     public Task Apply_AllPassFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_test_all_pass.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         return Verify(result);
     }
 
@@ -22,7 +22,7 @@ public class DotnetTestFilterTests
     public Task Apply_FailuresFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_test_failures.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 1);
         return Verify(result);
     }
 
@@ -30,7 +30,7 @@ public class DotnetTestFilterTests
     public void Apply_AllPassFixture_SavingsAtLeast90Percent()
     {
         var fixture = LoadFixture("dotnet_test_all_pass.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         var savings = 100.0 - (result.Length * 100.0 / fixture.Length);
         savings.Should().BeGreaterThanOrEqualTo(90.0, "test all-pass filter should achieve ≥90% savings");
     }
@@ -39,7 +39,7 @@ public class DotnetTestFilterTests
     public void Apply_FailuresFixture_SavingsAtLeast70Percent()
     {
         var fixture = LoadFixture("dotnet_test_failures.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 1);
         var savings = 100.0 - (result.Length * 100.0 / fixture.Length);
         savings.Should().BeGreaterThanOrEqualTo(70.0, "test failures filter should achieve ≥70% savings");
     }
@@ -54,14 +54,14 @@ public class DotnetTestFilterTests
     public void Apply_AllPassFixture_DoesNotContainNoiseLine(string noiseLine)
     {
         var fixture = LoadFixture("dotnet_test_all_pass.txt");
-        _sut.Apply(fixture).Should().NotContain(noiseLine);
+        _sut.Apply(fixture, exitCode: 0).Should().NotContain(noiseLine);
     }
 
     [Fact]
     public Task Apply_ZeroTestsFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_test_zero.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         return Verify(result);
     }
 
@@ -69,19 +69,19 @@ public class DotnetTestFilterTests
     public void Apply_ZeroTestsFixture_ReturnsZeroTestsMessage()
     {
         var fixture = LoadFixture("dotnet_test_zero.txt");
-        _sut.Apply(fixture).Should().Be("✓ dotnet test: 0 tests found\n");
+        _sut.Apply(fixture, exitCode: 0).Should().Be("✓ dotnet test: 0 tests found\n");
     }
 
     [Fact]
     public void Apply_NullInput_ReturnsEmpty()
     {
-        _sut.Apply(null!).Should().BeEmpty();
+        _sut.Apply(null!, exitCode: 0).Should().BeEmpty();
     }
 
     [Fact]
     public void Apply_EmptyInput_ReturnsEmpty()
     {
-        _sut.Apply(string.Empty).Should().BeEmpty();
+        _sut.Apply(string.Empty, exitCode: 0).Should().BeEmpty();
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = new DotnetTestFilter().Apply(input);
+        var result = new DotnetTestFilter().Apply(input, exitCode: 1);
         result.Should().Contain("Throws_InvalidOperation");
         result.Should().Contain("InvalidOperationException");
     }
@@ -111,7 +111,7 @@ public class DotnetTestFilterTests
         // Covers FormatOutput ProjectCount==0 path (lines 168-169)
         const string input = "Some test runner output without a summary line";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().BeEmpty();
     }
@@ -122,7 +122,7 @@ public class DotnetTestFilterTests
         // Covers NormalizeDurationToMs "s" case (line 248)
         const string input = "Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 2.5 s - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("passed");
     }
@@ -133,7 +133,7 @@ public class DotnetTestFilterTests
         // Covers NormalizeDurationToMs "m" case (line 249)
         const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("passed");
     }
@@ -144,7 +144,7 @@ public class DotnetTestFilterTests
         // Covers NormalizeDurationToMs "h" case (line 250)
         const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 h - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("passed");
     }
@@ -155,7 +155,7 @@ public class DotnetTestFilterTests
         // Covers TotalSkipped > 0 true branch (condition at line 176)
         const string input = "Passed!  - Failed: 0, Passed: 5, Skipped: 2, Total: 7, Duration: 10 ms - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("2 skipped");
     }
@@ -166,7 +166,7 @@ public class DotnetTestFilterTests
         // Covers (ProjectCount == 1 ? "" : "s") true branch (condition at line 179)
         const string input = "Passed!  - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 100 ms - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("1 project");
         result.Should().NotContain("projects");
@@ -189,7 +189,7 @@ public class DotnetTestFilterTests
 
         sb.AppendLine("Failed!  - Failed: 16, Passed: 0, Skipped: 0, Total: 16, Duration: 100 ms - Tests.dll");
 
-        var result = _sut.Apply(sb.ToString());
+        var result = _sut.Apply(sb.ToString(), exitCode: 1);
 
         result.Should().Contain("+1 more failures");
     }
@@ -208,7 +208,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("EmptyMessageTest");
     }
@@ -219,7 +219,7 @@ public class DotnetTestFilterTests
         // Covers i >= lines.Length short-circuit in ParseFailure (conditions at lines 75, 84)
         const string input = "  Failed MyTests.LastLineTest [1 ms]";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         // No summary → empty output
         result.Should().BeEmpty();
@@ -239,7 +239,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 3, Total: 4, Duration: 50 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("3 skipped");
     }
@@ -258,7 +258,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 50 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("1 project");
         result.Should().NotContain("projects");
@@ -279,7 +279,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 50 ms - Tests2.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("2 projects");
     }
@@ -302,7 +302,7 @@ public class DotnetTestFilterTests
         // Covers state is { ProjectCount: > 0, TotalPassed: 0, TotalFailed: 0 } branch (line 162)
         const string input = "Passed!  - Failed: 0, Passed: 0, Skipped: 0, Total: 0, Duration: 5 ms - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be("✓ dotnet test: 0 tests found\n");
     }
@@ -314,7 +314,7 @@ public class DotnetTestFilterTests
         var filter = new DotnetTestFilter();
         const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 10 ms - T.dll";
 
-        var result = filter.Apply(input);
+        var result = filter.Apply(input, exitCode: 0);
 
         result.Should().Contain("passed");
     }
@@ -336,7 +336,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 5 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         // Verifies the first stack frame file reference is captured (Internal.cs:line 5)
         result.Should().Contain("line 5");
@@ -356,7 +356,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("at Tests/Test.cs:line 42");
     }
@@ -375,7 +375,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 42 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("[42 ms]");
     }
@@ -392,7 +392,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().StartWith("FAILURES (1):");
     }
@@ -412,7 +412,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         // Should just join the message, not the compacted Expected/Actual form
         result.Should().Contain("Expected: 42");
@@ -434,7 +434,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("Expected:");
         result.Should().Contain("Actual:");
@@ -457,7 +457,7 @@ public class DotnetTestFilterTests
 
         sb.AppendLine("Failed!  - Failed: 15, Passed: 0, Skipped: 0, Total: 15, Duration: 100 ms - Tests.dll");
 
-        var result = _sut.Apply(sb.ToString());
+        var result = _sut.Apply(sb.ToString(), exitCode: 1);
 
         result.Should().NotContain("more failures");
     }
@@ -469,7 +469,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 2 s - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("2.00s");
     }
@@ -481,7 +481,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("60.00s");
     }
@@ -493,7 +493,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 h - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("3600.00s");
     }
@@ -505,7 +505,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 500 ms - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("0.50s");
     }
@@ -522,7 +522,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 2, Skipped: 0, Total: 3, Duration: 100 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("dotnet test: 1 failed, 2 passed");
     }
@@ -534,7 +534,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 10, Skipped: 0, Total: 10, Duration: 200 ms - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("dotnet test: 10 passed");
     }
@@ -555,7 +555,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("NoStack1");
         result.Should().Contain("NoStack2");
@@ -568,7 +568,7 @@ public class DotnetTestFilterTests
         // "No test matches" pattern triggers the zero-tests path
         const string input = "No test matches the given testcase filter";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("0 tests found");
     }
@@ -596,7 +596,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("First");
         result.Should().Contain("Second");
@@ -609,7 +609,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 5, Skipped: 0, Total: 5, Duration: 100 ms - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().StartWith("\u2713");
     }
@@ -629,7 +629,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("Actual: 99");
     }
@@ -646,7 +646,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 3, Skipped: 0, Total: 4, Duration: 50 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("dotnet test:");
     }
@@ -661,7 +661,7 @@ public class DotnetTestFilterTests
                              Passed!  - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 50 ms - Tests2.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("2 projects");
         result.Should().NotContain("1 project");
@@ -681,7 +681,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("NoContent");
         result.Should().NotContain("Stryker was here!");
@@ -703,7 +703,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 5 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("Expected: 42");
         result.Should().Contain("Actual:   99");
@@ -724,7 +724,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("Actual: 99");
         result.Should().NotContain(", Actual: 99");
@@ -745,7 +745,7 @@ public class DotnetTestFilterTests
                              Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 2 ms - Tests.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("quick brown fox assertion failed");
     }
@@ -757,7 +757,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 7, Skipped: 0, Total: 7, Duration: 200 ms - Tests.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("1 project,");
         result.Should().NotContain("1 projects");
@@ -772,7 +772,7 @@ public class DotnetTestFilterTests
                              Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 500 ms - Tests2.dll
                              """;
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("1.50s");
         result.Should().Contain("2 projects");
