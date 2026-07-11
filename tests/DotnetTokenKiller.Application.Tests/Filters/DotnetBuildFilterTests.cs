@@ -637,6 +637,33 @@ public class DotnetBuildFilterTests
         result.Should().NotContain("✗");
     }
 
+    [Fact]
+    public void Apply_MultiPartTimeElapsed_IncludesMinutesAndSeconds()
+    {
+        // "Time Elapsed hh:mm:ss.ff" is a full TimeSpan, so minutes and seconds are already summed:
+        // 00:01:02.50 → 62.50s. Locks this in alongside the test filter's multi-part duration fix.
+        const string input = "Time Elapsed 00:01:02.50";
+
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
+
+        result.Should().Contain("62.50s");
+    }
+
+    [Theory]
+    [InlineData("/repo/Tests.cs(10,5): warning xUnit1013: Public method should be marked as test [/repo/T.csproj]",
+        "xUnit1013")]
+    [InlineData("/repo/App.cs(3,9): error CS0029: Cannot implicitly convert type 'string[]' to 'int' [/repo/A.csproj]",
+        "'string[]' to 'int'")]
+    [InlineData("C:\\Program Files (x86)\\proj\\App.cs(1,1): error CS1002: ; expected [C:\\p\\A.csproj]", "CS1002")]
+    public void Apply_HardDiagnosticShapes_AreCapturedInFull(string line, string mustContain)
+    {
+        // Mixed-case codes (xUnit1013), bracketed message content ('string[]'), and parens in the
+        // file path (Program Files (x86)) all defeated the original regexes.
+        var result = new DotnetBuildFilter().Apply($"{line}\nBuild FAILED.\n", exitCode: 1);
+        result.Should().Contain(mustContain);
+        result.Should().NotContain("✓");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetBuildFilterTests).Assembly;

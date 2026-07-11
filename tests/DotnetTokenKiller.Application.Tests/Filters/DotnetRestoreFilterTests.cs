@@ -188,9 +188,10 @@ public class DotnetRestoreFilterTests
     }
 
     [Fact]
-    public void Apply_RestoredDuration_IncludedInElapsed()
+    public void Apply_RestoredDuration_ReportsSlowestNotSum()
     {
-        // Kills statement mutation on TotalDurationMs accumulation (line 64)
+        // Elapsed reports the slowest single restore (300 ms), not the sum (500 ms): restores run
+        // in parallel, so summing per-project times overstates the real wall-clock time.
         const string input = """
                                Restored /path/A.csproj (in 200 ms).
                                Restored /path/B.csproj (in 300 ms).
@@ -198,7 +199,7 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("0.50s");
+        result.Should().Contain("0.30s").And.NotContain("0.50s");
     }
 
     [Fact]
@@ -317,6 +318,26 @@ public class DotnetRestoreFilterTests
         var result = _sut.Apply(input, exitCode: 139);
 
         result.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("  Restored /repo/App.csproj (in 1.02 sec).")]
+    [InlineData("  Restored /repo/App.csproj (in 1 min 5 sec).")]
+    public void Apply_SlowRestore_CountsProject(string line)
+    {
+        // Second- and minute-scale restore durations were missed by the ms-only pattern,
+        // dropping the project from the count entirely.
+        var result = new DotnetRestoreFilter().Apply(line + "\n", exitCode: 0);
+        result.Should().Contain("1 project");
+    }
+
+    [Fact]
+    public void Apply_MsbError_IsSurfaced()
+    {
+        // MSB-class failures (e.g. missing project file) are as fatal as NU errors and must surface.
+        const string raw = "MSBUILD : error MSB1009: Project file does not exist.";
+        var result = new DotnetRestoreFilter().Apply(raw, exitCode: 1);
+        result.Should().Contain("MSB1009");
     }
 
     private static string LoadFixture(string resourceName)

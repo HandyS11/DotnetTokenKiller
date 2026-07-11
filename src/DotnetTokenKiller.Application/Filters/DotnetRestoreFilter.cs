@@ -40,9 +40,12 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         if (restoredMatch.Success)
         {
             state.RestoredCount++;
-            if (double.TryParse(restoredMatch.Groups["ms"].Value, CultureInfo.InvariantCulture, out var ms))
+            // Track the slowest single restore, not the sum: restores run in parallel, so summing
+            // the per-project times wildly overstates the actual wall-clock elapsed.
+            var ms = ParseDurationToMs(restoredMatch.Groups["dur"].Value);
+            if (ms > state.MaxDurationMs)
             {
-                state.TotalDurationMs += ms;
+                state.MaxDurationMs = ms;
             }
 
             return;
@@ -107,6 +110,31 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             proj));
     }
 
+    private static double ParseDurationToMs(string duration)
+    {
+        var match = DurationPattern().Match(duration.Trim());
+        if (!match.Success)
+        {
+            return 0;
+        }
+
+        if (match.Groups["min"].Success)
+        {
+            var minutes = double.Parse(match.Groups["min"].Value, CultureInfo.InvariantCulture);
+            var seconds = match.Groups["minsec"].Success
+                ? double.Parse(match.Groups["minsec"].Value, CultureInfo.InvariantCulture)
+                : 0;
+            return (minutes * 60_000) + (seconds * 1_000);
+        }
+
+        if (match.Groups["sec"].Success)
+        {
+            return double.Parse(match.Groups["sec"].Value, CultureInfo.InvariantCulture) * 1_000;
+        }
+
+        return double.Parse(match.Groups["ms"].Value, CultureInfo.InvariantCulture);
+    }
+
     private static string FormatOutput(ParseState state, int exitCode)
     {
         if (state.Errors.Count == 0 && exitCode != 0)
@@ -134,7 +162,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             return string.Empty;
         }
 
-        var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
+        var elapsed = $"{state.MaxDurationMs / 1000.0:F2}s";
         return $"✓ dotnet restore ({totalProjects} project{(totalProjects == 1 ? "" : "s")}, {elapsed})\n";
     }
 
@@ -158,9 +186,18 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         return sb.ToString();
     }
 
-    // "  Restored /path/Project.csproj (in 123 ms)."
-    [GeneratedRegex(@"^\s*Restored .+\.[a-z]+proj \(in (?<ms>[\d.]+) ms\)", RegexOptions.IgnoreCase)]
+    // "  Restored /path/Project.csproj (in 123 ms)." — duration may be ms, seconds, or minutes:
+    // "(in 123 ms)", "(in 1.02 sec)", "(in 1 min)", "(in 1 min 5 sec)".
+    [GeneratedRegex(
+        @"^\s*Restored .+\.[a-z]+proj \(in (?<dur>[\d.]+ (?:ms|sec)|(?:\d+ min)(?: \d+(?:\.\d+)? sec)?)\)",
+        RegexOptions.IgnoreCase)]
     private static partial Regex RestoredPattern();
+
+    // Parses a captured restore duration ("123 ms", "1.02 sec", "1 min", "1 min 5 sec") into groups.
+    [GeneratedRegex(
+        @"^(?:(?<min>\d+) min(?: (?<minsec>[\d.]+) sec)?|(?<sec>[\d.]+) sec|(?<ms>[\d.]+) ms)$",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex DurationPattern();
 
     // "All projects are up-to-date for restore."
     [GeneratedRegex("All projects are up-to-date for restore", RegexOptions.IgnoreCase)]
@@ -170,13 +207,13 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
     [GeneratedRegex(@"(?<count>\d+) of \d+ projects are up-to-date for restore", RegexOptions.IgnoreCase)]
     private static partial Regex PartialUpToDatePattern();
 
-    // "/path/proj.csproj : error NU1101: message here"
-    [GeneratedRegex(@"^\s*(?<proj>.+?\.[a-z]+proj)\s*:\s*error\s+(?<code>NU\d+):\s+(?<message>.+?)\s*$",
+    // "/path/proj.csproj : error NU1101: message here" (NU or MSB class)
+    [GeneratedRegex(@"^\s*(?<proj>.+?\.[a-z]+proj)\s*:\s*error\s+(?<code>(?:NU|MSB)\d+):\s+(?<message>.+?)\s*$",
         RegexOptions.IgnoreCase)]
     private static partial Regex NuGetErrorProjectFirstPattern();
 
-    // "error NU1101: message text [/path/proj.csproj]"
-    [GeneratedRegex(@"error\s+(?<code>NU\d+):\s+(?<message>[^\[]+)(?:\s*\[(?<proj>[^\]]+)\])?\s*$",
+    // "error NU1101: message text [/path/proj.csproj]" (NU or MSB class)
+    [GeneratedRegex(@"error\s+(?<code>(?:NU|MSB)\d+):\s+(?<message>[^\[]+)(?:\s*\[(?<proj>[^\]]+)\])?\s*$",
         RegexOptions.IgnoreCase)]
     private static partial Regex NuGetErrorStandardPattern();
 
@@ -186,7 +223,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         public int RestoredCount { get; set; }
         public int UpToDateCount { get; set; }
         public bool AllUpToDate { get; set; }
-        public double TotalDurationMs { get; set; }
+        public double MaxDurationMs { get; set; }
     }
 
     private sealed record NuGetError(string Code, string Message, string Project);

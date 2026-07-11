@@ -1,1 +1,1 @@
-✓ dotnet restore (8 projects, 1.43s)
+✓ dotnet restore (8 projects, 0.46s)
