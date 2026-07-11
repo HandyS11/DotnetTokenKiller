@@ -729,6 +729,34 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_FailedRunUnparsedOutputEmojiDisabled_ReplacesFailureMarkerWithFail()
+    {
+        // The raw-tail fallback (triggered by a failed run with unparseable/empty filter output)
+        // prepends a "✗ ... failed (exit N)" marker. When emoji is disabled, that marker must be
+        // substituted just like "✓" is, so no raw "✗" glyph escapes to the terminal.
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        var config = DtkConfig.Default with
+        {
+            Display = new DisplayConfig(Emoji: false)
+        };
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("MSBUILD : error MSB1009: Project file does not exist.", "", 1));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        var output = writer.ToString();
+        output.Should().Contain("FAIL:");
+        output.Should().NotContain("✗");
+    }
+
+    [Fact]
     public async Task RunAsync_NoColorEnvVar_ReplacesCheckmarkWithOk()
     {
         // Kills string mutation: "NO_COLOR" → ""

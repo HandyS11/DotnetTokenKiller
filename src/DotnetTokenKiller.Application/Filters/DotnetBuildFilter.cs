@@ -43,7 +43,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             return string.Empty;
         }
 
-        return FormatDiagnostics(errors, warnings, context);
+        return FormatDiagnostics(errors, warnings, context, exitCode);
     }
 
     private (List<Diagnostic> Diagnostics, int ProjectCount, string Elapsed) ParseLines(string[] lines)
@@ -133,12 +133,21 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         return true;
     }
 
-    private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context)
+    private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context,
+        int exitCode)
     {
         var sb = new StringBuilder();
 
         if (errors.Count == 0)
         {
+            // Non-zero exit with only warnings parsed (no error line matched the regex): a bare
+            // "0 errors, N warnings" header would read like a near-success for a run that FAILED.
+            // Prepend an explicit failure marker so the rendered verdict stays exit-code-derived.
+            if (exitCode != 0)
+            {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"✗ dotnet build failed (exit {exitCode})");
+            }
+
             sb.AppendLine(CultureInfo.InvariantCulture,
                     $"dotnet build: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{context}")
                 .AppendLine(Separator);

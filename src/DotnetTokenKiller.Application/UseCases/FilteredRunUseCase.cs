@@ -92,7 +92,9 @@ public sealed class FilteredRunUseCase(
 
         if (!config.Display.Emoji || Environment.GetEnvironmentVariable("NO_COLOR") is not null)
         {
-            filtered = filtered.Replace("✓", "ok:", StringComparison.Ordinal);
+            filtered = filtered
+                .Replace("✓", "ok:", StringComparison.Ordinal)
+                .Replace("✗", "FAIL:", StringComparison.Ordinal);
         }
 
         if (verbosityLevel >= 2)

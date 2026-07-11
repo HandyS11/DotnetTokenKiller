@@ -610,6 +610,33 @@ public class DotnetBuildFilterTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Apply_NonZeroExitWarningsOnly_ContainsFailureMarkerAndWarningCode()
+    {
+        // Failed build (non-zero exit) where only warnings were parsed (no errors matched the
+        // regex): rendering "0 errors, N warnings" with no failure marker reads like a near-success
+        // for a run that FAILED. A "✗" line must be prepended so the verdict stays exit-code-derived.
+        const string input =
+            "/repo/App.cs(3,9): warning CS0219: The variable 'x' is assigned but its value is never used [/repo/A.csproj]";
+
+        var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 1);
+
+        result.Should().Contain("✗");
+        result.Should().Contain("CS0219");
+    }
+
+    [Fact]
+    public void Apply_ZeroExitWarningsOnly_DoesNotContainFailureMarker()
+    {
+        // Same warnings-only input but a successful run: must NOT gain a failure marker.
+        const string input =
+            "/repo/App.cs(3,9): warning CS0219: The variable 'x' is assigned but its value is never used [/repo/A.csproj]";
+
+        var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
+
+        result.Should().NotContain("✗");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetBuildFilterTests).Assembly;
