@@ -28,9 +28,7 @@ internal sealed class ConfigShowCommand(
         table.AddRow("tracking.retentionDays", config.Tracking.RetentionDays.ToString(CultureInfo.InvariantCulture));
         table.AddRow("tracking.dbPath", config.Tracking.DbPath ?? "[grey](default)[/]");
         table.AddRow("tracking.tokenizer", config.Tracking.Tokenizer.ToString());
-        table.AddRow("display.colors", config.Display.Colors.ToString(CultureInfo.InvariantCulture));
         table.AddRow("display.emoji", config.Display.Emoji.ToString(CultureInfo.InvariantCulture));
-        table.AddRow("display.width", config.Display.Width.ToString(CultureInfo.InvariantCulture));
         table.AddRow("tee.mode", config.Tee.Mode.ToString());
         table.AddRow("tee.directory", config.Tee.Directory ?? "[grey](default)[/]");
         table.AddRow("tee.maxFiles", config.Tee.MaxFiles.ToString(CultureInfo.InvariantCulture));

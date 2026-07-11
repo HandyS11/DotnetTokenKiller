@@ -134,7 +134,7 @@ Examples:
 ```sh
 dtk config set tracking.enabled false
 dtk config set tracking.retentionDays 30
-dtk config set display.width 100
+dtk config set display.emoji false
 dtk config set tee.mode Always
 dtk config set tracking.tokenizer O200kBase
 ```

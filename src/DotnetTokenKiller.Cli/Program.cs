@@ -123,7 +123,7 @@ try
             cfg.AddCommand<ConfigSetCommand>("set")
                 .WithDescription("Set a configuration value")
                 .WithExample(configBranch, "set", "tracking.enabled", "false")
-                .WithExample(configBranch, "set", "display.width", "100")
+                .WithExample(configBranch, "set", "display.emoji", "false")
                 .WithExample(configBranch, "set", "tee.mode", "Always");
         });
 

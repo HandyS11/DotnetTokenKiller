@@ -169,12 +169,12 @@ Manage settings via CLI or edit `~/.config/dtk/config.json` directly:
 dtk config show                              # display all current values
 dtk config set tracking.enabled false
 dtk config set tracking.retentionDays 30
-dtk config set display.width 100
+dtk config set display.emoji false
 dtk config set tee.mode Always
 ```
 
-Supported keys: `tracking.enabled`, `tracking.retentionDays`, `tracking.dbPath`, `tracking.tokenizer`, `display.colors`,
-`display.emoji`, `display.width`, `tee.mode`, `tee.directory`, `tee.maxFiles`, `tee.maxFileSizeBytes`.
+Supported keys: `tracking.enabled`, `tracking.retentionDays`, `tracking.dbPath`, `tracking.tokenizer`,
+`display.emoji`, `tee.mode`, `tee.directory`, `tee.maxFiles`, `tee.maxFileSizeBytes`.
 
 See [Configuration](https://handys11.github.io/DotnetTokenKiller/articles/configuration.html) for defaults, valid
 values, and the full JSON schema.
