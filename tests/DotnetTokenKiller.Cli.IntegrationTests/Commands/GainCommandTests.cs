@@ -241,8 +241,9 @@ public class GainCommandTests
         }, CancellationToken.None);
 
         var output = writer.ToString();
+        // AppendLine emits "\r\n" on Windows; trim the "\r" so the split is cross-platform.
         var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        lines[0].Should().Be(GainCommand.CsvHeader); // complete header, unwrapped
+        lines[0].TrimEnd('\r').Should().Be(GainCommand.CsvHeader); // complete header, unwrapped
         output.Should().Contain(longCommand); // full field, not split across a wrap
     }
 
