@@ -216,13 +216,14 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_FailureHeaderAsLastLine_CovershortCircuitCondition()
     {
-        // Covers i >= lines.Length short-circuit in ParseFailure (conditions at lines 75, 84)
+        // Covers i >= lines.Length short-circuit in ParseFailure (conditions at lines 75, 84).
+        // A parsed failure now renders even without a trailing summary (crashed-host scenario),
+        // so the run reports the failure instead of collapsing to empty.
         const string input = "  Failed MyTests.LastLineTest [1 ms]";
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        // No summary → empty output
-        result.Should().BeEmpty();
+        result.Should().Contain("LastLineTest").And.Contain("FAILURES (1)");
     }
 
     [Fact]
@@ -790,6 +791,45 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 134);
 
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_SlowFailingTest_KeepsFailureDetail()
+    {
+        // Slow tests report second-scale durations ("[1 s]") that the ms-only header regex missed.
+        const string raw =
+            "  Failed MyTests.SlowTest [1 s]\n  Error Message:\n   Expected 1 but was 2.\nFailed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 1 s - MyTests.dll";
+        var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
+        result.Should().Contain("SlowTest").And.Contain("Expected 1 but was 2");
+    }
+
+    [Fact]
+    public void Apply_DotNet9MtpSummary_IsParsed()
+    {
+        // .NET 9 Microsoft.Testing.Platform output: lowercase "failed" lines and a "Test summary:" line.
+        const string raw =
+            "failed MyTests.T1 (12ms)\nTest summary: total: 10, failed: 1, succeeded: 9, skipped: 0, duration: 2.3s";
+        var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
+        result.Should().Contain("failed").And.NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void Apply_FailuresParsedButNoSummary_StillReportsFailures()
+    {
+        // Test host crashed before printing a summary — old code returned "" and lost the failures.
+        const string raw = "  Failed MyTests.T1 [15 ms]\n  Error Message:\n   boom";
+        var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
+        result.Should().Contain("T1").And.Contain("boom");
+    }
+
+    [Fact]
+    public void Apply_AllSkipped_ReportsSkippedNotZeroFound()
+    {
+        // A run where every test is skipped is not "0 tests found" — tests existed, none executed.
+        const string raw =
+            "Passed!  - Failed:     0, Passed:     0, Skipped:     5, Total:     5, Duration: 10 ms - T.dll";
+        var result = new DotnetTestFilter().Apply(raw, exitCode: 0);
+        result.Should().Contain("5 skipped").And.NotContain("0 tests found");
     }
 
     private static string LoadFixture(string resourceName)
