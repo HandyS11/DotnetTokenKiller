@@ -513,3 +513,6 @@ $RECYCLE.BIN/
 .sonarlint/
 
 StrykerOutput/
+
+# Superpowers
+docs/superpowers/*
