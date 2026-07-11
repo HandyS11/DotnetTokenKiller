@@ -107,14 +107,17 @@ public sealed class DoctorUseCaseTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_DbDirectoryMissing_DbCheckFails()
+    public async Task RunAsync_DbDirectoryMissing_DbCheckPassesAsWillBeCreated()
     {
+        // A missing database directory is normal on a fresh install — the tracker creates it on
+        // first write — so this must pass ("will be created"), not false-alarm.
         var dbPath = Path.Combine(_tempDir, "missing-dir", "tracking.db");
 
         var checks = await _sut.RunAsync(dbPath, _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
-        dbCheck.Passed.Should().BeFalse();
+        dbCheck.Passed.Should().BeTrue();
+        dbCheck.Message.Should().Contain("will be created");
     }
 
     [Fact]
@@ -166,10 +169,9 @@ public sealed class DoctorUseCaseTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_DbPathWithNoDirectory_SkipsDirectoryExistenceCheck()
+    public async Task RunAsync_DbPathWithNoDirectory_PassesAsWillBeCreated()
     {
-        // Path.GetDirectoryName("tracking.db") returns "" → IsNullOrEmpty is true → skip dir check
-        // Covers the uncovered branch of the !string.IsNullOrEmpty(dir) condition (line 80)
+        // A bare filename with no directory component still resolves to a pending database.
         var checks = await _sut.RunAsync("tracking.db", _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
@@ -198,17 +200,6 @@ public sealed class DoctorUseCaseTests : IDisposable
 
         var configCheck = checks.First(c => c.Name == "config file");
         configCheck.Message.Should().Contain("Loaded successfully");
-    }
-
-    [Fact]
-    public async Task RunAsync_DbDirectoryMissing_MessageContainsDoesNotExist()
-    {
-        var dbPath = Path.Combine(_tempDir, "missing-dir", "tracking.db");
-
-        var checks = await _sut.RunAsync(dbPath, _tempDir);
-
-        var dbCheck = checks.First(c => c.Name == "tracking database");
-        dbCheck.Message.Should().Contain("does not exist");
     }
 
     [Fact]

@@ -75,21 +75,152 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task RecordAsync_TriggersCleanup_DeletesOldRecords()
+    public async Task RecordAsync_FirstInsertOfProcess_PurgesExpiredRowsAsync()
     {
-        var oldTimestamp = DateTimeOffset.UtcNow.AddDays(-91);
-        await _sut.RecordAsync(MakeRecord(timestamp: oldTimestamp));
+        // A one-shot CLI is one process = one tracker instance. Cleanup must run once at
+        // initialization so a fresh process purges rows that expired while it was not running.
+        var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "tracking.db");
+        try
+        {
+            // Seed an expired row using a first tracker (a prior process).
+            await using (var seeder = new SqliteTracker($"Data Source={dbPath}"))
+            {
+                await seeder.RecordAsync(MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-100)));
+            }
 
-        // Cleanup runs every 50 inserts; insert enough to trigger it
-        for (var i = 0; i < 50; i++)
+            SqliteConnection.ClearAllPools();
+
+            // Fresh instance = fresh process. Its first insert must purge the expired row.
+            await using var tracker = new SqliteTracker($"Data Source={dbPath}");
+            await tracker.RecordAsync(MakeRecord(timestamp: DateTimeOffset.UtcNow));
+
+            var history = await tracker.GetHistoryAsync(365, null);
+            history.Should().ContainSingle(); // expired row purged at init, only the fresh one remains
+            history.Should().NotContain(r => r.Timestamp < DateTimeOffset.UtcNow.AddDays(-90));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            var dir = Path.GetDirectoryName(dbPath);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RecordAsync_ExpiredRowInsertedMidSession_NotPurgedUntilNextProcessAsync()
+    {
+        // Cleanup runs once at init, not on every insert. A row inserted mid-session that is
+        // already older than the cutoff is NOT retroactively purged by later inserts.
+        await _sut.RecordAsync(MakeRecord()); // triggers init + cleanup (db empty, no-op)
+        await _sut.RecordAsync(MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-100)));
+        await _sut.RecordAsync(MakeRecord());
+
+        var history = await _sut.GetHistoryAsync(365, null);
+
+        history.Should().HaveCount(3); // no per-insert cleanup; the old row survives this process
+    }
+
+    [Fact]
+    public async Task InitializeAsync_TwoTrackersOneFreshFile_NeitherThrowsAsync()
+    {
+        // Two processes racing to initialize the same brand-new db file must not collide on
+        // schema creation / migration (old failure: "duplicate column name: success").
+        // Looped to make the timing-dependent race reliable.
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "race.db");
+            try
+            {
+                await using var a = new SqliteTracker($"Data Source={dbPath}");
+                await using var b = new SqliteTracker($"Data Source={dbPath}");
+
+                var act = () => Task.WhenAll(
+                    a.RecordAsync(MakeRecord(), default),
+                    b.RecordAsync(MakeRecord(), default));
+
+                await act.Should().NotThrowAsync();
+            }
+            finally
+            {
+                SqliteConnection.ClearAllPools();
+                var dir = Path.GetDirectoryName(dbPath);
+                if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                {
+                    Directory.Delete(dir, true);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LegacyDbWithoutSuccessColumn_IsMigratedAsync()
+    {
+        // A db created before the `success` column existed must still be usable: the pragma
+        // check detects the missing column and ALTERs it in.
+        var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "legacy.db");
+        try
+        {
+            await CreateLegacySchemaByHandAsync(dbPath);
+
+            await using var tracker = new SqliteTracker($"Data Source={dbPath}");
+            var act = () => tracker.RecordAsync(MakeRecord(), default);
+
+            await act.Should().NotThrowAsync();
+            (await tracker.GetHistoryAsync(1, null)).Should().ContainSingle();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            var dir = Path.GetDirectoryName(dbPath);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_CapsResultsAtLimitAsync()
+    {
+        // History is bounded so a huge tracking db can't load an unbounded result set into memory.
+        for (var i = 0; i < 501; i++)
         {
             await _sut.RecordAsync(MakeRecord());
         }
 
         var history = await _sut.GetHistoryAsync(365, null);
 
-        // The old record should have been cleaned up; only the 50 recent ones remain
-        history.Should().HaveCount(50);
+        history.Should().HaveCount(500); // newest 500, older rows dropped by the LIMIT
+    }
+
+    private static async Task CreateLegacySchemaByHandAsync(string dbPath)
+    {
+        var dir = Path.GetDirectoryName(dbPath);
+        if (!string.IsNullOrWhiteSpace(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        await using var connection = new SqliteConnection($"Data Source={dbPath}");
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+                          CREATE TABLE commands (
+                              id INTEGER PRIMARY KEY AUTOINCREMENT,
+                              timestamp TEXT NOT NULL,
+                              command TEXT NOT NULL,
+                              project_path TEXT NOT NULL,
+                              input_tokens INTEGER NOT NULL,
+                              output_tokens INTEGER NOT NULL,
+                              saved_tokens INTEGER NOT NULL,
+                              savings_percentage REAL NOT NULL,
+                              execution_time_ms REAL NOT NULL
+                          );
+                          """;
+        await cmd.ExecuteNonQueryAsync();
     }
 
     [Fact]
@@ -347,42 +478,6 @@ public class SqliteTrackerTests : IAsyncDisposable
         var summary = await _sut.GetSummaryAsync(30, null);
 
         summary.AverageSavingsPercentage.Should().BeApproximately(32.5, 0.01);
-    }
-
-    [Fact]
-    public async Task RecordAsync_JustBeforeCleanupThreshold_OldRecordIsPreserved()
-    {
-        // Kills < mutation: with < mutation cleanup runs on every insert, deleting the old record immediately.
-        // With original >=: 49 total inserts never reaches 50, so no cleanup.
-        var old = MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-100));
-        await _sut.RecordAsync(old);
-        for (var i = 0; i < 48; i++)
-        {
-            await _sut.RecordAsync(MakeRecord());
-        }
-
-        var history = await _sut.GetHistoryAsync(365, null);
-
-        history.Should().HaveCount(49); // 1 old + 48 new, no cleanup triggered yet
-    }
-
-    [Fact]
-    public async Task RecordAsync_OldRecordInsertedAfterCleanupReset_IsPreserved()
-    {
-        // Kills > mutation: with > mutation the 51st insert triggers cleanup which deletes the old record.
-        // With original >=: cleanup resets at the 50th insert; old record at insert 51 is safe (counter = 1).
-        for (var i = 0; i < 50; i++)
-        {
-            await _sut.RecordAsync(MakeRecord());
-        }
-
-        // Insert old record as the 51st insert — cleanup counter reset to 0 at insert 50, now at 1
-        var old = MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-100));
-        await _sut.RecordAsync(old);
-
-        var history = await _sut.GetHistoryAsync(365, null);
-
-        history.Should().HaveCount(51); // 50 recent + 1 old
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 using DotnetTokenKiller.Domain.Execution;
@@ -19,6 +20,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            RedirectStandardInput = true,
             UseShellExecute = false,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
@@ -31,6 +33,10 @@ public sealed class ProcessCommandRunner : ICommandRunner
 
         using var process = Process.Start(psi)
                             ?? throw new InvalidOperationException($"Failed to start process: {command}");
+
+        // Close stdin immediately so a child that reads it sees EOF and exits instead of hanging
+        // forever waiting for input this non-interactive capture will never provide.
+        process.StandardInput.Close();
 
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
         var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
@@ -98,9 +104,10 @@ public sealed class ProcessCommandRunner : ICommandRunner
                 process.Kill(true);
             }
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or AggregateException)
         {
-            // Process already exited between the check and the kill
+            // The process exited between the check and the kill, or the OS refused the kill
+            // (already-reaped child / access race). Nothing left to terminate.
         }
     }
 }

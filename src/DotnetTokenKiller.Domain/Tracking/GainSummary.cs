@@ -9,8 +9,8 @@ namespace DotnetTokenKiller.Domain.Tracking;
 /// <param name="CommandDetails">Per-command breakdown.</param>
 public sealed record GainSummary(
     int TotalCommands,
-    int TotalInputTokens,
-    int TotalOutputTokens,
-    int TotalSavedTokens,
+    long TotalInputTokens,
+    long TotalOutputTokens,
+    long TotalSavedTokens,
     double AverageSavingsPercentage,
     IReadOnlyDictionary<string, CommandGainDetail> CommandDetails);

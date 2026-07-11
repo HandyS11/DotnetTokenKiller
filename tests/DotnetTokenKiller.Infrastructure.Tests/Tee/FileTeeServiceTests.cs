@@ -44,6 +44,25 @@ public sealed class FileTeeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TeeAndHintAsync_HintContainsOpenableFullPath()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+
+        hint.Should().NotBeNull();
+        var path = ExtractPathFromHint(hint!);
+        Path.IsPathRooted(path).Should().BeTrue(); // old hint: bare filename, not rooted
+        File.Exists(path).Should().BeTrue();        // old hint: File.Exists false from any other cwd
+    }
+
+    private static string ExtractPathFromHint(string hint)
+    {
+        const string prefix = "[full output: ";
+        return hint[prefix.Length..^1]; // strip prefix and the trailing ']'
+    }
+
+    [Fact]
     public async Task TeeAndHintAsync_ReturnsNull_WhenFailuresMode_ZeroExit()
     {
         var sut = CreateSut(new TeeConfig());

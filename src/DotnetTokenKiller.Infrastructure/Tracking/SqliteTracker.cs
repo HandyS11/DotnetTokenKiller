@@ -10,11 +10,10 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 public sealed class SqliteTracker(string connectionString, int defaultRetentionDays = 90)
     : ITracker, IDisposable, IAsyncDisposable
 {
-    private const int CleanupIntervalInserts = 50;
+    private const int HistoryLimit = 500;
     private readonly SqliteConnection _connection = new(connectionString);
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private bool _initialized;
-    private int _insertsSinceCleanup;
 
     /// <summary>Asynchronously releases managed resources.</summary>
     public async ValueTask DisposeAsync()
@@ -47,7 +46,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                                   saved_tokens, savings_percentage, execution_time_ms, success)
                               VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success)
                               """;
-            cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToString("O", CultureInfo.InvariantCulture));
+            cmd.Parameters.AddWithValue("@ts",
+                record.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
             cmd.Parameters.AddWithValue("@cmd", record.Command);
             cmd.Parameters.AddWithValue("@path", record.ProjectPath);
             cmd.Parameters.AddWithValue("@in", record.InputTokens);
@@ -57,13 +57,6 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
             cmd.Parameters.AddWithValue("@success", record.Success ? 1 : 0);
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-            _insertsSinceCleanup++;
-            if (_insertsSinceCleanup >= CleanupIntervalInserts)
-            {
-                _insertsSinceCleanup = 0;
-                await CleanupCoreAsync(defaultRetentionDays, cancellationToken).ConfigureAwait(false);
-            }
         }
         finally
         {
@@ -93,7 +86,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                            ORDER BY command, success DESC
                            """;
 
-        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, cancellationToken);
+        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, null, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -111,9 +104,11 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                              AND (@path IS NULL OR project_path = @path)
                              AND (@cmd IS NULL OR command = @cmd)
                            ORDER BY timestamp DESC
+                           LIMIT @limit
                            """;
 
-        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadHistoryAsync, cancellationToken);
+        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadHistoryAsync, HistoryLimit,
+            cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -150,7 +145,9 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         }
     }
 
-    internal static string GetDefaultDbPath()
+    /// <summary>Returns the default tracking-database path used when no override is configured.</summary>
+    /// <returns>The platform-default database path.</returns>
+    public static string GetDefaultDbPath()
     {
         var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         return Path.Combine(baseDir, "dtk", "tracking.db");
@@ -186,6 +183,11 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         EnsureDataDirectory(connectionString);
         await _connection.OpenAsync(ct).ConfigureAwait(false);
         await InitializeSchemaAsync(ct).ConfigureAwait(false);
+
+        // A one-shot CLI runs as a single process with a single tracker instance, so purge
+        // expired rows once here at startup. A single delete per process is cheap and replaces
+        // the old per-insert counter cleanup that could never fire during a one-command run.
+        await CleanupCoreAsync(defaultRetentionDays, ct).ConfigureAwait(false);
         _initialized = true;
     }
 
@@ -204,14 +206,16 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                                     output_tokens INTEGER NOT NULL,
                                     saved_tokens INTEGER NOT NULL,
                                     savings_percentage REAL NOT NULL,
-                                    execution_time_ms REAL NOT NULL
+                                    execution_time_ms REAL NOT NULL,
+                                    success INTEGER NOT NULL DEFAULT 1
                                 );
                                 CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
                                 CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
                                 """;
         await createCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
-        // Migration: add success column for existing databases (old records default to success=1)
+        // Migration for databases created before the success column existed. Fresh databases
+        // already have it (see CREATE TABLE above) so this ALTER only runs on legacy files.
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var checkCmd = _connection.CreateCommand();
 #pragma warning restore CA2007
@@ -219,11 +223,19 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         var columnExists = (long)(await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false))! > 0;
         if (!columnExists)
         {
+            try
+            {
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var alterCmd = _connection.CreateCommand();
+                await using var alterCmd = _connection.CreateCommand();
 #pragma warning restore CA2007
-            alterCmd.CommandText = "ALTER TABLE commands ADD COLUMN success INTEGER NOT NULL DEFAULT 1";
-            await alterCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                alterCmd.CommandText = "ALTER TABLE commands ADD COLUMN success INTEGER NOT NULL DEFAULT 1";
+                await alterCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+            {
+                // A concurrent initializer added the column between our pragma check and this ALTER.
+                // The column now exists, which is all we required — the losing racer is fine.
+            }
         }
     }
 
@@ -233,6 +245,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         string? commandFilter,
         string sql,
         Func<SqliteCommand, CancellationToken, Task<T>> readResultsAsync,
+        int? limit,
         CancellationToken cancellationToken)
     {
         await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -250,6 +263,10 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             cmd.Parameters.AddWithValue("@since", since);
             cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@cmd", (object?)commandFilter ?? DBNull.Value);
+            if (limit.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@limit", limit.Value);
+            }
 
             return await readResultsAsync(cmd, cancellationToken).ConfigureAwait(false);
         }
@@ -262,13 +279,13 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     private static async Task<GainSummary> ReadSummaryAsync(SqliteCommand cmd, CancellationToken ct)
     {
         var totalCommands = 0;
-        var totalInput = 0;
-        var totalOutput = 0;
-        var totalSaved = 0;
+        long totalInput = 0;
+        long totalOutput = 0;
+        long totalSaved = 0;
 
         // Accumulate per-command, per-status rows before building CommandGainDetail
         var grouped =
-            new Dictionary<string, List<(bool Success, int RunCount, int SumInput, int SumOutput, int SumSaved, double
+            new Dictionary<string, List<(bool Success, int RunCount, long SumInput, long SumOutput, long SumSaved, double
                 AvgPct)>>(StringComparer.Ordinal);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
@@ -279,9 +296,9 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             var cmdName = reader.GetString(0);
             var success = reader.GetInt32(1) != 0;
             var runCount = reader.GetInt32(2);
-            var sumInput = reader.GetInt32(3);
-            var sumOutput = reader.GetInt32(4);
-            var sumSaved = reader.GetInt32(5);
+            var sumInput = reader.GetInt64(3);
+            var sumOutput = reader.GetInt64(4);
+            var sumSaved = reader.GetInt64(5);
             var avgPct = reader.GetDouble(6);
 
             totalCommands += runCount;
@@ -304,9 +321,9 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             CommandGainDetail? successDetail = null;
             CommandGainDetail? failureDetail = null;
             var totalRunsCmd = 0;
-            var totalInputCmd = 0;
-            var totalOutputCmd = 0;
-            var totalSavedCmd = 0;
+            long totalInputCmd = 0;
+            long totalOutputCmd = 0;
+            long totalSavedCmd = 0;
             var weightedPctSum = 0.0;
 
             foreach (var (success, runCount, sumInput, sumOutput, sumSaved, avgPct) in rows)

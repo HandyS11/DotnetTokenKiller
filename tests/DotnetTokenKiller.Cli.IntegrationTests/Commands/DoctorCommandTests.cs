@@ -2,6 +2,8 @@ using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Infrastructure.Tee;
+using DotnetTokenKiller.Infrastructure.Tracking;
 using FluentAssertions;
 using Spectre.Console.Testing;
 using Xunit;
@@ -61,15 +63,16 @@ public sealed class DoctorCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecuteAsync_NullDbPathAndTeeDirectory_CallsResolveDefaultMethods()
+    public async Task ExecuteAsync_NullConfigPaths_ReportsSharedTrackerAndTeeDefaultPaths()
     {
-        // Covers ResolveDefaultDbPath() and ResolveDefaultTeeDir() private methods (lines 55-65)
-        // when config returns null for both fields and DTK_DB_PATH is not set
+        // With null config paths and no env override, doctor must report the EXACT default paths
+        // the tracker and tee service actually use — a single source of truth, no drift.
         var savedEnv = Environment.GetEnvironmentVariable("DTK_DB_PATH");
         Environment.SetEnvironmentVariable("DTK_DB_PATH", null);
         try
         {
             var console = new TestConsole();
+            console.Profile.Width = 400; // avoid wrapping the long absolute paths in the output
             var configProvider = new NullPathsConfigProvider();
             var runner = new StubCommandRunner(0);
             var useCase = new DoctorUseCase(runner, configProvider);
@@ -77,16 +80,65 @@ public sealed class DoctorCommandTests : IDisposable
 
             await command.RunAsync(CancellationToken.None);
 
-            // ResolveDefaultDbPath returns LocalApplicationData/dtk/tracking.db
-            // ResolveDefaultTeeDir returns LocalApplicationData/dtk/tee
-            // The db directory likely won't exist → check fails, exitCode = 1
-            console.Output.Should().Contain("tracking database");
-            console.Output.Should().Contain("tee directory");
+            console.Output.Should().Contain(SqliteTracker.GetDefaultDbPath());
+            console.Output.Should().Contain(FileTeeService.GetDefaultTeeDir());
         }
         finally
         {
             Environment.SetEnvironmentVariable("DTK_DB_PATH", savedEnv);
         }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DtkTeeDirEnvVar_ReportsTheOverrideTheTeeServiceUses()
+    {
+        // The tee service honors DTK_TEE_DIR over config/default, so doctor must report that same
+        // path — otherwise it would show a tee directory dtk does not actually use at runtime.
+        Directory.CreateDirectory(_tempDir);
+        var envTeeDir = Path.Combine(_tempDir, "env-tee");
+        Directory.CreateDirectory(envTeeDir);
+
+        var savedEnv = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
+        Environment.SetEnvironmentVariable("DTK_TEE_DIR", envTeeDir);
+        try
+        {
+            var console = new TestConsole();
+            console.Profile.Width = 400;
+            var configProvider = new StubConfigProvider(_tempDir); // config points tee elsewhere
+            var runner = new StubCommandRunner(0);
+            var useCase = new DoctorUseCase(runner, configProvider);
+            var command = new DoctorCommand(useCase, configProvider, console);
+
+            await command.RunAsync(CancellationToken.None);
+
+            // envTeeDir only appears in the output if DTK_TEE_DIR was honored (config points
+            // the tee dir at _tempDir instead), so this alone discriminates the fix.
+            console.Output.Should().Contain(envTeeDir);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTK_TEE_DIR", savedEnv);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_FreshInstall_MissingDbDirectory_PassesAsWillBeCreated()
+    {
+        // Fresh install: _tempDir is intentionally NOT created, so neither the database directory
+        // nor the tee directory exists. Both checks must pass ("will be created") instead of the
+        // tracking-database check false-alarming on a brand-new machine.
+        var console = new TestConsole();
+        console.Profile.Width = 400;
+        var configProvider = new StubConfigProvider(_tempDir); // db = _tempDir/tracking.db, tee = _tempDir
+        var runner = new StubCommandRunner(0);
+        var useCase = new DoctorUseCase(runner, configProvider);
+        var command = new DoctorCommand(useCase, configProvider, console);
+
+        var exitCode = await command.RunAsync(CancellationToken.None);
+
+        exitCode.Should().Be(0); // old: missing db directory → check failed → exit 1
+        console.Output.Should().Contain("All checks passed");
+        console.Output.Should().Contain("will be created");
     }
 
     [Fact]

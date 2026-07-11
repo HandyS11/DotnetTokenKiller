@@ -171,6 +171,26 @@ public sealed class ProcessCommandRunnerTests
             : ("printenv", ["DOTNET_CLI_UI_LANGUAGE"]);
     }
 
+    private static (string command, string[] args) StdinDrainingCommand()
+    {
+        // Both read stdin until EOF, then exit — they block forever if stdin stays open/inherited.
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ("sort", [])
+            : ("cat", []);
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_ChildReadingStdin_TerminatesInsteadOfHangingAsync()
+    {
+        var (cmd, args) = StdinDrainingCommand();
+
+        var task = _sut.RunCapturedAsync(cmd, args, CancellationToken.None);
+        var done = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        done.Should().Be(task); // with stdin redirected+closed, the child sees EOF and exits immediately
+        (await task).ExitCode.Should().Be(0);
+    }
+
     [Fact]
     public async Task RunCapturedAsync_SetsEnglishCliLanguageOnChildAsync()
     {

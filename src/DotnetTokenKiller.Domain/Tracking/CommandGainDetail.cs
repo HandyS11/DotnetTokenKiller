@@ -10,9 +10,9 @@ namespace DotnetTokenKiller.Domain.Tracking;
 /// <param name="FailureDetail">Detail for runs that exited with a non-zero code, or <see langword="null"/> if none.</param>
 public sealed record CommandGainDetail(
     int RunCount,
-    int TotalInputTokens,
-    int TotalOutputTokens,
-    int TotalSavedTokens,
+    long TotalInputTokens,
+    long TotalOutputTokens,
+    long TotalSavedTokens,
     double AverageSavingsPercentage,
     CommandGainDetail? SuccessDetail = null,
     CommandGainDetail? FailureDetail = null);
