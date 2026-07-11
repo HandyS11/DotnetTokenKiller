@@ -597,6 +597,19 @@ public class DotnetBuildFilterTests
         result.Should().Be("\u2713 dotnet build\n");
     }
 
+    [Fact]
+    public void Apply_NonZeroExitWithNoParsedDiagnostics_ReturnsEmpty()
+    {
+        // Crashed process / unparseable output: 0 errors and 0 warnings were parsed, but the exit
+        // code is non-zero. Returning a "0 errors, 0 warnings" header here would look like a clean
+        // success and would prevent FilteredRunUseCase's raw-tail fallback from ever firing.
+        const string input = "Segmentation fault (core dumped)";
+
+        var result = _sut.Apply(input, exitCode: 139);
+
+        result.Should().BeEmpty();
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetBuildFilterTests).Assembly;

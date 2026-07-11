@@ -183,6 +183,19 @@ public class DotnetFormatFilterTests
         result.Should().Be("✓ dotnet format (1 file formatted)\n");
     }
 
+    [Fact]
+    public void Apply_NonZeroExitWithNoParsedViolations_ReturnsEmpty()
+    {
+        // Crashed process / unparseable output: no violation lines were parsed, but the exit code
+        // is non-zero. Returning "0 violations" here would look like a clean success and would
+        // prevent FilteredRunUseCase's raw-tail fallback from ever firing.
+        const string input = "Segmentation fault (core dumped)";
+
+        var result = _sut.Apply(input, exitCode: 139);
+
+        result.Should().BeEmpty();
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetFormatFilterTests).Assembly;

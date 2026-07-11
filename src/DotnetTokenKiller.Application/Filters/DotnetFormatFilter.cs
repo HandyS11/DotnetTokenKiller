@@ -37,7 +37,15 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
 
         var lines = stripped.Split('\n');
         var violations = Array.FindAll(lines, l => ViolationPattern().IsMatch(l));
-        if (violations.Length > 0 || exitCode != 0)
+        if (violations.Length == 0 && exitCode != 0)
+        {
+            // Failed run with nothing parsed (crashed process, localized SDK, garbled output):
+            // degrade to blank so FilteredRunUseCase's raw-tail fallback surfaces the real output
+            // instead of a misleadingly clean "0 violations" header.
+            return string.Empty;
+        }
+
+        if (violations.Length > 0)
         {
             return BuildViolationOutput(violations);
         }

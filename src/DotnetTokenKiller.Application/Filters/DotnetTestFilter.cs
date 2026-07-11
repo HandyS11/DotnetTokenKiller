@@ -172,6 +172,14 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return string.Empty;
         }
 
+        if (exitCode != 0 && state.TotalFailed == 0)
+        {
+            // Failed run with zero parsed failures (e.g. host crashed after a partial pass summary):
+            // degrade to blank so FilteredRunUseCase's raw-tail fallback surfaces the real output
+            // instead of a misleadingly clean "FAILURES (0)" report.
+            return string.Empty;
+        }
+
         var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
 
         if (exitCode == 0 && state.TotalFailed == 0)

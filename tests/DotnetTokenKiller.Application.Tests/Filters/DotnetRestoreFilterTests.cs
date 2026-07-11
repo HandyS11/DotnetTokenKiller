@@ -306,6 +306,19 @@ public class DotnetRestoreFilterTests
         result.Should().StartWith("dotnet restore:");
     }
 
+    [Fact]
+    public void Apply_NonZeroExitWithNoParsedErrors_ReturnsEmpty()
+    {
+        // Crashed process / unparseable output: no NuGet errors were parsed, but the exit code is
+        // non-zero. Returning "0 errors" here would look like a clean success and would prevent
+        // FilteredRunUseCase's raw-tail fallback from ever firing.
+        const string input = "Segmentation fault (core dumped)";
+
+        var result = _sut.Apply(input, exitCode: 139);
+
+        result.Should().BeEmpty();
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetRestoreFilterTests).Assembly;

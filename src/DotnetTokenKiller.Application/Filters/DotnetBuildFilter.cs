@@ -35,6 +35,14 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             return $"✓ dotnet build{context}\n";
         }
 
+        if (exitCode != 0 && errors.Count == 0 && warnings.Count == 0)
+        {
+            // Failed run with nothing parsed (crashed process, localized SDK, garbled output):
+            // degrade to blank so FilteredRunUseCase's raw-tail fallback surfaces the real output
+            // instead of a misleadingly clean "0 errors, 0 warnings" header.
+            return string.Empty;
+        }
+
         return FormatDiagnostics(errors, warnings, context);
     }
 

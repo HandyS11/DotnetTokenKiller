@@ -778,6 +778,20 @@ public class DotnetTestFilterTests
         result.Should().Contain("2 projects");
     }
 
+    [Fact]
+    public void Apply_PartialSummaryThenCrash_NonZeroExitZeroFailed_ReturnsEmpty()
+    {
+        // Host crashed after printing a partial pass summary: ProjectCount > 0 and TotalFailed == 0,
+        // but the exit code is non-zero, so the run did not actually succeed. "FAILURES (0):" would
+        // look like a clean report and would prevent FilteredRunUseCase's raw-tail fallback from
+        // ever firing.
+        const string input = "Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 89 ms - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 134);
+
+        result.Should().BeEmpty();
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetTestFilterTests).Assembly;
