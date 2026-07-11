@@ -156,14 +156,14 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         else
         {
             sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"dotnet build: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}")
+                    $"dotnet build: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{context}")
                 .AppendLine(Separator);
             AppendGroupedByFile(sb, errors);
             AppendTopCodes(sb, errors);
             if (warnings.Count > 0)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use -v to see)");
+                    $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use -v -v to see)");
             }
         }
 
@@ -218,9 +218,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
                || NoiseRestoredPattern().IsMatch(line)
                || NoiseBuildStartedPattern().IsMatch(line)
                || NoiseBuildResultPattern().IsMatch(line)
-               || NoiseCountPattern().IsMatch(line)
-               || NoiseTimeElapsedPattern().IsMatch(line)
-               || NoiseProjectOutputPattern().IsMatch(line);
+               || NoiseCountPattern().IsMatch(line);
     }
 
     private static void AppendGroupedByCode(StringBuilder sb, List<Diagnostic> diags)
@@ -266,13 +264,17 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     }
 
     // Matches: /path/file.cs(10,5): error CS0001: message [project.csproj]
+    // - file matches lazily up to the (line,col) anchor so paths containing parens (e.g. "Program Files (x86)") survive
+    // - code allows lower-case prefixes (xUnit1013, IDE0055) in addition to CS/MSB
+    // - message captures the full text and only the trailing "[project]" suffix is peeled off at end-of-line,
+    //   so messages containing brackets (e.g. "'string[]'") are kept intact
     [GeneratedRegex(
-        @"^\s*(?<file>[^()]+)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>[^\[]+?)(?:\s*\[.+?\])?\s*$")]
+        @"^\s*(?<file>.+?)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Za-z]+\d+):\s+(?<message>.+?)(?:\s+\[(?<project>[^\]]+)\])?\s*$")]
     private static partial Regex DiagnosticPattern();
 
     // Matches: "MSBUILD : error MSB1001: message" or "CSC : error CS2012: message" (no file/line/col)
     [GeneratedRegex(
-        @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?<code>[A-Z]+\d+):\s+(?<message>.+?)(?:\s*\[.+?\])?\s*$")]
+        @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?<code>[A-Za-z]+\d+):\s+(?<message>.+?)(?:\s*\[.+?\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
 
     // Matches: "  MyProject -> /path/to/bin/MyProject.dll" (or .exe)
@@ -310,14 +312,6 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     // Noise: "    0 Warning(s)" and "    0 Error(s)"
     [GeneratedRegex(@"^\s+\d+ (Warning|Error)\(s\)\s*$")]
     private static partial Regex NoiseCountPattern();
-
-    // Noise: "Time Elapsed ..." line itself
-    [GeneratedRegex("^Time Elapsed")]
-    private static partial Regex NoiseTimeElapsedPattern();
-
-    // Noise: project output redirect (-> dll/exe) - fallback for IsNoiseLine
-    [GeneratedRegex(@"^\s+\S+ -> .+\.(dll|exe)\s*$")]
-    private static partial Regex NoiseProjectOutputPattern();
 
     private sealed record Diagnostic(string File, string Line, string Col, string Level, string Code, string Message);
 }
