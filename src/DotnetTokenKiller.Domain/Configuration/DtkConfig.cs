@@ -28,13 +28,9 @@ public sealed record TrackingConfig(
     TokenizerModel Tokenizer = TokenizerModel.Cl100kBase);
 
 /// <summary>Configuration for display output.</summary>
-/// <param name="Colors">Whether to use ANSI colors.</param>
 /// <param name="Emoji">Whether to use emoji in output.</param>
-/// <param name="Width">Maximum output width in characters.</param>
 public sealed record DisplayConfig(
-    bool Colors = true,
-    bool Emoji = true,
-    int Width = 120);
+    bool Emoji = true);
 
 /// <summary>Supported tokenizer models for token counting.</summary>
 public enum TokenizerModel

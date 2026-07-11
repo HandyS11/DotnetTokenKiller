@@ -22,9 +22,7 @@ public class DtkConfigTests
     {
         var config = DtkConfig.Default;
 
-        config.Display.Colors.Should().BeTrue();
         config.Display.Emoji.Should().BeTrue();
-        config.Display.Width.Should().Be(120);
     }
 
     [Fact]
@@ -64,9 +62,7 @@ public class DtkConfigTests
     {
         var config = new DisplayConfig();
 
-        config.Colors.Should().BeTrue();
         config.Emoji.Should().BeTrue();
-        config.Width.Should().Be(120);
     }
 
     [Fact]

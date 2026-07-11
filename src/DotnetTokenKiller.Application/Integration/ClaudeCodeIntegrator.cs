@@ -52,7 +52,8 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         | Flag         | Purpose                                           |
         |--------------|---------------------------------------------------|
         | `--show-log` | Print path to full unfiltered log after a run     |
-        | `-v`         | Increase verbosity (repeatable: `-v -v`)          |
+        | `-v`         | Echo the resolved command line before running     |
+        | `--vv`       | Also dump raw dotnet output and elapsed time      |
 
         ## Key Behaviors
 

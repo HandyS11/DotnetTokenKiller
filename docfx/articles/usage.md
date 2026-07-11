@@ -134,7 +134,7 @@ Examples:
 ```sh
 dtk config set tracking.enabled false
 dtk config set tracking.retentionDays 30
-dtk config set display.width 100
+dtk config set display.emoji false
 dtk config set tee.mode Always
 dtk config set tracking.tokenizer O200kBase
 ```
@@ -204,7 +204,7 @@ dtk dotnet build -q | grep "error"
 dtk dotnet test -q > test-results.txt
 ```
 
-In quiet mode, verbosity flags (`-v`, `-v -v`) and `--show-log` are ignored — only the filtered command output is written.
+In quiet mode, verbosity flags (`-v`, `--vv`) and `--show-log` are ignored — only the filtered command output is written.
 
 ## Passthrough Behavior
 

@@ -61,27 +61,11 @@ public sealed class ConfigSetUseCaseTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_DisplayColors_False_SavesUpdatedValue()
-    {
-        await _sut.ExecuteAsync("display.colors", "false");
-
-        _savedConfig.Display.Colors.Should().BeFalse();
-    }
-
-    [Fact]
     public async Task ExecuteAsync_DisplayEmoji_False_SavesUpdatedValue()
     {
         await _sut.ExecuteAsync("display.emoji", "false");
 
         _savedConfig.Display.Emoji.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_DisplayWidth_SavesUpdatedValue()
-    {
-        await _sut.ExecuteAsync("display.width", "80");
-
-        _savedConfig.Display.Width.Should().Be(80);
     }
 
     [Fact]
@@ -127,9 +111,9 @@ public sealed class ConfigSetUseCaseTests
     [Fact]
     public async Task ExecuteAsync_KeyIsCaseInsensitive_Succeeds()
     {
-        await _sut.ExecuteAsync("DISPLAY.WIDTH", "100");
+        await _sut.ExecuteAsync("DISPLAY.EMOJI", "false");
 
-        _savedConfig.Display.Width.Should().Be(100);
+        _savedConfig.Display.Emoji.Should().BeFalse();
     }
 
     [Fact]
@@ -197,23 +181,12 @@ public sealed class ConfigSetUseCaseTests
             .WithMessage("*Expected one of*");
     }
 
-    [Fact]
-    public async Task ExecuteAsync_DisplayWidthBelowMin_ThrowsFormatException()
-    {
-        var act = () => _sut.ExecuteAsync("display.width", "10");
-
-        await act.Should().ThrowAsync<FormatException>()
-            .WithMessage("*Minimum*");
-    }
-
     [Theory]
     [InlineData("tracking.enabled")]
     [InlineData("tracking.retentionDays")]
     [InlineData("tracking.dbPath")]
     [InlineData("tracking.tokenizer")]
-    [InlineData("display.colors")]
     [InlineData("display.emoji")]
-    [InlineData("display.width")]
     [InlineData("tee.mode")]
     [InlineData("tee.directory")]
     [InlineData("tee.maxFiles")]
@@ -248,15 +221,6 @@ public sealed class ConfigSetUseCaseTests
         await _sut.ExecuteAsync("tee.maxFileSizeBytes", "0");
 
         _savedConfig.Tee.MaxFileSizeBytes.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_DisplayWidthAtMin_Succeeds()
-    {
-        // Kills equality mutation on min bound (ParseInt)
-        await _sut.ExecuteAsync("display.width", "40");
-
-        _savedConfig.Display.Width.Should().Be(40);
     }
 
     [Fact]
@@ -358,20 +322,20 @@ public sealed class ConfigSetUseCaseTests
     public async Task ExecuteAsync_InvalidInt_ErrorIncludesValueAndKey()
     {
         // Kills string mutations on ParseInt error format
-        var act = () => _sut.ExecuteAsync("display.width", "abc");
+        var act = () => _sut.ExecuteAsync("tracking.retentionDays", "abc");
 
         await act.Should().ThrowAsync<FormatException>()
-            .WithMessage("*abc*display.width*");
+            .WithMessage("*abc*tracking.retentionDays*");
     }
 
     [Fact]
     public async Task ExecuteAsync_IntBelowMin_ErrorIncludesMinimum()
     {
         // Kills string/arithmetic mutations on "Minimum allowed value is {min}" format
-        var act = () => _sut.ExecuteAsync("display.width", "5");
+        var act = () => _sut.ExecuteAsync("tee.maxFiles", "0");
 
         await act.Should().ThrowAsync<FormatException>()
-            .WithMessage("*Minimum allowed value is 40*");
+            .WithMessage("*Minimum allowed value is 1*");
     }
 
     [Fact]

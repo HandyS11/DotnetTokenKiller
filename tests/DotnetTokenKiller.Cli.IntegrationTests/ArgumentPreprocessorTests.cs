@@ -1,4 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
+using DotnetTokenKiller.Cli.Commands.Settings;
 using FluentAssertions;
+using Spectre.Console.Cli;
 using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests;
@@ -72,16 +75,40 @@ public sealed class ArgumentPreprocessorTests
     }
 
     [Fact]
-    public void InsertSeparator_ReturnsOriginal_WhenDoubleDashAlreadyPresent()
+    public void InsertSeparator_ForwardsUserSeparatorVerbatim_WhenDoubleDashPresent()
     {
-        var args = new[]
-        {
-            "dotnet", "build", "--", "MyProject.slnx"
-        };
+        // The user's own "--" must survive to dotnet, so dtk inserts its own separator
+        // and leaves the user's untouched (Spectre consumes only the first "--").
+        var result = ArgumentPreprocessor.InsertSeparator(
+            ["dotnet", "build", "--", "MyProject.slnx"]);
 
-        var result = ArgumentPreprocessor.InsertSeparator(args);
+        result.Should().Equal("dotnet", "build", "--", "--", "MyProject.slnx");
+    }
 
-        result.Should().BeSameAs(args);
+    [Theory]
+    [InlineData(
+        "dotnet test --filter Category=Unit -- RunConfiguration.X=1",
+        "dotnet test -- --filter Category=Unit -- RunConfiguration.X=1")]
+    [InlineData(
+        "dotnet test -- RunConfiguration.MaxCpuCount=4",
+        "dotnet test -- -- RunConfiguration.MaxCpuCount=4")]
+    [InlineData(
+        "dotnet restore --bogusopt bogusvalue -- proj.csproj",
+        "dotnet restore -- --bogusopt bogusvalue -- proj.csproj")]
+    [InlineData(
+        "dotnet test -v --filter Category=Unit -- RunConfiguration.X=1",
+        "dotnet test -v -- --filter Category=Unit -- RunConfiguration.X=1")]
+    public void InsertSeparator_UserSeparator_PartitionsDtkFlagsThenForwardsVerbatim(
+        string input, string expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        // After Spectre consumes the first "--", dotnet receives everything past it verbatim,
+        // including the user's own "--" — e.g. `dotnet test -- RunConfiguration.MaxCpuCount=4`.
+        var result = ArgumentPreprocessor.InsertSeparator(input.Split(' '));
+
+        result.Should().Equal(expected.Split(' '));
     }
 
     [Fact]
@@ -174,5 +201,110 @@ public sealed class ArgumentPreprocessorTests
             ["dotnet", "test", "--quiet", "--filter", "Category=Unit"]);
 
         result.Should().Equal("dotnet", "test", "--quiet", "--", "--filter", "Category=Unit");
+    }
+
+    // ── Help routing ─────────────────────────────────────────────────────────
+    // --help/-h must reach Spectre (dtk's own help), never be forwarded to dotnet.
+
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("-h")]
+    public void InsertSeparator_HelpFlag_IsKeptBeforeSeparator_NotForwarded(string helpFlag)
+    {
+        ArgumentNullException.ThrowIfNull(helpFlag);
+
+        var result = ArgumentPreprocessor.InsertSeparator(["dotnet", "build", helpFlag]);
+
+        // No "--" inserted: Spectre sees --help/-h and renders help instead of a filtered build.
+        result.Should().Equal("dotnet", "build", helpFlag);
+    }
+
+    [Fact]
+    public void InsertSeparator_HelpFlag_PartitionedBeforeSeparator_WithTrailingArgs()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(["dotnet", "test", "--help", "--filter", "X"]);
+
+        result.Should().Equal("dotnet", "test", "--help", "--", "--filter", "X");
+    }
+
+    // ── Casing normalization ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("DOTNET BUILD MyProject.slnx", "dotnet build MyProject.slnx")]
+    [InlineData("Dotnet Test", "dotnet test")]
+    [InlineData("dotnet BUILD x", "dotnet build x")]
+    public void Normalize_CanonicalizesKnownInvocationCasing(string input, string expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        var result = ArgumentPreprocessor.Normalize(input.Split(' '));
+
+        result.Should().Equal(expected.Split(' '));
+    }
+
+    [Theory]
+    [InlineData("DOTNET RUN")]  // unknown subcommand -> passthrough, forwarded verbatim
+    [InlineData("other build")] // not a dotnet invocation
+    [InlineData("dotnet")]      // too short to be an invocation
+    public void Normalize_LeavesNonCanonicalizableInvocationsUnchanged(string input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var args = input.Split(' ');
+
+        ArgumentPreprocessor.Normalize(args).Should().Equal(args);
+    }
+
+    // ── Verbosity flag parsing ───────────────────────────────────────────────
+    // Regression: `bool[] Verbose` made Spectre demand a value for `-v`
+    // ("Option 'verbose' is defined but no value has been provided").
+
+    [Fact]
+    public void DotnetCommandSettings_NoVerbosityFlag_ParsesAsLevel0()
+    {
+        var exitCode = RunCapturingVerbosity("build", "MyProject.slnx");
+
+        exitCode.Should().Be(0);
+        VerbosityCaptureCommand.LastLevel.Should().Be(0);
+    }
+
+    [Fact]
+    public void DotnetCommandSettings_SingleV_ParsesAsLevel1()
+    {
+        var exitCode = RunCapturingVerbosity("build", "-v", "MyProject.slnx");
+
+        exitCode.Should().Be(0);
+        VerbosityCaptureCommand.LastLevel.Should().Be(1);
+    }
+
+    [Fact]
+    public void DotnetCommandSettings_DoubleV_ParsesAsLevel2()
+    {
+        var exitCode = RunCapturingVerbosity("build", "--vv", "MyProject.slnx");
+
+        exitCode.Should().Be(0);
+        VerbosityCaptureCommand.LastLevel.Should().Be(2);
+    }
+
+    private static int RunCapturingVerbosity(params string[] args)
+    {
+        VerbosityCaptureCommand.LastLevel = -1;
+        var app = new CommandApp();
+        app.Configure(config => config.AddCommand<VerbosityCaptureCommand>("build"));
+        return app.Run(args);
+    }
+
+    [SuppressMessage("Performance", "CA1812",
+        Justification = "Instantiated by Spectre.Console.Cli via reflection.")]
+    private sealed class VerbosityCaptureCommand : Command<DotnetCommandSettings>
+    {
+        public static int LastLevel { get; set; } = -1;
+
+        protected override int Execute(
+            CommandContext context, DotnetCommandSettings settings, CancellationToken cancellationToken)
+        {
+            LastLevel = settings.VerbosityLevel;
+            return 0;
+        }
     }
 }

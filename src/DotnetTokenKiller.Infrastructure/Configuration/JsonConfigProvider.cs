@@ -110,9 +110,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
                 tracking?.DbPath ?? defaults.Tracking.DbPath,
                 tracking?.Tokenizer ?? defaults.Tracking.Tokenizer),
             new DisplayConfig(
-                display?.Colors ?? defaults.Display.Colors,
-                display?.Emoji ?? defaults.Display.Emoji,
-                display?.Width ?? defaults.Display.Width),
+                display?.Emoji ?? defaults.Display.Emoji),
             new TeeConfig(
                 tee?.Mode ?? defaults.Tee.Mode,
                 tee?.Directory ?? defaults.Tee.Directory,
@@ -126,15 +124,11 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         {
             RetentionDays = Math.Max(1, config.Tracking.RetentionDays)
         };
-        var display = config.Display with
-        {
-            Width = Math.Max(40, config.Display.Width)
-        };
         var tee = config.Tee with
         {
             MaxFiles = Math.Max(1, config.Tee.MaxFiles),
             MaxFileSizeBytes = Math.Max(0, config.Tee.MaxFileSizeBytes)
         };
-        return new DtkConfig(tracking, display, tee);
+        return new DtkConfig(tracking, config.Display, tee);
     }
 }

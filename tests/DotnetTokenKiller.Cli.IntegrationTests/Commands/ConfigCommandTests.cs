@@ -22,7 +22,7 @@ public sealed class ConfigCommandTests
 
         console.Output.Should().Contain("tracking.enabled");
         console.Output.Should().Contain("tracking.retentionDays");
-        console.Output.Should().Contain("display.colors");
+        console.Output.Should().Contain("display.emoji");
         console.Output.Should().Contain("tee.mode");
     }
 
@@ -46,13 +46,13 @@ public sealed class ConfigCommandTests
 
         var exitCode = await command.RunAsync(new ConfigSetCommandSettings
         {
-            Key = "display.width",
-            Value = "100"
+            Key = "display.emoji",
+            Value = "false"
         }, CancellationToken.None);
 
         exitCode.Should().Be(0);
-        console.Output.Should().Contain("display.width");
-        console.Output.Should().Contain("100");
+        console.Output.Should().Contain("display.emoji");
+        console.Output.Should().Contain("false");
     }
 
     [Fact]
@@ -99,7 +99,6 @@ public sealed class ConfigCommandTests
         console.Output.Should().Contain("tracking.dbPath");
         console.Output.Should().Contain("tracking.tokenizer");
         console.Output.Should().Contain("display.emoji");
-        console.Output.Should().Contain("display.width");
         console.Output.Should().Contain("tee.directory");
         console.Output.Should().Contain("tee.maxFiles");
         console.Output.Should().Contain("tee.maxFileSizeBytes");

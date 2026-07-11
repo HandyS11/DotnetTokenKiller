@@ -25,12 +25,12 @@ DTK uses an optional JSON configuration file at:
 > [!TIP]
 > **Zero-config by default** — DTK works out of the box without any configuration file. All settings have sensible defaults. You only need to create or edit the config file if you want to customize behavior.
 
-A minimal config that only changes the display width would be:
+A minimal config that only disables emoji would be:
 
 ```json
 {
   "display": {
-    "width": 100
+    "emoji": false
   }
 }
 ```
@@ -48,9 +48,7 @@ Any omitted keys use their defaults.
     "tokenizer": "Cl100kBase"
   },
   "display": {
-    "colors": true,
-    "emoji": true,
-    "width": 120
+    "emoji": true
   },
   "tee": {
     "mode": "failures",
@@ -78,9 +76,7 @@ Controls terminal output formatting.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `colors` | `true` | Enable colored terminal output |
 | `emoji` | `true` | Enable emoji characters (✓, etc.) |
-| `width` | `120` | Display width in characters |
 
 ## Tee Logs
 

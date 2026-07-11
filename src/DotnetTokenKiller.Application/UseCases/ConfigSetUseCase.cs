@@ -17,9 +17,7 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
             ["tracking.retentionDays"] = "integer ≥ 1",
             ["tracking.dbPath"] = "file path (empty string to reset to default)",
             ["tracking.tokenizer"] = "Cl100kBase|O200kBase",
-            ["display.colors"] = "true|false",
             ["display.emoji"] = "true|false",
-            ["display.width"] = "integer ≥ 40",
             ["tee.mode"] = "Failures|Always|Never",
             ["tee.directory"] = "directory path (empty string to reset to default)",
             ["tee.maxFiles"] = "integer ≥ 1",
@@ -75,25 +73,11 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
                     Tokenizer = ParseEnum<TokenizerModel>(key, value)
                 }
             },
-            "display.colors" => config with
-            {
-                Display = config.Display with
-                {
-                    Colors = ParseBool(key, value)
-                }
-            },
             "display.emoji" => config with
             {
                 Display = config.Display with
                 {
                     Emoji = ParseBool(key, value)
-                }
-            },
-            "display.width" => config with
-            {
-                Display = config.Display with
-                {
-                    Width = ParseInt(key, value, 40)
                 }
             },
             "tee.mode" => config with
