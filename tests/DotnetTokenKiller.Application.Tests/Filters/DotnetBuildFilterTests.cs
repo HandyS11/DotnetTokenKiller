@@ -637,6 +637,18 @@ public class DotnetBuildFilterTests
         result.Should().NotContain("✗");
     }
 
+    [Fact]
+    public void Apply_MultiPartTimeElapsed_IncludesMinutesAndSeconds()
+    {
+        // "Time Elapsed hh:mm:ss.ff" is a full TimeSpan, so minutes and seconds are already summed:
+        // 00:01:02.50 → 62.50s. Locks this in alongside the test filter's multi-part duration fix.
+        const string input = "Time Elapsed 00:01:02.50";
+
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
+
+        result.Should().Contain("62.50s");
+    }
+
     [Theory]
     [InlineData("/repo/Tests.cs(10,5): warning xUnit1013: Public method should be marked as test [/repo/T.csproj]",
         "xUnit1013")]

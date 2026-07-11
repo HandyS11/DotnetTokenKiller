@@ -794,6 +794,17 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_MultiPartSummaryDuration_SumsAllParts()
+    {
+        // VSTest renders long runs as multi-part durations ("1 m 2 s"); the single-part parse
+        // dropped every trailing part, so a 62 s run was reported as 60 s.
+        const string input =
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m 2 s - Tests.dll";
+        var result = _sut.Apply(input, exitCode: 0);
+        result.Should().Contain("62.00s").And.NotContain("60.00s");
+    }
+
+    [Fact]
     public void Apply_SlowFailingTest_KeepsFailureDetail()
     {
         // Slow tests report second-scale durations ("[1 s]") that the ms-only header regex missed.

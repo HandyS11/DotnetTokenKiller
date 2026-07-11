@@ -212,10 +212,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
         state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
         state.TotalSkipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
-        state.TotalDurationMs += NormalizeDurationToMs(
-            double.Parse(summaryMatch.Groups["duration"].Value, CultureInfo.InvariantCulture),
-            summaryMatch.Groups["unit"].Value);
+        state.TotalDurationMs += ParseDurationToMs(summaryMatch.Groups["duration"].Value);
         state.ProjectCount++;
+    }
+
+    private static double ParseDurationToMs(string duration)
+    {
+        return DurationPartPattern().Matches(duration)
+            .Sum(part => NormalizeDurationToMs(
+                double.Parse(part.Groups["value"].Value, CultureInfo.InvariantCulture),
+                part.Groups["unit"].Value));
     }
 
     private static void AccumulateMtpSummary(Match summaryMatch, ParseState state)
@@ -341,11 +347,15 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     }
 
     // Summary: "Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 89 ms - File.dll"
-    // Duration unit can be ms, s, m, or h
+    // Duration may be a single unit ("89 ms") or multi-part ("1 m 2 s", "1 h 3 m 4 s").
     [GeneratedRegex(
-        @"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+)\s+(?<unit>ms|s|m|h)",
+        @"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+ (?:ms|s|m|h)(?: [\d.]+ (?:ms|s|m|h))*)",
         RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
+
+    // A single "<number> <unit>" pair within a possibly multi-part duration string.
+    [GeneratedRegex(@"(?<value>[\d.]+)\s+(?<unit>ms|s|m|h)", RegexOptions.IgnoreCase)]
+    private static partial Regex DurationPartPattern();
 
     // "  Failed FullyQualifiedTestName [12 ms]", "[< 1 ms]", "[1 s]", or "[1 m 30 s]".
     // The full duration (number + unit) is captured so slow, second/minute-scale tests survive.
