@@ -90,6 +90,38 @@ public sealed class DoctorCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteAsync_DtkTeeDirEnvVar_ReportsTheOverrideTheTeeServiceUses()
+    {
+        // The tee service honors DTK_TEE_DIR over config/default, so doctor must report that same
+        // path — otherwise it would show a tee directory dtk does not actually use at runtime.
+        Directory.CreateDirectory(_tempDir);
+        var envTeeDir = Path.Combine(_tempDir, "env-tee");
+        Directory.CreateDirectory(envTeeDir);
+
+        var savedEnv = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
+        Environment.SetEnvironmentVariable("DTK_TEE_DIR", envTeeDir);
+        try
+        {
+            var console = new TestConsole();
+            console.Profile.Width = 400;
+            var configProvider = new StubConfigProvider(_tempDir); // config points tee elsewhere
+            var runner = new StubCommandRunner(0);
+            var useCase = new DoctorUseCase(runner, configProvider);
+            var command = new DoctorCommand(useCase, configProvider, console);
+
+            await command.RunAsync(CancellationToken.None);
+
+            // envTeeDir only appears in the output if DTK_TEE_DIR was honored (config points
+            // the tee dir at _tempDir instead), so this alone discriminates the fix.
+            console.Output.Should().Contain(envTeeDir);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTK_TEE_DIR", savedEnv);
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_FreshInstall_MissingDbDirectory_PassesAsWillBeCreated()
     {
         // Fresh install: _tempDir is intentionally NOT created, so neither the database directory

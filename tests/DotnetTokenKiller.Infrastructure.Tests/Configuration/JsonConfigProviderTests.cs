@@ -229,6 +229,21 @@ public sealed class JsonConfigProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_WhenMoveFails_DoesNotLeaveTempFileBehindAsync()
+    {
+        Directory.CreateDirectory(_tempDir);
+        // Make the destination path a directory so File.Move cannot overwrite it — the temp file
+        // is written but the move fails, and the finally must still clear the temp file.
+        Directory.CreateDirectory(ConfigPath);
+        var sut = CreateSut();
+
+        var act = () => sut.SaveAsync(DtkConfig.Default);
+
+        await act.Should().ThrowAsync<Exception>();
+        Directory.GetFiles(_tempDir, "*.tmp").Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task DeleteAsync_DeletesFile_WhenFileExists()
     {
         Directory.CreateDirectory(_tempDir);

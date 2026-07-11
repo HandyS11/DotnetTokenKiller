@@ -63,10 +63,21 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         var json = JsonSerializer.Serialize(config, DtkConfigJsonContext.Default.DtkConfig);
 
         // Write to a temp file then atomically move into place so a crash mid-write can never
-        // leave a truncated, unparseable config behind.
+        // leave a truncated, unparseable config behind. The finally clears the temp file if the
+        // write or move fails (or is cancelled) so stray *.tmp files never accumulate.
         var tempPath = configPath + ".tmp";
-        await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-        File.Move(tempPath, configPath, overwrite: true);
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, configPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
     }
 
     /// <inheritdoc/>

@@ -26,12 +26,15 @@ internal sealed class DoctorCommand(
         var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
 
         // Resolve exactly as the DI-registered tracker and tee service do, so doctor never
-        // reports a path that differs from the one dtk will actually use.
+        // reports a path that differs from the one dtk will actually use — including the
+        // DTK_DB_PATH / DTK_TEE_DIR environment overrides.
         var dbPath = EnvironmentOverride.Read("DTK_DB_PATH")
                      ?? config.Tracking.DbPath
                      ?? SqliteTracker.GetDefaultDbPath();
 
-        var teeDirectory = config.Tee.Directory ?? FileTeeService.GetDefaultTeeDir();
+        var teeDirectory = EnvironmentOverride.Read("DTK_TEE_DIR")
+                           ?? config.Tee.Directory
+                           ?? FileTeeService.GetDefaultTeeDir();
 
         var checks = await doctorUseCase.RunAsync(dbPath, teeDirectory, cancellationToken)
             .ConfigureAwait(false);
