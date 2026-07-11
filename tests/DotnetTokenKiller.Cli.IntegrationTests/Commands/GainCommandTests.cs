@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Cli.Commands.Settings;
@@ -16,7 +17,7 @@ public class GainCommandTests
     [Fact]
     public async Task ExecuteAsync_JsonMode_WritesJson()
     {
-        var (command, console) = Create();
+        var (command, _, writer) = Create();
 
         var exitCode = await command.RunAsync(new GainCommandSettings
         {
@@ -24,13 +25,13 @@ public class GainCommandTests
         }, CancellationToken.None);
 
         exitCode.Should().Be(0);
-        console.Output.Should().Contain("{");
+        writer.ToString().Should().Contain("{");
     }
 
     [Fact]
     public async Task ExecuteAsync_NoData_WritesNoDataMessage()
     {
-        var (command, console) = Create();
+        var (command, console, _) = Create();
 
         var exitCode = await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
@@ -48,7 +49,7 @@ public class GainCommandTests
             ["build"] = new(5, 2500, 400, 2100, 84.0, successDetail, failureDetail)
         };
         var summary = new GainSummary(5, 2500, 400, 2100, 84.0, details);
-        var (command, console) = Create(summary);
+        var (command, console, _) = Create(summary);
 
         var exitCode = await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
@@ -64,8 +65,7 @@ public class GainCommandTests
         {
             Summary = EmptySummary
         };
-        var console = new TestConsole();
-        var command = new GainCommand(new GainReportUseCase(tracker), console);
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), new StringWriter());
 
         await command.RunAsync(new GainCommandSettings
         {
@@ -82,8 +82,7 @@ public class GainCommandTests
         {
             Summary = EmptySummary
         };
-        var console = new TestConsole();
-        var command = new GainCommand(new GainReportUseCase(tracker), console);
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), new StringWriter());
 
         await command.RunAsync(new GainCommandSettings
         {
@@ -93,20 +92,21 @@ public class GainCommandTests
         tracker.LastCommandFilter.Should().Be("build");
     }
 
-    private static (GainCommand command, TestConsole console) Create(GainSummary? summary = null)
+    private static (GainCommand command, TestConsole console, StringWriter writer) Create(GainSummary? summary = null)
     {
         var console = new TestConsole();
+        var writer = new StringWriter();
         var tracker = new StubTracker
         {
             Summary = summary ?? EmptySummary
         };
-        return (new GainCommand(new GainReportUseCase(tracker), console), console);
+        return (new GainCommand(new GainReportUseCase(tracker), console, writer), console, writer);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExportCsv_NoRecords_WritesHeaderOnly()
     {
-        var (command, console) = Create();
+        var (command, _, writer) = Create();
 
         var exitCode = await command.RunAsync(new GainCommandSettings
         {
@@ -114,14 +114,14 @@ public class GainCommandTests
         }, CancellationToken.None);
 
         exitCode.Should().Be(0);
-        console.Output.Should().Contain("timestamp,command,project_path");
-        console.Output.Should().Contain("execution_time_ms,success");
+        writer.ToString().Should().Contain("timestamp,command,project_path");
+        writer.ToString().Should().Contain("execution_time_ms,success");
     }
 
     [Fact]
     public async Task ExecuteAsync_ExportCsv_WithRecords_WritesCsvRows()
     {
-        var console = new TestConsole();
+        var writer = new StringWriter();
         var tracker = new StubTracker
         {
             History =
@@ -134,7 +134,7 @@ public class GainCommandTests
                     TimeSpan.FromMilliseconds(500))
             ]
         };
-        var command = new GainCommand(new GainReportUseCase(tracker), console);
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), writer);
 
         var exitCode = await command.RunAsync(new GainCommandSettings
         {
@@ -142,17 +142,17 @@ public class GainCommandTests
         }, CancellationToken.None);
 
         exitCode.Should().Be(0);
-        console.Output.Should().Contain("build");
-        console.Output.Should().Contain("/my/project");
-        console.Output.Should().Contain("1000");
-        console.Output.Should().Contain("850");
-        console.Output.Should().Contain(",1"); // success=1
+        writer.ToString().Should().Contain("build");
+        writer.ToString().Should().Contain("/my/project");
+        writer.ToString().Should().Contain("1000");
+        writer.ToString().Should().Contain("850");
+        writer.ToString().Should().Contain(",1"); // success=1
     }
 
     [Fact]
     public async Task ExecuteAsync_ExportCsv_UnknownFormat_ReturnsOne()
     {
-        var (command, console) = Create();
+        var (command, console, _) = Create();
 
         var exitCode = await command.RunAsync(new GainCommandSettings
         {
@@ -166,7 +166,7 @@ public class GainCommandTests
     [Fact]
     public async Task ExecuteAsync_ExportCsv_FieldWithComma_IsQuoted()
     {
-        var console = new TestConsole();
+        var writer = new StringWriter();
         var tracker = new StubTracker
         {
             History =
@@ -179,14 +179,71 @@ public class GainCommandTests
                     TimeSpan.FromMilliseconds(100))
             ]
         };
-        var command = new GainCommand(new GainReportUseCase(tracker), console);
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), writer);
 
         await command.RunAsync(new GainCommandSettings
         {
             Export = "csv"
         }, CancellationToken.None);
 
-        console.Output.Should().Contain("\"/path/with,comma\"");
+        writer.ToString().Should().Contain("\"/path/with,comma\"");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_JsonMode_LongCommand_ProducesParseableJson()
+    {
+        // A command string longer than a narrow console width would wrap and corrupt the JSON
+        // if it were written through Spectre. The dedicated writer must emit it verbatim.
+        var longCommand = new string('x', 200);
+        var detail = new CommandGainDetail(1, 1000, 100, 900, 90.0);
+        var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
+        {
+            [longCommand] = new(1, 1000, 100, 900, 90.0, detail)
+        };
+        var summary = new GainSummary(1, 1000, 100, 900, 90.0, details);
+        var (command, _, writer) = Create(summary);
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Json = true
+        }, CancellationToken.None);
+
+        var output = writer.ToString();
+        var act = () => JsonDocument.Parse(output);
+        act.Should().NotThrow();
+        output.Should().Contain(longCommand); // key survived intact, not split across a wrap
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ExportCsv_LongCommand_RowSurvivesNarrowConsole()
+    {
+        // Long records must not be line-wrapped: the header stays a single CSV line and the
+        // long field is emitted whole.
+        var longCommand = new string('x', 200);
+        var writer = new StringWriter();
+        var tracker = new StubTracker
+        {
+            History =
+            [
+                new CommandRecord(
+                    new DateTimeOffset(2025, 1, 15, 10, 0, 0, TimeSpan.Zero),
+                    longCommand,
+                    "/my/project",
+                    new TokenStatistics(1000, 150, 850, 85.0),
+                    TimeSpan.FromMilliseconds(500))
+            ]
+        };
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), writer);
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Export = "csv"
+        }, CancellationToken.None);
+
+        var output = writer.ToString();
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        lines[0].Should().Be(GainCommand.CsvHeader); // complete header, unwrapped
+        output.Should().Contain(longCommand); // full field, not split across a wrap
     }
 
     [Fact]
@@ -199,7 +256,7 @@ public class GainCommandTests
             ["build"] = new(2, 1000, 150, 850, 85.0, successDetail)
         };
         var summary = new GainSummary(2, 1000, 150, 850, 85.0, details);
-        var (command, console) = Create(summary);
+        var (command, console, _) = Create(summary);
 
         await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
@@ -221,7 +278,7 @@ public class GainCommandTests
             ["build"] = new(3, 1500, 300, 1200, 80.0, successDetail)
         };
         var summary = new GainSummary(3, 1500, 300, 1200, 80.0, details);
-        var (command, console) = Create(summary);
+        var (command, console, _) = Create(summary);
 
         await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
@@ -242,7 +299,7 @@ public class GainCommandTests
             ["build"] = new(1, 1000, 167, 833, 83.3, successDetail)
         };
         var summary = new GainSummary(1, 1000, 167, 833, 83.3, details);
-        var (command, console) = Create(summary);
+        var (command, console, _) = Create(summary);
 
         await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
