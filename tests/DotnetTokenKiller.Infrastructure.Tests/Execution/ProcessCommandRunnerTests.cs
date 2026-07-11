@@ -163,4 +163,17 @@ public sealed class ProcessCommandRunnerTests
 
         exitCode.Should().Be(7);
     }
+
+    [Fact]
+    public async Task RunCapturedAsync_SetsEnglishCliLanguageOnChildAsync()
+    {
+        // Child echoes the env var back (Linux only via printenv)
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return;
+        }
+
+        var result = await _sut.RunCapturedAsync("printenv", ["DOTNET_CLI_UI_LANGUAGE"], CancellationToken.None);
+        result.StdOut.Trim().Should().Be("en");
+    }
 }
