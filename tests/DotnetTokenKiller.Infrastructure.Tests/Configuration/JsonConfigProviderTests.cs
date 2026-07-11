@@ -214,6 +214,21 @@ public sealed class JsonConfigProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_IsAtomic_NoTornFileOnOverwriteAsync()
+    {
+        var sut = CreateSut();
+        await sut.SaveAsync(DtkConfig.Default);
+
+        // Overwrite an existing file — the write must go through a temp file + atomic move.
+        await sut.SaveAsync(DtkConfig.Default with { Tracking = new TrackingConfig(false, 30) });
+
+        Directory.GetFiles(_tempDir, "*.tmp").Should().BeEmpty(); // no leftover temp file
+        var reloaded = await sut.LoadAsync();
+        reloaded.Should().NotBeNull();
+        reloaded.Tracking.Enabled.Should().BeFalse(); // the overwrite landed intact
+    }
+
+    [Fact]
     public async Task DeleteAsync_DeletesFile_WhenFileExists()
     {
         Directory.CreateDirectory(_tempDir);

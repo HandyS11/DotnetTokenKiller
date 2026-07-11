@@ -67,9 +67,9 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
 
             return $"[full output: {filePath}]";
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Intentional: tee errors must never surface to the user
+            // Intentional: tee errors must never surface to the user (but cancellation must propagate)
             return null;
         }
     }
@@ -91,9 +91,9 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
                 File.Delete(file);
             }
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Intentional: cleanup errors must never surface to the user
+            // Intentional: cleanup errors must never surface to the user (but cancellation must propagate)
         }
     }
 
@@ -125,8 +125,8 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             return teeDirOverride;
         }
 
-        var envVar = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
-        if (!string.IsNullOrEmpty(envVar))
+        var envVar = EnvironmentOverride.Read("DTK_TEE_DIR");
+        if (envVar is not null)
         {
             return envVar;
         }

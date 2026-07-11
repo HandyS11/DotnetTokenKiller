@@ -24,7 +24,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
             var loaded = JsonSerializer.Deserialize(json, DtkConfigJsonContext.Default.DtkConfig);
             return loaded is null ? DtkConfig.Default : Validate(Merge(loaded));
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return DtkConfig.Default;
         }
@@ -44,7 +44,7 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
             var loaded = JsonSerializer.Deserialize(json, DtkConfigJsonContext.Default.DtkConfig);
             return loaded is null ? DtkConfig.Default : Validate(Merge(loaded));
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return DtkConfig.Default;
         }
@@ -61,7 +61,12 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
 
         Directory.CreateDirectory(directory);
         var json = JsonSerializer.Serialize(config, DtkConfigJsonContext.Default.DtkConfig);
-        await File.WriteAllTextAsync(configPath, json, cancellationToken).ConfigureAwait(false);
+
+        // Write to a temp file then atomically move into place so a crash mid-write can never
+        // leave a truncated, unparseable config behind.
+        var tempPath = configPath + ".tmp";
+        await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+        File.Move(tempPath, configPath, overwrite: true);
     }
 
     /// <inheritdoc/>
@@ -77,10 +82,10 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
 
     private static string GetDefaultConfigPath()
     {
-        var envPath = Environment.GetEnvironmentVariable("DTK_CONFIG_PATH");
-        if (!string.IsNullOrWhiteSpace(envPath))
+        var envPath = EnvironmentOverride.Read("DTK_CONFIG_PATH");
+        if (envPath is not null)
         {
-            return envPath.Trim();
+            return envPath;
         }
 
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);

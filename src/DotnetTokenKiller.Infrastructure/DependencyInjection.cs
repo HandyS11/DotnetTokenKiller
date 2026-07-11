@@ -6,6 +6,7 @@ using DotnetTokenKiller.Infrastructure.Configuration;
 using DotnetTokenKiller.Infrastructure.Execution;
 using DotnetTokenKiller.Infrastructure.Tee;
 using DotnetTokenKiller.Infrastructure.Tracking;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DotnetTokenKiller.Infrastructure;
@@ -24,10 +25,11 @@ public static class ServiceCollectionExtensions
         {
             var configProvider = sp.GetRequiredService<IConfigProvider>();
             var config = configProvider.Load();
-            var dbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH")
+            var dbPath = EnvironmentOverride.Read("DTK_DB_PATH")
                          ?? config.Tracking.DbPath
                          ?? SqliteTracker.GetDefaultDbPath();
-            return new SqliteTracker($"Data Source={dbPath}", config.Tracking.RetentionDays);
+            var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+            return new SqliteTracker(connectionString, config.Tracking.RetentionDays);
         });
 
         services.AddSingleton<ITeeService, FileTeeService>();

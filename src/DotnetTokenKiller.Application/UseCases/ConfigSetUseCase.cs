@@ -161,7 +161,7 @@ public sealed class ConfigSetUseCase(IConfigProvider configProvider)
 
     private static TEnum ParseEnum<TEnum>(string key, string value) where TEnum : struct, Enum
     {
-        if (!char.IsLetter(value[0]))
+        if (string.IsNullOrEmpty(value) || !char.IsLetter(value[0]))
         {
             var names = string.Join("|", Enum.GetNames<TEnum>());
             throw new FormatException(

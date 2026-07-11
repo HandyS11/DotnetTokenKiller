@@ -300,6 +300,17 @@ public sealed class ConfigSetUseCaseTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_EmptyEnumValue_ThrowsFormatException()
+    {
+        // Empty value for an enum key must fail with a friendly FormatException, not an
+        // IndexOutOfRangeException from indexing value[0].
+        var act = () => _sut.ExecuteAsync("tracking.tokenizer", "");
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*Expected one of*");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_NumericEnumInput_ThrowsFormatException()
     {
         // Enum.TryParse accepts numeric strings like "2" and produces undefined enum values — must be rejected
