@@ -203,6 +203,58 @@ public sealed class ArgumentPreprocessorTests
         result.Should().Equal("dotnet", "test", "--quiet", "--", "--filter", "Category=Unit");
     }
 
+    // ── Help routing ─────────────────────────────────────────────────────────
+    // --help/-h must reach Spectre (dtk's own help), never be forwarded to dotnet.
+
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("-h")]
+    public void InsertSeparator_HelpFlag_IsKeptBeforeSeparator_NotForwarded(string helpFlag)
+    {
+        ArgumentNullException.ThrowIfNull(helpFlag);
+
+        var result = ArgumentPreprocessor.InsertSeparator(["dotnet", "build", helpFlag]);
+
+        // No "--" inserted: Spectre sees --help/-h and renders help instead of a filtered build.
+        result.Should().Equal("dotnet", "build", helpFlag);
+    }
+
+    [Fact]
+    public void InsertSeparator_HelpFlag_PartitionedBeforeSeparator_WithTrailingArgs()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(["dotnet", "test", "--help", "--filter", "X"]);
+
+        result.Should().Equal("dotnet", "test", "--help", "--", "--filter", "X");
+    }
+
+    // ── Casing normalization ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("DOTNET BUILD MyProject.slnx", "dotnet build MyProject.slnx")]
+    [InlineData("Dotnet Test", "dotnet test")]
+    [InlineData("dotnet BUILD x", "dotnet build x")]
+    public void Normalize_CanonicalizesKnownInvocationCasing(string input, string expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        var result = ArgumentPreprocessor.Normalize(input.Split(' '));
+
+        result.Should().Equal(expected.Split(' '));
+    }
+
+    [Theory]
+    [InlineData("DOTNET RUN")]  // unknown subcommand -> passthrough, forwarded verbatim
+    [InlineData("other build")] // not a dotnet invocation
+    [InlineData("dotnet")]      // too short to be an invocation
+    public void Normalize_LeavesNonCanonicalizableInvocationsUnchanged(string input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var args = input.Split(' ');
+
+        ArgumentPreprocessor.Normalize(args).Should().Equal(args);
+    }
+
     // ── Verbosity flag parsing ───────────────────────────────────────────────
     // Regression: `bool[] Verbose` made Spectre demand a value for `-v`
     // ("Option 'verbose' is defined but no value has been provided").

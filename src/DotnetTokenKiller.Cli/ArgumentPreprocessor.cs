@@ -29,18 +29,22 @@ internal static class ArgumentPreprocessor
     internal const string FormatSubcommand = "format";
 
     /// <summary>
-    /// Dotnet subcommands handled by dtk. This set is the single source of truth — the command
-    /// registrations in Program.cs reference these constants to stay in sync automatically.
+    /// Dotnet subcommands handled by dtk, in canonical (lowercase, display) order. This is the
+    /// single source of truth: the command registrations in Program.cs and the shell-completion
+    /// scripts both derive from it, so a new subcommand can never silently drift out of sync.
     /// </summary>
+    internal static readonly IReadOnlyList<string> KnownSubcommandsOrdered =
+    [
+        BuildSubcommand,
+        TestSubcommand,
+        RestoreSubcommand,
+        CleanSubcommand,
+        FormatSubcommand
+    ];
+
+    /// <summary>Case-insensitive lookup over <see cref="KnownSubcommandsOrdered"/>.</summary>
     internal static readonly IReadOnlySet<string> KnownSubcommands =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            BuildSubcommand,
-            TestSubcommand,
-            RestoreSubcommand,
-            CleanSubcommand,
-            FormatSubcommand
-        };
+        new HashSet<string>(KnownSubcommandsOrdered, StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> DtkOptions =
         new(StringComparer.Ordinal)
@@ -50,8 +54,41 @@ internal static class ArgumentPreprocessor
             "--vv",
             "--show-log",
             "-q",
-            "--quiet"
+            "--quiet",
+            "-h",
+            "--help"
         };
+
+    /// <summary>
+    /// Canonicalizes the casing of a known <c>dotnet &lt;subcommand&gt;</c> invocation so
+    /// Spectre.Console's case-sensitive routing matches (e.g. <c>dtk DOTNET BUILD</c> →
+    /// <c>dotnet build</c>). Unknown/passthrough invocations are returned untouched, since
+    /// their subcommand is forwarded verbatim to <c>dotnet</c>.
+    /// </summary>
+    /// <param name="args">The raw CLI arguments.</param>
+    internal static string[] Normalize(string[] args)
+    {
+        if (args.Length < 2 ||
+            !string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) ||
+            !KnownSubcommands.Contains(args[1]))
+        {
+            return args;
+        }
+
+        var canonicalSub = KnownSubcommandsOrdered.First(
+            s => string.Equals(s, args[1], StringComparison.OrdinalIgnoreCase));
+
+        if (string.Equals(args[0], "dotnet", StringComparison.Ordinal) &&
+            string.Equals(args[1], canonicalSub, StringComparison.Ordinal))
+        {
+            return args;
+        }
+
+        var normalized = (string[])args.Clone();
+        normalized[0] = "dotnet";
+        normalized[1] = canonicalSub;
+        return normalized;
+    }
 
     /// <summary>
     /// Returns <see langword="true"/> when the invocation should bypass the Spectre app

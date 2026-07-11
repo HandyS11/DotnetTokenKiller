@@ -21,6 +21,10 @@ const string integrateBranch = "integrate";
 const string configBranch = "config";
 const string completionCmd = "completion";
 
+// Canonicalize `dotnet <sub>` casing (e.g. `DOTNET BUILD` -> `dotnet build`) so Spectre's
+// case-sensitive routing resolves it; unknown/passthrough invocations are left untouched.
+args = ArgumentPreprocessor.Normalize(args);
+
 // Passthrough: run any unsupported dotnet subcommand directly without extra DI
 if (ArgumentPreprocessor.IsPassthrough(args))
 {

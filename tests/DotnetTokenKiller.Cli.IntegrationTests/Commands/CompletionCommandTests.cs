@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Cli.Commands.Settings;
 using FluentAssertions;
@@ -16,7 +17,7 @@ public sealed class CompletionCommandTests
     [InlineData("pwsh")]
     public async Task ExecuteAsync_KnownShell_ReturnsZeroAndPrintsScript(string shell)
     {
-        var (command, console) = Create();
+        var (command, _, writer) = Create();
 
         var exitCode = await command.RunAsync(new CompletionCommandSettings
         {
@@ -24,73 +25,100 @@ public sealed class CompletionCommandTests
         }, CancellationToken.None);
 
         exitCode.Should().Be(0);
-        console.Output.Should().NotBeNullOrWhiteSpace();
+        writer.ToString().Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Theory]
+    [InlineData("bash")]
+    [InlineData("zsh")]
+    [InlineData("fish")]
+    [InlineData("powershell")]
+    public async Task ExecuteAsync_Script_OffersEveryDotnetSubcommand(string shell)
+    {
+        // Anti-drift: the completion lists are generated from ArgumentPreprocessor.KnownSubcommands,
+        // so every supported subcommand (including 'format') must appear in every shell script.
+        var (command, _, writer) = Create();
+
+        await command.RunAsync(new CompletionCommandSettings
+        {
+            Shell = shell
+        }, CancellationToken.None);
+
+        var script = writer.ToString();
+        foreach (var subcommand in ArgumentPreprocessor.KnownSubcommands)
+        {
+            script.Should().Contain(subcommand, "the {0} completion must offer '{1}'", shell, subcommand);
+        }
     }
 
     [Fact]
     public async Task ExecuteAsync_BashShell_ContainsDtkSubcommands()
     {
-        var (command, console) = Create();
+        var (command, _, writer) = Create();
 
         await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "bash"
         }, CancellationToken.None);
 
-        console.Output.Should().Contain("dotnet");
-        console.Output.Should().Contain("integrate");
-        console.Output.Should().Contain("complete -F _dtk_completion dtk");
+        var script = writer.ToString();
+        script.Should().Contain("dotnet");
+        script.Should().Contain("integrate");
+        script.Should().Contain("complete -F _dtk_completion dtk");
     }
 
     [Fact]
     public async Task ExecuteAsync_ZshShell_ContainsDtkSubcommands()
     {
-        var (command, console) = Create();
+        var (command, _, writer) = Create();
 
         await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "zsh"
         }, CancellationToken.None);
 
-        console.Output.Should().Contain("#compdef dtk");
-        console.Output.Should().Contain("dotnet");
-        console.Output.Should().Contain("integrate");
+        var script = writer.ToString();
+        script.Should().Contain("#compdef dtk");
+        script.Should().Contain("dotnet");
+        script.Should().Contain("integrate");
     }
 
     [Fact]
     public async Task ExecuteAsync_FishShell_ContainsDtkSubcommands()
     {
-        var (command, console) = Create();
+        var (command, _, writer) = Create();
 
         await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "fish"
         }, CancellationToken.None);
 
-        console.Output.Should().Contain("complete -c dtk");
-        console.Output.Should().Contain("dotnet");
-        console.Output.Should().Contain("integrate");
+        var script = writer.ToString();
+        script.Should().Contain("complete -c dtk");
+        script.Should().Contain("dotnet");
+        script.Should().Contain("integrate");
     }
 
     [Fact]
     public async Task ExecuteAsync_PowerShellShell_ContainsDtkSubcommands()
     {
-        var (command, console) = Create();
+        var (command, _, writer) = Create();
 
         await command.RunAsync(new CompletionCommandSettings
         {
             Shell = "powershell"
         }, CancellationToken.None);
 
-        console.Output.Should().Contain("Register-ArgumentCompleter");
-        console.Output.Should().Contain("dotnet");
-        console.Output.Should().Contain("integrate");
+        var script = writer.ToString();
+        script.Should().Contain("Register-ArgumentCompleter");
+        script.Should().Contain("dotnet");
+        script.Should().Contain("integrate");
     }
 
     [Fact]
     public async Task ExecuteAsync_UnknownShell_ReturnsOneAndPrintsError()
     {
-        var (command, console) = Create();
+        var (command, console, _) = Create();
 
         var exitCode = await command.RunAsync(new CompletionCommandSettings
         {
@@ -105,7 +133,7 @@ public sealed class CompletionCommandTests
     [Fact]
     public async Task ExecuteAsync_ShellNameCaseInsensitive_ReturnsZero()
     {
-        var (command, _) = Create();
+        var (command, _, _) = Create();
 
         var exitCode = await command.RunAsync(new CompletionCommandSettings
         {
@@ -115,9 +143,10 @@ public sealed class CompletionCommandTests
         exitCode.Should().Be(0);
     }
 
-    private static (CompletionCommand command, TestConsole console) Create()
+    private static (CompletionCommand command, TestConsole console, StringWriter writer) Create()
     {
         var console = new TestConsole();
-        return (new CompletionCommand(console), console);
+        var writer = new StringWriter();
+        return (new CompletionCommand(console, writer), console, writer);
     }
 }
