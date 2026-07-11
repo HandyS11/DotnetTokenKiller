@@ -163,4 +163,23 @@ public sealed class ProcessCommandRunnerTests
 
         exitCode.Should().Be(7);
     }
+
+    private static (string command, string[] args) PrintCliLanguageCommand()
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ("cmd", ["/c", "echo %DOTNET_CLI_UI_LANGUAGE%"])
+            : ("printenv", ["DOTNET_CLI_UI_LANGUAGE"]);
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_SetsEnglishCliLanguageOnChildAsync()
+    {
+        // Child echoes the env var back. If unset, Windows echoes the literal
+        // %DOTNET_CLI_UI_LANGUAGE% and Linux prints nothing — both fail the assertion.
+        var (cmd, args) = PrintCliLanguageCommand();
+
+        var result = await _sut.RunCapturedAsync(cmd, args, CancellationToken.None);
+
+        result.StdOut.Trim().Should().Be("en");
+    }
 }

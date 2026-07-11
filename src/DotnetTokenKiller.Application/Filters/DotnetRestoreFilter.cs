@@ -16,7 +16,8 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
 
     /// <summary>Applies the filter to the raw restore output.</summary>
     /// <param name="rawOutput">The raw restore output to filter.</param>
-    public string Apply(string rawOutput)
+    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    public string Apply(string rawOutput, int exitCode)
     {
         if (string.IsNullOrEmpty(rawOutput))
         {
@@ -30,7 +31,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             ProcessLine(rawLine.Trim(), state);
         }
 
-        return FormatOutput(state);
+        return FormatOutput(state, exitCode);
     }
 
     private void ProcessLine(string line, ParseState state)
@@ -106,8 +107,16 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             proj));
     }
 
-    private static string FormatOutput(ParseState state)
+    private static string FormatOutput(ParseState state, int exitCode)
     {
+        if (state.Errors.Count == 0 && exitCode != 0)
+        {
+            // Failed run with nothing parsed (crashed process, localized SDK, garbled output):
+            // degrade to blank so FilteredRunUseCase's raw-tail fallback surfaces the real output
+            // instead of a misleadingly clean "0 errors" header.
+            return string.Empty;
+        }
+
         if (state.Errors.Count > 0)
         {
             return FormatErrors(state.Errors);

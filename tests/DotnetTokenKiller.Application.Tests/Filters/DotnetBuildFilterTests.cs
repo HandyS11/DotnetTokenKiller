@@ -12,7 +12,7 @@ public class DotnetBuildFilterTests
     public Task Apply_SuccessFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_build_success.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         return Verify(result);
     }
 
@@ -20,7 +20,7 @@ public class DotnetBuildFilterTests
     public Task Apply_WarningsFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_build_warnings.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         return Verify(result);
     }
 
@@ -28,7 +28,7 @@ public class DotnetBuildFilterTests
     public Task Apply_ErrorsFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_build_errors.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 1);
         return Verify(result);
     }
 
@@ -36,7 +36,7 @@ public class DotnetBuildFilterTests
     public void Apply_SuccessFixture_SavingsAtLeast85Percent()
     {
         var fixture = LoadFixture("dotnet_build_success.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         var inputTokens = fixture.Length / 4;
         var outputTokens = result.Length / 4;
         var savings = 100.0 - (outputTokens * 100.0 / inputTokens);
@@ -47,7 +47,7 @@ public class DotnetBuildFilterTests
     public void Apply_WarningsFixture_SavingsAtLeast75Percent()
     {
         var fixture = LoadFixture("dotnet_build_warnings.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         var inputTokens = fixture.Length / 4;
         var outputTokens = result.Length / 4;
         var savings = 100.0 - (outputTokens * 100.0 / inputTokens);
@@ -58,7 +58,7 @@ public class DotnetBuildFilterTests
     public void Apply_ErrorsFixture_SavingsAtLeast70Percent()
     {
         var fixture = LoadFixture("dotnet_build_errors.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 1);
         var inputTokens = fixture.Length / 4;
         var outputTokens = result.Length / 4;
         var savings = 100.0 - (outputTokens * 100.0 / inputTokens);
@@ -74,26 +74,26 @@ public class DotnetBuildFilterTests
     public void Apply_SuccessFixture_DoesNotContainNoiseLine(string noiseLine)
     {
         var fixture = LoadFixture("dotnet_build_success.txt");
-        _sut.Apply(fixture).Should().NotContain(noiseLine);
+        _sut.Apply(fixture, exitCode: 0).Should().NotContain(noiseLine);
     }
 
     [Fact]
     public void Apply_NullInput_ReturnsEmpty()
     {
-        _sut.Apply(null!).Should().BeEmpty();
+        _sut.Apply(null!, exitCode: 0).Should().BeEmpty();
     }
 
     [Fact]
     public void Apply_EmptyInput_ReturnsEmpty()
     {
-        _sut.Apply(string.Empty).Should().BeEmpty();
+        _sut.Apply(string.Empty, exitCode: 0).Should().BeEmpty();
     }
 
     [Fact]
     public void Apply_AnsiCodesInInput_StrippedFromOutput()
     {
         const string ansiInput = "\x1b[32mBuild succeeded.\x1b[0m\n";
-        var result = _sut.Apply(ansiInput);
+        var result = _sut.Apply(ansiInput, exitCode: 0);
         result.Should().NotContain("\x1b[");
     }
 
@@ -103,7 +103,7 @@ public class DotnetBuildFilterTests
         // Covers SimpleDiagnosticPattern path (lines 79-98) and TryAddDiagnosticLine false return (lines 107-108)
         const string input = "MSBUILD : error MSB1001: Unknown switch.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Contain("MSB1001");
     }
@@ -120,7 +120,7 @@ public class DotnetBuildFilterTests
                              MSBUILD : error MSB1001: Unknown switch.
                              """;
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Contain("MSB1001");
     }
@@ -131,7 +131,7 @@ public class DotnetBuildFilterTests
         // Covers (warnings.Count == 1 ? "" : "s") true branch at line 133
         const string input = "/path/File.cs(1,1): warning CS0001: a warning message [Project.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Contain("1 warning");
         result.Should().NotContain("warnings");
@@ -144,7 +144,7 @@ public class DotnetBuildFilterTests
         const string input =
             "/path/File.cs(1,1): error CS0001: error message [Project.csproj]\n/path/File.cs(2,1): warning CS0002: a warning [Project.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("1 warning").And.Contain("suppressed");
     }
@@ -155,7 +155,7 @@ public class DotnetBuildFilterTests
         // Covers BuildContext elapsed-empty + single-project branch (lines 165-166, condition at 164, 166)
         const string input = "  MyProject -> /path/MyProject.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("1 project");
         result.Should().NotContain("projects");
@@ -167,7 +167,7 @@ public class DotnetBuildFilterTests
         // Covers BuildContext plural branch for projectCount != 1 (condition at 166)
         const string input = "  MyProject -> /path/MyProject.dll\n  OtherProject -> /path/OtherProject.dll";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Contain("2 projects");
     }
@@ -182,7 +182,7 @@ public class DotnetBuildFilterTests
                              /path/File.cs(3,1): warning CS0003: warning two [Project.csproj]
                              """;
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("2 warnings suppressed");
     }
@@ -205,7 +205,7 @@ public class DotnetBuildFilterTests
         // Kills equality mutation: warnings.Count >= 0 (line 145)
         const string input = "/path/File.cs(1,1): error CS0001: error msg [Project.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().NotContain("suppressed");
     }
@@ -215,7 +215,7 @@ public class DotnetBuildFilterTests
     {
         const string input = "/path/File.cs(1,1): error CS0001: error msg [Project.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("1 error,");
         result.Should().NotContain("errors,");
@@ -229,7 +229,7 @@ public class DotnetBuildFilterTests
                              /path/B.cs(2,1): error CS0002: err2 [P.csproj]
                              """;
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("2 errors,");
     }
@@ -242,7 +242,7 @@ public class DotnetBuildFilterTests
                              /path/File.cs(20,3): warning CS0168: Another unused variable [P.csproj]
                              """;
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Contain("CS0168 (2x)");
         result.Should().Contain("File.cs:10");
@@ -257,7 +257,7 @@ public class DotnetBuildFilterTests
                              /path/File.cs(2,1): error CS0002: second error [P.csproj]
                              """;
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("File.cs (2 errors)");
         result.Should().Contain("(1,1) CS0001: first error");
@@ -269,7 +269,7 @@ public class DotnetBuildFilterTests
     {
         const string input = "/path/File.cs(1,1): error CS0001: error msg [P.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("Top codes: CS0001 (1x)");
     }
@@ -283,7 +283,7 @@ public class DotnetBuildFilterTests
                              Time Elapsed 00:00:03.50
                              """;
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Contain("1 project, 3.50s");
     }
@@ -294,7 +294,7 @@ public class DotnetBuildFilterTests
         // Kills BuildContext branch: projectCount == 0, elapsed not empty (line 164)
         const string input = "Time Elapsed 00:00:01.23";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Contain("(1.23s)");
         result.Should().NotContain("project");
@@ -306,7 +306,7 @@ public class DotnetBuildFilterTests
         // Kills BuildContext branch: projectCount == 0, elapsed empty (line 157-158)
         const string input = "Build succeeded.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Be("✓ dotnet build\n");
     }
@@ -323,7 +323,7 @@ public class DotnetBuildFilterTests
     {
         // Kills logical mutations in IsNoiseLine: || changed to && (lines 198-205)
         // Each noise pattern must independently cause the line to be filtered
-        var result = new DotnetBuildFilter().Apply(noiseLine);
+        var result = new DotnetBuildFilter().Apply(noiseLine, exitCode: 0);
 
         result.Should().Be("✓ dotnet build\n", $"'{noiseLine}' should be treated as noise");
     }
@@ -332,7 +332,7 @@ public class DotnetBuildFilterTests
     public void Apply_TimeElapsedNoiseLine_FilteredAndParsesTime()
     {
         // Time Elapsed is both noise and a source of elapsed time
-        var result = new DotnetBuildFilter().Apply("Time Elapsed 00:00:01.23");
+        var result = new DotnetBuildFilter().Apply("Time Elapsed 00:00:01.23", exitCode: 0);
 
         result.Should().Contain("dotnet build").And.Contain("1.23s");
     }
@@ -343,7 +343,7 @@ public class DotnetBuildFilterTests
         // Kills statement mutations on project counter increment (line 55)
         const string input = "  MyProject -> /path/MyProject.dll";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Contain("1 project");
     }
@@ -354,7 +354,7 @@ public class DotnetBuildFilterTests
         // Kills statement mutations on elapsed assignment (lines 63, 69)
         const string input = "Time Elapsed 00:00:42.00";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Contain("42.00s");
     }
@@ -368,7 +368,7 @@ public class DotnetBuildFilterTests
                              /path/File.cs(1,1): error CS0001: same error [P.csproj]
                              """;
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("1 error,");
     }
@@ -379,7 +379,7 @@ public class DotnetBuildFilterTests
         // Kills string mutations on SimpleDiagnostic groups (lines 92-94)
         const string input = "MSBUILD : error MSB1001: Unknown switch.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Contain("MSB1001");
         result.Should().Contain("Unknown switch.");
@@ -393,7 +393,7 @@ public class DotnetBuildFilterTests
         const string input = "Build succeeded.";
 
         // Should not throw and produce valid output
-        var result = filter.Apply(input);
+        var result = filter.Apply(input, exitCode: 0);
 
         result.Should().NotBeEmpty();
     }
@@ -403,7 +403,7 @@ public class DotnetBuildFilterTests
     {
         const string input = "/path/File.cs(1,1): warning CS0168: unused var [P.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Contain("0 errors, 1 warning");
         result.Should().Contain("---");
@@ -414,7 +414,7 @@ public class DotnetBuildFilterTests
     {
         const string input = "/path/File.cs(1,1): error CS0001: msg [P.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("---");
     }
@@ -425,7 +425,7 @@ public class DotnetBuildFilterTests
         // Kills string mutations on SimpleDiagnostic groups (lines 92-94) — verifies exact level, code, message extraction
         const string input = "MSBUILD : warning MSB4011: This is a warning.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Contain("MSB4011");
         result.Should().Contain("This is a warning.");
@@ -439,7 +439,7 @@ public class DotnetBuildFilterTests
         const string input =
             "/path/Foo.cs(42,7): warning CS0168: The variable 'x' is declared but never used [P.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         // Verify the grouped-by-code format includes file:line and em-dash separator
         result.Should().Contain("Foo.cs:42");
@@ -452,7 +452,7 @@ public class DotnetBuildFilterTests
         // Kills string mutation on "dotnet build:" prefix in warnings-only header (line 134)
         const string input = "/path/File.cs(1,1): warning CS0168: unused [P.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Contain("dotnet build:");
     }
@@ -463,7 +463,7 @@ public class DotnetBuildFilterTests
         // Kills string mutation on "dotnet build:" prefix in errors header (line 141)
         const string input = "/path/a.cs(1,1): error CS001: e [P.csproj]\n/path/b.cs(1,1): warning CS002: w [P.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Contain("dotnet build:");
     }
@@ -475,7 +475,7 @@ public class DotnetBuildFilterTests
         // are handled by the project-count branch, not by IsNoiseLine
         const string input = "  MyProject -> /path/MyProject.dll";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Contain("project");
     }
@@ -487,7 +487,7 @@ public class DotnetBuildFilterTests
         // not a diagnostic, and not a simple diagnostic should be silently skipped
         const string input = "Some random informational text\nBuild succeeded.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Be("\u2713 dotnet build\n");
         result.Should().NotContain("random");
@@ -500,7 +500,7 @@ public class DotnetBuildFilterTests
         // should be skipped
         const string input = "MSBUILD : error MSB1001: Unknown switch.\nMSBUILD : error MSB1001: Unknown switch.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         // Only one diagnostic entry for "Unknown switch." in the output
         result.Split("Unknown switch.").Length.Should().Be(2, "duplicate simple diagnostic should be deduplicated");
@@ -513,7 +513,7 @@ public class DotnetBuildFilterTests
         // If simpleKey is empty, dedup won't work correctly
         const string input = "MSBUILD : error MSB1001: First.\nMSBUILD : error MSB1001: Second.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         // Both have different messages but same code — should both appear since key includes message
         result.Should().Contain("First.");
@@ -526,7 +526,7 @@ public class DotnetBuildFilterTests
         // Kills string mutation on BuildContext format (line 164)
         const string input = "  Proj -> /path/Proj.dll\nTime Elapsed 00:00:02.00";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Contain("1 project, 2.00s");
     }
@@ -541,7 +541,7 @@ public class DotnetBuildFilterTests
                              /path/B.cs(2,1): warning CS0219: unused value [P.csproj]
                              """;
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Contain("0 errors, 2 warnings");
     }
@@ -553,7 +553,7 @@ public class DotnetBuildFilterTests
         // but with (false?""  :"s") mutation it would produce "1 warnings" — this kills the inverse
         const string input = "/path/A.cs(1,1): warning CS0168: unused [P.csproj]";
 
-        var result = new DotnetBuildFilter("/path").Apply(input);
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Contain("0 errors, 1 warning");
         result.Should().NotContain("1 warnings");
@@ -566,7 +566,7 @@ public class DotnetBuildFilterTests
         // When level becomes "", the diagnostic is not classified as error → output is success ✓
         const string input = "MSBUILD : error MSB1001: Something went wrong.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Contain("1 error");
         result.Should().NotStartWith("\u2713");
@@ -579,7 +579,7 @@ public class DotnetBuildFilterTests
         // When code becomes "", Top codes line would show empty code instead of MSB1001
         const string input = "MSBUILD : error MSB1001: Something went wrong.";
 
-        var result = new DotnetBuildFilter().Apply(input);
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Contain("MSB1001");
         result.Should().Contain("Top codes: MSB1001");
@@ -592,9 +592,49 @@ public class DotnetBuildFilterTests
         var filter = new DotnetBuildFilter();
         const string input = "Build succeeded.";
 
-        var result = filter.Apply(input);
+        var result = filter.Apply(input, exitCode: 0);
 
         result.Should().Be("\u2713 dotnet build\n");
+    }
+
+    [Fact]
+    public void Apply_NonZeroExitWithNoParsedDiagnostics_ReturnsEmpty()
+    {
+        // Crashed process / unparseable output: 0 errors and 0 warnings were parsed, but the exit
+        // code is non-zero. Returning a "0 errors, 0 warnings" header here would look like a clean
+        // success and would prevent FilteredRunUseCase's raw-tail fallback from ever firing.
+        const string input = "Segmentation fault (core dumped)";
+
+        var result = _sut.Apply(input, exitCode: 139);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_NonZeroExitWarningsOnly_ContainsFailureMarkerAndWarningCode()
+    {
+        // Failed build (non-zero exit) where only warnings were parsed (no errors matched the
+        // regex): rendering "0 errors, N warnings" with no failure marker reads like a near-success
+        // for a run that FAILED. A "✗" line must be prepended so the verdict stays exit-code-derived.
+        const string input =
+            "/repo/App.cs(3,9): warning CS0219: The variable 'x' is assigned but its value is never used [/repo/A.csproj]";
+
+        var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 1);
+
+        result.Should().Contain("✗");
+        result.Should().Contain("CS0219");
+    }
+
+    [Fact]
+    public void Apply_ZeroExitWarningsOnly_DoesNotContainFailureMarker()
+    {
+        // Same warnings-only input but a successful run: must NOT gain a failure marker.
+        const string input =
+            "/repo/App.cs(3,9): warning CS0219: The variable 'x' is assigned but its value is never used [/repo/A.csproj]";
+
+        var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
+
+        result.Should().NotContain("✗");
     }
 
     private static string LoadFixture(string resourceName)

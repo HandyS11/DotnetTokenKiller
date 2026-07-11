@@ -32,7 +32,7 @@ public class FilteredRunUseCaseTests
     {
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 42));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -46,7 +46,7 @@ public class FilteredRunUseCaseTests
     {
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Throws(new InvalidOperationException("boom"));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -62,7 +62,7 @@ public class FilteredRunUseCaseTests
     {
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db error"));
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
@@ -78,7 +78,7 @@ public class FilteredRunUseCaseTests
     {
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("io error"));
 
@@ -94,13 +94,13 @@ public class FilteredRunUseCaseTests
         const string stderr = "\x1b[31mError\x1b[0m\n";
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult(stdout, stderr, 0));
-        _filter.Apply(Arg.Any<string>()).Returns("ok");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("ok");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
-        _filter.Received(1).Apply("Hello\nError\n");
+        _filter.Received(1).Apply("Hello\nError\n", 0);
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class FilteredRunUseCaseTests
         // tiktoken cl100k_base: "1234567890123456" = 6 tokens; "1234" = 2 tokens; saved = 4
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234567890123456", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("1234");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -129,7 +129,7 @@ public class FilteredRunUseCaseTests
     {
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -145,7 +145,7 @@ public class FilteredRunUseCaseTests
     {
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -162,7 +162,7 @@ public class FilteredRunUseCaseTests
         // tiktoken cl100k_base: "1234" = 2 tokens; filter returns "1234567890123456" = 6 tokens; saved = -4
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("1234567890123456");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234567890123456");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -187,7 +187,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("✓ dotnet build\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -210,7 +210,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("✓ dotnet build\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -231,7 +231,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 1));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
@@ -250,7 +250,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 1));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
@@ -269,7 +269,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -288,7 +288,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -310,7 +310,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Throws(new InvalidOperationException("boom"));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -348,7 +348,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -366,7 +366,7 @@ public class FilteredRunUseCaseTests
         // Kills boolean mutation on inputTokens > 0 check (line 146) and arithmetic mutations
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -387,7 +387,7 @@ public class FilteredRunUseCaseTests
         // "Hello world" = 2 tokens; "Hello" = 1 token; saved = 1; pct = 50%
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("Hello world", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("Hello");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("Hello");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -413,7 +413,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -433,7 +433,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw stuff", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -456,7 +456,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("✓ build ok\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -477,7 +477,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -492,7 +492,7 @@ public class FilteredRunUseCaseTests
         // Covers inputTokens == 0 → savingsPct = 0.0 branch (line 126)
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -513,7 +513,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -536,7 +536,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
@@ -556,7 +556,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered result\n");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered result\n");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -578,7 +578,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -600,7 +600,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Throws(new InvalidOperationException("boom"));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -620,7 +620,7 @@ public class FilteredRunUseCaseTests
 
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("\x1b[32mraw fallback\x1b[0m", "", 0));
-        _filter.Apply(Arg.Any<string>()).Throws(new InvalidOperationException("boom"));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -635,7 +635,7 @@ public class FilteredRunUseCaseTests
         // Kills statement mutations on tee invocation (line 97-98)
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 7));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -654,7 +654,7 @@ public class FilteredRunUseCaseTests
         // Kills boolean mutation on config.Tracking.Enabled (line 138)
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -671,7 +671,7 @@ public class FilteredRunUseCaseTests
         // Kills equality mutation: exitCode == 0 → exitCode != 0
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -688,7 +688,7 @@ public class FilteredRunUseCaseTests
         // Kills equality mutation: exitCode == 0 → exitCode != 0
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
-        _filter.Apply(Arg.Any<string>()).Returns("filtered");
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
@@ -697,6 +697,79 @@ public class FilteredRunUseCaseTests
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => !r.Success),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_FailedCommandWithUnparsedOutput_EmitsRawTailAsync()
+    {
+        // Arrange a fake ICommandRunner returning ExitCode=1 and output the filter won't match,
+        // e.g. "MSBUILD : error MSB1009: Project file does not exist."
+        var output = await RunUseCaseAsync(exitCode: 1,
+            rawOutput: "MSBUILD : error MSB1009: Project file does not exist.");
+
+        output.Should().NotBeNullOrWhiteSpace(); // the old behavior returned ""
+        output.Should().Contain("MSB1009"); // the raw tail must surface the reason
+        output.Should().Contain("exit 1");
+    }
+
+    [Fact]
+    public async Task RunAsync_FailedCommandWithCrlfOutput_RawTailHasNoStrayCarriageReturnsAsync()
+    {
+        // On Windows the captured output uses CRLF. Splitting the raw tail on '\n' alone would leave
+        // a trailing '\r' glued to each content line (the other filters guard against this with
+        // TrimEnd('\r')). We can't assert the whole output is '\r'-free: StringBuilder.AppendLine emits
+        // Environment.NewLine, which is "\r\n" on Windows — so instead we assert the platform-independent
+        // guarantee that no content line carries a stray carriage return.
+        var output = await RunUseCaseAsync(exitCode: 1,
+            rawOutput: "MSBUILD : error MSB1009: alpha line\r\nbeta line\r\n");
+
+        output.Should().Contain("MSB1009");
+        output.Should().NotContain("alpha line\r"); // stray CR would survive without the tail TrimEnd
+        output.Should().NotContain("\r\r"); // and no doubled CR where a tail line meets AppendLine's newline
+    }
+
+    private async Task<string> RunUseCaseAsync(int exitCode, string rawOutput)
+    {
+        await using var writer = new StringWriter();
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, _configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(rawOutput, "", exitCode));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        return writer.ToString();
+    }
+
+    [Fact]
+    public async Task RunAsync_FailedRunUnparsedOutputEmojiDisabled_ReplacesFailureMarkerWithFail()
+    {
+        // The raw-tail fallback (triggered by a failed run with unparseable/empty filter output)
+        // prepends a "✗ ... failed (exit N)" marker. When emoji is disabled, that marker must be
+        // substituted just like "✓" is, so no raw "✗" glyph escapes to the terminal.
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        var config = DtkConfig.Default with
+        {
+            Display = new DisplayConfig(Emoji: false)
+        };
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("MSBUILD : error MSB1009: Project file does not exist.", "", 1));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        var output = writer.ToString();
+        output.Should().Contain("FAIL:");
+        output.Should().NotContain("✗");
     }
 
     [Fact]
@@ -714,7 +787,7 @@ public class FilteredRunUseCaseTests
 
             _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
                 .Returns(new CommandResult("output", "", 0));
-            _filter.Apply(Arg.Any<string>()).Returns("✓ build ok\n");
+            _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
             _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
                     Arg.Any<CancellationToken>())
                 .Returns((string?)null);

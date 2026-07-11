@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Infrastructure.Execution;
@@ -18,8 +19,11 @@ public sealed class ProcessCommandRunner : ICommandRunner
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false
+            UseShellExecute = false,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
         };
+        psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         foreach (var arg in args)
         {
             psi.ArgumentList.Add(arg);
@@ -62,6 +66,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
         {
             UseShellExecute = false
         };
+        psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         foreach (var arg in args)
         {
             psi.ArgumentList.Add(arg);

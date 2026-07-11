@@ -116,7 +116,7 @@ public class LargeOutputStressTests
         input.Length.Should().BeGreaterThan(TargetSizeBytes);
 
         var sut = new DotnetBuildFilter();
-        var result = sut.Apply(input);
+        var result = sut.Apply(input, exitCode: 0);
 
         result.Should().NotBeNullOrEmpty();
         result.Length.Should().BeLessThan(input.Length);
@@ -129,7 +129,7 @@ public class LargeOutputStressTests
         input.Length.Should().BeGreaterThan(TargetSizeBytes);
 
         var sut = new DotnetTestFilter();
-        var result = sut.Apply(input);
+        var result = sut.Apply(input, exitCode: 0);
 
         result.Should().NotBeNullOrEmpty();
         result.Length.Should().BeLessThan(input.Length);
@@ -142,7 +142,7 @@ public class LargeOutputStressTests
         input.Length.Should().BeGreaterThan(TargetSizeBytes);
 
         var sut = new DotnetRestoreFilter();
-        var result = sut.Apply(input);
+        var result = sut.Apply(input, exitCode: 0);
 
         result.Should().NotBeNullOrEmpty();
         result.Length.Should().BeLessThan(input.Length);
@@ -155,7 +155,7 @@ public class LargeOutputStressTests
         input.Length.Should().BeGreaterThan(TargetSizeBytes);
 
         var sut = new DotnetCleanFilter();
-        var result = sut.Apply(input);
+        var result = sut.Apply(input, exitCode: 0);
 
         result.Should().NotBeNullOrEmpty();
         result.Length.Should().BeLessThan(input.Length);

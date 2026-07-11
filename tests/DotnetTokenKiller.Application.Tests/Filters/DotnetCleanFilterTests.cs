@@ -11,7 +11,7 @@ public class DotnetCleanFilterTests
     public Task Apply_SuccessFixture_MatchesSnapshot()
     {
         var fixture = LoadFixture("dotnet_clean_raw.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         return Verify(result);
     }
 
@@ -19,7 +19,7 @@ public class DotnetCleanFilterTests
     public void Apply_SuccessFixture_SavingsAtLeast95Percent()
     {
         var fixture = LoadFixture("dotnet_clean_raw.txt");
-        var result = _sut.Apply(fixture);
+        var result = _sut.Apply(fixture, exitCode: 0);
         var savings = 100.0 - (result.Length * 100.0 / fixture.Length);
         savings.Should().BeGreaterThanOrEqualTo(95.0, "clean filter should achieve ≥95% savings");
     }
@@ -33,7 +33,7 @@ public class DotnetCleanFilterTests
     public void Apply_SuccessFixture_DoesNotContainNoiseLine(string noiseLine)
     {
         var fixture = LoadFixture("dotnet_clean_raw.txt");
-        _sut.Apply(fixture).Should().NotContain(noiseLine);
+        _sut.Apply(fixture, exitCode: 0).Should().NotContain(noiseLine);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class DotnetCleanFilterTests
                                  6 Error(s)
                              Time Elapsed 00:00:00.10
                              """;
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
         var outputLines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         var errorLines = outputLines.Where(l =>
                 l.Contains("error", StringComparison.OrdinalIgnoreCase) &&
@@ -73,7 +73,7 @@ public class DotnetCleanFilterTests
                                  1 Error(s)
                              Time Elapsed 00:00:00.05
                              """;
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
         result.Should().Contain("error MSB4019");
         result.Should().NotStartWith("✓");
     }
@@ -82,20 +82,20 @@ public class DotnetCleanFilterTests
     public void Apply_AnsiInput_StripsAnsiBeforeProcessing()
     {
         const string input = "\x1b[32mBuild succeeded.\x1b[0m\n    0 Warning(s)\n    0 Error(s)\n";
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
         result.Should().Be("✓ dotnet clean\n");
     }
 
     [Fact]
     public void Apply_NullInput_ReturnsEmpty()
     {
-        _sut.Apply(null!).Should().BeEmpty();
+        _sut.Apply(null!, exitCode: 0).Should().BeEmpty();
     }
 
     [Fact]
     public void Apply_EmptyInput_ReturnsEmpty()
     {
-        _sut.Apply(string.Empty).Should().BeEmpty();
+        _sut.Apply(string.Empty, exitCode: 0).Should().BeEmpty();
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class DotnetCleanFilterTests
         var filter = new DotnetCleanFilter();
         const string input = "Build succeeded.";
 
-        var result = filter.Apply(input);
+        var result = filter.Apply(input, exitCode: 0);
 
         result.Should().Be("✓ dotnet clean\n");
     }
@@ -116,7 +116,7 @@ public class DotnetCleanFilterTests
         // Kills string mutation on "✓ dotnet clean" (line 23)
         const string input = "Build succeeded.\n    0 Warning(s)\n    0 Error(s)";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be("✓ dotnet clean\n");
     }
@@ -129,7 +129,7 @@ public class DotnetCleanFilterTests
             Enumerable.Range(1, 5).Select(i => $"error MSB400{i}: Error {i}"));
         var input = $"{lines}\nBuild FAILED.";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().NotContain("... and");
         result.Should().Contain("error MSB4001");
@@ -144,7 +144,7 @@ public class DotnetCleanFilterTests
             Enumerable.Range(1, 6).Select(i => $"error MSB400{i}: Error {i}"));
         var input = $"{lines}\nBuild FAILED.";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("... and 1 more error");
         result.Should().NotContain("more errors");
@@ -158,9 +158,25 @@ public class DotnetCleanFilterTests
             Enumerable.Range(1, 7).Select(i => $"error MSB40{i:D2}: Error {i}"));
         var input = $"{lines}\nBuild FAILED.";
 
-        var result = _sut.Apply(input);
+        var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("... and 2 more errors");
+    }
+
+    [Fact]
+    public void Apply_ProjectNameContainingFailed_WithZeroExit_ReportsSuccess()
+    {
+        const string raw = "  FailedRequestTests -> /repo/bin/Debug/FailedRequestTests.dll\nBuild succeeded.";
+        var result = new DotnetCleanFilter().Apply(raw, exitCode: 0);
+        result.Should().StartWith("✓");
+    }
+
+    [Fact]
+    public void Apply_LocalizedFailure_WithNonZeroExit_DoesNotReportSuccess()
+    {
+        const string raw = "Échec de la génération."; // French SDK: no English keywords at all
+        var result = new DotnetCleanFilter().Apply(raw, exitCode: 1);
+        result.Should().NotContain("✓");
     }
 
     private static string LoadFixture(string resourceName)

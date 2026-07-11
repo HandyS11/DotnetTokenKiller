@@ -17,7 +17,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
     /// <summary>Applies the filter to the raw build output.</summary>
     /// <param name="rawOutput">The raw build output to filter.</param>
-    public string Apply(string rawOutput)
+    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    public string Apply(string rawOutput, int exitCode)
     {
         if (string.IsNullOrEmpty(rawOutput))
         {
@@ -29,12 +30,20 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
         var context = BuildContext(projectCount, elapsed);
 
-        if (errors.Count == 0 && warnings.Count == 0)
+        if (exitCode == 0 && errors.Count == 0 && warnings.Count == 0)
         {
             return $"✓ dotnet build{context}\n";
         }
 
-        return FormatDiagnostics(errors, warnings, context);
+        if (exitCode != 0 && errors.Count == 0 && warnings.Count == 0)
+        {
+            // Failed run with nothing parsed (crashed process, localized SDK, garbled output):
+            // degrade to blank so FilteredRunUseCase's raw-tail fallback surfaces the real output
+            // instead of a misleadingly clean "0 errors, 0 warnings" header.
+            return string.Empty;
+        }
+
+        return FormatDiagnostics(errors, warnings, context, exitCode);
     }
 
     private (List<Diagnostic> Diagnostics, int ProjectCount, string Elapsed) ParseLines(string[] lines)
@@ -124,12 +133,21 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         return true;
     }
 
-    private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context)
+    private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context,
+        int exitCode)
     {
         var sb = new StringBuilder();
 
         if (errors.Count == 0)
         {
+            // Non-zero exit with only warnings parsed (no error line matched the regex): a bare
+            // "0 errors, N warnings" header would read like a near-success for a run that FAILED.
+            // Prepend an explicit failure marker so the rendered verdict stays exit-code-derived.
+            if (exitCode != 0)
+            {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"✗ dotnet build failed (exit {exitCode})");
+            }
+
             sb.AppendLine(CultureInfo.InvariantCulture,
                     $"dotnet build: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{context}")
                 .AppendLine(Separator);
