@@ -139,7 +139,9 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         return GetDefaultTeeDir();
     }
 
-    private static string GetDefaultTeeDir()
+    /// <summary>Returns the default tee output directory used when no override is configured.</summary>
+    /// <returns>The platform-default tee directory.</returns>
+    public static string GetDefaultTeeDir()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         return Path.Combine(localAppData, "dtk", "tee");

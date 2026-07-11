@@ -1,7 +1,7 @@
 namespace DotnetTokenKiller.Infrastructure;
 
 /// <summary>Reads dtk environment-variable overrides consistently across the infrastructure layer.</summary>
-internal static class EnvironmentOverride
+public static class EnvironmentOverride
 {
     /// <summary>
     /// Reads an environment variable, returning <see langword="null"/> when it is unset, empty, or

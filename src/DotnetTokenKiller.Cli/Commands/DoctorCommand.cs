@@ -1,5 +1,8 @@
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Infrastructure;
+using DotnetTokenKiller.Infrastructure.Tee;
+using DotnetTokenKiller.Infrastructure.Tracking;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -22,11 +25,13 @@ internal sealed class DoctorCommand(
     {
         var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
 
-        var dbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH")
+        // Resolve exactly as the DI-registered tracker and tee service do, so doctor never
+        // reports a path that differs from the one dtk will actually use.
+        var dbPath = EnvironmentOverride.Read("DTK_DB_PATH")
                      ?? config.Tracking.DbPath
-                     ?? ResolveDefaultDbPath();
+                     ?? SqliteTracker.GetDefaultDbPath();
 
-        var teeDirectory = config.Tee.Directory ?? ResolveDefaultTeeDir();
+        var teeDirectory = config.Tee.Directory ?? FileTeeService.GetDefaultTeeDir();
 
         var checks = await doctorUseCase.RunAsync(dbPath, teeDirectory, cancellationToken)
             .ConfigureAwait(false);
@@ -48,17 +53,5 @@ internal sealed class DoctorCommand(
             : "[red]Some checks failed. Review the output above.[/]");
 
         return allPassed ? 0 : 1;
-    }
-
-    private static string ResolveDefaultDbPath()
-    {
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(baseDir, "dtk", "tracking.db");
-    }
-
-    private static string ResolveDefaultTeeDir()
-    {
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(baseDir, "dtk", "tee");
     }
 }

@@ -76,18 +76,14 @@ public sealed class DoctorUseCase(ICommandRunner runner, IConfigProvider configP
         const string name = "tracking database";
         try
         {
-            var dir = Path.GetDirectoryName(dbPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
-                return new DiagnosticCheck(name, false,
-                    $"Database directory does not exist: {dir}");
-            }
-
             if (File.Exists(dbPath))
             {
                 return new DiagnosticCheck(name, true, $"Found at {dbPath}");
             }
 
+            // A missing database (or its parent directory) is normal on a fresh install: the
+            // tracker creates both on first write. Report it as pending, not a failure —
+            // consistent with the tee-directory check below.
             return new DiagnosticCheck(name, true,
                 $"No data yet — will be created at {dbPath}");
         }
