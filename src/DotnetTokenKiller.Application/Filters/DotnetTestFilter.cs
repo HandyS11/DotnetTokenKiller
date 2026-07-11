@@ -244,9 +244,11 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     {
         var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
 
-        // Any parsed failure header or a non-zero summary failure count always renders — even without
-        // a full summary (crashed host) — so a failed run can never silently collapse to empty.
-        if (state.TotalFailed > 0 || state.Failures.Count > 0)
+        // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
+        // headers alone (crashed host) — always renders its failures, so it can never silently
+        // collapse to empty. The exit code stays the sole verdict: on a zero exit we never emit a
+        // FAILURES report just because a stray line happened to match a failure-shaped pattern.
+        if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
             return FormatFailures(state, elapsed);
         }
@@ -310,8 +312,18 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             sb.AppendLine(CultureInfo.InvariantCulture, $"+{state.Failures.Count - MaxFailures} more failures");
         }
 
+        // Only show the "(N projects, elapsed)" context when a summary was actually parsed. Without
+        // one (crashed host), ProjectCount and elapsed are both 0, and "(0 projects, 0.00s)" reads
+        // as a real — but bogus — measurement.
+        var context = string.Empty;
+        if (state.ProjectCount > 0)
+        {
+            var projectWord = state.ProjectCount == 1 ? "project" : "projects";
+            context = $" ({state.ProjectCount} {projectWord}, {elapsed})";
+        }
+
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})");
+            $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{context}");
 
         return sb.ToString();
     }

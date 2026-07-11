@@ -828,9 +828,23 @@ public class DotnetTestFilterTests
     public void Apply_FailuresParsedButNoSummary_StillReportsFailures()
     {
         // Test host crashed before printing a summary — old code returned "" and lost the failures.
+        // With no summary there is no project/elapsed context, so it must not fabricate "0 projects".
         const string raw = "  Failed MyTests.T1 [15 ms]\n  Error Message:\n   boom";
         var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
         result.Should().Contain("T1").And.Contain("boom");
+        result.Should().NotContain("0 projects").And.NotContain("0.00s");
+    }
+
+    [Fact]
+    public void Apply_ZeroExit_StrayFailureShapedLine_IsNotReportedAsFailure()
+    {
+        // A passing run (exit 0) whose output coincidentally contains a failure-shaped line must
+        // never be rendered as failed — the exit code is the sole verdict.
+        const string raw =
+            "  Failed to connect [500 ms]\nPassed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 10 ms - Tests.dll";
+        var result = new DotnetTestFilter().Apply(raw, exitCode: 0);
+        result.Should().StartWith("✓").And.Contain("3 passed");
+        result.Should().NotContain("FAILURES");
     }
 
     [Fact]
