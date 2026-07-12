@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
-    <Version>0.1.0</Version>
+    <Version>0.5.0</Version>
     <IsPackable>false</IsPackable>
 
     <!-- Code Analysis & Quality -->
@@ -16,7 +16,6 @@
     <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);NU1901;NU1902;NU1903;NU1904</NoWarn>
   </PropertyGroup>
 
   <!-- Code Analyzers -->
