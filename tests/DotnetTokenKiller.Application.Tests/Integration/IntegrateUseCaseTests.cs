@@ -20,13 +20,15 @@ public class IntegrateUseCaseTests
     }
 
     [Fact]
-    public async Task RunAsync_UnknownProvider_ThrowsArgumentException()
+    public async Task RunAsync_UnknownProvider_ThrowsInvalidOperationException()
     {
+        // Must match the exception type IntegrateCommandBase actually catches, or an unknown
+        // provider crashes the CLI with an unhandled exception instead of a friendly error message.
         var sut = new IntegrateUseCase([new StubIntegrator("claude")]);
 
         var act = () => sut.RunAsync("copilot", "/some/dir", false, CancellationToken.None);
 
-        await act.Should().ThrowAsync<ArgumentException>()
+        await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*copilot*");
     }
 

@@ -59,6 +59,66 @@ public class IntegrateCommandTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_NoForce_SkippedFiles_ShowForceHint()
+    {
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [],
+            [],
+            [$"{dir}/.claude/settings.json"]);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Directory = dir,
+            Force = false
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain("use --force to overwrite");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ForceFlag_SkippedFiles_DoNotShowForceHint()
+    {
+        // Behavior (a): once --force was already passed, the "use --force to overwrite" hint is
+        // never honest — any leftover skip (e.g. an idempotent hook merge) isn't fixed by force.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [],
+            [],
+            [$"{dir}/.claude/settings.json"]);
+
+        var (command, console) = Create("claude", result);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Directory = dir,
+            Force = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("skipped");
+        console.Output.Should().NotContain("use --force to overwrite");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownProvider_PrintsErrorAndReturnsExitCodeOne()
+    {
+        // Exception-type alignment: IntegrateUseCase.RunAsync now throws InvalidOperationException,
+        // which IntegrateCommandBase's catch block turns into a friendly error message instead of
+        // letting it propagate as an unhandled exception.
+        var console = new TestConsole();
+        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([]), console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("Error:");
+        console.Output.Should().Contain("claude");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_SomeFilesUpdated_ShowsUpdatedLinesAndDoneMessage()
     {
         const string dir = "/project";

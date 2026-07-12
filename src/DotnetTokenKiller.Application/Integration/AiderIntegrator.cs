@@ -43,26 +43,14 @@ public sealed class AiderIntegrator : IProviderIntegrator
         """;
 
     private const string InstructionsMarkdown =
-        """
+        $"""
         # DotnetTokenKiller (dtk)
 
-        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
-        `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+        {IntegrationInstructions.Intro}
 
         ## Usage
 
-        ```sh
-        dtk dotnet build MyProject.slnx
-        dtk dotnet test --filter "Category=Unit"
-        dtk dotnet restore
-        dtk dotnet clean
-        dtk dotnet format
-        dtk dotnet format --verify-no-changes
-        ```
-
-        - All arguments and flags are forwarded to `dotnet` unchanged.
-        - Exit codes are preserved — CI pipelines work correctly.
-        - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
+        {IntegrationInstructions.UsageBody}
         """;
 
     /// <inheritdoc/>
@@ -96,10 +84,12 @@ public sealed class AiderIntegrator : IProviderIntegrator
     /// outside the dtk-managed section (both flow style <c>read: [a, b]</c> and block style
     /// <c>read:\n  - a</c>) instead of letting the dtk section declare a second top-level
     /// <c>read:</c> key that would shadow it.
-    /// When the file already contains the section marker and <paramref name="force"/> is
-    /// <see langword="false"/>, <see cref="IntegratorHelpers.WriteSectionBasedFileAsync"/> will
-    /// skip the file — so this method leaves it completely untouched (no merge, no write),
-    /// honoring the "Skipped means no changes" contract.
+    /// The skip decision is delegated to <see cref="IntegratorHelpers.ShouldSkipWrite"/> — the same
+    /// predicate <see cref="IntegratorHelpers.WriteSectionBasedFileAsync"/> itself consults — so the
+    /// two can never drift apart. When it says the write will be skipped (an existing file without
+    /// <paramref name="force"/>, regardless of whether the dtk marker is present), this method
+    /// leaves the file completely untouched (no merge, no write), honoring the "Skipped means no
+    /// changes" contract.
     /// </summary>
     /// <param name="confPath">Path to the Aider configuration file.</param>
     /// <param name="force">Whether the integration is running with the force flag.</param>
@@ -114,14 +104,14 @@ public sealed class AiderIntegrator : IProviderIntegrator
         bool force,
         CancellationToken cancellationToken)
     {
-        if (!File.Exists(confPath))
+        var exists = File.Exists(confPath);
+        if (!exists || IntegratorHelpers.ShouldSkipWrite(exists, force))
         {
             return AiderConfSection;
         }
 
         var content = await File.ReadAllTextAsync(confPath, cancellationToken).ConfigureAwait(false);
-        var sectionWriteWillSkip = content.Contains(SectionMarker, StringComparison.Ordinal) && !force;
-        if (sectionWriteWillSkip || !TryMergeExistingReadKey(ref content))
+        if (!TryMergeExistingReadKey(ref content))
         {
             return AiderConfSection;
         }

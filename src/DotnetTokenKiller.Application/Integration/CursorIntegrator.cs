@@ -12,7 +12,7 @@ namespace DotnetTokenKiller.Application.Integration;
 public sealed class CursorIntegrator : IProviderIntegrator
 {
     private const string CursorRule =
-        """
+        $"""
         ---
         description: Use dtk instead of dotnet for build, test, restore, clean, and format commands
         globs:
@@ -25,23 +25,11 @@ public sealed class CursorIntegrator : IProviderIntegrator
 
         # DotnetTokenKiller (dtk)
 
-        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
-        `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+        {IntegrationInstructions.Intro}
 
         ## Usage
 
-        ```sh
-        dtk dotnet build MyProject.slnx
-        dtk dotnet test --filter "Category=Unit"
-        dtk dotnet restore
-        dtk dotnet clean
-        dtk dotnet format
-        dtk dotnet format --verify-no-changes
-        ```
-
-        - All arguments and flags are forwarded to `dotnet` unchanged.
-        - Exit codes are preserved — CI pipelines work correctly.
-        - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
+        {IntegrationInstructions.UsageBody}
         """;
 
     /// <inheritdoc/>

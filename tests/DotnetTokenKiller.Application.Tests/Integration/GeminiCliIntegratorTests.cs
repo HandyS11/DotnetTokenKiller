@@ -202,12 +202,26 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_ExistingGeminiMdWithoutMarker_AppendsDtkSection()
+    public async Task IntegrateAsync_ExistingGeminiMdWithoutMarker_NoForce_SkipsFile()
+    {
+        Directory.CreateDirectory(_tempDir);
+        const string original = "# My Project\n\nDo stuff.";
+        await File.WriteAllTextAsync(GeminiMdPath, original);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.SkippedFiles.Should().Contain(GeminiMdPath);
+        var content = await File.ReadAllTextAsync(GeminiMdPath);
+        content.Should().Be(original);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_ExistingGeminiMdWithoutMarker_WithForce_AppendsDtkSection()
     {
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(GeminiMdPath, "# My Project\n\nDo stuff.");
 
-        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(GeminiMdPath);
 
@@ -234,12 +248,12 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_WhitespaceOnlyGeminiMd_CreatesDtkSection()
+    public async Task IntegrateAsync_WhitespaceOnlyGeminiMd_WithForce_CreatesDtkSection()
     {
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(GeminiMdPath, "   \n  \n  ");
 
-        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(GeminiMdPath);
         var content = await File.ReadAllTextAsync(GeminiMdPath);
@@ -251,5 +265,27 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     public void ProviderName_ReturnsGemini()
     {
         _sut.ProviderName.Should().Be("gemini");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_SettingsJson_RegistersHookViaGeminiProjectDirEnvVar()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(SettingsPath);
+        var root = JsonNode.Parse(json) as JsonObject;
+
+        var command = root!["hooks"]!["BeforeTool"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
+        command.Should().Be("""python3 "$GEMINI_PROJECT_DIR"/.gemini/hooks/dotnet-to-dtk.py""");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_GeminiMd_DocumentsWindowsPythonCaveat()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(GeminiMdPath);
+        content.Should().Contain("python3");
+        content.Should().Contain("Windows");
     }
 }

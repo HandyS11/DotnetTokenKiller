@@ -84,9 +84,30 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task WriteSectionBasedFileAsync_ExistingWithoutMarker_AppendsSection()
+    public async Task WriteSectionBasedFileAsync_ExistingWithoutMarker_NoForce_SkipsFile()
     {
+        // Decision: section-append without --force on an existing user file must SKIP, matching
+        // WriteFileAsync's documented contract, instead of silently appending into it.
         var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string original = "# My Instructions\n\nExisting content.";
+        await File.WriteAllTextAsync(path, original);
+        const string section = "<!-- dtk -->\nDTK content\n<!-- /dtk -->";
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(path);
+        content.Should().Be(original);
+        context.Skipped.Should().ContainSingle();
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_ExistingWithoutMarker_WithForce_AppendsSection()
+    {
+        var context = new IntegrationContext(true);
         var path = Path.Combine(_tempDir, "instructions.md");
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(path, "# My Instructions\n\nExisting content.");
@@ -139,9 +160,11 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task WriteSectionBasedFileAsync_WhitespaceOnlyFile_CreatesSection()
+    public async Task WriteSectionBasedFileAsync_WhitespaceOnlyFile_WithForce_CreatesSection()
     {
-        var context = new IntegrationContext(false);
+        // A whitespace-only file still "exists", so this requires --force like any other
+        // pre-existing file (matching WriteFileAsync's contract).
+        var context = new IntegrationContext(true);
         var path = Path.Combine(_tempDir, "instructions.md");
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(path, "   \n  \n  ");
@@ -153,6 +176,24 @@ public sealed class IntegratorHelpersTests : IDisposable
         var content = await File.ReadAllTextAsync(path);
         content.Should().Contain("<!-- dtk -->");
         context.Updated.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_WhitespaceOnlyFile_NoForce_SkipsFile()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string original = "   \n  \n  ";
+        await File.WriteAllTextAsync(path, original);
+        const string section = "<!-- dtk -->\nDTK\n<!-- /dtk -->";
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(path);
+        content.Should().Be(original);
+        context.Skipped.Should().ContainSingle();
     }
 
     // --- MergeJsonSettingsAsync ---
@@ -440,8 +481,13 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task WriteSectionBasedFileAsync_ExistingWithStartMarkerButMissingEndMarker_ReplacesFromMarkerOnward()
+    public async Task WriteSectionBasedFileAsync_ExistingWithStartMarkerButMissingEndMarker_PreservesTrailingContent()
     {
+        // A missing end marker (e.g. a user accidentally deleted just the "<!-- /dtk -->" line)
+        // means the dtk-managed span can no longer be reliably identified. The fix must never
+        // delete content in that situation — it inserts the fresh section where the begin marker
+        // was and leaves everything that followed untouched, even though that leaves the stale
+        // "incomplete section" text dangling without markers around it.
         var context = new IntegrationContext(true);
         var path = Path.Combine(_tempDir, "instructions.md");
         Directory.CreateDirectory(_tempDir);
@@ -453,10 +499,34 @@ public sealed class IntegratorHelpersTests : IDisposable
             path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(path);
-        content.Should().NotContain("OLD");
         content.Should().Contain("# Header");
         content.Should().Contain("NEW");
         content.Should().Contain("<!-- /dtk -->");
+        content.Should().Contain("OLD incomplete section", "damaged old content must be preserved, not deleted");
+        context.Updated.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_MissingEndMarker_PreservesRealUserContentAfterOldMarker()
+    {
+        // Simulates a user who deleted only the "<!-- /dtk -->" line, leaving their own content
+        // immediately after the (now unterminated) dtk section. That real content must survive.
+        var context = new IntegrationContext(true);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(
+            path,
+            "# Header\n<!-- dtk -->\nOLD\n\n## My Own Notes\nDon't delete me!");
+        const string section = "<!-- dtk -->\nNEW\n<!-- /dtk -->";
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(path);
+        content.Should().Contain("# Header");
+        content.Should().Contain("NEW");
+        content.Should().Contain("## My Own Notes");
+        content.Should().Contain("Don't delete me!");
         context.Updated.Should().ContainSingle();
     }
 
@@ -537,5 +607,19 @@ public sealed class IntegratorHelpersTests : IDisposable
         content.Should().Contain("python3 hook.py");
         content.Should().Contain("other-hook.py");
         context.Updated.Should().ContainSingle();
+    }
+
+    // --- ShouldSkipWrite ---
+    // Single source of truth consumed by WriteFileAsync, WriteSectionBasedFileAsync, and
+    // AiderIntegrator.PrepareConfSectionAsync so their skip decisions can never drift apart.
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public void ShouldSkipWrite_ReturnsExpected(bool fileExists, bool force, bool expected)
+    {
+        IntegratorHelpers.ShouldSkipWrite(fileExists, force).Should().Be(expected);
     }
 }

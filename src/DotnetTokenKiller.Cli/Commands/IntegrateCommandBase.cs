@@ -56,8 +56,12 @@ internal abstract class IntegrateCommandBase(
 
         foreach (var file in result.SkippedFiles)
         {
-            console.MarkupLine(
-                $"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))} [grey](use --force to overwrite)[/]");
+            // Once --force was already passed, telling the user to "use --force to overwrite" is
+            // never true: WriteFileAsync/WriteSectionBasedFileAsync always honor force, so any
+            // remaining skip (e.g. a hook already registered) is a force-independent no-op, not
+            // something a repeated --force would change.
+            var hint = settings.Force ? string.Empty : " [grey](use --force to overwrite)[/]";
+            console.MarkupLine($"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))}{hint}");
         }
 
         if (result.CreatedFiles.Count == 0 && result.UpdatedFiles.Count == 0 && result.SkippedFiles.Count > 0)

@@ -83,12 +83,26 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FileWithoutMarker_AppendsDtkSection()
+    public async Task IntegrateAsync_FileWithoutMarker_NoForce_SkipsFile()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
+        const string original = "# My Rules\n\nDo stuff.";
+        await File.WriteAllTextAsync(InstructionsPath, original);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.SkippedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
+        var content = await File.ReadAllTextAsync(InstructionsPath);
+        content.Should().Be(original);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_FileWithoutMarker_WithForce_AppendsDtkSection()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "# My Rules\n\nDo stuff.");
 
-        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
         result.CreatedFiles.Should().BeEmpty();
@@ -100,8 +114,10 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FileWithMarkerButNoEndMarker_ReplacesFromStartMarker()
+    public async Task IntegrateAsync_FileWithMarkerButNoEndMarker_PreservesTrailingContent()
     {
+        // A missing end marker means the dtk-managed span can't be reliably identified — the fix
+        // must preserve whatever followed the begin marker rather than deleting it.
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "# My Rules\n\n<!-- dtk -->\nOrphaned content");
 
@@ -112,7 +128,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
         var content = await File.ReadAllTextAsync(InstructionsPath);
         content.Should().Contain("# My Rules");
         content.Should().Contain("<!-- dtk -->");
-        content.Should().NotContain("Orphaned content");
+        content.Should().Contain("Orphaned content");
     }
 
     [Fact]
@@ -122,12 +138,12 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_WhitespaceOnlyFileWithoutMarker_CreatesCopilotSection()
+    public async Task IntegrateAsync_WhitespaceOnlyFileWithoutMarker_WithForce_CreatesCopilotSection()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "   \n  \n  ");
 
-        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
         var content = await File.ReadAllTextAsync(InstructionsPath);

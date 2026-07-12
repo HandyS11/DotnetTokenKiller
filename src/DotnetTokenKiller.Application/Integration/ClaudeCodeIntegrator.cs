@@ -13,7 +13,12 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </remarks>
 public sealed class ClaudeCodeIntegrator : IProviderIntegrator
 {
-    private const string HookCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
+    /// <summary>
+    /// Quoted and rooted at <c>$CLAUDE_PROJECT_DIR</c> (the absolute project root Claude Code
+    /// exports to hooks) so the hook resolves correctly regardless of Claude's current working
+    /// directory.
+    /// </summary>
+    private const string HookCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
 
     private const string SkillMarkdown =
         """
@@ -62,6 +67,7 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
         - Exit codes preserved — CI pipelines work correctly
         - Works with xUnit, NUnit, MSTest, and Reqnroll
         - Run `dtk dotnet clean` first for a full warning report (incremental builds skip unchanged files)
+        - The PreToolUse hook shells out to `python3`; on Windows (where the launcher is usually `python`, not `python3`), edit the `command` in `.claude/settings.json` if the hook doesn't fire
 
         ## Token Savings
 

@@ -23,7 +23,7 @@ internal static class IntegratorHelpers
     {
         var exists = File.Exists(path);
 
-        if (exists && !context.Force)
+        if (ShouldSkipWrite(exists, context.Force))
         {
             context.Skipped.Add(path);
             return;
@@ -35,9 +35,24 @@ internal static class IntegratorHelpers
     }
 
     /// <summary>
+    /// Decides whether a write to an existing file should be skipped: <see langword="true"/>
+    /// whenever <paramref name="fileExists"/> and <paramref name="force"/> is <see langword="false"/>.
+    /// This is the single source of truth for "existing file, no --force ⇒ leave it alone",
+    /// consumed by <see cref="WriteFileAsync"/>, <see cref="WriteSectionBasedFileAsync"/>, and
+    /// <see cref="AiderIntegrator"/>'s merge into an existing external <c>read:</c> key — so those
+    /// decisions can never drift apart.
+    /// </summary>
+    /// <param name="fileExists">Whether the target file already exists.</param>
+    /// <param name="force">Whether the integration is running with the force flag.</param>
+    internal static bool ShouldSkipWrite(bool fileExists, bool force) => fileExists && !force;
+
+    /// <summary>
     /// Writes a file that uses begin/end section markers to track a dtk-managed block.
-    /// If the file already contains the section marker: replaces when <c>context.Force</c> is <see langword="true"/>, skips otherwise.
-    /// If the file exists but has no marker: appends the section.
+    /// If the file already exists — whether or not it contains the section marker — and
+    /// <c>context.Force</c> is <see langword="false"/>: skips, leaving the file completely
+    /// untouched (matching <see cref="WriteFileAsync"/>'s contract).
+    /// If the file already exists and <c>context.Force</c> is <see langword="true"/>: replaces the
+    /// dtk-managed span when the marker is present, or appends the section when it is not.
     /// If the file does not exist: creates it with the section as the only content.
     /// </summary>
     /// <param name="path">Path to the target file.</param>
@@ -56,36 +71,35 @@ internal static class IntegratorHelpers
     {
         var exists = File.Exists(path);
 
-        if (exists)
+        if (ShouldSkipWrite(exists, context.Force))
         {
-            var current = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-            if (current.Contains(sectionMarker, StringComparison.Ordinal))
-            {
-                if (!context.Force)
-                {
-                    context.Skipped.Add(path);
-                    return;
-                }
-
-                var replaced = ReplaceDtkSection(current, sectionMarker, sectionEndMarker, section);
-                await File.WriteAllTextAsync(path, replaced, cancellationToken).ConfigureAwait(false);
-                context.Updated.Add(path);
-                return;
-            }
-
-            var trimmed = current.TrimEnd();
-            var appended = string.IsNullOrWhiteSpace(trimmed)
-                ? section
-                : trimmed + Environment.NewLine + section;
-            await File.WriteAllTextAsync(path, appended, cancellationToken).ConfigureAwait(false);
-            context.Updated.Add(path);
+            context.Skipped.Add(path);
+            return;
         }
-        else
+
+        if (!exists)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             await File.WriteAllTextAsync(path, section, cancellationToken).ConfigureAwait(false);
             context.Created.Add(path);
+            return;
         }
+
+        var current = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        var updated = current.Contains(sectionMarker, StringComparison.Ordinal)
+            ? ReplaceDtkSection(current, sectionMarker, sectionEndMarker, section)
+            : AppendSection(current, section);
+
+        await File.WriteAllTextAsync(path, updated, cancellationToken).ConfigureAwait(false);
+        context.Updated.Add(path);
+    }
+
+    private static string AppendSection(string current, string section)
+    {
+        var trimmed = current.TrimEnd();
+        return string.IsNullOrWhiteSpace(trimmed)
+            ? section
+            : trimmed + Environment.NewLine + section;
     }
 
     private static string ReplaceDtkSection(string content, string marker, string endMarker, string section)
@@ -95,7 +109,12 @@ internal static class IntegratorHelpers
 
         if (end < 0)
         {
-            return content[..start] + section;
+            // The begin marker is present but the end marker is missing (e.g. a user accidentally
+            // deleted just the "<!-- /dtk -->" line). The dtk-managed span can no longer be
+            // reliably identified, so don't guess how far it extends: insert the fresh section in
+            // place of the begin marker and preserve everything that followed it (stale dtk body
+            // text and/or real user content) immediately after, rather than deleting it.
+            return content[..start] + section + content[(start + marker.Length)..];
         }
 
         return content[..start] + section + content[(end + endMarker.Length)..];
