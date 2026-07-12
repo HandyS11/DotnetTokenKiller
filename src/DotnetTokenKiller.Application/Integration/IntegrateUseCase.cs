@@ -18,7 +18,7 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
     /// <param name="force">When <see langword="true"/>, overwrite existing files.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The integration result.</returns>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="providerName"/> is unknown.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="providerName"/> is unknown.</exception>
     public Task<IntegrationResult> RunAsync(
         string providerName,
         string directory,
@@ -27,9 +27,12 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
     {
         if (!_integrators.TryGetValue(providerName, out var integrator))
         {
-            throw new ArgumentException(
-                $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}",
-                nameof(providerName));
+            // InvalidOperationException (not ArgumentException): IntegrateCommand validates
+            // settings.Provider against AvailableProviders before calling RunAsync, so this path
+            // is a defense-in-depth guard for other callers of this public use case rather than
+            // the CLI's primary error path.
+            throw new InvalidOperationException(
+                $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}");
         }
 
         return integrator.IntegrateAsync(directory, force, cancellationToken);

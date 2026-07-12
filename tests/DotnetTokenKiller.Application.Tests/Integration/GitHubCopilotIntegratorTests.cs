@@ -83,12 +83,26 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FileWithoutMarker_AppendsDtkSection()
+    public async Task IntegrateAsync_FileWithoutMarker_NoForce_SkipsFile()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
+        const string original = "# My Rules\n\nDo stuff.";
+        await File.WriteAllTextAsync(InstructionsPath, original);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.SkippedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
+        var content = await File.ReadAllTextAsync(InstructionsPath);
+        content.Should().Be(original);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_FileWithoutMarker_WithForce_AppendsDtkSection()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "# My Rules\n\nDo stuff.");
 
-        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
         result.CreatedFiles.Should().BeEmpty();
@@ -100,8 +114,10 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FileWithMarkerButNoEndMarker_ReplacesFromStartMarker()
+    public async Task IntegrateAsync_FileWithMarkerButNoEndMarker_PreservesTrailingContent()
     {
+        // A missing end marker means the dtk-managed span can't be reliably identified — the fix
+        // must preserve whatever followed the begin marker rather than deleting it.
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "# My Rules\n\n<!-- dtk -->\nOrphaned content");
 
@@ -112,7 +128,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
         var content = await File.ReadAllTextAsync(InstructionsPath);
         content.Should().Contain("# My Rules");
         content.Should().Contain("<!-- dtk -->");
-        content.Should().NotContain("Orphaned content");
+        content.Should().Contain("Orphaned content");
     }
 
     [Fact]
@@ -122,12 +138,48 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_WhitespaceOnlyFileWithoutMarker_CreatesCopilotSection()
+    public async Task IntegrateAsync_FreshDirectory_RendersExactSection()
+    {
+        // The six providers sharing IntegrationInstructions (Aider, Cursor, Gemini CLI, GitHub
+        // Copilot, JetBrains AI, Windsurf) are otherwise guarded only by .Contain(...)
+        // assertions, which would miss a whitespace/interpolation regression in
+        // IntegrationInstructions.Intro/UsageBody or in how this integrator composes them
+        // around its markers. This pins the fully rendered output byte-for-byte for one of them.
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(InstructionsPath);
+
+        content.Should().Be(
+            """
+            <!-- dtk -->
+            ## DotnetTokenKiller (dtk)
+
+            Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+            `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+
+            ```sh
+            dtk dotnet build MyProject.slnx
+            dtk dotnet test --filter "Category=Unit"
+            dtk dotnet restore
+            dtk dotnet clean
+            dtk dotnet format
+            dtk dotnet format --verify-no-changes
+            ```
+
+            - All arguments and flags are forwarded to `dotnet` unchanged.
+            - Exit codes are preserved — CI pipelines work correctly.
+            - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
+            <!-- /dtk -->
+            """);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_WhitespaceOnlyFileWithoutMarker_WithForce_CreatesCopilotSection()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);
         await File.WriteAllTextAsync(InstructionsPath, "   \n  \n  ");
 
-        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
         var content = await File.ReadAllTextAsync(InstructionsPath);

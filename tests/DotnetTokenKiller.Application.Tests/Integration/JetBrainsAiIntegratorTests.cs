@@ -66,12 +66,26 @@ public sealed class JetBrainsAiIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_ExistingGuidelinesWithoutMarker_AppendsSection()
+    public async Task IntegrateAsync_ExistingGuidelinesWithoutMarker_NoForce_SkipsFile()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(GuidelinesPath)!);
+        const string original = "# My Project Guidelines\n\nDo stuff.";
+        await File.WriteAllTextAsync(GuidelinesPath, original);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.SkippedFiles.Should().Contain(GuidelinesPath);
+        var content = await File.ReadAllTextAsync(GuidelinesPath);
+        content.Should().Be(original);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_ExistingGuidelinesWithoutMarker_WithForce_AppendsSection()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(GuidelinesPath)!);
         await File.WriteAllTextAsync(GuidelinesPath, "# My Project Guidelines\n\nDo stuff.");
 
-        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.UpdatedFiles.Should().Contain(GuidelinesPath);
         var content = await File.ReadAllTextAsync(GuidelinesPath);

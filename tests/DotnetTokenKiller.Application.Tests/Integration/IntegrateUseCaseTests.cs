@@ -20,13 +20,15 @@ public class IntegrateUseCaseTests
     }
 
     [Fact]
-    public async Task RunAsync_UnknownProvider_ThrowsArgumentException()
+    public async Task RunAsync_UnknownProvider_ThrowsInvalidOperationException()
     {
+        // Defense-in-depth: IntegrateCommand pre-validates the provider via AvailableProviders,
+        // but RunAsync must still fail safely for any other caller of this public use case.
         var sut = new IntegrateUseCase([new StubIntegrator("claude")]);
 
         var act = () => sut.RunAsync("copilot", "/some/dir", false, CancellationToken.None);
 
-        await act.Should().ThrowAsync<ArgumentException>()
+        await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*copilot*");
     }
 

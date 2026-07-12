@@ -14,30 +14,25 @@ namespace DotnetTokenKiller.Application.Integration;
 public sealed class GeminiCliIntegrator : IProviderIntegrator
 {
     private const string SectionMarker = "<!-- dtk -->";
+    private const string SectionEndMarker = "<!-- /dtk -->";
 
-    private const string HookCommand = "python3 .gemini/hooks/dotnet-to-dtk.py";
+    /// <summary>
+    /// Quoted and rooted at <c>$GEMINI_PROJECT_DIR</c> (the absolute project root Gemini CLI
+    /// exports to hooks) so the hook resolves correctly regardless of the CLI's current working
+    /// directory.
+    /// </summary>
+    private const string HookCommand = """python3 "$GEMINI_PROJECT_DIR"/.gemini/hooks/dotnet-to-dtk.py""";
 
     private const string GeminiSection =
-        """
-        <!-- dtk -->
+        $"""
+        {SectionMarker}
         ## DotnetTokenKiller (dtk)
 
-        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
-        `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+        {IntegrationInstructions.Markdown}
 
-        ```sh
-        dtk dotnet build MyProject.slnx
-        dtk dotnet test --filter "Category=Unit"
-        dtk dotnet restore
-        dtk dotnet clean
-        dtk dotnet format
-        dtk dotnet format --verify-no-changes
-        ```
-
-        - All arguments and flags are forwarded to `dotnet` unchanged.
-        - Exit codes are preserved — CI pipelines work correctly.
-        - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
-        <!-- /dtk -->
+        The `BeforeTool` hook shells out to `python3`; on Windows (where the launcher is usually
+        `python`, not `python3`), edit the hook command in `.gemini/settings.json` if it doesn't fire.
+        {SectionEndMarker}
         """;
 
     /// <inheritdoc/>
@@ -53,7 +48,7 @@ public sealed class GeminiCliIntegrator : IProviderIntegrator
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             Path.Combine(directory, "GEMINI.md"),
-            SectionMarker, "<!-- /dtk -->", GeminiSection,
+            SectionMarker, SectionEndMarker, GeminiSection,
             context, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.WriteHookAndSettingsAsync(

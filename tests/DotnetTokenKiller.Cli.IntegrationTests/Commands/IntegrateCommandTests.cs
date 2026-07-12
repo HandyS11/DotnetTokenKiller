@@ -27,6 +27,7 @@ public class IntegrateCommandTests
 
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -37,8 +38,12 @@ public class IntegrateCommandTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AllFilesSkipped_ShowsAlreadyIntegratedMessage()
+    public async Task ExecuteAsync_AllFilesSkipped_NoForce_DoesNotClaimAlreadyIntegratedAndMentionsForce()
     {
+        // Honest summaries: under skip-unless-force, a skipped file (e.g. a pre-existing
+        // .aider.conf.yml without the dtk read: key) might never have been functionally
+        // integrated. The CLI cannot distinguish that from a file that already carries dtk's
+        // exact managed content, so without --force it must never claim completion.
         const string dir = "/project";
         var result = new IntegrationResult(
             [],
@@ -49,13 +54,222 @@ public class IntegrateCommandTests
 
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
-            Directory = dir
+            Provider = "claude",
+            Directory = dir,
+            Force = false
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("skipped");
+        console.Output.Should().NotContain("Already integrated");
+        console.Output.Should().NotContain("Done.");
+        console.Output.Should().Contain("--force");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AllFilesSkipped_WithForce_ShowsAlreadyIntegratedMessage()
+    {
+        // Under --force, ShouldSkipWrite-based skips can never fire (they require !force), so any
+        // remaining skip must come from content-based detection (e.g. the hook command is already
+        // registered) — "Already integrated" is honest here.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [],
+            [],
+            [$"{dir}/.claude/settings.json"]);
+
+        var (command, console) = Create("claude", result);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir,
+            Force = true
         }, CancellationToken.None);
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("skipped");
         console.Output.Should().Contain("Already integrated");
         console.Output.Should().NotContain("Done.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NoForce_SomeCreatedSomeSkipped_DoesNotClaimDoneAndMentionsForce()
+    {
+        // Reproduces the dishonest "Done." from a pre-existing .aider.conf.yml: the instructions
+        // file is newly created, but the conf file (the only functional wiring) is skipped because
+        // it pre-existed without --force. Claiming "Done." here is false — the integration does
+        // not actually work yet.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [$"{dir}/.aider-dtk-instructions.md"],
+            [],
+            [$"{dir}/.aider.conf.yml"]);
+
+        var (command, console) = Create("aider", result);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "aider",
+            Directory = dir,
+            Force = false
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("created");
+        console.Output.Should().Contain("skipped");
+        console.Output.Should().NotContain("Done.");
+        console.Output.Should().Contain("--force");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NoForce_SkippedFiles_ShowForceHint()
+    {
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [],
+            [],
+            [$"{dir}/.claude/settings.json"]);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir,
+            Force = false
+        }, CancellationToken.None);
+
+        // Force *merges/appends* the managed section and preserves user content — it never
+        // overwrites — so the hint must not claim otherwise.
+        console.Output.Should().Contain("use --force to integrate into existing files");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ForceFlag_SkippedFiles_DoNotShowForceHint()
+    {
+        // Behavior (a): once --force was already passed, the "use --force" hint is never honest —
+        // any leftover skip (e.g. an idempotent hook merge) isn't fixed by force.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [],
+            [],
+            [$"{dir}/.claude/settings.json"]);
+
+        var (command, console) = Create("claude", result);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir,
+            Force = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("skipped");
+        console.Output.Should().NotContain("use --force to integrate into existing files");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NoProvidersRegistered_PrintsErrorAndReturnsExitCodeOne()
+    {
+        // With an empty provider registry, every provider name is unknown, so IntegrateCommand's
+        // validation against AvailableProviders produces a friendly CLI error and exit 1 rather than
+        // an unhandled exception. (A genuinely-unknown provider against a populated registry is
+        // covered by ExecuteAsync_UnknownProvider_ListsAvailableProviders.)
+        var console = new TestConsole();
+        var command = new IntegrateCommand(new IntegrateUseCase([]), console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude"
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("Error:");
+        console.Output.Should().Contain("claude");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownProvider_ListsAvailableProviders()
+    {
+        var console = new TestConsole();
+        var command = new IntegrateCommand(
+            new IntegrateUseCase(
+            [
+                new StubIntegrator("claude"),
+                new StubIntegrator("copilot")
+            ]),
+            console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "bogus"
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("Error:");
+        console.Output.Should().Contain("bogus");
+        console.Output.Should().Contain("claude");
+        console.Output.Should().Contain("copilot");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MalformedSettingsJson_PrintsErrorAndReturnsExitCodeOne()
+    {
+        // IntegratorHelpers.MergeJsonSettingsAsync throws InvalidOperationException on a
+        // malformed/non-object settings.json. IntegrateCommand must catch it and turn it into a
+        // friendly exit-1 error instead of letting it escape to Spectre's default handler (exit 255).
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-malformed-settings-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".claude"));
+        await File.WriteAllTextAsync(Path.Combine(dir, ".claude", "settings.json"), "not json at all {{{");
+
+        try
+        {
+            var console = new TestConsole();
+            var command = new IntegrateCommand(new IntegrateUseCase([new ClaudeCodeIntegrator()]), console);
+
+            var exitCode = await command.RunAsync(new IntegrateCommandSettings
+            {
+                Provider = "claude",
+                Directory = dir
+            }, CancellationToken.None);
+
+            exitCode.Should().Be(1);
+            console.Output.Should().Contain("Error:");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProviderCasingDiffersFromCanonical_MessagesUseCanonicalCasing()
+    {
+        // Validation is OrdinalIgnoreCase, so "CLAUDE" resolves to the "claude" integrator — but
+        // messages must echo the canonical registered name, not the user's raw casing.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [$"{dir}/.claude/settings.json"],
+            [],
+            []);
+        var console = new TestConsole();
+        var stub = new StubIntegrator("claude")
+        {
+            Result = result
+        };
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "CLAUDE",
+            Directory = dir
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("integrated with claude");
+        console.Output.Should().NotContain("CLAUDE");
     }
 
     [Fact]
@@ -71,6 +285,7 @@ public class IntegrateCommandTests
 
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -83,9 +298,12 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_NoDirectoryOption_UsesCurrentDirectory()
     {
         var stub = new StubIntegrator("claude");
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude"
+        }, CancellationToken.None);
 
         stub.LastDirectory.Should().Be(Environment.CurrentDirectory);
     }
@@ -94,10 +312,11 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_WithDirectoryOption_UsesProvidedDirectory()
     {
         var stub = new StubIntegrator("claude");
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = "/custom/dir"
         }, CancellationToken.None);
 
@@ -108,80 +327,39 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_ForceFlag_PassesForceThroughToUseCase()
     {
         var stub = new StubIntegrator("claude");
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Force = true
         }, CancellationToken.None);
 
         stub.LastForce.Should().BeTrue();
     }
 
-    [Fact]
-    public async Task ExecuteAsync_CopilotProvider_UsesCorrectProviderName()
+    [Theory]
+    [InlineData("claude")]
+    [InlineData("copilot")]
+    [InlineData("gemini")]
+    [InlineData("cursor")]
+    [InlineData("windsurf")]
+    [InlineData("aider")]
+    [InlineData("jetbrains")]
+    public async Task ExecuteAsync_EveryProviderName_RoutesToMatchingIntegrator(string provider)
     {
-        var stub = new StubIntegrator("copilot");
-        var command = new CopilotIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var stub = new StubIntegrator(provider);
+        var otherStub = new StubIntegrator($"not-{provider}");
+        var command = new IntegrateCommand(new IntegrateUseCase([stub, otherStub]), new TestConsole());
 
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = provider
+        }, CancellationToken.None);
 
+        exitCode.Should().Be(0);
         stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_AiderProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("aider");
-        var command = new AiderIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_CursorProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("cursor");
-        var command = new CursorIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_GeminiProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("gemini");
-        var command = new GeminiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_JetBrainsProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("jetbrains");
-        var command = new JetBrainsAiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WindsurfProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("windsurf");
-        var command = new WindsurfIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
+        otherStub.LastDirectory.Should().BeNull();
     }
 
     [Fact]
@@ -193,6 +371,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = "/project"
         }, CancellationToken.None);
 
@@ -212,6 +391,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -231,6 +411,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = ""
         }, CancellationToken.None);
 
@@ -248,6 +429,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -255,7 +437,7 @@ public class IntegrateCommandTests
         console.Output.Should().Contain("file.json");
     }
 
-    private static (ClaudeIntegrateCommand command, TestConsole console) Create(
+    private static (IntegrateCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)
     {
@@ -264,7 +446,7 @@ public class IntegrateCommandTests
         {
             Result = result
         };
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), console);
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
         return (command, console);
     }
 

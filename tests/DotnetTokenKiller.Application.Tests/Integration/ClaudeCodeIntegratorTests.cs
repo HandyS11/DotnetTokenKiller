@@ -248,6 +248,30 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_SettingsJson_RegistersHookViaClaudeProjectDirEnvVar()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(Path.Combine(_tempDir, ".claude", "settings.json"));
+        var root = JsonNode.Parse(json) as JsonObject;
+
+        var command = root!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
+        command.Should().Be("""python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_SkillFile_DocumentsWindowsPythonCaveat()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(
+            Path.Combine(_tempDir, ".claude", "skills", "dotnet-token-killer", "SKILL.md"));
+
+        content.Should().Contain("python3");
+        content.Should().Contain("Windows");
+    }
+
+    [Fact]
     public async Task IntegrateAsync_SettingsWithDifferentHookInPreToolUse_AddsOurHook()
     {
         var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
