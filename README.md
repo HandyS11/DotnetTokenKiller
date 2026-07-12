@@ -1,19 +1,29 @@
 <div align="center">
 
+<img src="./icon.png" alt="DotnetTokenKiller" width="128" />
+
 # DotnetTokenKiller
 
-A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands down to only what
-matters.
+**A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
+down to only what matters.**
+Prefix `build`, `test`, `restore`, `clean`, and `format` with `dtk` for 60–90% fewer tokens —
+per-command filters, token analytics, and one-command setup for 8 AI coding agents.
 
 [![CI](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml)
 [![CD](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml)
-[![License](https://img.shields.io/github/license/HandyS11/DotnetTokenKiller)](./LICENSE)
+[![Docs](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/doc-publish.yml/badge.svg)](https://handys11.github.io/DotnetTokenKiller/)
 
+![.NET](https://img.shields.io/badge/.NET-10-512BD4)
+[![License](https://img.shields.io/github/license/HandyS11/DotnetTokenKiller)](./LICENSE)
 [![codecov](https://codecov.io/github/HandyS11/DotnetTokenKiller/graph/badge.svg?token=AP66I96X3E)](https://codecov.io/github/HandyS11/DotnetTokenKiller)
 [![Mutation testing badge](https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FHandyS11%2FDotnetTokenKiller%2Fdevelop)](https://dashboard.stryker-mutator.io/reports/github.com/HandyS11/DotnetTokenKiller/develop)
 
-[![DotnetTokenKiller NuGet](https://img.shields.io/nuget/v/DotnetTokenKiller?label=CLI&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
-[![DotnetTokenKiller Downloads](https://img.shields.io/nuget/dt/DotnetTokenKiller?label=CLI%20downloads&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
+[![DotnetTokenKiller NuGet](https://img.shields.io/nuget/v/DotnetTokenKiller?label=NuGet&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
+[![DotnetTokenKiller Downloads](https://img.shields.io/nuget/dt/DotnetTokenKiller?label=downloads&logo=nuget)](https://www.nuget.org/packages/DotnetTokenKiller)
+
+[Getting Started](https://handys11.github.io/DotnetTokenKiller/articles/getting-started.html) ·
+[Documentation](https://handys11.github.io/DotnetTokenKiller/) ·
+[Samples](./samples/README.md)
 
 </div>
 
