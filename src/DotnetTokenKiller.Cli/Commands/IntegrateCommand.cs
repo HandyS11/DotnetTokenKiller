@@ -76,6 +76,11 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             console.MarkupLine($"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))}{hint}");
         }
 
+        foreach (var note in result.Notes)
+        {
+            console.MarkupLine($"[cyan]note[/]     {Markup.Escape(note)}");
+        }
+
         PrintSummary(result, settings.Force, canonicalProvider, console);
 
         return 0;

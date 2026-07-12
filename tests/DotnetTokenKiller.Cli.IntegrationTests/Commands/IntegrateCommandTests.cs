@@ -437,6 +437,18 @@ public class IntegrateCommandTests
         console.Output.Should().Contain("file.json");
     }
 
+    [Fact]
+    public async Task RunAsync_ResultWithNotes_RendersNoteLine()
+    {
+        var result = new IntegrationResult([], [], [], ["excluded dotnet in rtk config"]);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings { Provider = "claude" }, CancellationToken.None);
+
+        console.Output.Should().Contain("excluded dotnet in rtk config");
+    }
+
     private static (IntegrateCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)
