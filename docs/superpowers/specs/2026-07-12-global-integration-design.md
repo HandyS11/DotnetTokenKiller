@@ -39,7 +39,7 @@ must not introduce new violations.
 1. **Scope model**: new `--global` flag; **local stays the default**. Backward compatible.
 2. **Global providers**: claude, gemini, aider. Others error out on `--global`.
 3. **Global hook command root**: `$HOME`-rooted, e.g.
-   `python3 "$HOME/.claude/hooks/dotnet-to-dtk.py"` (portable across the user's machine, readable
+   `python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py` (portable across the user's machine, readable
    in `settings.json`).
 
 ## CLI surface
@@ -61,62 +61,80 @@ Only two things change between scopes for a given provider:
 |          | base directory              | hook command root                                             |
 |----------|-----------------------------|--------------------------------------------------------------|
 | local    | project dir (`$dir/.claude`)| env-var: `python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/…`      |
-| global   | home dir (`~/.claude`)      | `$HOME`-absolute: `python3 "$HOME/.claude/hooks/…"`           |
+| global   | home dir (`~/.claude`)      | `$HOME`-absolute: `python3 "$HOME"/.claude/hooks/…`           |
 
 The env-var root (`$CLAUDE_PROJECT_DIR`, `$GEMINI_PROJECT_DIR`) resolves to the *current project*,
 which is wrong for a home-installed script — so global must root the command at `$HOME` instead.
 
 ### Changes by layer
 
+Chosen approach: a **capability interface**, not a signature change to `IProviderIntegrator`.
+Threading a scope parameter through `IProviderIntegrator.IntegrateAsync` would churn every
+integrator and dozens of existing test call sites for the 4 providers that will never support
+global. Instead, the existing `IntegrateAsync(directory, force, ct)` keeps its exact meaning
+(local, project-scoped), and global is added as a separate opt-in capability that only the three
+capable providers implement. This follows interface segregation and keeps existing tests untouched.
+
 **Domain (`DotnetTokenKiller.Domain.Integration`)**
 
-- Add `enum IntegrationScope { Local, Global }`.
-- Add `bool SupportsGlobal { get; }` to `IProviderIntegrator`.
-- Change `IProviderIntegrator.IntegrateAsync` to accept the scope:
-  `Task<IntegrationResult> IntegrateAsync(string directory, IntegrationScope scope, bool force, CancellationToken ct)`.
-  For `Local` the integrator uses `directory` as today; for `Global` it uses its resolved home
-  base directory (the `directory` argument is unused/ignored in global mode).
+- Add a new interface:
+
+  ```csharp
+  public interface IGlobalIntegrator
+  {
+      Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken);
+  }
+  ```
+
+- `IProviderIntegrator` is unchanged. No `IntegrationScope` enum (YAGNI — the CLI's `bool Global`
+  plus `integrator is IGlobalIntegrator` fully covers routing and the capability check).
 
 **Home resolution & testability**
 
-- Extract one small `internal sealed class HomePaths` in the Application layer with:
+- Add one small `internal sealed class HomePaths` in the Application layer with:
   - a **public parameterless ctor** resolving the real home
     (`Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)`), and
   - an **internal ctor** taking an override home directory for tests.
 - This mirrors the exact seam already used by `RtkHookCoexistence` (public default ctor +
   internal ctor taking `userClaudeDir`). Registered in DI; injected into the three global-capable
-  integrators so tests can point it at a temp directory.
+  integrators so tests can point it at a temp directory. Exposes resolved paths:
+  `ClaudeDir` (`~/.claude`), `GeminiDir` (`~/.gemini`), `AiderConfPath` (`~/.aider.conf.yml`),
+  `AiderInstructionsPath` (`~/.aider-dtk-instructions.md`), and `Home`.
 
 **Integrators**
 
-- `ClaudeCodeIntegrator`, `GeminiCliIntegrator`, `AiderIntegrator`:
-  - `SupportsGlobal => true`.
-  - Resolve base dir + hook-command constant from `scope` (local constant = existing env-var-rooted
-    command; global constant = `$HOME`-rooted command).
+- `ClaudeCodeIntegrator`, `GeminiCliIntegrator`, `AiderIntegrator` additionally implement
+  `IGlobalIntegrator`:
   - Take `HomePaths` via constructor for global path resolution.
-- `GitHubCopilotIntegrator`, `CursorIntegrator`, `WindsurfIntegrator`, `JetBrainsAiIntegrator`:
-  - `SupportsGlobal => false`.
-  - When called with `Global`, do not attempt a write (the use case guards first; see below).
+  - `IntegrateGlobalAsync` mirrors the local flow but writes under the home base dir and uses the
+    `$HOME`-rooted hook-command constant (local flow keeps its existing env-var-rooted constant).
+  - The global hook **command** is a compile-time constant that quotes only the `$HOME` env var,
+    mirroring the local `"$CLAUDE_PROJECT_DIR"/…` convention (e.g.
+    `python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py`); only the **file write paths** and aider's
+    `read:` path are resolved from `HomePaths`.
+- `GitHubCopilotIntegrator`, `CursorIntegrator`, `WindsurfIntegrator`, `JetBrainsAiIntegrator` are
+  unchanged and do **not** implement `IGlobalIntegrator`.
 
 **`IntegrateUseCase`**
 
-- New parameter/overload on `RunAsync` carrying `IntegrationScope`.
-- When scope is `Global` and the resolved integrator's `SupportsGlobal` is `false`, throw a
-  friendly `InvalidOperationException` (message names the provider). `IntegrateCommand` already maps
-  `InvalidOperationException` to exit 1, so the CLI reports it cleanly.
+- Add `RunGlobalAsync(providerName, force, ct)`. It resolves the integrator, and if it is not an
+  `IGlobalIntegrator`, throws a friendly `InvalidOperationException` naming the provider.
+  Otherwise it calls `IntegrateGlobalAsync`. Existing `RunAsync` (local) is unchanged.
+- `IntegrateCommand` already maps `InvalidOperationException` to exit 1, so the CLI reports it
+  cleanly.
 
 **`IntegrateCommand`**
 
-- Read `settings.Global`; reject `--global` + `--dir` combination.
-- Pass the scope through; when global, echo home-relative paths in the created/updated/skipped
+- Read `settings.Global`; reject the `--global` + `--dir` combination (exit 1).
+- When global, call `RunGlobalAsync` and echo home-relative paths in the created/updated/skipped
   output.
 
 ### Per-provider global specifics
 
 - **claude** → `~/.claude/{settings.json, hooks/dotnet-to-dtk.py, skills/dotnet-token-killer/SKILL.md}`;
-  hook command `python3 "$HOME/.claude/hooks/dotnet-to-dtk.py"`; `PreToolUse`/`Bash`.
+  hook command `python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py`; `PreToolUse`/`Bash`.
 - **gemini** → `~/.gemini/{settings.json, hooks/dotnet-to-dtk.py, GEMINI.md}`;
-  hook command `python3 "$HOME/.gemini/hooks/dotnet-to-dtk.py"`; `BeforeTool`/`run_shell_command`.
+  hook command `python3 "$HOME"/.gemini/hooks/dotnet-to-dtk.py`; `BeforeTool`/`run_shell_command`.
 - **aider** → `~/.aider.conf.yml` + `~/.aider-dtk-instructions.md`; the `read:` entry uses the
   **absolute** path to `~/.aider-dtk-instructions.md` (a global conf cannot rely on a cwd-relative
   path resolving). The existing external-`read:`-key merge logic still applies.
@@ -164,6 +182,9 @@ tests).
 ## Rollout / sequencing
 
 1. SonarQube cleanup track (independent, low risk) — can land first to green the gate.
-2. Domain scope enum + interface change + `HomePaths` seam.
-3. Global-capable integrators + use case guard + CLI flag.
-4. Tests, docs.
+2. `IGlobalIntegrator` interface + `HomePaths` seam.
+3. Global-capable integrators (claude, gemini, aider) + `RunGlobalAsync` guard + CLI `--global` flag.
+4. Docs.
+
+The global claude/gemini flow reuses the existing `RtkHookCoexistence.ReconcileAsync`, passing
+`HomePaths.Home` as the directory so the user-level rtk hook is still reconciled in global mode.
