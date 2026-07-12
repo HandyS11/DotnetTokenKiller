@@ -63,21 +63,8 @@ public sealed class FilteredRunUseCase(
         var stripped = AnsiStrip.Strip(raw);
         var commandSlug = args.Count > 0 ? args[0] : command;
 
-        string filtered;
-        try
-        {
-            filtered = filter.Apply(stripped, result.ExitCode);
-        }
-        catch
-        {
-            // Intentional: filter errors must not break the user's workflow
-            if (verbosityLevel >= 2)
-            {
-                await output.WriteLineAsync("[filter error — using raw output]").ConfigureAwait(false);
-            }
-
-            filtered = stripped;
-        }
+        var filtered = await ApplyFilterSafelyAsync(filter, stripped, result.ExitCode, verbosityLevel)
+            .ConfigureAwait(false);
 
         var logHint = await GetTeeHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken)
             .ConfigureAwait(false);
@@ -90,12 +77,7 @@ public sealed class FilteredRunUseCase(
             usedRawTailFallback = true;
         }
 
-        if (!config.Display.Emoji || Environment.GetEnvironmentVariable("NO_COLOR") is not null)
-        {
-            filtered = filtered
-                .Replace("✓", "ok:", StringComparison.Ordinal)
-                .Replace("✗", "FAIL:", StringComparison.Ordinal);
-        }
+        filtered = NormalizeGlyphs(filtered, config);
 
         if (verbosityLevel >= 2)
         {
@@ -118,6 +100,50 @@ public sealed class FilteredRunUseCase(
             .ConfigureAwait(false);
 
         return result.ExitCode;
+    }
+
+    /// <summary>Applies the filter, falling back to raw output if the filter throws (never breaks the workflow).</summary>
+    /// <param name="filter">The output filter to apply.</param>
+    /// <param name="stripped">The ANSI-stripped command output.</param>
+    /// <param name="exitCode">The process exit code.</param>
+    /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
+    /// <returns>The filtered output, or the stripped output if filtering fails.</returns>
+    private async Task<string> ApplyFilterSafelyAsync(
+        IOutputFilter filter,
+        string stripped,
+        int exitCode,
+        int verbosityLevel)
+    {
+        try
+        {
+            return filter.Apply(stripped, exitCode);
+        }
+        catch
+        {
+            // Intentional: filter errors must not break the user's workflow
+            if (verbosityLevel >= 2)
+            {
+                await output.WriteLineAsync("[filter error — using raw output]").ConfigureAwait(false);
+            }
+
+            return stripped;
+        }
+    }
+
+    /// <summary>Replaces ✓/✗ glyphs with ASCII equivalents when emoji are disabled or NO_COLOR is set.</summary>
+    /// <param name="filtered">The filtered output text.</param>
+    /// <param name="config">The DTK configuration.</param>
+    /// <returns>The output with glyphs normalized according to configuration and environment.</returns>
+    private static string NormalizeGlyphs(string filtered, DtkConfig config)
+    {
+        if (config.Display.Emoji && Environment.GetEnvironmentVariable("NO_COLOR") is null)
+        {
+            return filtered;
+        }
+
+        return filtered
+            .Replace("✓", "ok:", StringComparison.Ordinal)
+            .Replace("✗", "FAIL:", StringComparison.Ordinal);
     }
 
     /// <summary>Builds a fallback message for failed commands whose output the filter could not parse.</summary>
