@@ -83,17 +83,26 @@ internal sealed partial class RtkHookCoexistence
                 return new RtkReconcileOutcome(null, null, [AdviceNote()]);
             }
 
+            if (ConfigTextExcludesDotnet(text))
+            {
+                return RtkReconcileOutcome.None; // already excluded — stay silent
+            }
+
             var hooks = model.TryGetValue("hooks", out var hooksNode) ? hooksNode as TomlTable : null;
             var excludes = hooks is not null && hooks.TryGetValue("exclude_commands", out var arrayNode)
                 ? arrayNode as TomlArray
                 : null;
 
-            if (excludes?.OfType<string>().Contains("dotnet") == true)
-            {
-                return RtkReconcileOutcome.None; // already excluded — stay silent
-            }
-
             var updated = BuildUpdatedConfigText(text, hooks, excludes);
+
+            // The regex-based edit targets common TOML shapes but can miss unusual ones (spaced/dotted
+            // headers, inline tables, a same-named array in a different table, a non-array value). Re-parse
+            // the candidate text and confirm it actually achieved the goal before writing — otherwise we'd
+            // report false success, or worse, write a file that clobbers unrelated content.
+            if (!ConfigTextExcludesDotnet(updated))
+            {
+                return new RtkReconcileOutcome(null, null, [AdviceNote()]);
+            }
 
             await WriteConfigAsync(updated, cancellationToken).ConfigureAwait(false);
             return new RtkReconcileOutcome(null, _rtkConfigPath, [ExcludedNote]);
@@ -117,6 +126,26 @@ internal sealed partial class RtkHookCoexistence
     private string AdviceNote() =>
         $"Could not update rtk's config at {_rtkConfigPath}. To let dtk own dotnet commands, add " +
         "under [hooks]: exclude_commands = [\"dotnet\"].";
+
+    /// <summary>
+    /// True when <paramref name="text"/> parses as TOML and <c>[hooks].exclude_commands</c> is an
+    /// array containing <c>"dotnet"</c>. Used both to detect an already-reconciled config and to
+    /// verify, after a candidate edit, that the edit actually achieved that outcome.
+    /// </summary>
+    /// <param name="text">The candidate rtk config TOML text to check.</param>
+    private static bool ConfigTextExcludesDotnet(string text)
+    {
+        if (!TomlSerializer.TryDeserialize<TomlTable>(text, out var model))
+        {
+            return false;
+        }
+
+        var hooks = model.TryGetValue("hooks", out var hooksNode) ? hooksNode as TomlTable : null;
+        return hooks is not null
+            && hooks.TryGetValue("exclude_commands", out var arrayNode)
+            && arrayNode is TomlArray array
+            && array.OfType<string>().Contains("dotnet");
+    }
 
     private static string BuildUpdatedConfigText(string text, TomlTable? hooks, TomlArray? excludes)
     {

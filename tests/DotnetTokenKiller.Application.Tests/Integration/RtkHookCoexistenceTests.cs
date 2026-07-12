@@ -156,6 +156,48 @@ public sealed class RtkHookCoexistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task ReconcileRtkConfig_HooksHeaderWithTrailingComment_LeavesFileUntouchedAndAdvises()
+    {
+        const string original = "[hooks] # trailing comment\ntransparent_prefixes = []\n";
+        await WriteAsync(RtkConfigPath, original);
+
+        var outcome = await CreateSut().ReconcileRtkConfigAsync(CancellationToken.None);
+
+        outcome.CreatedConfigPath.Should().BeNull();
+        outcome.UpdatedConfigPath.Should().BeNull();
+        outcome.Notes.Should().NotBeEmpty();
+        (await File.ReadAllTextAsync(RtkConfigPath)).Should().Be(original); // byte-unchanged
+    }
+
+    [Fact]
+    public async Task ReconcileRtkConfig_ExcludeArrayInDifferentTable_DoesNotClobberForeignArrayAndAdvises()
+    {
+        const string original = "[other]\nexclude_commands = [\"x\"]\n[hooks]\nexclude_commands = [\"git\"]\n";
+        await WriteAsync(RtkConfigPath, original);
+
+        var outcome = await CreateSut().ReconcileRtkConfigAsync(CancellationToken.None);
+
+        outcome.CreatedConfigPath.Should().BeNull();
+        outcome.UpdatedConfigPath.Should().BeNull();
+        outcome.Notes.Should().NotBeEmpty();
+        (await File.ReadAllTextAsync(RtkConfigPath)).Should().Be(original); // byte-unchanged
+    }
+
+    [Fact]
+    public async Task ReconcileRtkConfig_NonArrayExcludeCommandsValue_LeavesFileUntouchedAndAdvises()
+    {
+        const string original = "[hooks]\nexclude_commands = \"git\"\n";
+        await WriteAsync(RtkConfigPath, original);
+
+        var outcome = await CreateSut().ReconcileRtkConfigAsync(CancellationToken.None);
+
+        outcome.CreatedConfigPath.Should().BeNull();
+        outcome.UpdatedConfigPath.Should().BeNull();
+        outcome.Notes.Should().NotBeEmpty();
+        (await File.ReadAllTextAsync(RtkConfigPath)).Should().Be(original); // byte-unchanged
+    }
+
+    [Fact]
     public async Task ReconcileAsync_NoRtkHook_ReturnsNone()
     {
         // No settings files → no rtk hook → reconcile short-circuits, config never created.
