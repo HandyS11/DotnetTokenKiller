@@ -7,7 +7,14 @@ namespace DotnetTokenKiller.Application.Tests.Integration;
 public sealed class GeminiCliIntegratorTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-gemini-test-{Guid.NewGuid()}");
-    private readonly GeminiCliIntegrator _sut = new();
+    private readonly string _isolatedHome;
+    private readonly GeminiCliIntegrator _sut;
+
+    public GeminiCliIntegratorTests()
+    {
+        _isolatedHome = Path.Combine(_tempDir, "isolated-home");
+        _sut = new GeminiCliIntegrator(new HomePaths(_isolatedHome));
+    }
 
     private string GeminiMdPath => Path.Combine(_tempDir, "GEMINI.md");
     private string HookPath => Path.Combine(_tempDir, ".gemini", "hooks", "dotnet-to-dtk.py");
@@ -287,5 +294,28 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         var content = await File.ReadAllTextAsync(GeminiMdPath);
         content.Should().Contain("python3");
         content.Should().Contain("Windows");
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_FreshHome_CreatesArtifactsUnderHomeGeminiDir()
+    {
+        var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        result.CreatedFiles.Should().NotBeEmpty();
+        File.Exists(Path.Combine(_isolatedHome, ".gemini", "settings.json")).Should().BeTrue();
+        File.Exists(Path.Combine(_isolatedHome, ".gemini", "hooks", "dotnet-to-dtk.py")).Should().BeTrue();
+        File.Exists(Path.Combine(_isolatedHome, ".gemini", "GEMINI.md")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_RegistersHomeRootedHookCommand()
+    {
+        await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(Path.Combine(_isolatedHome, ".gemini", "settings.json"));
+        var root = JsonNode.Parse(json) as JsonObject;
+
+        var command = root!["hooks"]!["BeforeTool"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
+        command.Should().Be("""python3 "$HOME"/.gemini/hooks/dotnet-to-dtk.py""");
     }
 }

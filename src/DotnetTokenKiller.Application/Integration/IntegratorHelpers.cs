@@ -180,38 +180,7 @@ internal static class IntegratorHelpers
         CancellationToken cancellationToken)
     {
         var exists = File.Exists(path);
-        JsonObject root;
-
-        if (exists)
-        {
-            var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-            JsonNode? parsed;
-            try
-            {
-                parsed = JsonNode.Parse(json);
-            }
-            catch (JsonException ex)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to parse JSON settings file '{path}'. The file must contain a valid JSON object at the root.",
-                    ex);
-            }
-
-            if (parsed is JsonObject obj)
-            {
-                root = obj;
-            }
-            else
-            {
-                var actualType = parsed?.GetType().Name ?? "null";
-                throw new InvalidOperationException(
-                    $"The settings file '{path}' must contain a JSON object at the root, but found '{actualType}'.");
-            }
-        }
-        else
-        {
-            root = [];
-        }
+        var root = await ReadRootObjectAsync(path, exists, cancellationToken).ConfigureAwait(false);
 
         root.TryGetPropertyValue(HooksKey, out var hooksNode);
         var hooks = hooksNode switch
@@ -270,6 +239,48 @@ internal static class IntegratorHelpers
             cancellationToken).ConfigureAwait(false);
 
         (exists ? context.Updated : context.Created).Add(path);
+    }
+
+    /// <summary>
+    /// Reads and parses the settings file into its root <see cref="JsonObject"/>, or returns an empty
+    /// object when the file does not exist. Throws <see cref="InvalidOperationException"/> when the file
+    /// contains invalid JSON or a non-object root.
+    /// </summary>
+    /// <param name="path">Path to the settings.json file.</param>
+    /// <param name="exists">Whether the file already exists on disk.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the file contains invalid JSON or the root is not a JSON object.</exception>
+    private static async Task<JsonObject> ReadRootObjectAsync(
+        string path,
+        bool exists,
+        CancellationToken cancellationToken)
+    {
+        if (!exists)
+        {
+            return [];
+        }
+
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        JsonNode? parsed;
+        try
+        {
+            parsed = JsonNode.Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to parse JSON settings file '{path}'. The file must contain a valid JSON object at the root.",
+                ex);
+        }
+
+        if (parsed is JsonObject obj)
+        {
+            return obj;
+        }
+
+        var actualType = parsed?.GetType().Name ?? "null";
+        throw new InvalidOperationException(
+            $"The settings file '{path}' must contain a JSON object at the root, but found '{actualType}'.");
     }
 
     /// <summary>Finds the inner hook object whose <c>"command"</c> field equals <paramref name="command"/>, if any.</summary>

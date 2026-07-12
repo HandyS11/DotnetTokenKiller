@@ -16,6 +16,9 @@ internal sealed partial class RtkHookCoexistence
         "Detected an rtk hook: excluded `dotnet` in rtk's config so dtk owns dotnet commands. " +
         "`rtk dotnet …` still works for manual use.";
 
+    /// <summary>The <c>hooks</c> key/table name used in both rtk's TOML config and Claude's JSON settings.</summary>
+    private const string HooksKey = "hooks";
+
     private readonly string _userClaudeDir;
     private readonly string _rtkConfigPath;
 
@@ -88,7 +91,7 @@ internal sealed partial class RtkHookCoexistence
                 return RtkReconcileOutcome.None; // already excluded — stay silent
             }
 
-            var hooks = model.TryGetValue("hooks", out var hooksNode) ? hooksNode as TomlTable : null;
+            var hooks = model.TryGetValue(HooksKey, out var hooksNode) ? hooksNode as TomlTable : null;
             var excludes = hooks is not null && hooks.TryGetValue("exclude_commands", out var arrayNode)
                 ? arrayNode as TomlArray
                 : null;
@@ -141,7 +144,7 @@ internal sealed partial class RtkHookCoexistence
             return false;
         }
 
-        var hooks = model.TryGetValue("hooks", out var hooksNode) ? hooksNode as TomlTable : null;
+        var hooks = model.TryGetValue(HooksKey, out var hooksNode) ? hooksNode as TomlTable : null;
         return hooks is not null
             && hooks.TryGetValue("exclude_commands", out var arrayNode)
             && arrayNode is TomlArray array
@@ -185,14 +188,14 @@ internal sealed partial class RtkHookCoexistence
         try
         {
             var root = JsonNode.Parse(File.ReadAllText(path));
-            if (root?["hooks"] is not JsonObject hooksObject || hooksObject["PreToolUse"] is not JsonArray preToolUse)
+            if (root?[HooksKey] is not JsonObject hooksObject || hooksObject["PreToolUse"] is not JsonArray preToolUse)
             {
                 return false;
             }
 
             foreach (var entry in preToolUse)
             {
-                if (entry?["hooks"] is not JsonArray hooks)
+                if (entry?[HooksKey] is not JsonArray hooks)
                 {
                     continue;
                 }

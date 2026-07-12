@@ -5,8 +5,14 @@ namespace DotnetTokenKiller.Application.Tests.Integration;
 
 public sealed class AiderIntegratorTests : IDisposable
 {
-    private readonly AiderIntegrator _sut = new();
+    private readonly string _isolatedHome = Path.Combine(Path.GetTempPath(), $"dtk-aider-home-{Guid.NewGuid()}");
+    private readonly AiderIntegrator _sut;
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-aider-test-{Guid.NewGuid()}");
+
+    public AiderIntegratorTests()
+    {
+        _sut = new AiderIntegrator(new HomePaths(_isolatedHome));
+    }
 
     private string InstructionsPath => Path.Combine(_tempDir, ".aider-dtk-instructions.md");
     private string ConfPath => Path.Combine(_tempDir, ".aider.conf.yml");
@@ -16,6 +22,11 @@ public sealed class AiderIntegratorTests : IDisposable
         if (Directory.Exists(_tempDir))
         {
             Directory.Delete(_tempDir, true);
+        }
+
+        if (Directory.Exists(_isolatedHome))
+        {
+            Directory.Delete(_isolatedHome, true);
         }
     }
 
@@ -291,6 +302,25 @@ public sealed class AiderIntegratorTests : IDisposable
 
         var text = await File.ReadAllTextAsync(ConfPath);
         text.Should().Contain("  - .aider-dtk-instructions.md\r\n");
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_FreshHome_CreatesConfAndInstructionsUnderHome()
+    {
+        var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        result.CreatedFiles.Should().NotBeEmpty();
+        File.Exists(Path.Combine(_isolatedHome, ".aider.conf.yml")).Should().BeTrue();
+        File.Exists(Path.Combine(_isolatedHome, ".aider-dtk-instructions.md")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_ConfReadsAbsoluteInstructionsPath()
+    {
+        await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        var conf = await File.ReadAllTextAsync(Path.Combine(_isolatedHome, ".aider.conf.yml"));
+        conf.Should().Contain(Path.Combine(_isolatedHome, ".aider-dtk-instructions.md"));
     }
 
     [Fact]

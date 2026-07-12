@@ -226,11 +226,12 @@ public class IntegrateCommandTests
 
         try
         {
-            var userClaudeDir = Path.Combine(dir, "isolated-home", ".claude");
+            var isolatedHome = Path.Combine(dir, "isolated-home");
+            var userClaudeDir = Path.Combine(isolatedHome, ".claude");
             var rtkConfigPath = Path.Combine(dir, "isolated-config", "rtk", "config.toml");
             var console = new TestConsole();
             var command = new IntegrateCommand(
-                new IntegrateUseCase([new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath))]),
+                new IntegrateUseCase([new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath), new HomePaths(isolatedHome))]),
                 console);
 
             var exitCode = await command.RunAsync(new IntegrateCommandSettings
@@ -497,6 +498,65 @@ public class IntegrateCommandTests
         console.Output.Should().Contain("excluded dotnet in rtk config");
     }
 
+    [Fact]
+    public async Task RunAsync_GlobalWithDir_ReturnsErrorAndDoesNotRunIntegrator()
+    {
+        var stub = new GlobalStubIntegrator("claude");
+        var console = new TestConsole();
+        console.Profile.Width = 400; // avoid wrapping the long error message in the output
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Global = true,
+            Directory = "/tmp/x"
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("cannot be combined with --dir");
+        stub.GlobalCallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunAsync_GlobalOnRepoOnlyProvider_ReturnsErrorWithRepositoryScopedMessage()
+    {
+        var stub = new StubIntegrator("copilot");
+        var console = new TestConsole();
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "copilot",
+            Global = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("repository-scoped");
+    }
+
+    [Fact]
+    public async Task RunAsync_GlobalOnGlobalCapableProvider_DelegatesToRunGlobalAsync()
+    {
+        var stub = new GlobalStubIntegrator("claude")
+        {
+            Result = new IntegrationResult(["~/.claude/CLAUDE.md"], [], [])
+        };
+        var console = new TestConsole();
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Global = true,
+            Force = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        stub.GlobalCallCount.Should().Be(1);
+        stub.LastGlobalForce.Should().BeTrue();
+    }
+
     private static (IntegrateCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)
@@ -524,6 +584,26 @@ public class IntegrateCommandTests
         {
             LastDirectory = directory;
             LastForce = force;
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class GlobalStubIntegrator(string providerName) : IProviderIntegrator, IGlobalIntegrator
+    {
+        public int GlobalCallCount { get; private set; }
+        public bool LastGlobalForce { get; private set; }
+        public IntegrationResult Result { get; init; } = new([], [], []);
+        public string ProviderName => providerName;
+
+        public Task<IntegrationResult> IntegrateAsync(
+            string directory,
+            bool force,
+            CancellationToken cancellationToken) => Task.FromResult(Result);
+
+        public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
+        {
+            GlobalCallCount++;
+            LastGlobalForce = force;
             return Task.FromResult(Result);
         }
     }

@@ -4,6 +4,7 @@ namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>Installs dtk integration artifacts for Claude Code.</summary>
 /// <param name="rtk">Detects and reconciles an rtk hook so dtk owns dotnet commands.</param>
+/// <param name="home">Resolves the user's home directory for global (home-config) integration.</param>
 /// <remarks>
 /// Creates:
 /// <list type="bullet">
@@ -24,7 +25,8 @@ namespace DotnetTokenKiller.Application.Integration;
 /// the public <see cref="IProviderIntegrator"/> via DI, and tests reach it directly via
 /// <c>InternalsVisibleTo</c>.
 /// </remarks>
-internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk) : IProviderIntegrator
+internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
+    : IProviderIntegrator, IGlobalIntegrator
 {
     /// <summary>
     /// Quoted and rooted at <c>$CLAUDE_PROJECT_DIR</c> (the absolute project root Claude Code
@@ -32,6 +34,13 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk) : IProviderIn
     /// directory.
     /// </summary>
     private const string HookCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+
+    /// <summary>
+    /// Global variant of <see cref="HookCommand"/>: rooted at <c>$HOME</c> because the hook script is
+    /// installed under <c>~/.claude/hooks</c> (Claude's <c>$CLAUDE_PROJECT_DIR</c> points at the
+    /// current project, not the home-installed script).
+    /// </summary>
+    private const string GlobalHookCommand = """python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py""";
 
     private const string SkillMarkdown =
         """
@@ -96,28 +105,40 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk) : IProviderIn
     public string ProviderName => "claude";
 
     /// <inheritdoc/>
-    public async Task<IntegrationResult> IntegrateAsync(
+    public Task<IntegrationResult> IntegrateAsync(
         string directory,
+        bool force,
+        CancellationToken cancellationToken)
+        => IntegrateCoreAsync(Path.Combine(directory, ".claude"), directory, HookCommand, force, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
+        => IntegrateCoreAsync(home.ClaudeDir, home.Home, GlobalHookCommand, force, cancellationToken);
+
+    private async Task<IntegrationResult> IntegrateCoreAsync(
+        string baseDirectory,
+        string reconcileDir,
+        string hookCommand,
         bool force,
         CancellationToken cancellationToken)
     {
         var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(directory, ".claude", "skills", "dotnet-token-killer", "SKILL.md"),
+            Path.Combine(baseDirectory, "skills", "dotnet-token-killer", "SKILL.md"),
             SkillMarkdown, context, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.WriteHookAndSettingsAsync(
             new HookSpec(
-                Path.Combine(directory, ".claude", "hooks", "dotnet-to-dtk.py"),
+                Path.Combine(baseDirectory, "hooks", "dotnet-to-dtk.py"),
                 HookScriptTemplates.ClaudeHook,
-                Path.Combine(directory, ".claude", "settings.json"),
+                Path.Combine(baseDirectory, "settings.json"),
                 "PreToolUse",
                 "Bash",
-                HookCommand),
+                hookCommand),
             context, cancellationToken).ConfigureAwait(false);
 
-        var rtkOutcome = await rtk.ReconcileAsync(directory, cancellationToken).ConfigureAwait(false);
+        var rtkOutcome = await rtk.ReconcileAsync(reconcileDir, cancellationToken).ConfigureAwait(false);
         if (rtkOutcome.CreatedConfigPath is not null)
         {
             context.Created.Add(rtkOutcome.CreatedConfigPath);

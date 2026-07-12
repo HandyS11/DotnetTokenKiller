@@ -10,12 +10,14 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-claude-test-{Guid.NewGuid()}");
     private readonly ClaudeCodeIntegrator _sut;
+    private readonly string _isolatedHome;
 
     public ClaudeCodeIntegratorTests()
     {
-        var userClaudeDir = Path.Combine(_tempDir, "isolated-home", ".claude");
+        _isolatedHome = Path.Combine(_tempDir, "isolated-home");
+        var userClaudeDir = Path.Combine(_isolatedHome, ".claude");
         var rtkConfigPath = Path.Combine(_tempDir, "isolated-config", "rtk", "config.toml");
-        _sut = new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath));
+        _sut = new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath), new HomePaths(_isolatedHome));
     }
 
     public void Dispose()
@@ -315,12 +317,41 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
             { "hooks": { "PreToolUse": [ { "matcher": "Bash",
               "hooks": [ { "type": "command", "command": "rtk hook claude" } ] } ] } }
             """);
-        var sut = new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath));
+        var sut = new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath), new HomePaths(_isolatedHome));
 
         var result = await sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.Notes.Should().ContainSingle(n => n.Contains("dotnet"));
         result.CreatedFiles.Should().Contain(rtkConfigPath);
         (await File.ReadAllTextAsync(rtkConfigPath)).Should().Contain("exclude_commands = [\"dotnet\"]");
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_FreshHome_CreatesAllThreeFilesUnderHomeClaudeDir()
+    {
+        var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        result.CreatedFiles.Should().HaveCount(3);
+        File.Exists(Path.Combine(_isolatedHome, ".claude", "skills", "dotnet-token-killer", "SKILL.md")).Should().BeTrue();
+        File.Exists(Path.Combine(_isolatedHome, ".claude", "hooks", "dotnet-to-dtk.py")).Should().BeTrue();
+        File.Exists(Path.Combine(_isolatedHome, ".claude", "settings.json")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_RegistersHomeRootedHookCommand()
+    {
+        await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(Path.Combine(_isolatedHome, ".claude", "settings.json"));
+        var root = JsonNode.Parse(json) as JsonObject;
+
+        var command = root!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
+        command.Should().Be("""python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py""");
+    }
+
+    [Fact]
+    public void ImplementsIGlobalIntegrator()
+    {
+        _sut.Should().BeAssignableTo<DotnetTokenKiller.Domain.Integration.IGlobalIntegrator>();
     }
 }

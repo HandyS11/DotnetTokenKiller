@@ -37,14 +37,25 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             return 1;
         }
 
-        var directory = settings.Directory ?? Environment.CurrentDirectory;
+        if (settings.Global && settings.Directory is not null)
+        {
+            console.MarkupLine(
+                "[red]Error:[/] --global installs into your home config and cannot be combined with --dir.");
+            return 1;
+        }
+
+        var directory = settings.Global ? Environment.CurrentDirectory : (settings.Directory ?? Environment.CurrentDirectory);
 
         IntegrationResult result;
         try
         {
-            result = await integrateUseCase
-                .RunAsync(canonicalProvider, directory, settings.Force, cancellationToken)
-                .ConfigureAwait(false);
+            result = settings.Global
+                ? await integrateUseCase
+                    .RunGlobalAsync(canonicalProvider, settings.Force, cancellationToken)
+                    .ConfigureAwait(false)
+                : await integrateUseCase
+                    .RunAsync(canonicalProvider, directory, settings.Force, cancellationToken)
+                    .ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
         {

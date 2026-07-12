@@ -13,6 +13,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private const int MaxFailures = 15;
     private const int MessageMaxLen = 200;
 
+    /// <summary>Name of the regex capture group holding a test/summary duration.</summary>
+    private const string DurationGroup = "duration";
+
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the raw test output.</summary>
@@ -84,7 +87,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private int ParseFailure(string[] lines, int i, Match failedHeaderMatch, ParseState state)
     {
         var testName = failedHeaderMatch.Groups["name"].Value.Trim();
-        var duration = failedHeaderMatch.Groups["duration"].Value;
+        var duration = failedHeaderMatch.Groups[DurationGroup].Value;
         i++;
 
         // Skip "Error Message:" label
@@ -112,7 +115,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private int ParseMtpFailure(string[] lines, int i, Match failedMatch, ParseState state)
     {
         var testName = failedMatch.Groups["name"].Value.Trim();
-        var duration = failedMatch.Groups["duration"].Value.Trim();
+        var duration = failedMatch.Groups[DurationGroup].Value.Trim();
         i++;
 
         // MTP has no "Error Message:"/"Stack Trace:" labels — collect the indented continuation
@@ -212,7 +215,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
         state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
         state.TotalSkipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
-        state.TotalDurationMs += ParseDurationToMs(summaryMatch.Groups["duration"].Value);
+        state.TotalDurationMs += ParseDurationToMs(summaryMatch.Groups[DurationGroup].Value);
         state.ProjectCount++;
     }
 
@@ -229,7 +232,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
         state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
         state.TotalSkipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
-        var durationGroup = summaryMatch.Groups["duration"];
+        var durationGroup = summaryMatch.Groups[DurationGroup];
         if (durationGroup.Success)
         {
             state.TotalDurationMs += NormalizeDurationToMs(
