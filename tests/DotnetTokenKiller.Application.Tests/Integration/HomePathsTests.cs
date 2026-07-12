@@ -16,6 +16,7 @@ public sealed class HomePathsTests
         sut.GeminiDir.Should().Be(Path.Combine(home, ".gemini"));
         sut.AiderConfPath.Should().Be(Path.Combine(home, ".aider.conf.yml"));
         sut.AiderInstructionsPath.Should().Be(Path.Combine(home, ".aider-dtk-instructions.md"));
+        sut.CopilotHooksDir.Should().Be(Path.Combine(home, ".copilot", "hooks"));
     }
 
     [Fact]
