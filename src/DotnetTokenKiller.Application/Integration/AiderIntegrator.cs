@@ -112,8 +112,8 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
 
     /// <summary>
     /// Decides which dtk section to write and, when the section write will actually proceed,
-    /// merges <see cref="InstructionsFileName"/> into an existing top-level <c>read:</c> key
-    /// outside the dtk-managed section (both flow style <c>read: [a, b]</c> and block style
+    /// merges the resolved <c>read:</c> target (<paramref name="readTarget"/>) into an existing
+    /// top-level <c>read:</c> key outside the dtk-managed section (both flow style <c>read: [a, b]</c> and block style
     /// <c>read:\n  - a</c>) instead of letting the dtk section declare a second top-level
     /// <c>read:</c> key that would shadow it.
     /// The skip decision is delegated to <see cref="IntegratorHelpers.ShouldSkipWrite"/> — the same

@@ -25,15 +25,7 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
         bool force,
         CancellationToken cancellationToken)
     {
-        if (!_integrators.TryGetValue(providerName, out var integrator))
-        {
-            // InvalidOperationException (not ArgumentException): IntegrateCommand validates
-            // settings.Provider against AvailableProviders before calling RunAsync, so this path
-            // is a defense-in-depth guard for other callers of this public use case rather than
-            // the CLI's primary error path.
-            throw new InvalidOperationException(
-                $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}");
-        }
+        var integrator = ResolveOrThrow(providerName);
 
         return integrator.IntegrateAsync(directory, force, cancellationToken);
     }
@@ -52,11 +44,7 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
         bool force,
         CancellationToken cancellationToken)
     {
-        if (!_integrators.TryGetValue(providerName, out var integrator))
-        {
-            throw new InvalidOperationException(
-                $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}");
-        }
+        var integrator = ResolveOrThrow(providerName);
 
         if (integrator is not IGlobalIntegrator globalIntegrator)
         {
@@ -66,5 +54,24 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
         }
 
         return globalIntegrator.IntegrateGlobalAsync(force, cancellationToken);
+    }
+
+    /// <summary>Resolves a provider by name, throwing if it is not registered.</summary>
+    /// <param name="providerName">Provider identifier (e.g. "claude", "copilot").</param>
+    /// <returns>The resolved integrator.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="providerName"/> is unknown.</exception>
+    private IProviderIntegrator ResolveOrThrow(string providerName)
+    {
+        // InvalidOperationException (not ArgumentException): IntegrateCommand validates
+        // settings.Provider against AvailableProviders before calling RunAsync, so this path
+        // is a defense-in-depth guard for other callers of this public use case rather than
+        // the CLI's primary error path.
+        if (!_integrators.TryGetValue(providerName, out var integrator))
+        {
+            throw new InvalidOperationException(
+                $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}");
+        }
+
+        return integrator;
     }
 }
