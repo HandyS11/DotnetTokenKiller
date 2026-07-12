@@ -423,6 +423,29 @@ public class IntegrateCommandTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_FileOutsideProjectDirectory_ShowsAbsolutePathInsteadOfRelativeWalk()
+    {
+        // When a rendered file lives outside the project directory (e.g. a global rtk config under
+        // a different root), Path.GetRelativePath yields a "../"-prefixed walk. RelativePath renders
+        // the absolute, forward-slashed path instead, since that reads better than a deep relative
+        // walk to an unrelated root.
+        const string dir = "/project";
+        const string outsidePath = "/other-root/config/global.toml";
+        var result = new IntegrationResult([outsidePath], [], []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain(outsidePath);
+        console.Output.Should().NotContain("../");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_PathWithInvalidChars_FallsBackToFullPath()
     {
         const string dir = "/project";
