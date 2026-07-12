@@ -141,8 +141,60 @@ public sealed class FileTeeServiceTests : IDisposable
         await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
 
         var file = Directory.GetFiles(_tempDir).Single();
+        new FileInfo(file).Length.Should().BeLessThanOrEqualTo(maxBytes);
+        // ASCII input: the byte cap equals the char count exactly.
         var content = await File.ReadAllTextAsync(file);
         content.Length.Should().Be(100);
+    }
+
+    [Fact]
+    public async Task TeeAndHintAsync_TruncationDoesNotSplitMultiByteChar_AndRespectsByteCap()
+    {
+        // '🚀' (U+1F680) is 4 UTF-8 bytes; a byte cap that lands mid-rune must drop the whole rune,
+        // never emit a replacement char, and never exceed the cap.
+        const long maxBytes = 102L; // 25 rockets = 100 bytes, so the cap falls inside the 26th
+        var rockets = string.Concat(Enumerable.Repeat("🚀", 600));
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
+
+        await sut.TeeAndHintAsync(rockets, "build", 0);
+
+        var file = Directory.GetFiles(_tempDir).Single();
+        new FileInfo(file).Length.Should().BeLessThanOrEqualTo(maxBytes);
+        var content = await File.ReadAllTextAsync(file);
+        content.Should().NotContain("�"); // no split-rune replacement character
+        content.Should().Be(string.Concat(Enumerable.Repeat("🚀", 25)));
+    }
+
+    [Fact]
+    public async Task TeeAndHintAsync_WritesLogFileOwnerOnly()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // POSIX permission bits are not meaningful on Windows
+        }
+
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+
+        var file = Directory.GetFiles(_tempDir).Single();
+        File.GetUnixFileMode(file).Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+
+    [Fact]
+    public async Task TeeAndHintAsync_CreatesTeeDirectoryOwnerOnly()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // POSIX permission bits are not meaningful on Windows
+        }
+
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+
+        File.GetUnixFileMode(_tempDir)
+            .Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
     [Fact]
