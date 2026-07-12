@@ -122,6 +122,21 @@ Install integration artifacts with one command:
 | **Aider**          | `dtk integrate aider`     | Instructions file, `.aider.conf.yml` section         |
 | **JetBrains AI**   | `dtk integrate jetbrains` | Section in `.junie/guidelines.md`                    |
 
+### Global vs per-project integration
+
+By default, `dtk integrate <provider>` installs artifacts into the current project. To install into
+your home config so the integration applies across all projects, add `--global` (`-g`):
+
+```sh
+dtk integrate claude --global   # ~/.claude
+dtk integrate gemini --global   # ~/.gemini
+dtk integrate aider  --global   # ~/.aider.conf.yml
+```
+
+`--global` is supported for **claude**, **gemini**, and **aider** (the providers with a home config).
+The other providers are repository-scoped; run them without `--global` inside a project. `--global`
+cannot be combined with `--dir`.
+
 All commands are idempotent — re-running is safe. Pass `--force` to refresh existing files.
 
 On machines that also run the rtk hook, `dtk integrate claude` automatically excludes `dotnet` from rtk so the two proxies don't both rewrite `dotnet` commands.
