@@ -239,13 +239,32 @@ public sealed class ProcessCommandRunnerTests
             : ("sh", ["-c", "head -c 1048576 /dev/zero | tr '\\0' 'a' & head -c 1048576 /dev/zero | tr '\\0' 'b' 1>&2 & wait"]);
     }
 
-    private static (string command, string[] args) DelayedMarkerCommand(string markerPath, int sleepSeconds)
+    private static (string command, string[] args) StartedThenDelayedMarkerCommand(
+        string startedPath,
+        string donePath,
+        int sleepSeconds)
     {
-        // Sleep, then create the marker file. If the process or any descendant survives a
-        // cancellation, the marker appears after the sleep. A truly killed tree never creates it.
+        // Create the "started" marker immediately, then sleep, then create the "done" marker. The
+        // started marker lets the test cancel only once the child is provably running (immune to CI
+        // load skewing a wall-clock delay); the done marker appears only if the process or a
+        // descendant survives cancellation — a truly killed tree never reaches that step.
         return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? ("powershell", ["-NoProfile", "-Command", $"Start-Sleep -Seconds {sleepSeconds}; New-Item -ItemType File -Force -Path '{markerPath}' | Out-Null"])
-            : ("sh", ["-c", $"sleep {sleepSeconds}; touch '{markerPath}'"]);
+            ? ("powershell", ["-NoProfile", "-Command", $"New-Item -ItemType File -Force -Path '{startedPath}' | Out-Null; Start-Sleep -Seconds {sleepSeconds}; New-Item -ItemType File -Force -Path '{donePath}' | Out-Null"])
+            : ("sh", ["-c", $"touch '{startedPath}'; sleep {sleepSeconds}; touch '{donePath}'"]);
+    }
+
+    private static async Task WaitForFileAsync(string path, TimeSpan timeout)
+    {
+        using var cts = new CancellationTokenSource(timeout);
+        while (!File.Exists(path))
+        {
+            if (cts.IsCancellationRequested)
+            {
+                throw new TimeoutException($"File '{path}' was not created within {timeout}.");
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50)).ConfigureAwait(false);
+        }
     }
 
     [Fact]
@@ -267,23 +286,35 @@ public sealed class ProcessCommandRunnerTests
     {
         // Runs on every platform: RunCapturedAsync now kills the whole child tree and waits for it
         // to be reaped on the cancellation path, so a killed child never reaches the marker step.
-        const int childSleepSeconds = 3;
+        const int childSleepSeconds = 5;
         var dir = Path.Combine(Path.GetTempPath(), $"dtk-kill-{Guid.NewGuid()}");
         Directory.CreateDirectory(dir);
-        var marker = Path.Combine(dir, "marker");
+        var started = Path.Combine(dir, "started");
+        var done = Path.Combine(dir, "done");
         try
         {
-            var (cmd, args) = DelayedMarkerCommand(marker, childSleepSeconds);
-            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            var (cmd, args) = StartedThenDelayedMarkerCommand(started, done, childSleepSeconds);
+            using var cts = new CancellationTokenSource();
+
+            // Cancel only once the child is provably running. A fixed wall-clock delay
+            // (e.g. CancellationTokenSource(200ms)) is load-sensitive: on a starved CI ThreadPool the
+            // cancel timer can fire after a short child has already exited, so nothing gets cancelled
+            // and no OperationCanceledException is thrown. Gating the cancel on the "started" marker
+            // makes the test deterministic regardless of scheduling latency.
+            var cancelWhenStarted = Task.Run(async () =>
+            {
+                await WaitForFileAsync(started, TimeSpan.FromSeconds(30));
+                await cts.CancelAsync();
+            });
 
             var act = async () => await _sut.RunCapturedAsync(cmd, args, cts.Token);
-
             await act.Should().ThrowAsync<OperationCanceledException>();
+            await cancelWhenStarted; // surface any failure (e.g. the child never started) from the canceller
 
-            // Wait past the child's sleep. A leaked process would create the marker during this
+            // Wait past the child's sleep. A leaked process would create the done marker during this
             // window, whereas a properly killed process tree never reaches the marker-creating step.
             await Task.Delay(TimeSpan.FromSeconds(childSleepSeconds + 2));
-            File.Exists(marker).Should().BeFalse();
+            File.Exists(done).Should().BeFalse();
         }
         finally
         {
