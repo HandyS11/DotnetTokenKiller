@@ -138,6 +138,42 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_FreshDirectory_RendersExactSection()
+    {
+        // The six providers sharing IntegrationInstructions (Aider, Cursor, Gemini CLI, GitHub
+        // Copilot, JetBrains AI, Windsurf) are otherwise guarded only by .Contain(...)
+        // assertions, which would miss a whitespace/interpolation regression in
+        // IntegrationInstructions.Intro/UsageBody or in how this integrator composes them
+        // around its markers. This pins the fully rendered output byte-for-byte for one of them.
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(InstructionsPath);
+
+        content.Should().Be(
+            """
+            <!-- dtk -->
+            ## DotnetTokenKiller (dtk)
+
+            Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+            `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+
+            ```sh
+            dtk dotnet build MyProject.slnx
+            dtk dotnet test --filter "Category=Unit"
+            dtk dotnet restore
+            dtk dotnet clean
+            dtk dotnet format
+            dtk dotnet format --verify-no-changes
+            ```
+
+            - All arguments and flags are forwarded to `dotnet` unchanged.
+            - Exit codes are preserved — CI pipelines work correctly.
+            - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
+            <!-- /dtk -->
+            """);
+    }
+
+    [Fact]
     public async Task IntegrateAsync_WhitespaceOnlyFileWithoutMarker_WithForce_CreatesCopilotSection()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(InstructionsPath)!);

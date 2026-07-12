@@ -23,7 +23,11 @@ This creates three files:
 - `.claude/hooks/dotnet-to-dtk.py` — the Python rewrite hook
 - `.claude/settings.json` — registers the hook under `PreToolUse` (merges with any existing settings)
 
-Re-running the command is safe: existing files are skipped. Use `--force` to overwrite:
+Re-running the command without `--force` leaves any already-existing files untouched
+(`SKILL.md`, the hook script). `.claude/settings.json` is always safely merged: the hook entry
+is added if missing, or upgraded in place if it still carries the pre-`$CLAUDE_PROJECT_DIR`
+command from an older version of dtk — either way it is never duplicated. To write into
+existing `SKILL.md`/hook-script files (replacing them with the latest version), pass `--force`:
 
 ```sh
 dtk integrate claude --force
@@ -49,7 +53,9 @@ curl -sSL https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.
   -o .claude/hooks/dotnet-to-dtk.py
 ```
 
-Then add the following to `.claude/settings.json`:
+Then add the following to `.claude/settings.json`. The command is rooted at
+`$CLAUDE_PROJECT_DIR` (the absolute project root Claude Code exports to hooks, quoted so the
+path survives spaces) so the hook resolves regardless of Claude's current working directory:
 
 ```json
 {
@@ -60,7 +66,7 @@ Then add the following to `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/dotnet-to-dtk.py"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dotnet-to-dtk.py"
           }
         ]
       }
@@ -79,7 +85,7 @@ From your project root, run:
 dtk integrate copilot
 ```
 
-This appends a `dtk` instructions section to `.github/copilot-instructions.md`, creating the file if it does not exist. The section is wrapped in `<!-- dtk -->` / `<!-- /dtk -->` markers so re-running the command is safe. Use `--force` to refresh the section:
+This creates `.github/copilot-instructions.md` with a `dtk` instructions section, wrapped in `<!-- dtk -->` / `<!-- /dtk -->` markers, if the file does not exist yet. If the file already exists, it is left completely untouched unless you pass `--force`. With `--force`, the section is merged in: an existing dtk section (identified by the markers) is replaced in place, or the section is appended after your existing content if no dtk section is present yet:
 
 ```sh
 dtk integrate copilot --force
@@ -87,17 +93,25 @@ dtk integrate copilot --force
 
 ### Manual Installation
 
-Add to your `.github/copilot-instructions.md`:
+Add to your `.github/copilot-instructions.md`, wrapped in `<!-- dtk -->` / `<!-- /dtk -->`
+markers so a future `dtk integrate copilot --force` can safely replace just this section:
 
-```markdown
-Use `dtk` instead of raw `dotnet` for build, test, restore, and clean to reduce token usage.
+````markdown
+<!-- dtk -->
+## DotnetTokenKiller (dtk)
+
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+`dtk` filters output to actionable signal only, reducing noise by 50-97%.
 
 ```sh
 dtk dotnet build
 dtk dotnet test
 dtk dotnet restore
 dtk dotnet clean
+dtk dotnet format
 ```
+<!-- /dtk -->
+````
 
 ## Gemini CLI
 
@@ -113,11 +127,16 @@ dtk integrate gemini
 
 This creates three files:
 
-- `GEMINI.md` — appends a `dtk` instructions section (creating the file if it does not exist)
+- `GEMINI.md` — a `dtk` instructions section, created if the file does not exist yet
 - `.gemini/hooks/dotnet-to-dtk.py` — the Python rewrite hook
 - `.gemini/settings.json` — registers the hook under `BeforeTool` (merges with any existing settings)
 
-Re-running the command is safe: existing files are skipped. Use `--force` to overwrite:
+Re-running the command without `--force` leaves any already-existing files untouched
+(`GEMINI.md`, the hook script). `.gemini/settings.json` is always safely merged: the hook entry
+is added if missing, or upgraded in place if it still carries the pre-`$GEMINI_PROJECT_DIR`
+command from an older version of dtk — either way it is never duplicated. To write into an
+existing `GEMINI.md` (its dtk section, marked by `<!-- dtk -->` / `<!-- /dtk -->`, is replaced;
+the rest of the file is preserved) or the hook script, pass `--force`:
 
 ```sh
 dtk integrate gemini --force
@@ -143,7 +162,9 @@ curl -sSL https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.
   -o .gemini/hooks/dotnet-to-dtk.py
 ```
 
-Then add the following to `.gemini/settings.json`:
+Then add the following to `.gemini/settings.json`. The command is rooted at
+`$GEMINI_PROJECT_DIR` (the absolute project root Gemini CLI exports to hooks, quoted so the
+path survives spaces) so the hook resolves regardless of the CLI's current working directory:
 
 ```json
 {
@@ -154,7 +175,7 @@ Then add the following to `.gemini/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .gemini/hooks/dotnet-to-dtk.py"
+            "command": "python3 \"$GEMINI_PROJECT_DIR\"/.gemini/hooks/dotnet-to-dtk.py"
           }
         ]
       }
@@ -163,13 +184,17 @@ Then add the following to `.gemini/settings.json`:
 }
 ```
 
-And append the following to your `GEMINI.md`:
+And append the following to your `GEMINI.md`, wrapped in `<!-- dtk -->` / `<!-- /dtk -->`
+markers so a future `dtk integrate gemini --force` can safely replace just this section without
+touching the rest of the file:
 
 ```markdown
+<!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, and clean commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
 `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+<!-- /dtk -->
 ```
 
 ## Cursor
@@ -237,9 +262,24 @@ dtk integrate aider
 This creates two files:
 
 - `.aider-dtk-instructions.md` — standalone instructions file referenced by Aider
-- `.aider.conf.yml` — a `# dtk` / `# /dtk` section is appended (creating the file if needed)
+- `.aider.conf.yml` — a `# dtk` / `# /dtk` section, created if the file doesn't exist yet
 
-Re-running is safe; use `--force` to refresh the section.
+If either file already exists, it is left completely untouched unless you pass `--force`:
+
+```sh
+dtk integrate aider --force
+```
+
+When `--force` writes into an existing `.aider.conf.yml`:
+
+- if the file already declares a top-level `read:` key outside the dtk-managed section (either
+  flow style, `read: [a, b]`, or block style, `read:\n  - a`), `.aider-dtk-instructions.md` is
+  merged into that existing key instead of the `# dtk` section declaring a second `read:` key —
+  YAML's last-key-wins semantics would otherwise let the second key silently shadow the first;
+- otherwise the `# dtk` section declares its own `read:` key.
+
+Re-running with `--force` is idempotent either way: the merge never adds a duplicate entry for
+`.aider-dtk-instructions.md`.
 
 ### Manual Installation
 
@@ -252,6 +292,9 @@ read:
 # /dtk
 ```
 
+If your `.aider.conf.yml` already has a top-level `read:` key, add
+`.aider-dtk-instructions.md` to that existing list instead of declaring a second `read:` key.
+
 And create `.aider-dtk-instructions.md`:
 
 ```markdown
@@ -261,7 +304,7 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format co
 
 ### How It Works
 
-Aider reads configuration from `.aider.conf.yml`, which can reference additional instruction files via the `read:` key. The integration adds a reference to `.aider-dtk-instructions.md`, which tells Aider to prefer `dtk` over raw `dotnet` commands. No hook or Python dependency is needed beyond Aider's own Python runtime.
+Aider reads configuration from `.aider.conf.yml`, which can reference additional instruction files via the `read:` key. The integration adds a reference to `.aider-dtk-instructions.md`, merging it into an existing top-level `read:` key when present rather than declaring a second one, which tells Aider to prefer `dtk` over raw `dotnet` commands. No hook or Python dependency is needed beyond Aider's own Python runtime.
 
 ## JetBrains AI
 
@@ -271,7 +314,7 @@ Aider reads configuration from `.aider.conf.yml`, which can reference additional
 dtk integrate jetbrains
 ```
 
-This appends a `<!-- dtk -->` / `<!-- /dtk -->` instructions section to `.junie/guidelines.md`, creating the file if it does not exist. Re-running is safe; use `--force` to refresh the section.
+This creates `.junie/guidelines.md` with a `<!-- dtk -->` / `<!-- /dtk -->` instructions section if the file does not exist yet. If the file already exists, it is left completely untouched unless you pass `--force`. With `--force`, the section is merged in: an existing dtk section is replaced in place, or the section is appended after your existing content if none is present yet.
 
 ### How It Works
 
