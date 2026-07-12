@@ -173,7 +173,9 @@ public sealed class ProcessCommandRunner : ICommandRunner
     {
         try
         {
-            var psi = new ProcessStartInfo("taskkill")
+            // Absolute path (System32\taskkill.exe) avoids resolving the command through PATH.
+            var taskkillPath = Path.Combine(Environment.SystemDirectory, "taskkill.exe");
+            var psi = new ProcessStartInfo(taskkillPath)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,

@@ -98,11 +98,10 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         }
     }
 
-    // Tee logs can carry secrets from a failed command's output, so both the directory and the
-    // file are kept owner-only (0700 / 0600). On Windows these calls are no-ops: File.SetUnixFileMode
-    // throws PlatformNotSupportedException, and FileStreamOptions.UnixCreateMode is ignored.
     private static void RestrictToOwnerOnly(string teeDir)
     {
+        // Tee logs can carry secrets from a failed command's output, so both the directory and the
+        // file are kept owner-only (0700 / 0600). On Windows this is a no-op (POSIX modes only).
         if (OperatingSystem.IsWindows())
         {
             return;
@@ -119,20 +118,27 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         {
             Mode = FileMode.CreateNew,
             Access = FileAccess.Write,
-            Share = FileShare.None,
-            UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+            Share = FileShare.None
         };
+
+        // Keep the file owner-only (0600) on POSIX; UnixCreateMode is unsupported on Windows.
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
 
         // Write UTF-8 bytes directly (no BOM), matching the repo's no-BOM policy.
         var bytes = Encoding.UTF8.GetBytes(content);
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var stream = new FileStream(filePath, options);
+#pragma warning restore CA2007
         await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
     }
 
-    // MaxFileSizeBytes is a byte budget; slicing the string by char count could overshoot the cap
-    // (multi-byte runes) or split a rune and emit U+FFFD. Cut on a UTF-8 code-point boundary instead.
     private static string TruncateToUtf8Bytes(string text, long maxBytes)
     {
+        // MaxFileSizeBytes is a byte budget; slicing the string by char count could overshoot the cap
+        // (multi-byte runes) or split a rune and emit U+FFFD. Cut on a UTF-8 code-point boundary instead.
         if (maxBytes <= 0)
         {
             return string.Empty;
