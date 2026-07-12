@@ -28,6 +28,9 @@ internal static class ArgumentPreprocessor
     /// <summary>Subcommand name for <c>dotnet format</c>. Used in both the command registration and passthrough detection.</summary>
     internal const string FormatSubcommand = "format";
 
+    /// <summary>The <c>dotnet</c> driver command that dtk-handled invocations begin with.</summary>
+    private const string DotnetCommand = "dotnet";
+
     /// <summary>
     /// Dotnet subcommands handled by dtk, in canonical (lowercase, display) order. This is the
     /// single source of truth: the command registrations in Program.cs and the shell-completion
@@ -69,7 +72,7 @@ internal static class ArgumentPreprocessor
     internal static string[] Normalize(string[] args)
     {
         if (args.Length < 2 ||
-            !string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) ||
             !KnownSubcommands.Contains(args[1]))
         {
             return args;
@@ -78,14 +81,14 @@ internal static class ArgumentPreprocessor
         var canonicalSub = KnownSubcommandsOrdered.First(
             s => string.Equals(s, args[1], StringComparison.OrdinalIgnoreCase));
 
-        if (string.Equals(args[0], "dotnet", StringComparison.Ordinal) &&
+        if (string.Equals(args[0], DotnetCommand, StringComparison.Ordinal) &&
             string.Equals(args[1], canonicalSub, StringComparison.Ordinal))
         {
             return args;
         }
 
         var normalized = (string[])args.Clone();
-        normalized[0] = "dotnet";
+        normalized[0] = DotnetCommand;
         normalized[1] = canonicalSub;
         return normalized;
     }
@@ -98,7 +101,7 @@ internal static class ArgumentPreprocessor
     internal static bool IsPassthrough(string[] args)
     {
         return args.Length >= 2 &&
-               string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
                !KnownSubcommands.Contains(args[1]);
     }
 
@@ -115,7 +118,7 @@ internal static class ArgumentPreprocessor
     internal static string[] InsertSeparator(string[] args)
     {
         if (args.Length <= 2 ||
-            !string.Equals(args[0], "dotnet", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) ||
             !KnownSubcommands.Contains(args[1]))
         {
             return args;
