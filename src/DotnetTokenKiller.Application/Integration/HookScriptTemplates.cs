@@ -175,15 +175,38 @@ internal static class HookScriptTemplates
         Reads the preToolUse event from stdin (JSON with "toolName" and "toolArgs";
         for the CLI's file-based hooks "toolArgs" is a JSON string holding {"command": ...}).
         When the tool is `bash` and a qualifying dotnet command is found, prints a
-        preToolUse decision that allows the call with `modifiedArgs` carrying the
-        rewritten command. Prints nothing when no rewrite is needed (allow, no change).
-        Always exits 0: Copilot CLI treats a non-zero exit as a denial.
+        preToolUse decision carrying the rewritten command via `modifiedArgs`:
+        "allow" for a simple single invocation, "ask" for a compound command (e.g.
+        `dotnet build && rm -rf x`) so Copilot still prompts before the other parts run.
+        Prints nothing when no rewrite is needed. Always exits 0: Copilot CLI treats a
+        non-zero exit as a denial.
         """
 
 
         """";
 
     private const string CopilotCliMain = """
+        # Unquoted shell operators that can chain, pipe, or subshell another command.
+        _CHAINING_CHARS = ";&|`\n()"
+
+
+        def _is_simple_command(command: str) -> bool:
+            # Whether `command` is a single invocation with no unquoted operators that
+            # could run another command alongside the dotnet one. Only a simple command
+            # is auto-approved ("allow"); anything compound (e.g. `dotnet build && rm -rf x`)
+            # is downgraded to "ask" so Copilot CLI still prompts on the non-dotnet parts.
+            i = 0
+            while i < len(command):
+                char = command[i]
+                if char == "\\":
+                    i += 2  # skip an escaped character
+                    continue
+                if char in _CHAINING_CHARS and not _inside_quotes(command, i):
+                    return False
+                i += 1
+            return True
+
+
         def main() -> None:
             # Copilot CLI is fail-closed: a non-zero exit denies the tool call. Guard the
             # entire body so any unexpected shape (e.g. a top-level JSON array/string) is a
@@ -209,8 +232,12 @@ internal static class HookScriptTemplates
                 if rewritten != command:
                     modified = dict(tool_args)
                     modified["command"] = rewritten
+                    # Only auto-approve a simple, single dotnet invocation. A compound
+                    # command is still rewritten, but returns "ask" so Copilot prompts
+                    # rather than silently approving its non-dotnet parts.
+                    decision = "allow" if _is_simple_command(command) else "ask"
                     print(json.dumps({
-                        "permissionDecision": "allow",
+                        "permissionDecision": decision,
                         "modifiedArgs": modified,
                     }))
                 # No output on the no-change path: Copilot CLI proceeds normally.

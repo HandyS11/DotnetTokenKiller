@@ -140,8 +140,12 @@ def main() -> None:
     if rewritten != command:
         modified = dict(tool_args)          # preserve timeout et al.
         modified["command"] = rewritten
+        # Auto-approve only a simple single invocation; a compound command (e.g.
+        # `dotnet build && rm -rf x`) is still rewritten but returns "ask" so Copilot
+        # prompts rather than silently approving its non-dotnet parts.
+        decision = "allow" if _is_simple_command(command) else "ask"
         print(json.dumps({
-            "permissionDecision": "allow",
+            "permissionDecision": decision,
             "modifiedArgs": modified,
         }))
     # No output on the no-change path: Copilot CLI proceeds normally.

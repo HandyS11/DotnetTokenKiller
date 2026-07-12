@@ -33,4 +33,15 @@ public sealed class HookScriptTemplatesTests
         script.Should().NotContain("updatedInput");
         script.Should().NotContain("hookSpecificOutput");
     }
+
+    [Fact]
+    public void CopilotCliHook_GatesAutoApprovalOnSimpleCommands()
+    {
+        var script = HookScriptTemplates.CopilotCliHook;
+
+        // A compound command must be downgraded to "ask" rather than auto-approved,
+        // so the hook never silently approves non-dotnet parts of a chained command.
+        script.Should().Contain("def _is_simple_command");
+        script.Should().Contain("\"allow\" if _is_simple_command(command) else \"ask\"");
+    }
 }

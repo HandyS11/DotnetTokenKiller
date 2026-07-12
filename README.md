@@ -134,16 +134,16 @@ for **claude**, **gemini**, **aider**, and **copilot-cli** (the providers with a
 For the other providers — or when you want dtk scoped to a single repository — run
 `dtk integrate <provider>` inside the project (without `--global`):
 
-| Provider               | Command                     | What it creates                                      |
-|------------------------|-----------------------------|------------------------------------------------------|
-| **Claude Code**        | `dtk integrate claude`      | Skill file, PreToolUse hook, settings merge          |
-| **GitHub Copilot**     | `dtk integrate copilot`     | Section in `.github/copilot-instructions.md`         |
-| **GitHub Copilot CLI** | `dtk integrate copilot-cli` | preToolUse hook in `.github/hooks/`                  |
-| **Gemini CLI**         | `dtk integrate gemini`      | BeforeTool hook, settings merge, `GEMINI.md` section |
-| **Cursor**             | `dtk integrate cursor`      | `.cursor/rules/dtk.mdc`                              |
-| **Windsurf**           | `dtk integrate windsurf`    | `.windsurf/rules/dtk.md`                             |
-| **Aider**              | `dtk integrate aider`       | Instructions file, `.aider.conf.yml` section         |
-| **JetBrains AI**       | `dtk integrate jetbrains`   | Section in `.junie/guidelines.md`                    |
+| Provider               | Command                     | What it creates                                            |
+|------------------------|-----------------------------|------------------------------------------------------------|
+| **Claude Code**        | `dtk integrate claude`      | Skill file, PreToolUse hook, settings merge                |
+| **GitHub Copilot**     | `dtk integrate copilot`     | Section in `.github/copilot-instructions.md`               |
+| **GitHub Copilot CLI** | `dtk integrate copilot-cli` | preToolUse hook in `.github/hooks/` + instructions section |
+| **Gemini CLI**         | `dtk integrate gemini`      | BeforeTool hook, settings merge, `GEMINI.md` section       |
+| **Cursor**             | `dtk integrate cursor`      | `.cursor/rules/dtk.mdc`                                    |
+| **Windsurf**           | `dtk integrate windsurf`    | `.windsurf/rules/dtk.md`                                   |
+| **Aider**              | `dtk integrate aider`       | Instructions file, `.aider.conf.yml` section               |
+| **JetBrains AI**       | `dtk integrate jetbrains`   | Section in `.junie/guidelines.md`                          | `dtk integrate jetbrains`   | Section in `.junie/guidelines.md`                    |
 
 `copilot`, `cursor`, `windsurf`, and `jetbrains` are repository-scoped and have no global mode.
 `copilot-cli` is distinct from `copilot` (instruction-only, Copilot IDE) and supports `--global`.
