@@ -120,6 +120,30 @@ public sealed class ProcessCommandRunnerTests
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
 
+    [Fact]
+    public async Task RunCapturedAsync_MissingExecutable_ThrowsFriendlyErrorNamingTheCommandAsync()
+    {
+        const string missing = "definitely-not-a-real-binary-xyz";
+
+        var act = async () => await _sut.RunCapturedAsync(missing, []);
+
+        // A raw Win32Exception reports only the OS-level reason and never names the missing
+        // command, so the runner must surface a message that an agent can act on.
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage($"*{missing}*");
+    }
+
+    [Fact]
+    public async Task RunPassthroughAsync_MissingExecutable_ThrowsFriendlyErrorNamingTheCommandAsync()
+    {
+        const string missing = "definitely-not-a-real-binary-xyz";
+
+        var act = async () => await _sut.RunPassthroughAsync(missing, []);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage($"*{missing}*");
+    }
+
     private static (string command, string[] args) StdErrCommand()
     {
         return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
@@ -201,5 +225,77 @@ public sealed class ProcessCommandRunnerTests
         var result = await _sut.RunCapturedAsync(cmd, args, CancellationToken.None);
 
         result.StdOut.Trim().Should().Be("en");
+    }
+
+    private static (string command, string[] args) MegabyteBothStreamsCommand()
+    {
+        // Emit ~1 MB on stdout AND ~1 MB on stderr *concurrently* (interleaved). The OS pipe
+        // buffer is only tens of KB, so a runner that drains the streams sequentially deadlocks
+        // in EITHER read order: whichever stream it reads first, the other fills its buffer and
+        // blocks the child. A stdout-then-stderr sequential writer would not catch that.
+        // Linux runs both pipelines as background jobs and waits. Windows interleaves 1 KB chunks.
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ("powershell", ["-NoProfile", "-Command", "for ($i = 0; $i -lt 1024; $i++) { [Console]::Out.Write('a' * 1024); [Console]::Error.Write('b' * 1024) }"])
+            : ("sh", ["-c", "head -c 1048576 /dev/zero | tr '\\0' 'a' & head -c 1048576 /dev/zero | tr '\\0' 'b' 1>&2 & wait"]);
+    }
+
+    private static (string command, string[] args) DelayedMarkerCommand(string markerPath, int sleepSeconds)
+    {
+        // Sleep, then create the marker file. If the process or any descendant survives a
+        // cancellation, the marker appears after the sleep. A truly killed tree never creates it.
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? ("powershell", ["-NoProfile", "-Command", $"Start-Sleep -Seconds {sleepSeconds}; New-Item -ItemType File -Force -Path '{markerPath}' | Out-Null"])
+            : ("sh", ["-c", $"sleep {sleepSeconds}; touch '{markerPath}'"]);
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_MegabyteOnBothStreams_DoesNotDeadlockAsync()
+    {
+        var (cmd, args) = MegabyteBothStreamsCommand();
+
+        var task = _sut.RunCapturedAsync(cmd, args, CancellationToken.None);
+        var done = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(30)));
+
+        done.Should().Be(task); // a sequential-read deadlock would leave the task unfinished at the timeout
+        var result = await task;
+        result.StdOut.Length.Should().BeGreaterThan(1_000_000);
+        result.StdErr.Length.Should().BeGreaterThan(1_000_000);
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_Cancellation_ActuallyTerminatesTheChildAsync()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            // Not exercised on Windows: cancelling a captured run there does not promptly terminate
+            // the child process tree. The existing ping-based cancellation test also runs for its
+            // full duration before the exception surfaces, so the premise that a killed child never
+            // writes the marker does not hold. Cross-platform cancellation stays covered by
+            // RunCapturedAsync_Cancellation_KillsRunningProcess.
+            return;
+        }
+
+        const int childSleepSeconds = 3;
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-kill-{Guid.NewGuid()}");
+        Directory.CreateDirectory(dir);
+        var marker = Path.Combine(dir, "marker");
+        try
+        {
+            var (cmd, args) = DelayedMarkerCommand(marker, childSleepSeconds);
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+
+            var act = async () => await _sut.RunCapturedAsync(cmd, args, cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+
+            // Wait past the child's sleep. A leaked process would create the marker during this
+            // window, whereas a properly killed process tree never reaches the marker-creating step.
+            await Task.Delay(TimeSpan.FromSeconds(childSleepSeconds + 2));
+            File.Exists(marker).Should().BeFalse();
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 }
