@@ -158,6 +158,11 @@ internal static class IntegratorHelpers
     /// <c>hooks[<paramref name="hookEventKey"/>]</c>.
     /// Existing content is preserved; the entry is only added if not already present
     /// (detected by matching <paramref name="hookCommand"/> in the "command" field).
+    /// If an entry carrying the pre-<c>$..._PROJECT_DIR</c> relative form of
+    /// <paramref name="hookCommand"/> is found (see <see cref="DeriveLegacyCommand"/>), that stale
+    /// entry is replaced in place instead of appending a duplicate alongside it — otherwise a
+    /// project integrated before the hook command was rooted at an env var would keep the old,
+    /// broken entry registered forever, even across repeated <c>--force</c> runs.
     /// </summary>
     /// <param name="path">Path to the settings.json file.</param>
     /// <param name="hookEventKey">Key of the hook event array within the hooks object (e.g. "PreToolUse").</param>
@@ -226,13 +231,24 @@ internal static class IntegratorHelpers
                 $"The settings file '{path}' has a '{HooksKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
         };
 
-        if (IsHookAlreadyRegistered(hookArray, hookCommand))
+        if (FindRegisteredCommandEntry(hookArray, hookCommand) is not null)
         {
             context.Skipped.Add(path);
             return;
         }
 
-        hookArray.Add(hookEntry);
+        var legacyCommand = DeriveLegacyCommand(hookCommand);
+        var legacyEntry = legacyCommand is null ? null : FindRegisteredCommandEntry(hookArray, legacyCommand);
+
+        if (legacyEntry is not null)
+        {
+            legacyEntry["command"] = hookCommand;
+        }
+        else
+        {
+            hookArray.Add(hookEntry);
+        }
+
         hooks[hookEventKey] = hookArray;
         root[HooksKey] = hooks;
 
@@ -248,7 +264,10 @@ internal static class IntegratorHelpers
         (exists ? context.Updated : context.Created).Add(path);
     }
 
-    private static bool IsHookAlreadyRegistered(JsonArray hookArray, string hookCommand)
+    /// <summary>Finds the inner hook object whose <c>"command"</c> field equals <paramref name="command"/>, if any.</summary>
+    /// <param name="hookArray">The hook event array (e.g. <c>hooks.PreToolUse</c>) to search.</param>
+    /// <param name="command">The command string to match.</param>
+    private static JsonObject? FindRegisteredCommandEntry(JsonArray hookArray, string command)
     {
         foreach (var item in hookArray)
         {
@@ -266,13 +285,44 @@ internal static class IntegratorHelpers
             foreach (var inner in innerHooks)
             {
                 if (inner is JsonObject innerEntry &&
-                    innerEntry["command"]?.GetValue<string>() == hookCommand)
+                    innerEntry["command"]?.GetValue<string>() == command)
                 {
-                    return true;
+                    return innerEntry;
                 }
             }
         }
 
-        return false;
+        return null;
+    }
+
+    /// <summary>
+    /// Derives the pre-<c>$..._PROJECT_DIR</c> relative form of a hook command shaped as
+    /// <c>&lt;prefix&gt;"$XXX_PROJECT_DIR"/&lt;relative path&gt;</c> (e.g.
+    /// <c>python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py</c> becomes
+    /// <c>python3 .claude/hooks/dotnet-to-dtk.py</c>), so a settings file carrying the old, broken
+    /// relative command can be recognized and replaced regardless of which provider's env var
+    /// prefixes the current command. Derived structurally from <paramref name="hookCommand"/>
+    /// rather than a hardcoded per-provider lookup, so it keeps working for any future provider
+    /// that adopts the same env-var-rooting convention.
+    /// </summary>
+    /// <param name="hookCommand">The current, env-var-rooted hook command.</param>
+    /// <returns>The legacy relative command, or <see langword="null"/> when <paramref name="hookCommand"/> doesn't follow that shape.</returns>
+    private static string? DeriveLegacyCommand(string hookCommand)
+    {
+        var quoteStart = hookCommand.IndexOf("\"$", StringComparison.Ordinal);
+        if (quoteStart < 0)
+        {
+            return null;
+        }
+
+        var quoteEnd = hookCommand.IndexOf('"', quoteStart + 1);
+        if (quoteEnd < 0 || quoteEnd + 1 >= hookCommand.Length || hookCommand[quoteEnd + 1] != '/')
+        {
+            return null;
+        }
+
+        // Drop the opening quote/env-var/closing quote and the leading '/' of the relative path so
+        // the two prefix/suffix halves join into the legacy bare-relative form.
+        return hookCommand[..quoteStart] + hookCommand[(quoteEnd + 2)..];
     }
 }

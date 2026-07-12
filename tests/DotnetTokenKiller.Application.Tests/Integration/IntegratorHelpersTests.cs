@@ -609,6 +609,126 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Updated.Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task MergeJsonSettingsAsync_ExistingLegacyRelativeCommand_ReplacesWithNewProjectDirRootedCommand()
+    {
+        // Regression: a settings.json carrying the pre-fix relative hook command
+        // ("python3 .claude/hooks/dotnet-to-dtk.py") must have that stale, broken entry REPLACED
+        // by the new $..._PROJECT_DIR-rooted command — not have the new command appended
+        // alongside it, which would leave the broken entry registered forever (even with --force).
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string legacyCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = legacyCommand
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        const string newCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = newCommand
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, newCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
+        context.Updated.Should().ContainSingle();
+        context.Skipped.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_ExistingNewProjectDirRootedCommand_IsIdempotent()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string newCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = newCommand
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = newCommand
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, newCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
+        context.Skipped.Should().ContainSingle();
+        context.Updated.Should().BeEmpty();
+    }
+
+    private const string HooksProperty = "hooks";
+
+    private static async Task<List<string>> ReadInnerCommandsAsync(string path, string hookEventKey)
+    {
+        var content = await File.ReadAllTextAsync(path);
+        var root = (JsonObject)JsonNode.Parse(content)!;
+        return [.. root[HooksProperty]![hookEventKey]!.AsArray()
+            .SelectMany(entry => entry![HooksProperty]!.AsArray())
+            .Select(inner => inner!["command"]!.GetValue<string>())];
+    }
+
     // --- ShouldSkipWrite ---
     // Single source of truth consumed by WriteFileAsync, WriteSectionBasedFileAsync, and
     // AiderIntegrator.PrepareConfSectionAsync so their skip decisions can never drift apart.
