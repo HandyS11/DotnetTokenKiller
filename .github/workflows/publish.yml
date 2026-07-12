@@ -49,8 +49,14 @@ jobs:
       - name: Pack
         run: dotnet pack --configuration Release --output ./artifacts
 
+      - name: NuGet login (trusted publishing)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: HandyS11
+
       - name: Publish to NuGet.org
-        run: dotnet nuget push ./artifacts/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+        run: dotnet nuget push ./artifacts/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --skip-duplicate
 
       - name: Publish to GitHub Packages
         run: |
