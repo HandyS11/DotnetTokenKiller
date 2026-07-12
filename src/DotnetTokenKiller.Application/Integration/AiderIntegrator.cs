@@ -3,14 +3,22 @@ using DotnetTokenKiller.Domain.Integration;
 namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>Installs dtk integration artifacts for Aider.</summary>
+/// <param name="home">Resolves the user's home directory for global (home-config) integration.</param>
 /// <remarks>
 /// Creates:
 /// <list type="bullet">
 ///   <item><description><c>.aider-dtk-instructions.md</c> (instructions file read into context)</description></item>
 ///   <item><description><c>.aider.conf.yml</c> (Aider configuration, section-based merge)</description></item>
 /// </list>
+/// Declared <see langword="internal"/> (rather than <see langword="public"/>, its original
+/// accessibility) because its primary constructor takes the <see langword="internal"/>
+/// <see cref="HomePaths"/>: a primary constructor is as accessible as its containing type, and the
+/// compiler rejects (CS0051) a public constructor exposing a less-accessible parameter type. See
+/// <see cref="GeminiCliIntegrator"/> for the same pattern. Callers still reach it polymorphically
+/// through the public <see cref="IProviderIntegrator"/> via DI, and tests reach it directly via
+/// <c>InternalsVisibleTo</c>.
 /// </remarks>
-public sealed class AiderIntegrator : IProviderIntegrator
+internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator
 {
     private const string SectionMarker = "# dtk";
     private const string SectionEndMarker = "# /dtk";
@@ -18,17 +26,23 @@ public sealed class AiderIntegrator : IProviderIntegrator
     private const string BlockItemPrefix = "- ";
     private const string InstructionsFileName = ".aider-dtk-instructions.md";
 
-    private const string AiderConfSection =
-        """
+    /// <summary>Builds the dtk-managed conf section declaring a top-level <c>read:</c> key pointing at <paramref name="readTarget"/>.</summary>
+    /// <param name="readTarget">
+    /// The relative instructions filename for local integration, or the absolute
+    /// <see cref="HomePaths.AiderInstructionsPath"/> for global integration (a home-level conf
+    /// cannot rely on a cwd-relative filename resolving).
+    /// </param>
+    private static string BuildConfSection(string readTarget) =>
+        $"""
         # dtk
         # DotnetTokenKiller: use dtk instead of dotnet for build/test/restore/clean/format.
         read:
-          - .aider-dtk-instructions.md
+          - {readTarget}
         # /dtk
         """;
 
     /// <summary>
-    /// Used instead of <see cref="AiderConfSection"/> when the file already declares a top-level
+    /// Used instead of <see cref="BuildConfSection"/> when the file already declares a top-level
     /// <c>read:</c> key: the instructions file is merged into that existing key (see
     /// <see cref="TryMergeExistingReadKey"/>) rather than declared again here, which would create a
     /// second top-level <c>read:</c> key that shadows the user's entries under YAML's
@@ -57,19 +71,37 @@ public sealed class AiderIntegrator : IProviderIntegrator
     public string ProviderName => "aider";
 
     /// <inheritdoc/>
-    public async Task<IntegrationResult> IntegrateAsync(
-        string directory,
+    public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
+        => IntegrateCoreAsync(
+            Path.Combine(directory, InstructionsFileName),
+            Path.Combine(directory, ".aider.conf.yml"),
+            InstructionsFileName,
+            force,
+            cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
+        => IntegrateCoreAsync(
+            home.AiderInstructionsPath,
+            home.AiderConfPath,
+            home.AiderInstructionsPath,
+            force,
+            cancellationToken);
+
+    private static async Task<IntegrationResult> IntegrateCoreAsync(
+        string instructionsPath,
+        string confPath,
+        string readTarget,
         bool force,
         CancellationToken cancellationToken)
     {
         var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(directory, InstructionsFileName),
-            InstructionsMarkdown, context, cancellationToken).ConfigureAwait(false);
+            instructionsPath, InstructionsMarkdown, context, cancellationToken).ConfigureAwait(false);
 
-        var confPath = Path.Combine(directory, ".aider.conf.yml");
-        var confSection = await PrepareConfSectionAsync(confPath, force, cancellationToken).ConfigureAwait(false);
+        var confSection = await PrepareConfSectionAsync(confPath, readTarget, force, cancellationToken)
+            .ConfigureAwait(false);
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             confPath, SectionMarker, SectionEndMarker, confSection,
@@ -92,35 +124,41 @@ public sealed class AiderIntegrator : IProviderIntegrator
     /// changes" contract.
     /// </summary>
     /// <param name="confPath">Path to the Aider configuration file.</param>
+    /// <param name="readTarget">
+    /// The value to declare/merge under the <c>read:</c> key: the relative instructions filename
+    /// for local integration, or the absolute <see cref="HomePaths.AiderInstructionsPath"/> for
+    /// global integration.
+    /// </param>
     /// <param name="force">Whether the integration is running with the force flag.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
     /// <see cref="AiderConfSectionWithoutReadKey"/> when an external <c>read:</c> key exists and
     /// was merged into (so the written section must not contribute a second top-level key);
-    /// <see cref="AiderConfSection"/> otherwise.
+    /// <see cref="BuildConfSection"/>'s result otherwise.
     /// </returns>
     private static async Task<string> PrepareConfSectionAsync(
         string confPath,
+        string readTarget,
         bool force,
         CancellationToken cancellationToken)
     {
         var exists = File.Exists(confPath);
         if (!exists || IntegratorHelpers.ShouldSkipWrite(exists, force))
         {
-            return AiderConfSection;
+            return BuildConfSection(readTarget);
         }
 
         var content = await File.ReadAllTextAsync(confPath, cancellationToken).ConfigureAwait(false);
-        if (!TryMergeExistingReadKey(ref content))
+        if (!TryMergeExistingReadKey(ref content, readTarget))
         {
-            return AiderConfSection;
+            return BuildConfSection(readTarget);
         }
 
         await File.WriteAllTextAsync(confPath, content, cancellationToken).ConfigureAwait(false);
         return AiderConfSectionWithoutReadKey;
     }
 
-    private static bool TryMergeExistingReadKey(ref string content)
+    private static bool TryMergeExistingReadKey(ref string content, string readTarget)
     {
         var lines = content.Split('\n');
         var readLineIndex = FindExternalReadKeyIndex(lines);
@@ -133,8 +171,8 @@ public sealed class AiderIntegrator : IProviderIntegrator
         var afterColon = lines[readLineIndex][ReadKeyPrefix.Length..].Trim();
         var (value, comment) = SplitTrailingComment(afterColon);
         var updatedLines = value.Length == 0
-            ? MergeBlockStyle(lines, readLineIndex)
-            : MergeFlowStyle(lines, readLineIndex, value, comment);
+            ? MergeBlockStyle(lines, readLineIndex, readTarget)
+            : MergeFlowStyle(lines, readLineIndex, value, comment, readTarget);
 
         content = string.Join('\n', updatedLines);
         return true;
@@ -206,8 +244,9 @@ public sealed class AiderIntegrator : IProviderIntegrator
     /// <param name="readLineIndex">Index of the line declaring the top-level <c>read:</c> key.</param>
     /// <param name="value">The content following <c>read:</c> on that line, trimmed and with any trailing comment removed.</param>
     /// <param name="comment">The trailing comment removed from that line (empty when none); re-appended to the rebuilt line.</param>
-    /// <returns>The updated lines, unchanged if the instructions file is already listed.</returns>
-    private static string[] MergeFlowStyle(string[] lines, int readLineIndex, string value, string comment)
+    /// <param name="readTarget">The value to merge into the list (relative filename for local, absolute path for global).</param>
+    /// <returns>The updated lines, unchanged if <paramref name="readTarget"/> is already listed.</returns>
+    private static string[] MergeFlowStyle(string[] lines, int readLineIndex, string value, string comment, string readTarget)
     {
         var trimmed = value;
         if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
@@ -219,12 +258,12 @@ public sealed class AiderIntegrator : IProviderIntegrator
             ? []
             : [.. trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
 
-        if (items.Any(item => item.Trim('"', '\'').Equals(InstructionsFileName, StringComparison.Ordinal)))
+        if (items.Any(item => item.Trim('"', '\'').Equals(readTarget, StringComparison.Ordinal)))
         {
             return lines;
         }
 
-        items.Add(InstructionsFileName);
+        items.Add(readTarget);
 
         var commentSuffix = comment.Length == 0 ? string.Empty : "  " + comment;
         var lineEnding = lines[readLineIndex].EndsWith('\r') ? "\r" : string.Empty;
@@ -236,8 +275,9 @@ public sealed class AiderIntegrator : IProviderIntegrator
     /// <summary>Merges into a block-style <c>read:</c> key whose items are indented <c>- item</c> lines below it.</summary>
     /// <param name="lines">The configuration file's content, split into lines.</param>
     /// <param name="readLineIndex">Index of the line declaring the top-level <c>read:</c> key.</param>
-    /// <returns>The updated lines, unchanged if the instructions file is already listed.</returns>
-    private static string[] MergeBlockStyle(string[] lines, int readLineIndex)
+    /// <param name="readTarget">The value to insert into the list (relative filename for local, absolute path for global).</param>
+    /// <returns>The updated lines, unchanged if <paramref name="readTarget"/> is already listed.</returns>
+    private static string[] MergeBlockStyle(string[] lines, int readLineIndex, string readTarget)
     {
         var indent = "  ";
         var insertIndex = readLineIndex + 1;
@@ -255,7 +295,7 @@ public sealed class AiderIntegrator : IProviderIntegrator
 
             indent = line[..indentLength];
             var itemValue = trimmedStart[BlockItemPrefix.Length..].Trim().Trim('"', '\'');
-            if (itemValue.Equals(InstructionsFileName, StringComparison.Ordinal))
+            if (itemValue.Equals(readTarget, StringComparison.Ordinal))
             {
                 return lines;
             }
@@ -265,7 +305,7 @@ public sealed class AiderIntegrator : IProviderIntegrator
 
         var lineEnding = lines[readLineIndex].EndsWith('\r') ? "\r" : string.Empty;
         var updated = new List<string>(lines);
-        updated.Insert(insertIndex, indent + BlockItemPrefix + InstructionsFileName + lineEnding);
+        updated.Insert(insertIndex, indent + BlockItemPrefix + readTarget + lineEnding);
         return [.. updated];
     }
 }
