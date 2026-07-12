@@ -110,7 +110,28 @@ Unknown subcommands pass through to `dotnet` unchanged.
 
 ## AI Agent Setup
 
-Install integration artifacts with one command:
+Install integration artifacts with one command. **Installing globally is the recommended way to set
+dtk up** — do it once and every project your agent touches picks it up automatically, with no
+per-repo setup.
+
+### Recommended: install globally
+
+For the providers with a home config, add `--global` (`-g`) to install into your home directory so
+the integration applies across **all** projects:
+
+```sh
+dtk integrate claude --global   # ~/.claude
+dtk integrate gemini --global   # ~/.gemini
+dtk integrate aider  --global   # ~/.aider.conf.yml
+```
+
+Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
+for **claude**, **gemini**, and **aider** (the providers with a home config).
+
+### Per-project install
+
+For the other providers — or when you want dtk scoped to a single repository — run
+`dtk integrate <provider>` inside the project (without `--global`):
 
 | Provider           | Command                   | What it creates                                      |
 |--------------------|---------------------------|------------------------------------------------------|
@@ -122,20 +143,8 @@ Install integration artifacts with one command:
 | **Aider**          | `dtk integrate aider`     | Instructions file, `.aider.conf.yml` section         |
 | **JetBrains AI**   | `dtk integrate jetbrains` | Section in `.junie/guidelines.md`                    |
 
-### Global vs per-project integration
-
-By default, `dtk integrate <provider>` installs artifacts into the current project. To install into
-your home config so the integration applies across all projects, add `--global` (`-g`):
-
-```sh
-dtk integrate claude --global   # ~/.claude
-dtk integrate gemini --global   # ~/.gemini
-dtk integrate aider  --global   # ~/.aider.conf.yml
-```
-
-`--global` is supported for **claude**, **gemini**, and **aider** (the providers with a home config).
-The other providers are repository-scoped; run them without `--global` inside a project. `--global`
-cannot be combined with `--dir`.
+`copilot`, `cursor`, `windsurf`, and `jetbrains` are repository-scoped and have no global mode.
+`--global` cannot be combined with `--dir`.
 
 All commands are idempotent — re-running is safe. Pass `--force` to refresh existing files.
 
