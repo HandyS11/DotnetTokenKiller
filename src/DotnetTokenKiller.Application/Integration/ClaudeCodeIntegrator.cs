@@ -10,6 +10,10 @@ namespace DotnetTokenKiller.Application.Integration;
 ///   <item><description><c>.claude/skills/dotnet-token-killer/SKILL.md</c></description></item>
 ///   <item><description><c>.claude/hooks/dotnet-to-dtk.py</c></description></item>
 ///   <item><description><c>.claude/settings.json</c> (merged, never overwritten)</description></item>
+///   <item><description>
+///     When an rtk PreToolUse hook is detected, merges <c>exclude_commands = ["dotnet"]</c> into
+///     <c>~/.config/rtk/config.toml</c> so dtk (not rtk) owns dotnet commands. Silent if already excluded.
+///   </description></item>
 /// </list>
 /// Declared <see langword="internal"/> (rather than <see langword="public"/>, its original
 /// accessibility) because its primary constructor takes the <see langword="internal"/>
