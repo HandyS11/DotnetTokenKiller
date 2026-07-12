@@ -38,8 +38,12 @@ public class IntegrateCommandTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AllFilesSkipped_ShowsAlreadyIntegratedMessage()
+    public async Task ExecuteAsync_AllFilesSkipped_NoForce_DoesNotClaimAlreadyIntegratedAndMentionsForce()
     {
+        // Honest summaries: under skip-unless-force, a skipped file (e.g. a pre-existing
+        // .aider.conf.yml without the dtk read: key) might never have been functionally
+        // integrated. The CLI cannot distinguish that from a file that already carries dtk's
+        // exact managed content, so without --force it must never claim completion.
         const string dir = "/project";
         var result = new IntegrationResult(
             [],
@@ -51,13 +55,71 @@ public class IntegrateCommandTests
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
             Provider = "claude",
-            Directory = dir
+            Directory = dir,
+            Force = false
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("skipped");
+        console.Output.Should().NotContain("Already integrated");
+        console.Output.Should().NotContain("Done.");
+        console.Output.Should().Contain("--force");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AllFilesSkipped_WithForce_ShowsAlreadyIntegratedMessage()
+    {
+        // Under --force, ShouldSkipWrite-based skips can never fire (they require !force), so any
+        // remaining skip must come from content-based detection (e.g. the hook command is already
+        // registered) — "Already integrated" is honest here.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [],
+            [],
+            [$"{dir}/.claude/settings.json"]);
+
+        var (command, console) = Create("claude", result);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir,
+            Force = true
         }, CancellationToken.None);
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("skipped");
         console.Output.Should().Contain("Already integrated");
         console.Output.Should().NotContain("Done.");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NoForce_SomeCreatedSomeSkipped_DoesNotClaimDoneAndMentionsForce()
+    {
+        // Reproduces the dishonest "Done." from a pre-existing .aider.conf.yml: the instructions
+        // file is newly created, but the conf file (the only functional wiring) is skipped because
+        // it pre-existed without --force. Claiming "Done." here is false — the integration does
+        // not actually work yet.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [$"{dir}/.aider-dtk-instructions.md"],
+            [],
+            [$"{dir}/.aider.conf.yml"]);
+
+        var (command, console) = Create("aider", result);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "aider",
+            Directory = dir,
+            Force = false
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("created");
+        console.Output.Should().Contain("skipped");
+        console.Output.Should().NotContain("Done.");
+        console.Output.Should().Contain("--force");
     }
 
     [Fact]
@@ -78,14 +140,16 @@ public class IntegrateCommandTests
             Force = false
         }, CancellationToken.None);
 
-        console.Output.Should().Contain("use --force to overwrite");
+        // Force *merges/appends* the managed section and preserves user content — it never
+        // overwrites — so the hint must not claim otherwise.
+        console.Output.Should().Contain("use --force to integrate into existing files");
     }
 
     [Fact]
     public async Task ExecuteAsync_ForceFlag_SkippedFiles_DoNotShowForceHint()
     {
-        // Behavior (a): once --force was already passed, the "use --force to overwrite" hint is
-        // never honest — any leftover skip (e.g. an idempotent hook merge) isn't fixed by force.
+        // Behavior (a): once --force was already passed, the "use --force" hint is never honest —
+        // any leftover skip (e.g. an idempotent hook merge) isn't fixed by force.
         const string dir = "/project";
         var result = new IntegrationResult(
             [],
@@ -103,7 +167,7 @@ public class IntegrateCommandTests
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("skipped");
-        console.Output.Should().NotContain("use --force to overwrite");
+        console.Output.Should().NotContain("use --force to integrate into existing files");
     }
 
     [Fact]
@@ -147,6 +211,64 @@ public class IntegrateCommandTests
         console.Output.Should().Contain("bogus");
         console.Output.Should().Contain("claude");
         console.Output.Should().Contain("copilot");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MalformedSettingsJson_PrintsErrorAndReturnsExitCodeOne()
+    {
+        // IntegratorHelpers.MergeJsonSettingsAsync throws InvalidOperationException on a
+        // malformed/non-object settings.json. IntegrateCommand must catch it and turn it into a
+        // friendly exit-1 error instead of letting it escape to Spectre's default handler (exit 255).
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-malformed-settings-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(dir, ".claude"));
+        await File.WriteAllTextAsync(Path.Combine(dir, ".claude", "settings.json"), "not json at all {{{");
+
+        try
+        {
+            var console = new TestConsole();
+            var command = new IntegrateCommand(new IntegrateUseCase([new ClaudeCodeIntegrator()]), console);
+
+            var exitCode = await command.RunAsync(new IntegrateCommandSettings
+            {
+                Provider = "claude",
+                Directory = dir
+            }, CancellationToken.None);
+
+            exitCode.Should().Be(1);
+            console.Output.Should().Contain("Error:");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProviderCasingDiffersFromCanonical_MessagesUseCanonicalCasing()
+    {
+        // Validation is OrdinalIgnoreCase, so "CLAUDE" resolves to the "claude" integrator — but
+        // messages must echo the canonical registered name, not the user's raw casing.
+        const string dir = "/project";
+        var result = new IntegrationResult(
+            [$"{dir}/.claude/settings.json"],
+            [],
+            []);
+        var console = new TestConsole();
+        var stub = new StubIntegrator("claude")
+        {
+            Result = result
+        };
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "CLAUDE",
+            Directory = dir
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("integrated with claude");
+        console.Output.Should().NotContain("CLAUDE");
     }
 
     [Fact]

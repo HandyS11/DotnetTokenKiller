@@ -17,7 +17,7 @@ Console.OutputEncoding = Encoding.UTF8;
 var noColor = Environment.GetEnvironmentVariable("NO_COLOR") is not null;
 
 const string dotnetCmd = "dotnet";
-const string integrateBranch = "integrate";
+const string integrateCmd = "integrate";
 const string configBranch = "config";
 const string completionCmd = "completion";
 
@@ -87,16 +87,16 @@ try
                 .WithExample(dotnetCmd, "format", "--verify-no-changes");
         });
 
-        config.AddCommand<IntegrateCommand>(integrateBranch)
+        config.AddCommand<IntegrateCommand>(integrateCmd)
             .WithDescription("Install dtk integration artifacts for an AI assistant provider")
-            .WithExample(integrateBranch, "claude")
-            .WithExample(integrateBranch, "claude", "--dir", "/path/to/project", "--force")
-            .WithExample(integrateBranch, "copilot")
-            .WithExample(integrateBranch, "gemini")
-            .WithExample(integrateBranch, "cursor")
-            .WithExample(integrateBranch, "windsurf")
-            .WithExample(integrateBranch, "aider")
-            .WithExample(integrateBranch, "jetbrains");
+            .WithExample(integrateCmd, "claude")
+            .WithExample(integrateCmd, "claude", "--dir", "/path/to/project", "--force")
+            .WithExample(integrateCmd, "copilot")
+            .WithExample(integrateCmd, "gemini")
+            .WithExample(integrateCmd, "cursor")
+            .WithExample(integrateCmd, "windsurf")
+            .WithExample(integrateCmd, "aider")
+            .WithExample(integrateCmd, "jetbrains");
 
         config.AddBranch(configBranch, cfg =>
         {
