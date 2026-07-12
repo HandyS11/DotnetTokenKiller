@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
         services.AddTransient<RtkHookCoexistence>();
+        services.AddSingleton<HomePaths>();
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();
         services.AddTransient<IProviderIntegrator, GitHubCopilotIntegrator>();
         services.AddTransient<IProviderIntegrator, GeminiCliIntegrator>();
