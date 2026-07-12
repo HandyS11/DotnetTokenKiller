@@ -27,9 +27,10 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
     {
         if (!_integrators.TryGetValue(providerName, out var integrator))
         {
-            // InvalidOperationException (not ArgumentException) so this is caught by
-            // IntegrateCommandBase's catch block and surfaced as a friendly CLI error instead of
-            // crashing with an unhandled exception.
+            // InvalidOperationException (not ArgumentException): IntegrateCommand validates
+            // settings.Provider against AvailableProviders before calling RunAsync, so this path
+            // is a defense-in-depth guard for other callers of this public use case rather than
+            // the CLI's primary error path.
             throw new InvalidOperationException(
                 $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}");
         }

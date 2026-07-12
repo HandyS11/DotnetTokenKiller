@@ -27,6 +27,7 @@ public class IntegrateCommandTests
 
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -49,6 +50,7 @@ public class IntegrateCommandTests
 
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -71,6 +73,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir,
             Force = false
         }, CancellationToken.None);
@@ -93,6 +96,7 @@ public class IntegrateCommandTests
 
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir,
             Force = true
         }, CancellationToken.None);
@@ -105,17 +109,44 @@ public class IntegrateCommandTests
     [Fact]
     public async Task ExecuteAsync_UnknownProvider_PrintsErrorAndReturnsExitCodeOne()
     {
-        // Exception-type alignment: IntegrateUseCase.RunAsync now throws InvalidOperationException,
-        // which IntegrateCommandBase's catch block turns into a friendly error message instead of
-        // letting it propagate as an unhandled exception.
+        // IntegrateCommand validates settings.Provider against IntegrateUseCase.AvailableProviders
+        // before calling into the use case, so an unknown provider is a friendly CLI error rather
+        // than an unhandled exception or a raw dictionary-lookup failure.
         var console = new TestConsole();
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([]), console);
+        var command = new IntegrateCommand(new IntegrateUseCase([]), console);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude"
+        }, CancellationToken.None);
 
         exitCode.Should().Be(1);
         console.Output.Should().Contain("Error:");
         console.Output.Should().Contain("claude");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownProvider_ListsAvailableProviders()
+    {
+        var console = new TestConsole();
+        var command = new IntegrateCommand(
+            new IntegrateUseCase(
+            [
+                new StubIntegrator("claude"),
+                new StubIntegrator("copilot")
+            ]),
+            console);
+
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "bogus"
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("Error:");
+        console.Output.Should().Contain("bogus");
+        console.Output.Should().Contain("claude");
+        console.Output.Should().Contain("copilot");
     }
 
     [Fact]
@@ -131,6 +162,7 @@ public class IntegrateCommandTests
 
         var exitCode = await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -143,9 +175,12 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_NoDirectoryOption_UsesCurrentDirectory()
     {
         var stub = new StubIntegrator("claude");
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude"
+        }, CancellationToken.None);
 
         stub.LastDirectory.Should().Be(Environment.CurrentDirectory);
     }
@@ -154,10 +189,11 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_WithDirectoryOption_UsesProvidedDirectory()
     {
         var stub = new StubIntegrator("claude");
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = "/custom/dir"
         }, CancellationToken.None);
 
@@ -168,80 +204,39 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_ForceFlag_PassesForceThroughToUseCase()
     {
         var stub = new StubIntegrator("claude");
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Force = true
         }, CancellationToken.None);
 
         stub.LastForce.Should().BeTrue();
     }
 
-    [Fact]
-    public async Task ExecuteAsync_CopilotProvider_UsesCorrectProviderName()
+    [Theory]
+    [InlineData("claude")]
+    [InlineData("copilot")]
+    [InlineData("gemini")]
+    [InlineData("cursor")]
+    [InlineData("windsurf")]
+    [InlineData("aider")]
+    [InlineData("jetbrains")]
+    public async Task ExecuteAsync_EveryProviderName_RoutesToMatchingIntegrator(string provider)
     {
-        var stub = new StubIntegrator("copilot");
-        var command = new CopilotIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var stub = new StubIntegrator(provider);
+        var otherStub = new StubIntegrator($"not-{provider}");
+        var command = new IntegrateCommand(new IntegrateUseCase([stub, otherStub]), new TestConsole());
 
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
+        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = provider
+        }, CancellationToken.None);
 
+        exitCode.Should().Be(0);
         stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_AiderProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("aider");
-        var command = new AiderIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_CursorProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("cursor");
-        var command = new CursorIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_GeminiProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("gemini");
-        var command = new GeminiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_JetBrainsProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("jetbrains");
-        var command = new JetBrainsAiIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WindsurfProvider_UsesCorrectProviderName()
-    {
-        var stub = new StubIntegrator("windsurf");
-        var command = new WindsurfIntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
-
-        await command.RunAsync(new IntegrateCommandSettings(), CancellationToken.None);
-
-        stub.LastDirectory.Should().NotBeNull();
+        otherStub.LastDirectory.Should().BeNull();
     }
 
     [Fact]
@@ -253,6 +248,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = "/project"
         }, CancellationToken.None);
 
@@ -272,6 +268,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -291,6 +288,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = ""
         }, CancellationToken.None);
 
@@ -308,6 +306,7 @@ public class IntegrateCommandTests
 
         await command.RunAsync(new IntegrateCommandSettings
         {
+            Provider = "claude",
             Directory = dir
         }, CancellationToken.None);
 
@@ -315,7 +314,7 @@ public class IntegrateCommandTests
         console.Output.Should().Contain("file.json");
     }
 
-    private static (ClaudeIntegrateCommand command, TestConsole console) Create(
+    private static (IntegrateCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)
     {
@@ -324,7 +323,7 @@ public class IntegrateCommandTests
         {
             Result = result
         };
-        var command = new ClaudeIntegrateCommand(new IntegrateUseCase([stub]), console);
+        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
         return (command, console);
     }
 

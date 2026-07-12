@@ -87,32 +87,16 @@ try
                 .WithExample(dotnetCmd, "format", "--verify-no-changes");
         });
 
-        config.AddBranch(integrateBranch, integrate =>
-        {
-            integrate.SetDescription("Install dtk integration artifacts for an AI assistant provider");
-            integrate.AddCommand<ClaudeIntegrateCommand>("claude")
-                .WithDescription("Install dtk skill and hook for Claude Code")
-                .WithExample(integrateBranch, "claude")
-                .WithExample(integrateBranch, "claude", "--dir", "/path/to/project", "--force");
-            integrate.AddCommand<CopilotIntegrateCommand>("copilot")
-                .WithDescription("Install dtk instructions for GitHub Copilot")
-                .WithExample(integrateBranch, "copilot");
-            integrate.AddCommand<GeminiIntegrateCommand>("gemini")
-                .WithDescription("Install dtk instructions and hook for Gemini CLI")
-                .WithExample(integrateBranch, "gemini");
-            integrate.AddCommand<CursorIntegrateCommand>("cursor")
-                .WithDescription("Install dtk rules for Cursor")
-                .WithExample(integrateBranch, "cursor");
-            integrate.AddCommand<WindsurfIntegrateCommand>("windsurf")
-                .WithDescription("Install dtk rules for Windsurf")
-                .WithExample(integrateBranch, "windsurf");
-            integrate.AddCommand<AiderIntegrateCommand>("aider")
-                .WithDescription("Install dtk rules for Aider")
-                .WithExample(integrateBranch, "aider");
-            integrate.AddCommand<JetBrainsAiIntegrateCommand>("jetbrains")
-                .WithDescription("Install dtk guidelines for JetBrains AI")
-                .WithExample(integrateBranch, "jetbrains");
-        });
+        config.AddCommand<IntegrateCommand>(integrateBranch)
+            .WithDescription("Install dtk integration artifacts for an AI assistant provider")
+            .WithExample(integrateBranch, "claude")
+            .WithExample(integrateBranch, "claude", "--dir", "/path/to/project", "--force")
+            .WithExample(integrateBranch, "copilot")
+            .WithExample(integrateBranch, "gemini")
+            .WithExample(integrateBranch, "cursor")
+            .WithExample(integrateBranch, "windsurf")
+            .WithExample(integrateBranch, "aider")
+            .WithExample(integrateBranch, "jetbrains");
 
         config.AddBranch(configBranch, cfg =>
         {

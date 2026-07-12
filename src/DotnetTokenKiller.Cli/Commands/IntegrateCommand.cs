@@ -1,21 +1,16 @@
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Cli.Commands.Settings;
-using DotnetTokenKiller.Domain.Integration;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands;
 
-/// <summary>Base command for all integrate subcommands.</summary>
+/// <summary>Installs dtk integration artifacts for the given AI assistant provider.</summary>
 /// <param name="integrateUseCase">The integration use case.</param>
 /// <param name="console">The Spectre.Console output sink.</param>
-internal abstract class IntegrateCommandBase(
-    IntegrateUseCase integrateUseCase,
-    IAnsiConsole console) : AsyncCommand<IntegrateCommandSettings>
+internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiConsole console)
+    : AsyncCommand<IntegrateCommandSettings>
 {
-    /// <summary>Gets the provider name handled by this command.</summary>
-    protected abstract string ProviderName { get; }
-
     /// <inheritdoc/>
     protected override Task<int> ExecuteAsync(
         CommandContext context,
@@ -29,20 +24,20 @@ internal abstract class IntegrateCommandBase(
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var directory = settings.Directory ?? Environment.CurrentDirectory;
-
-        IntegrationResult result;
-        try
+        var availableProviders = integrateUseCase.AvailableProviders.ToList();
+        if (!availableProviders.Contains(settings.Provider, StringComparer.OrdinalIgnoreCase))
         {
-            result = await integrateUseCase
-                .RunAsync(ProviderName, directory, settings.Force, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (InvalidOperationException ex)
-        {
-            console.MarkupLine($"[red]Error:[/] {Markup.Escape(ex.Message)}");
+            console.MarkupLine(
+                $"[red]Error:[/] Unknown provider '{Markup.Escape(settings.Provider)}'. " +
+                $"Available: {Markup.Escape(string.Join(", ", availableProviders))}");
             return 1;
         }
+
+        var directory = settings.Directory ?? Environment.CurrentDirectory;
+
+        var result = await integrateUseCase
+            .RunAsync(settings.Provider, directory, settings.Force, cancellationToken)
+            .ConfigureAwait(false);
 
         foreach (var file in result.CreatedFiles)
         {
@@ -70,7 +65,7 @@ internal abstract class IntegrateCommandBase(
         }
         else if (result.CreatedFiles.Count > 0 || result.UpdatedFiles.Count > 0)
         {
-            console.MarkupLine($"[green]Done.[/] dtk is now integrated with [bold]{ProviderName}[/].");
+            console.MarkupLine($"[green]Done.[/] dtk is now integrated with [bold]{settings.Provider}[/].");
         }
 
         return 0;

@@ -22,8 +22,8 @@ public class IntegrateUseCaseTests
     [Fact]
     public async Task RunAsync_UnknownProvider_ThrowsInvalidOperationException()
     {
-        // Must match the exception type IntegrateCommandBase actually catches, or an unknown
-        // provider crashes the CLI with an unhandled exception instead of a friendly error message.
+        // Defense-in-depth: IntegrateCommand pre-validates the provider via AvailableProviders,
+        // but RunAsync must still fail safely for any other caller of this public use case.
         var sut = new IntegrateUseCase([new StubIntegrator("claude")]);
 
         var act = () => sut.RunAsync("copilot", "/some/dir", false, CancellationToken.None);
