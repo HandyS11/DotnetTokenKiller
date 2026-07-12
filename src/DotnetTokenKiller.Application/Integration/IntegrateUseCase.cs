@@ -37,4 +37,34 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
 
         return integrator.IntegrateAsync(directory, force, cancellationToken);
     }
+
+    /// <summary>Runs the named provider's global (home config) integration.</summary>
+    /// <param name="providerName">Provider identifier (e.g. "claude").</param>
+    /// <param name="force">When <see langword="true"/>, overwrite existing files.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The integration result.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <paramref name="providerName"/> is unknown, or when the provider does not support
+    /// global integration (it is repository-scoped).
+    /// </exception>
+    public Task<IntegrationResult> RunGlobalAsync(
+        string providerName,
+        bool force,
+        CancellationToken cancellationToken)
+    {
+        if (!_integrators.TryGetValue(providerName, out var integrator))
+        {
+            throw new InvalidOperationException(
+                $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}");
+        }
+
+        if (integrator is not IGlobalIntegrator globalIntegrator)
+        {
+            throw new InvalidOperationException(
+                $"Provider '{providerName}' is repository-scoped and has no global config. " +
+                $"Run 'dtk integrate {providerName}' inside a project.");
+        }
+
+        return globalIntegrator.IntegrateGlobalAsync(force, cancellationToken);
+    }
 }

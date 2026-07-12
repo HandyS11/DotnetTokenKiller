@@ -71,6 +71,54 @@ public class IntegrateUseCaseTests
         result.Should().Be(expected);
     }
 
+    [Fact]
+    public async Task RunGlobalAsync_UnknownProvider_ThrowsInvalidOperationException()
+    {
+        var sut = new IntegrateUseCase([new StubIntegrator("claude")]);
+
+        var act = () => sut.RunGlobalAsync("copilot", false, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*copilot*");
+    }
+
+    [Fact]
+    public async Task RunGlobalAsync_RepoOnlyProvider_ThrowsWithFriendlyMessage()
+    {
+        var sut = new IntegrateUseCase([new StubIntegrator("copilot")]);
+
+        var act = () => sut.RunGlobalAsync("copilot", false, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should().Contain("copilot").And.Contain("repository-scoped");
+    }
+
+    [Fact]
+    public async Task RunGlobalAsync_GlobalCapableProvider_ReturnsResult()
+    {
+        var expected = new IntegrationResult(["a.txt"], [], []);
+        var stub = new GlobalStubIntegrator("claude")
+        {
+            Result = expected
+        };
+        var sut = new IntegrateUseCase([stub]);
+
+        var result = await sut.RunGlobalAsync("claude", false, CancellationToken.None);
+
+        result.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task RunGlobalAsync_GlobalCapableProvider_PassesForceThrough()
+    {
+        var stub = new GlobalStubIntegrator("claude");
+        var sut = new IntegrateUseCase([stub]);
+
+        await sut.RunGlobalAsync("claude", true, CancellationToken.None);
+
+        stub.LastForce.Should().BeTrue();
+    }
+
     private sealed class StubIntegrator(string providerName) : IProviderIntegrator
     {
         public string? LastDirectory { get; private set; }
@@ -84,6 +132,24 @@ public class IntegrateUseCaseTests
             CancellationToken cancellationToken)
         {
             LastDirectory = directory;
+            LastForce = force;
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class GlobalStubIntegrator(string providerName) : IProviderIntegrator, IGlobalIntegrator
+    {
+        public bool LastForce { get; private set; }
+        public IntegrationResult Result { get; init; } = new([], [], []);
+        public string ProviderName => providerName;
+
+        public Task<IntegrationResult> IntegrateAsync(
+            string directory,
+            bool force,
+            CancellationToken cancellationToken) => Task.FromResult(Result);
+
+        public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
+        {
             LastForce = force;
             return Task.FromResult(Result);
         }

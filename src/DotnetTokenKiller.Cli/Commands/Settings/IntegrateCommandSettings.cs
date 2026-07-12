@@ -21,4 +21,9 @@ internal sealed class IntegrateCommandSettings : CommandSettings
     [CommandOption("-f|--force")]
     [Description("Overwrite existing files instead of skipping them")]
     public bool Force { get; init; }
+
+    /// <summary>Gets a value indicating whether to install into the user's home config instead of the project.</summary>
+    [CommandOption("-g|--global")]
+    [Description("Install into the user's home config (claude, gemini, aider) instead of a project")]
+    public bool Global { get; init; }
 }
