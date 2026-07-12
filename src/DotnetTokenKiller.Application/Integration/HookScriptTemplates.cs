@@ -167,9 +167,67 @@ internal static class HookScriptTemplates
 
         """;
 
+    private const string CopilotCliHeader = """"
+        #!/usr/bin/env python3
+        """GitHub Copilot CLI preToolUse hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
+
+        Reads the preToolUse event from stdin (JSON with "toolName" and "toolArgs";
+        for the CLI's file-based hooks "toolArgs" is a JSON string holding {"command": ...}).
+        When the tool is `bash` and a qualifying dotnet command is found, prints a
+        preToolUse decision that allows the call with `modifiedArgs` carrying the
+        rewritten command. Prints nothing when no rewrite is needed (allow, no change).
+        Always exits 0: Copilot CLI treats a non-zero exit as a denial.
+        """
+
+
+        """";
+
+    private const string CopilotCliMain = """
+        def main() -> None:
+            try:
+                payload = json.load(sys.stdin)
+            except (json.JSONDecodeError, EOFError):
+                return
+
+            if payload.get("toolName") != "bash":
+                return
+
+            tool_args = payload.get("toolArgs", {})
+            if isinstance(tool_args, str):
+                try:
+                    tool_args = json.loads(tool_args)
+                except (json.JSONDecodeError, TypeError):
+                    return
+            if not isinstance(tool_args, dict):
+                return
+
+            command = tool_args.get("command", "")
+            if not command:
+                return
+
+            rewritten = rewrite(command)
+
+            if rewritten != command:
+                modified = dict(tool_args)
+                modified["command"] = rewritten
+                print(json.dumps({
+                    "permissionDecision": "allow",
+                    "modifiedArgs": modified,
+                }))
+            # No output on the no-change path: Copilot CLI proceeds normally.
+
+
+        if __name__ == "__main__":
+            main()
+
+        """;
+
     /// <summary>Claude Code PreToolUse hook, verbatim identical to <c>.claude/hooks/dotnet-to-dtk.py</c> in this repo.</summary>
     internal static string ClaudeHook { get; } = ClaudeHeader + SharedCore + ClaudeMain;
 
     /// <summary>Gemini CLI BeforeTool hook, preserving Gemini's existing <c>hookSpecificOutput.tool_input</c> schema.</summary>
     internal static string GeminiHook { get; } = GeminiHeader + SharedCore + GeminiMain;
+
+    /// <summary>GitHub Copilot CLI preToolUse hook, emitting the CLI's <c>permissionDecision</c>/<c>modifiedArgs</c> schema.</summary>
+    internal static string CopilotCliHook { get; } = CopilotCliHeader + SharedCore + CopilotCliMain;
 }
