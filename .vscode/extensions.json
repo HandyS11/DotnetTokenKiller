@@ -6,7 +6,6 @@
     "DavidAnson.vscode-markdownlint",
     "ms-dotnettools.csdevkit",
     "ms-dotnettools.vscode-dotnet-runtime",
-    "formulahendry.dotnet-test-explorer",
     "jetbrains.resharper-code"
   ],
   "unwantedRecommendations": [

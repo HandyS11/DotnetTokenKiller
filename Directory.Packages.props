@@ -1,8 +1,14 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Security: transitively pin patched versions over vulnerable transitive dependencies.
+         Microsoft.Bcl.Memory 9.0.4 (via Microsoft.ML.Tokenizers.Data.*) -> GHSA-73j8-2gch-69rq.
+         SQLitePCLRaw.lib.e_sqlite3 2.1.11 (via Microsoft.Data.Sqlite) -> GHSA-2m69-gcr7-jv3q. -->
+    <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.9"/>
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3"/>
     <PackageVersion Include="coverlet.collector" Version="10.0.1"/>
     <PackageVersion Include="FluentAssertions" Version="8.10.0"/>
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9"/>

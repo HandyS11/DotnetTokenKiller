@@ -44,3 +44,4 @@ See the per-command example pages for exact raw vs. dtk output comparisons:
 | [examples/BUILD.md](examples/BUILD.md) | `dotnet build`, `dotnet clean` |
 | [examples/TEST.md](examples/TEST.md) | `dotnet test` (xUnit, NUnit, MSTest, Reqnroll) |
 | [examples/RESTORE.md](examples/RESTORE.md) | `dotnet restore` |
+| [examples/FORMAT.md](examples/FORMAT.md) | `dotnet format` |

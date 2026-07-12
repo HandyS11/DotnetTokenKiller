@@ -37,7 +37,6 @@ README                  text
 *.props                 text
 *.targets               text
 *.ruleset               text
-*.config                text
 *.nuspec                text
 *.resx                  text
 DotSettings             text
@@ -64,7 +63,7 @@ compose.yml             text
 # Shell scripts
 *.sh                    text eol=lf
 *.bash                  text eol=lf
-*.ps1                   text eol=crlf
+*.ps1                   text
 *.bat                   text eol=crlf
 *.cmd                   text eol=crlf
 
