@@ -171,11 +171,12 @@ public class IntegrateCommandTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_UnknownProvider_PrintsErrorAndReturnsExitCodeOne()
+    public async Task ExecuteAsync_NoProvidersRegistered_PrintsErrorAndReturnsExitCodeOne()
     {
-        // IntegrateCommand validates settings.Provider against IntegrateUseCase.AvailableProviders
-        // before calling into the use case, so an unknown provider is a friendly CLI error rather
-        // than an unhandled exception or a raw dictionary-lookup failure.
+        // With an empty provider registry, every provider name is unknown, so IntegrateCommand's
+        // validation against AvailableProviders produces a friendly CLI error and exit 1 rather than
+        // an unhandled exception. (A genuinely-unknown provider against a populated registry is
+        // covered by ExecuteAsync_UnknownProvider_ListsAvailableProviders.)
         var console = new TestConsole();
         var command = new IntegrateCommand(new IntegrateUseCase([]), console);
 

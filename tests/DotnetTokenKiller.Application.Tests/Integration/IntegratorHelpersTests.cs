@@ -718,6 +718,76 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Updated.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task MergeJsonSettingsAsync_BothLegacyAndNewCommands_RemovesLegacyDuplicate()
+    {
+        // Regression: if a settings.json ended up with BOTH the legacy relative command and the new
+        // $..._PROJECT_DIR-rooted command (possible when an in-between build appended the new one
+        // alongside the old before this cleanup existed), merging must drop the stale legacy entry
+        // rather than early-returning on the new command and leaving the broken relative entry to
+        // keep firing. Exactly one registration — the new command — must survive.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string legacyCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
+        const string newCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = legacyCommand
+                            }
+                        }
+                    },
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = newCommand
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = newCommand
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, newCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
+        context.Updated.Should().ContainSingle();
+        context.Skipped.Should().BeEmpty();
+    }
+
     private const string HooksProperty = "hooks";
 
     private static async Task<List<string>> ReadInnerCommandsAsync(string path, string hookEventKey)

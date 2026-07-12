@@ -231,16 +231,24 @@ internal static class IntegratorHelpers
                 $"The settings file '{path}' has a '{HooksKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
         };
 
-        if (FindRegisteredCommandEntry(hookArray, hookCommand) is not null)
-        {
-            context.Skipped.Add(path);
-            return;
-        }
-
+        var newAlreadyRegistered = FindRegisteredCommandEntry(hookArray, hookCommand) is not null;
         var legacyCommand = DeriveLegacyCommand(hookCommand);
         var legacyEntry = legacyCommand is null ? null : FindRegisteredCommandEntry(hookArray, legacyCommand);
 
-        if (legacyEntry is not null)
+        if (newAlreadyRegistered)
+        {
+            if (legacyEntry is null)
+            {
+                context.Skipped.Add(path);
+                return;
+            }
+
+            // Both the new command and a stale legacy relative command are registered (possible when
+            // an in-between build appended the new one alongside the old). Drop the legacy duplicate
+            // so the broken relative entry can't keep firing, leaving exactly one registration.
+            RemoveRegisteredCommandEntry(hookArray, legacyCommand!);
+        }
+        else if (legacyEntry is not null)
         {
             legacyEntry["command"] = hookCommand;
         }
@@ -293,6 +301,43 @@ internal static class IntegratorHelpers
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Removes every registered hook whose <c>"command"</c> equals <paramref name="command"/>,
+    /// dropping any outer entry whose inner <c>hooks</c> list becomes empty as a result.
+    /// </summary>
+    /// <param name="hookArray">The hook event array (e.g. <c>hooks.PreToolUse</c>) to prune.</param>
+    /// <param name="command">The command string whose registrations should be removed.</param>
+    private static void RemoveRegisteredCommandEntry(JsonArray hookArray, string command)
+    {
+        for (var outer = hookArray.Count - 1; outer >= 0; outer--)
+        {
+            if (hookArray[outer] is not JsonObject entry)
+            {
+                continue;
+            }
+
+            entry.TryGetPropertyValue(HooksKey, out var innerHooksNode);
+            if (innerHooksNode is not JsonArray innerHooks)
+            {
+                continue;
+            }
+
+            for (var inner = innerHooks.Count - 1; inner >= 0; inner--)
+            {
+                if (innerHooks[inner] is JsonObject innerEntry &&
+                    innerEntry["command"]?.GetValue<string>() == command)
+                {
+                    innerHooks.RemoveAt(inner);
+                }
+            }
+
+            if (innerHooks.Count == 0)
+            {
+                hookArray.RemoveAt(outer);
+            }
+        }
     }
 
     /// <summary>
