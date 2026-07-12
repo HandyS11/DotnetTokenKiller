@@ -226,8 +226,12 @@ public class IntegrateCommandTests
 
         try
         {
+            var userClaudeDir = Path.Combine(dir, "isolated-home", ".claude");
+            var rtkConfigPath = Path.Combine(dir, "isolated-config", "rtk", "config.toml");
             var console = new TestConsole();
-            var command = new IntegrateCommand(new IntegrateUseCase([new ClaudeCodeIntegrator()]), console);
+            var command = new IntegrateCommand(
+                new IntegrateUseCase([new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath))]),
+                console);
 
             var exitCode = await command.RunAsync(new IntegrateCommandSettings
             {
@@ -419,6 +423,50 @@ public class IntegrateCommandTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_FileOutsideProjectDirectory_ShowsAbsolutePathInsteadOfRelativeWalk()
+    {
+        // When a rendered file lives outside the project directory (e.g. a global rtk config under
+        // a different root), Path.GetRelativePath yields a "../"-prefixed walk. RelativePath renders
+        // the absolute, forward-slashed path instead, since that reads better than a deep relative
+        // walk to an unrelated root.
+        const string dir = "/project";
+        const string outsidePath = "/other-root/config/global.toml";
+        var result = new IntegrationResult([outsidePath], [], []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain(outsidePath);
+        console.Output.Should().NotContain("../");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InProjectFileStartingWithDotDot_RendersRelativeNotAbsolute()
+    {
+        // A filename that merely begins with ".." (a real file directly under the project root) is
+        // NOT outside the project — it must render as the relative "..notes.txt", not an absolute path.
+        const string dir = "/project";
+        const string inProjectPath = "/project/..notes.txt";
+        var result = new IntegrationResult([inProjectPath], [], []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain("..notes.txt");
+        console.Output.Should().NotContain(inProjectPath); // not rendered as the absolute "/project/..notes.txt"
+    }
+
+    [Fact]
     public async Task ExecuteAsync_PathWithInvalidChars_FallsBackToFullPath()
     {
         const string dir = "/project";
@@ -435,6 +483,18 @@ public class IntegrateCommandTests
 
         // Path.GetFullPath throws on null-byte paths; the catch block returns the raw path
         console.Output.Should().Contain("file.json");
+    }
+
+    [Fact]
+    public async Task RunAsync_ResultWithNotes_RendersNoteLine()
+    {
+        var result = new IntegrationResult([], [], [], ["excluded dotnet in rtk config"]);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings { Provider = "claude" }, CancellationToken.None);
+
+        console.Output.Should().Contain("excluded dotnet in rtk config");
     }
 
     private static (IntegrateCommand command, TestConsole console) Create(

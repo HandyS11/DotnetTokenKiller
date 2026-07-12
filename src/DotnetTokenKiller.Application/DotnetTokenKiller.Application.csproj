@@ -7,11 +7,13 @@
     <PackageReference Include="Microsoft.ML.Tokenizers"/>
     <PackageReference Include="Microsoft.ML.Tokenizers.Data.Cl100kBase"/>
     <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase"/>
+    <PackageReference Include="Tomlyn"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="DotnetTokenKiller.Application.Tests"/>
+    <InternalsVisibleTo Include="DotnetTokenKiller.Cli.IntegrationTests"/>
   </ItemGroup>
 </Project>

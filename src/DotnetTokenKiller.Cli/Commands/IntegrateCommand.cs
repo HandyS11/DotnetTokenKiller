@@ -76,6 +76,11 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             console.MarkupLine($"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))}{hint}");
         }
 
+        foreach (var note in result.Notes)
+        {
+            console.MarkupLine($"[cyan]note[/]     {Markup.Escape(note)}");
+        }
+
         PrintSummary(result, settings.Force, canonicalProvider, console);
 
         return 0;
@@ -115,6 +120,18 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
         console.MarkupLine("[grey]Already integrated. Nothing to do.[/]");
     }
 
+    /// <summary>
+    /// Whether a relative path computed by <see cref="Path.GetRelativePath(string, string)"/> escapes
+    /// the base directory. Only a leading <c>..</c> segment (<c>..</c> itself, or <c>..</c> followed by
+    /// a separator) counts — a filename that merely begins with two dots (e.g. <c>..notes.txt</c>) sits
+    /// directly under the project and must stay a relative path.
+    /// </summary>
+    /// <param name="relative">The relative path to classify.</param>
+    private static bool IsOutsideProject(string relative) =>
+        relative == ".."
+        || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+        || relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
+
     private static string RelativePath(string baseDir, string fullPath)
     {
         if (string.IsNullOrEmpty(fullPath) || string.IsNullOrEmpty(baseDir))
@@ -129,6 +146,13 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             var normalizedFullPath = Path.GetFullPath(fullPath);
 
             var relative = Path.GetRelativePath(normalizedBaseDir, normalizedFullPath);
+            if (IsOutsideProject(relative))
+            {
+                // Files outside the project (e.g. the global rtk config) read better as an
+                // absolute path than as a "../../.." relative walk.
+                return normalizedFullPath.Replace(Path.DirectorySeparatorChar, '/');
+            }
+
             return relative.Replace(Path.DirectorySeparatorChar, '/');
         }
         catch

@@ -25,9 +25,12 @@ internal sealed class IntegrationContext
     /// <summary>Gets the list of file paths skipped because they already existed and <see cref="Force"/> is <see langword="false"/>.</summary>
     internal List<string> Skipped { get; } = [];
 
+    /// <summary>Gets advisory messages accumulated during this integration run.</summary>
+    internal List<string> Notes { get; } = [];
+
     /// <summary>Builds an <see cref="IntegrationResult"/> from the accumulated lists.</summary>
     internal IntegrationResult ToResult()
     {
-        return new IntegrationResult(Created, Updated, Skipped);
+        return new IntegrationResult(Created, Updated, Skipped, Notes);
     }
 }

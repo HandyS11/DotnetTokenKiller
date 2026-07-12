@@ -124,6 +124,8 @@ Install integration artifacts with one command:
 
 All commands are idempotent — re-running is safe. Pass `--force` to refresh existing files.
 
+On machines that also run the rtk hook, `dtk integrate claude` automatically excludes `dotnet` from rtk so the two proxies don't both rewrite `dotnet` commands.
+
 See [AI Agent Setup](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html) for per-provider details
 and manual installation steps.
 
