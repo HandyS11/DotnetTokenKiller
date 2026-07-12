@@ -124,4 +124,37 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         result.SkippedFiles.Should().Contain(InstructionsPath);
         (await File.ReadAllTextAsync(InstructionsPath)).Should().Be(original);
     }
+
+    private string GlobalHookScriptPath => Path.Combine(_isolatedHome, ".copilot", "hooks", "dotnet-to-dtk.py");
+    private string GlobalHookJsonPath => Path.Combine(_isolatedHome, ".copilot", "hooks", "dtk-dotnet.json");
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_FreshHome_CreatesHookArtifactsOnly()
+    {
+        var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        File.Exists(GlobalHookScriptPath).Should().BeTrue();
+        File.Exists(GlobalHookJsonPath).Should().BeTrue();
+        result.CreatedFiles.Should().HaveCount(2);
+        result.Notes.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_HookJson_UsesAbsoluteHooksDirCwd()
+    {
+        await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(GlobalHookJsonPath)) as JsonObject;
+        var cwd = root!["hooks"]!["preToolUse"]!.AsArray()[0]!["cwd"]!.GetValue<string>();
+
+        cwd.Should().Be(Path.Combine(_isolatedHome, ".copilot", "hooks"));
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_DoesNotWriteRepoInstructions()
+    {
+        await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        File.Exists(InstructionsPath).Should().BeFalse();
+    }
 }

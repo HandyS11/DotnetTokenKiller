@@ -17,9 +17,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Declared <see langword="internal"/> because its primary constructor takes the internal
 /// <see cref="HomePaths"/>; reached polymorphically via <see cref="IProviderIntegrator"/> through DI.
 /// </remarks>
-#pragma warning disable CS9113 // 'home' is unread until IntegrateGlobalAsync is implemented in Task 4
 internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator
-#pragma warning restore CS9113
 {
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
@@ -59,8 +57,21 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     }
 
     /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
-        => throw new NotImplementedException("Implemented in Task 4.");
+    public async Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
+    {
+        var context = new IntegrationContext(force);
+
+        // Global (~/.copilot/hooks) is not a git-tracked location, so an absolute cwd is portable and
+        // unambiguous here (unlike the repo variant, which uses a relative cwd for a committed file).
+        await WriteHookArtifactsAsync(home.CopilotHooksDir, home.CopilotHooksDir, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        context.Notes.Add(
+            "Copilot CLI instructions are repository-scoped; the global install adds the rewrite hook only. "
+            + "Run 'dtk integrate copilot-cli' inside a project to also write .github/copilot-instructions.md.");
+
+        return context.ToResult();
+    }
 
     /// <summary>Relative <c>cwd</c> for the repository hook (resolved by Copilot CLI against the repo root).</summary>
     private const string HookCwdRelative = ".github/hooks";
