@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<HomePaths>();
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();
         services.AddTransient<IProviderIntegrator, GitHubCopilotIntegrator>();
+        services.AddTransient<IProviderIntegrator, CopilotCliIntegrator>();
         services.AddTransient<IProviderIntegrator, GeminiCliIntegrator>();
         services.AddTransient<IProviderIntegrator, CursorIntegrator>();
         services.AddTransient<IProviderIntegrator, WindsurfIntegrator>();

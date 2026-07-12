@@ -92,6 +92,8 @@ try
             .WithExample(integrateCmd, "claude")
             .WithExample(integrateCmd, "claude", "--dir", "/path/to/project", "--force")
             .WithExample(integrateCmd, "copilot")
+            .WithExample(integrateCmd, "copilot-cli")
+            .WithExample(integrateCmd, "copilot-cli", "--global")
             .WithExample(integrateCmd, "gemini")
             .WithExample(integrateCmd, "cursor")
             .WithExample(integrateCmd, "windsurf")
