@@ -107,12 +107,13 @@ internal sealed partial class RtkHookCoexistence
             await WriteConfigAsync(updated, cancellationToken).ConfigureAwait(false);
             return new RtkReconcileOutcome(null, _rtkConfigPath, [ExcludedNote]);
         }
-        catch (IOException)
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            return new RtkReconcileOutcome(null, null, [AdviceNote()]);
-        }
-        catch (UnauthorizedAccessException)
-        {
+            // Never fail integration over rtk's config. An unreadable/unwritable file (IOException,
+            // UnauthorizedAccessException) or an invalid config path — e.g. a malformed XDG_CONFIG_HOME
+            // producing bad path characters (ArgumentException, NotSupportedException) — degrades to
+            // an advisory note instead of throwing.
             return new RtkReconcileOutcome(null, null, [AdviceNote()]);
         }
     }
@@ -231,8 +232,14 @@ internal sealed partial class RtkHookCoexistence
 
     private static string DefaultRtkConfigPath()
     {
+        // Per the XDG Base Directory spec, XDG_CONFIG_HOME must be an absolute path; a relative (or
+        // empty) value is invalid and is ignored in favor of the ~/.config default. Honoring a
+        // relative value would resolve the write against the current working directory — surprising
+        // and unsafe for a global config.
         var xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        var configHome = string.IsNullOrEmpty(xdg) ? Path.Combine(Home(), ".config") : xdg;
+        var configHome = string.IsNullOrEmpty(xdg) || !Path.IsPathRooted(xdg)
+            ? Path.Combine(Home(), ".config")
+            : xdg;
         return Path.Combine(configHome, "rtk", "config.toml");
     }
 

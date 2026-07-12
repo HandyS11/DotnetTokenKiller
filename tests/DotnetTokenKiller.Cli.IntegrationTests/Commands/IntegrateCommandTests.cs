@@ -446,6 +446,27 @@ public class IntegrateCommandTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_InProjectFileStartingWithDotDot_RendersRelativeNotAbsolute()
+    {
+        // A filename that merely begins with ".." (a real file directly under the project root) is
+        // NOT outside the project — it must render as the relative "..notes.txt", not an absolute path.
+        const string dir = "/project";
+        const string inProjectPath = "/project/..notes.txt";
+        var result = new IntegrationResult([inProjectPath], [], []);
+
+        var (command, console) = Create("claude", result);
+
+        await command.RunAsync(new IntegrateCommandSettings
+        {
+            Provider = "claude",
+            Directory = dir
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain("..notes.txt");
+        console.Output.Should().NotContain(inProjectPath); // not rendered as the absolute "/project/..notes.txt"
+    }
+
+    [Fact]
     public async Task ExecuteAsync_PathWithInvalidChars_FallsBackToFullPath()
     {
         const string dir = "/project";

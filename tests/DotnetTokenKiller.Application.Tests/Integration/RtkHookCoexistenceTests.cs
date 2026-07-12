@@ -33,6 +33,20 @@ public sealed class RtkHookCoexistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task ReconcileRtkConfig_InvalidConfigPath_ReturnsAdviceWithoutThrowing()
+    {
+        // An invalid rtk config path (e.g. from a malformed XDG_CONFIG_HOME) makes File/Directory
+        // APIs throw ArgumentException/NotSupportedException; reconcile must degrade to advice, not throw.
+        var sut = new RtkHookCoexistence(UserClaudeDir, "invalid\0path/config.toml");
+
+        var outcome = await sut.ReconcileRtkConfigAsync(CancellationToken.None);
+
+        outcome.CreatedConfigPath.Should().BeNull();
+        outcome.UpdatedConfigPath.Should().BeNull();
+        outcome.Notes.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task IsRtkHookPresent_RtkHookInUserSettings_ReturnsTrue()
     {
         await WriteAsync(Path.Combine(UserClaudeDir, "settings.json"), """
