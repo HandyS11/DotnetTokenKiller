@@ -156,5 +156,7 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
 
         File.Exists(InstructionsPath).Should().BeFalse();
+        Directory.Exists(Path.Combine(_isolatedHome, ".github")).Should().BeFalse();
+        Directory.GetFiles(_isolatedHome, "copilot-instructions.md", SearchOption.AllDirectories).Should().BeEmpty();
     }
 }

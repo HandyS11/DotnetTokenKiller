@@ -1,16 +1,17 @@
 namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>
-/// Shared Python source for the pre-tool-execution hooks shipped by <see cref="ClaudeCodeIntegrator"/> and
-/// <see cref="GeminiCliIntegrator"/>.
+/// Shared Python source for the pre-tool-execution hooks shipped by <see cref="ClaudeCodeIntegrator"/>,
+/// <see cref="GeminiCliIntegrator"/>, and <see cref="CopilotCliIntegrator"/>.
 /// </summary>
 /// <remarks>
-/// Both hooks rewrite qualifying <c>dotnet &lt;sub&gt;</c> invocations to <c>dtk dotnet &lt;sub&gt;</c> using the
-/// identical subcommand pattern, quote-aware boundary scanner, and <c>rewrite()</c> function. They differ only in
-/// how the host CLI's payload is read and in the shape of the JSON printed back:
+/// All three hooks rewrite qualifying <c>dotnet &lt;sub&gt;</c> invocations to <c>dtk dotnet &lt;sub&gt;</c> using
+/// the identical subcommand pattern, quote-aware boundary scanner, and <c>rewrite()</c> function. They differ only
+/// in how the host CLI's payload is read and in the shape of the JSON printed back:
 /// <list type="bullet">
 ///   <item><description>Claude Code expects <c>hookSpecificOutput.updatedInput</c>.</description></item>
 ///   <item><description>Gemini CLI expects <c>hookSpecificOutput.tool_input</c> alongside a <c>decision</c> field.</description></item>
+///   <item><description>GitHub Copilot CLI expects <c>permissionDecision</c>/<c>modifiedArgs</c>.</description></item>
 /// </list>
 /// </remarks>
 internal static class HookScriptTemplates
@@ -184,37 +185,37 @@ internal static class HookScriptTemplates
 
     private const string CopilotCliMain = """
         def main() -> None:
+            # Copilot CLI is fail-closed: a non-zero exit denies the tool call. Guard the
+            # entire body so any unexpected shape (e.g. a top-level JSON array/string) is a
+            # silent no-op rather than an uncaught exception.
             try:
                 payload = json.load(sys.stdin)
-            except (json.JSONDecodeError, EOFError):
-                return
 
-            if payload.get("toolName") != "bash":
-                return
-
-            tool_args = payload.get("toolArgs", {})
-            if isinstance(tool_args, str):
-                try:
-                    tool_args = json.loads(tool_args)
-                except (json.JSONDecodeError, TypeError):
+                if payload.get("toolName") != "bash":
                     return
-            if not isinstance(tool_args, dict):
-                return
 
-            command = tool_args.get("command", "")
-            if not command:
-                return
+                tool_args = payload.get("toolArgs", {})
+                if isinstance(tool_args, str):
+                    tool_args = json.loads(tool_args)
+                if not isinstance(tool_args, dict):
+                    return
 
-            rewritten = rewrite(command)
+                command = tool_args.get("command", "")
+                if not command:
+                    return
 
-            if rewritten != command:
-                modified = dict(tool_args)
-                modified["command"] = rewritten
-                print(json.dumps({
-                    "permissionDecision": "allow",
-                    "modifiedArgs": modified,
-                }))
-            # No output on the no-change path: Copilot CLI proceeds normally.
+                rewritten = rewrite(command)
+
+                if rewritten != command:
+                    modified = dict(tool_args)
+                    modified["command"] = rewritten
+                    print(json.dumps({
+                        "permissionDecision": "allow",
+                        "modifiedArgs": modified,
+                    }))
+                # No output on the no-change path: Copilot CLI proceeds normally.
+            except Exception:
+                return  # Allow, no change: never let an unexpected error deny the command.
 
 
         if __name__ == "__main__":

@@ -101,7 +101,11 @@ Artifacts installed (both repo and global variants):
 3. **Instructions doc** (repo variant only) — section-merged into `.github/copilot-instructions.md`
    via `WriteSectionBasedFileAsync`, reusing the same `<!-- dtk -->` markers and
    `IntegrationInstructions.Markdown` as the existing `copilot` provider. Running both `integrate
-   copilot` and `integrate copilot-cli` is safe: the section is identical/idempotent.
+   copilot` and `integrate copilot-cli` is benign but **not** idempotent: `copilot-cli`'s section
+   additionally includes a preToolUse-hook paragraph that the IDE `copilot` section lacks, so the
+   two providers write different content into the same `<!-- dtk -->` block — last writer wins, with
+   no crash and no user-content loss, but switching providers may need `--force` to refresh the
+   section.
    The **global** variant installs the hook only and emits an advisory note that the instructions
    doc is repository-scoped.
 
