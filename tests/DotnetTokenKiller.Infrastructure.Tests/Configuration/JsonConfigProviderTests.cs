@@ -297,7 +297,7 @@ public sealed class JsonConfigProviderTests : IDisposable
     [Theory]
     [InlineData("""{"Tee":{"MaxFileSizeBytes":0}}""")]
     [InlineData("""{"Tee":{"MaxFileSizeBytes":-1024}}""")]
-    public async Task LoadAsync_MaxFileSizeBytesAtOrBelowZero_IsRejectedAsync(string json)
+    public async Task LoadAsync_MaxFileSizeBytesAtOrBelowZero_IsClampedToAtLeastOneAsync(string json)
     {
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(ConfigPath, json);
@@ -306,7 +306,7 @@ public sealed class JsonConfigProviderTests : IDisposable
         var config = await sut.LoadAsync();
 
         // A zero or negative cap would tee a truncated, empty log while the hint still promises
-        // full output. Reject it so the cap is always a usable size.
+        // full output, so Validate floors it at a minimum of 1.
         config.Tee.MaxFileSizeBytes.Should().BeGreaterThanOrEqualTo(1);
     }
 }

@@ -229,12 +229,14 @@ public sealed class ProcessCommandRunnerTests
 
     private static (string command, string[] args) MegabyteBothStreamsCommand()
     {
-        // Emit ~1 MB on stdout AND ~1 MB on stderr. The OS pipe buffer is only tens of KB,
-        // so a runner that drains the streams sequentially would deadlock: the child blocks
-        // writing the second stream while the runner waits on the first.
+        // Emit ~1 MB on stdout AND ~1 MB on stderr *concurrently* (interleaved). The OS pipe
+        // buffer is only tens of KB, so a runner that drains the streams sequentially deadlocks
+        // in EITHER read order: whichever stream it reads first, the other fills its buffer and
+        // blocks the child. A stdout-then-stderr sequential writer would not catch that.
+        // Linux runs both pipelines as background jobs and waits. Windows interleaves 1 KB chunks.
         return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? ("powershell", ["-NoProfile", "-Command", "[Console]::Out.Write('a' * 1048576); [Console]::Error.Write('b' * 1048576)"])
-            : ("sh", ["-c", "head -c 1048576 /dev/zero | tr '\\0' 'a'; head -c 1048576 /dev/zero | tr '\\0' 'b' 1>&2"]);
+            ? ("powershell", ["-NoProfile", "-Command", "for ($i = 0; $i -lt 1024; $i++) { [Console]::Out.Write('a' * 1024); [Console]::Error.Write('b' * 1024) }"])
+            : ("sh", ["-c", "head -c 1048576 /dev/zero | tr '\\0' 'a' & head -c 1048576 /dev/zero | tr '\\0' 'b' 1>&2 & wait"]);
     }
 
     private static (string command, string[] args) DelayedMarkerCommand(string markerPath, int sleepSeconds)
