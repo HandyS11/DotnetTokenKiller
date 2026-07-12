@@ -23,9 +23,9 @@
 
 ## Track A — SonarQube cleanup
 
-These 5 tasks are independent of the feature and can land first to green the gate. Tasks A1–A3 are behavior-preserving literal extractions covered by existing tests; A4–A5 are behavior-preserving method extractions covered by existing tests.
+These 5 tasks are independent of the feature and can land first to green the gate. Tasks 1–3 are behavior-preserving literal extractions covered by existing tests; 4–5 are behavior-preserving method extractions covered by existing tests.
 
-### Task A1: S1192 — extract `"dotnet"` literal constant (ArgumentPreprocessor)
+### Task 1: S1192 — extract `"dotnet"` literal constant (ArgumentPreprocessor)
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Cli/ArgumentPreprocessor.cs`
@@ -72,7 +72,7 @@ git commit -m "refactor: extract 'dotnet' literal constant (sonar S1192)"
 
 ---
 
-### Task A2: S1192 — extract `"duration"` group-name constant (DotnetTestFilter)
+### Task 2: S1192 — extract `"duration"` group-name constant (DotnetTestFilter)
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/Filters/DotnetTestFilter.cs`
@@ -118,7 +118,7 @@ git commit -m "refactor: extract 'duration' regex group-name constant (sonar S11
 
 ---
 
-### Task A3: S1192 — extract `"hooks"` literal constant (RtkHookCoexistence)
+### Task 3: S1192 — extract `"hooks"` literal constant (RtkHookCoexistence)
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/Integration/RtkHookCoexistence.cs`
@@ -163,7 +163,7 @@ git commit -m "refactor: extract 'hooks' literal constant (sonar S1192)"
 
 ---
 
-### Task A4: S3776 — reduce `FilteredRunUseCase.RunAsync` cognitive complexity (17 → ≤15)
+### Task 4: S3776 — reduce `FilteredRunUseCase.RunAsync` cognitive complexity (17 → ≤15)
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/UseCases/FilteredRunUseCase.cs:34-121`
@@ -255,7 +255,7 @@ git commit -m "refactor: reduce FilteredRunUseCase.RunAsync cognitive complexity
 
 ---
 
-### Task A5: S3776 — reduce `IntegratorHelpers.MergeJsonSettingsAsync` cognitive complexity (16 → ≤15)
+### Task 5: S3776 — reduce `IntegratorHelpers.MergeJsonSettingsAsync` cognitive complexity (16 → ≤15)
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/Integration/IntegratorHelpers.cs:174-273`
@@ -341,14 +341,14 @@ git commit -m "refactor: reduce MergeJsonSettingsAsync cognitive complexity (son
 
 ## Track B — Global integration
 
-### Task B1: Domain — add `IGlobalIntegrator` capability interface
+### Task 6: Domain — add `IGlobalIntegrator` capability interface
 
 **Files:**
 - Create: `src/DotnetTokenKiller.Domain/Integration/IGlobalIntegrator.cs`
 
 **Interfaces:**
 - Consumes: `IntegrationResult` (existing domain type).
-- Produces: `public interface IGlobalIntegrator { Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken); }` — consumed by Tasks B3–B6.
+- Produces: `public interface IGlobalIntegrator { Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken); }` — consumed by Tasks 8–11.
 
 - [ ] **Step 1: Create the interface**
 
@@ -383,7 +383,7 @@ git commit -m "feat: add IGlobalIntegrator capability interface"
 
 ---
 
-### Task B2: `HomePaths` seam + DI registration
+### Task 7: `HomePaths` seam + DI registration
 
 **Files:**
 - Create: `src/DotnetTokenKiller.Application/Integration/HomePaths.cs`
@@ -505,14 +505,14 @@ git commit -m "feat: add HomePaths seam for global config path resolution"
 
 ---
 
-### Task B3: `ClaudeCodeIntegrator` implements `IGlobalIntegrator`
+### Task 8: `ClaudeCodeIntegrator` implements `IGlobalIntegrator`
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/Integration/ClaudeCodeIntegrator.cs`
 - Modify (test ctor + new tests): `tests/DotnetTokenKiller.Application.Tests/Integration/ClaudeCodeIntegratorTests.cs`
 
 **Interfaces:**
-- Consumes: `IGlobalIntegrator` (B1), `HomePaths` (B2), `RtkHookCoexistence` (existing).
+- Consumes: `IGlobalIntegrator` (6), `HomePaths` (7), `RtkHookCoexistence` (existing).
 - Produces: `ClaudeCodeIntegrator : IProviderIntegrator, IGlobalIntegrator`; ctor becomes `ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -689,7 +689,7 @@ In `src/DotnetTokenKiller.Application/DependencyInjection.cs`, the existing line
 `services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();` keeps working. No global
 resolution is needed via DI (the use case downcasts `IProviderIntegrator` to `IGlobalIntegrator`),
 so no DI change is required here. Confirm `ClaudeCodeIntegrator`'s new `HomePaths` dependency resolves
-(registered in B2).
+(registered in 7).
 
 - [ ] **Step 5: Build + run tests (new + existing local ones)**
 
@@ -706,14 +706,14 @@ git commit -m "feat: global integration for Claude Code (dtk integrate claude --
 
 ---
 
-### Task B4: `GeminiCliIntegrator` implements `IGlobalIntegrator`
+### Task 9: `GeminiCliIntegrator` implements `IGlobalIntegrator`
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/Integration/GeminiCliIntegrator.cs`
 - Modify (test ctor + new tests): `tests/DotnetTokenKiller.Application.Tests/Integration/GeminiCliIntegratorTests.cs`
 
 **Interfaces:**
-- Consumes: `IGlobalIntegrator` (B1), `HomePaths` (B2).
+- Consumes: `IGlobalIntegrator` (6), `HomePaths` (7).
 - Produces: `GeminiCliIntegrator : IProviderIntegrator, IGlobalIntegrator`; ctor becomes `GeminiCliIntegrator(HomePaths home)`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -830,14 +830,14 @@ git commit -m "feat: global integration for Gemini CLI"
 
 ---
 
-### Task B5: `AiderIntegrator` implements `IGlobalIntegrator` (absolute `read:` path)
+### Task 10: `AiderIntegrator` implements `IGlobalIntegrator` (absolute `read:` path)
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/Integration/AiderIntegrator.cs`
 - Modify (test ctor + new tests): `tests/DotnetTokenKiller.Application.Tests/Integration/AiderIntegratorTests.cs`
 
 **Interfaces:**
-- Consumes: `IGlobalIntegrator` (B1), `HomePaths` (B2).
+- Consumes: `IGlobalIntegrator` (6), `HomePaths` (7).
 - Produces: `AiderIntegrator : IProviderIntegrator, IGlobalIntegrator`; ctor becomes `AiderIntegrator(HomePaths home)`.
 
 **Design note:** Local aider writes `.aider-dtk-instructions.md` + `.aider.conf.yml` in the project and the `read:` entry is the relative filename. Global writes `~/.aider.conf.yml` + `~/.aider-dtk-instructions.md`, and the `read:` entry must be the **absolute** path to `~/.aider-dtk-instructions.md` (a home-level conf cannot rely on a cwd-relative filename resolving). The instructions filename used inside the conf section therefore differs per scope.
@@ -971,7 +971,7 @@ git commit -m "feat: global integration for Aider (absolute read: path)"
 
 ---
 
-### Task B6: `IntegrateUseCase.RunGlobalAsync` + CLI `--global` flag
+### Task 11: `IntegrateUseCase.RunGlobalAsync` + CLI `--global` flag
 
 **Files:**
 - Modify: `src/DotnetTokenKiller.Application/Integration/IntegrateUseCase.cs`
@@ -980,7 +980,7 @@ git commit -m "feat: global integration for Aider (absolute read: path)"
 - Test: `tests/DotnetTokenKiller.Application.Tests/Integration/IntegrateUseCaseTests.cs`
 
 **Interfaces:**
-- Consumes: `IGlobalIntegrator` (B1), existing `IntegrateUseCase` internals.
+- Consumes: `IGlobalIntegrator` (6), existing `IntegrateUseCase` internals.
 - Produces:
   - `IntegrateUseCase.RunGlobalAsync(string providerName, bool force, CancellationToken)` → `Task<IntegrationResult>`; throws `InvalidOperationException` when the provider is unknown or not an `IGlobalIntegrator`.
   - `IntegrateCommandSettings.Global` (bool, `-g|--global`).
@@ -1161,7 +1161,7 @@ git commit -m "feat: dtk integrate --global flag with repo-only provider guard"
 
 ---
 
-### Task B7: Documentation
+### Task 12: Documentation
 
 **Files:**
 - Modify: `README.md` (AI Agent Setup section)
