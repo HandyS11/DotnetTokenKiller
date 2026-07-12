@@ -91,6 +91,10 @@ internal sealed partial class RtkHookCoexistence
         {
             // Tolerate a settings file we cannot read — never fail integration over another tool's file.
         }
+        catch (UnauthorizedAccessException)
+        {
+            // Tolerate a permission-denied settings file — never fail integration over another tool's file.
+        }
 
         return false;
     }
