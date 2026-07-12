@@ -31,8 +31,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
             psi.ArgumentList.Add(arg);
         }
 
-        using var process = Process.Start(psi)
-                            ?? throw new InvalidOperationException($"Failed to start process: {command}");
+        using var process = StartProcess(psi, command);
 
         // Close stdin immediately so a child that reads it sees EOF and exits instead of hanging
         // forever waiting for input this non-interactive capture will never provide.
@@ -78,8 +77,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
             psi.ArgumentList.Add(arg);
         }
 
-        using var process = Process.Start(psi)
-                            ?? throw new InvalidOperationException($"Failed to start process: {command}");
+        using var process = StartProcess(psi, command);
 
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
         var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
@@ -92,6 +90,21 @@ public sealed class ProcessCommandRunner : ICommandRunner
         finally
         {
             await registration.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private static Process StartProcess(ProcessStartInfo psi, string command)
+    {
+        try
+        {
+            return Process.Start(psi)
+                   ?? throw new InvalidOperationException($"Failed to start process: {command}");
+        }
+        catch (Win32Exception ex)
+        {
+            // The OS refused to launch (missing binary, no exec permission). The raw Win32Exception
+            // never names the command, so wrap it in a message that says which one failed and why.
+            throw new InvalidOperationException($"Failed to start process '{command}': {ex.Message}", ex);
         }
     }
 

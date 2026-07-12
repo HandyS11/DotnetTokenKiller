@@ -143,7 +143,9 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
         var tee = config.Tee with
         {
             MaxFiles = Math.Max(1, config.Tee.MaxFiles),
-            MaxFileSizeBytes = Math.Max(0, config.Tee.MaxFileSizeBytes)
+            // Floor at 1, not 0: a zero/negative cap would tee an empty log while the hint still
+            // promises the full output.
+            MaxFileSizeBytes = Math.Max(1, config.Tee.MaxFileSizeBytes)
         };
         return new DtkConfig(tracking, config.Display, tee);
     }

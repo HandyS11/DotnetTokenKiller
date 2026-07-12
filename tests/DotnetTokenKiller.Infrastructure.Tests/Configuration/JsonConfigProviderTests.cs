@@ -265,4 +265,48 @@ public sealed class JsonConfigProviderTests : IDisposable
 
         await act.Should().NotThrowAsync();
     }
+
+    [Theory]
+    [InlineData("""{"Tracking":{"RetentionDays":0}}""")]
+    [InlineData("""{"Tracking":{"RetentionDays":-30}}""")]
+    public async Task LoadAsync_RetentionDaysBelowOne_IsClampedToOneAsync(string json)
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, json);
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Tracking.RetentionDays.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("""{"Tee":{"MaxFiles":0}}""")]
+    [InlineData("""{"Tee":{"MaxFiles":-5}}""")]
+    public async Task LoadAsync_MaxFilesBelowOne_IsClampedToOneAsync(string json)
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, json);
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        config.Tee.MaxFiles.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("""{"Tee":{"MaxFileSizeBytes":0}}""")]
+    [InlineData("""{"Tee":{"MaxFileSizeBytes":-1024}}""")]
+    public async Task LoadAsync_MaxFileSizeBytesAtOrBelowZero_IsRejectedAsync(string json)
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, json);
+        var sut = CreateSut();
+
+        var config = await sut.LoadAsync();
+
+        // A zero or negative cap would tee a truncated, empty log while the hint still promises
+        // full output. Reject it so the cap is always a usable size.
+        config.Tee.MaxFileSizeBytes.Should().BeGreaterThanOrEqualTo(1);
+    }
 }
