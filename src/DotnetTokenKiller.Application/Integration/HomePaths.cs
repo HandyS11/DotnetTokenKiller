@@ -34,4 +34,7 @@ internal sealed class HomePaths
 
     /// <summary>Gets the user-level dtk instructions file path (<c>~/.aider-dtk-instructions.md</c>).</summary>
     internal string AiderInstructionsPath => Path.Combine(Home, ".aider-dtk-instructions.md");
+
+    /// <summary>Gets the user-level GitHub Copilot CLI hooks directory (<c>~/.copilot/hooks</c>).</summary>
+    internal string CopilotHooksDir => Path.Combine(Home, ".copilot", "hooks");
 }

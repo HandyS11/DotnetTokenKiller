@@ -68,7 +68,7 @@ context consumed.
 - **Test filtering** — removes adapter banners, license warnings, and reflection stack frames (~84% savings)
 - **Restore/Clean filtering** — condenses output to essentials (~47–98% savings)
 - **Format filtering** — shows only violations with workspace-relative paths
-- **7 AI agent integrations** — Claude Code, GitHub Copilot, Gemini CLI, Cursor, Windsurf, Aider, JetBrains AI
+- **8 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Cursor, Windsurf, Aider, JetBrains AI
 - **Token analytics** — tracks per-command savings over time with `dtk gain`
 - **Self-diagnostics** — `dtk doctor` validates your setup in one command
 - **Shell completion** — bash, zsh, fish, and PowerShell
@@ -120,30 +120,33 @@ For the providers with a home config, add `--global` (`-g`) to install into your
 the integration applies across **all** projects:
 
 ```sh
-dtk integrate claude --global   # ~/.claude
-dtk integrate gemini --global   # ~/.gemini
-dtk integrate aider  --global   # ~/.aider.conf.yml
+dtk integrate claude      --global   # ~/.claude
+dtk integrate gemini      --global   # ~/.gemini
+dtk integrate aider       --global   # ~/.aider.conf.yml
+dtk integrate copilot-cli --global   # ~/.copilot/hooks
 ```
 
 Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
-for **claude**, **gemini**, and **aider** (the providers with a home config).
+for **claude**, **gemini**, **aider**, and **copilot-cli** (the providers with a home config).
 
 ### Per-project install
 
 For the other providers — or when you want dtk scoped to a single repository — run
 `dtk integrate <provider>` inside the project (without `--global`):
 
-| Provider           | Command                   | What it creates                                      |
-|--------------------|---------------------------|------------------------------------------------------|
-| **Claude Code**    | `dtk integrate claude`    | Skill file, PreToolUse hook, settings merge          |
-| **GitHub Copilot** | `dtk integrate copilot`   | Section in `.github/copilot-instructions.md`         |
-| **Gemini CLI**     | `dtk integrate gemini`    | BeforeTool hook, settings merge, `GEMINI.md` section |
-| **Cursor**         | `dtk integrate cursor`    | `.cursor/rules/dtk.mdc`                              |
-| **Windsurf**       | `dtk integrate windsurf`  | `.windsurf/rules/dtk.md`                             |
-| **Aider**          | `dtk integrate aider`     | Instructions file, `.aider.conf.yml` section         |
-| **JetBrains AI**   | `dtk integrate jetbrains` | Section in `.junie/guidelines.md`                    |
+| Provider               | Command                     | What it creates                                            |
+|------------------------|-----------------------------|------------------------------------------------------------|
+| **Claude Code**        | `dtk integrate claude`      | Skill file, PreToolUse hook, settings merge                |
+| **GitHub Copilot**     | `dtk integrate copilot`     | Section in `.github/copilot-instructions.md`               |
+| **GitHub Copilot CLI** | `dtk integrate copilot-cli` | preToolUse hook in `.github/hooks/` + instructions section |
+| **Gemini CLI**         | `dtk integrate gemini`      | BeforeTool hook, settings merge, `GEMINI.md` section       |
+| **Cursor**             | `dtk integrate cursor`      | `.cursor/rules/dtk.mdc`                                    |
+| **Windsurf**           | `dtk integrate windsurf`    | `.windsurf/rules/dtk.md`                                   |
+| **Aider**              | `dtk integrate aider`       | Instructions file, `.aider.conf.yml` section               |
+| **JetBrains AI**       | `dtk integrate jetbrains`   | Section in `.junie/guidelines.md`                          | `dtk integrate jetbrains`   | Section in `.junie/guidelines.md`                    |
 
 `copilot`, `cursor`, `windsurf`, and `jetbrains` are repository-scoped and have no global mode.
+`copilot-cli` is distinct from `copilot` (instruction-only, Copilot IDE) and supports `--global`.
 `--global` cannot be combined with `--dir`.
 
 All commands are idempotent — re-running is safe. Pass `--force` to refresh existing files.

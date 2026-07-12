@@ -119,6 +119,49 @@ public class IntegrateUseCaseTests
         stub.LastForce.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task RunAsync_CopilotCli_WritesRepositoryArtifacts()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"dtk-usecase-copilotcli-{Guid.NewGuid()}");
+        try
+        {
+            var sut = new IntegrateUseCase([new CopilotCliIntegrator(new HomePaths(Path.Combine(tempDir, "home")))]);
+
+            var result = await sut.RunAsync("copilot-cli", tempDir, false, CancellationToken.None);
+
+            result.CreatedFiles.Should().NotBeEmpty();
+            File.Exists(Path.Combine(tempDir, ".github", "hooks", "dtk-dotnet.json")).Should().BeTrue();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RunGlobalAsync_CopilotCli_DoesNotThrow()
+    {
+        var home = Path.Combine(Path.GetTempPath(), $"dtk-usecase-copilotcli-global-{Guid.NewGuid()}");
+        try
+        {
+            var sut = new IntegrateUseCase([new CopilotCliIntegrator(new HomePaths(home))]);
+
+            var act = () => sut.RunGlobalAsync("copilot-cli", false, CancellationToken.None);
+
+            await act.Should().NotThrowAsync();
+        }
+        finally
+        {
+            if (Directory.Exists(home))
+            {
+                Directory.Delete(home, true);
+            }
+        }
+    }
+
     private sealed class StubIntegrator(string providerName) : IProviderIntegrator
     {
         public string? LastDirectory { get; private set; }

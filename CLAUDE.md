@@ -35,6 +35,10 @@ jb inspectcode DotnetTokenKiller.slnx --output=artifacts/inspectcode.xml --forma
 jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Syntax Style"
 ```
 
+`dtk integrate copilot-cli` installs a GitHub Copilot CLI `preToolUse` hook (`.github/hooks/`) that rewrites
+`dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`). Distinct from `dtk integrate copilot`
+(instruction-only, Copilot IDE).
+
 ## Git Hooks
 
 The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.props` files. Install it once with:
