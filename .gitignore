@@ -512,7 +512,5 @@ $RECYCLE.BIN/
 
 .sonarlint/
 
+# Stryker.NET
 StrykerOutput/
-
-# Superpowers
-docs/superpowers/*
