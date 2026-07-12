@@ -81,9 +81,7 @@ public sealed class AiderIntegrator : IProviderIntegrator
             InstructionsMarkdown, context, cancellationToken).ConfigureAwait(false);
 
         var confPath = Path.Combine(directory, ".aider.conf.yml");
-        var confSection = await MergeExistingReadKeyAsync(confPath, cancellationToken).ConfigureAwait(false)
-            ? AiderConfSectionWithoutReadKey
-            : AiderConfSection;
+        var confSection = await PrepareConfSectionAsync(confPath, force, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             confPath, SectionMarker, SectionEndMarker, confSection,
@@ -93,33 +91,43 @@ public sealed class AiderIntegrator : IProviderIntegrator
     }
 
     /// <summary>
-    /// If <paramref name="confPath"/> already declares a top-level <c>read:</c> key outside the
-    /// dtk-managed section, merges <see cref="InstructionsFileName"/> into that key's list (both
-    /// flow style <c>read: [a, b]</c> and block style <c>read:\n  - a</c> are supported) instead of
-    /// letting the dtk section declare a second top-level <c>read:</c> key that would shadow it.
+    /// Decides which dtk section to write and, when the section write will actually proceed,
+    /// merges <see cref="InstructionsFileName"/> into an existing top-level <c>read:</c> key
+    /// outside the dtk-managed section (both flow style <c>read: [a, b]</c> and block style
+    /// <c>read:\n  - a</c>) instead of letting the dtk section declare a second top-level
+    /// <c>read:</c> key that would shadow it.
+    /// When the file already contains the section marker and <paramref name="force"/> is
+    /// <see langword="false"/>, <see cref="IntegratorHelpers.WriteSectionBasedFileAsync"/> will
+    /// skip the file — so this method leaves it completely untouched (no merge, no write),
+    /// honoring the "Skipped means no changes" contract.
     /// </summary>
     /// <param name="confPath">Path to the Aider configuration file.</param>
+    /// <param name="force">Whether the integration is running with the force flag.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// <see langword="true"/> when an existing top-level <c>read:</c> key was found (whether or not
-    /// the file needed a change); <see langword="false"/> when no such key exists, meaning the dtk
-    /// section should declare its own.
+    /// <see cref="AiderConfSectionWithoutReadKey"/> when an external <c>read:</c> key exists and
+    /// was merged into (so the written section must not contribute a second top-level key);
+    /// <see cref="AiderConfSection"/> otherwise.
     /// </returns>
-    private static async Task<bool> MergeExistingReadKeyAsync(string confPath, CancellationToken cancellationToken)
+    private static async Task<string> PrepareConfSectionAsync(
+        string confPath,
+        bool force,
+        CancellationToken cancellationToken)
     {
         if (!File.Exists(confPath))
         {
-            return false;
+            return AiderConfSection;
         }
 
         var content = await File.ReadAllTextAsync(confPath, cancellationToken).ConfigureAwait(false);
-        if (!TryMergeExistingReadKey(ref content))
+        var sectionWriteWillSkip = content.Contains(SectionMarker, StringComparison.Ordinal) && !force;
+        if (sectionWriteWillSkip || !TryMergeExistingReadKey(ref content))
         {
-            return false;
+            return AiderConfSection;
         }
 
         await File.WriteAllTextAsync(confPath, content, cancellationToken).ConfigureAwait(false);
-        return true;
+        return AiderConfSectionWithoutReadKey;
     }
 
     private static bool TryMergeExistingReadKey(ref string content)
@@ -133,12 +141,42 @@ public sealed class AiderIntegrator : IProviderIntegrator
         }
 
         var afterColon = lines[readLineIndex][ReadKeyPrefix.Length..].Trim();
-        var updatedLines = afterColon.Length == 0
+        var (value, comment) = SplitTrailingComment(afterColon);
+        var updatedLines = value.Length == 0
             ? MergeBlockStyle(lines, readLineIndex)
-            : MergeFlowStyle(lines, readLineIndex, afterColon);
+            : MergeFlowStyle(lines, readLineIndex, value, comment);
 
         content = string.Join('\n', updatedLines);
         return true;
+    }
+
+    /// <summary>
+    /// Splits a trailing YAML comment (a <c>#</c> preceded by whitespace, or at the start, outside
+    /// any flow-sequence brackets) off the text following the <c>read:</c> key, so a commented key
+    /// line is neither mistaken for a flow value nor spliced into the rebuilt list.
+    /// </summary>
+    /// <param name="text">The trimmed text following <c>read:</c> on the key line.</param>
+    /// <returns>The value with the comment removed (trimmed), and the comment itself (empty when none).</returns>
+    private static (string Value, string Comment) SplitTrailingComment(string text)
+    {
+        var bracketDepth = 0;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            switch (text[i])
+            {
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    bracketDepth--;
+                    break;
+                case '#' when bracketDepth == 0 && (i == 0 || char.IsWhiteSpace(text[i - 1])):
+                    return (text[..i].TrimEnd(), text[i..]);
+            }
+        }
+
+        return (text, string.Empty);
     }
 
     /// <summary>Finds the first top-level <c>read:</c> line outside the dtk-managed marker block, if any.</summary>
@@ -176,11 +214,12 @@ public sealed class AiderIntegrator : IProviderIntegrator
     /// <summary>Merges into a flow-style <c>read: [a, b]</c> (or bare scalar <c>read: a</c>) line.</summary>
     /// <param name="lines">The configuration file's content, split into lines.</param>
     /// <param name="readLineIndex">Index of the line declaring the top-level <c>read:</c> key.</param>
-    /// <param name="afterColon">The trimmed content following <c>read:</c> on that line.</param>
+    /// <param name="value">The content following <c>read:</c> on that line, trimmed and with any trailing comment removed.</param>
+    /// <param name="comment">The trailing comment removed from that line (empty when none); re-appended to the rebuilt line.</param>
     /// <returns>The updated lines, unchanged if the instructions file is already listed.</returns>
-    private static string[] MergeFlowStyle(string[] lines, int readLineIndex, string afterColon)
+    private static string[] MergeFlowStyle(string[] lines, int readLineIndex, string value, string comment)
     {
-        var trimmed = afterColon;
+        var trimmed = value;
         if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
         {
             trimmed = trimmed[1..^1];
@@ -197,8 +236,10 @@ public sealed class AiderIntegrator : IProviderIntegrator
 
         items.Add(InstructionsFileName);
 
+        var commentSuffix = comment.Length == 0 ? string.Empty : "  " + comment;
+        var lineEnding = lines[readLineIndex].EndsWith('\r') ? "\r" : string.Empty;
         var updated = (string[])lines.Clone();
-        updated[readLineIndex] = $"{ReadKeyPrefix} [{string.Join(", ", items)}]";
+        updated[readLineIndex] = $"{ReadKeyPrefix} [{string.Join(", ", items)}]{commentSuffix}{lineEnding}";
         return updated;
     }
 
@@ -232,8 +273,9 @@ public sealed class AiderIntegrator : IProviderIntegrator
             insertIndex++;
         }
 
+        var lineEnding = lines[readLineIndex].EndsWith('\r') ? "\r" : string.Empty;
         var updated = new List<string>(lines);
-        updated.Insert(insertIndex, indent + BlockItemPrefix + InstructionsFileName);
+        updated.Insert(insertIndex, indent + BlockItemPrefix + InstructionsFileName + lineEnding);
         return [.. updated];
     }
 }

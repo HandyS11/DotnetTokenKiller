@@ -173,6 +173,89 @@ public sealed class AiderIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_FlowStyleWithTrailingComment_KeepsListValidAndPreservesComment()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfPath, "read: [CONVENTIONS.md]  # keep in context\n");
+
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var text = await File.ReadAllTextAsync(ConfPath);
+        CountTopLevelKeys(text, "read").Should().Be(1);
+        text.Should().Contain("read: [CONVENTIONS.md, .aider-dtk-instructions.md]")
+            .And.Contain("# keep in context");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_BlockStyleWithTrailingCommentOnKeyLine_MergesAsBlockStyle()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfPath, "read:  # files aider always loads\n  - CONVENTIONS.md\n");
+
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var text = await File.ReadAllTextAsync(ConfPath);
+        CountTopLevelKeys(text, "read").Should().Be(1);
+        text.Should().Contain("- CONVENTIONS.md")
+            .And.Contain("- .aider-dtk-instructions.md")
+            .And.Contain("# files aider always loads")
+            .And.NotContain("read: [");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_MarkerAndExternalReadKey_NoForce_SkipsWithoutTouchingFile()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var withUserKey = "read: [CONVENTIONS.md]\n" + await File.ReadAllTextAsync(ConfPath);
+        await File.WriteAllTextAsync(ConfPath, withUserKey);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.SkippedFiles.Should().Contain(ConfPath);
+        var text = await File.ReadAllTextAsync(ConfPath);
+        text.Should().Be(withUserKey);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_MarkerAndExternalReadKey_WithForce_EndsWithSingleReadKey()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var withUserKey = "read: [CONVENTIONS.md]\n" + await File.ReadAllTextAsync(ConfPath);
+        await File.WriteAllTextAsync(ConfPath, withUserKey);
+
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+
+        result.UpdatedFiles.Should().Contain(ConfPath);
+        var text = await File.ReadAllTextAsync(ConfPath);
+        CountTopLevelKeys(text, "read").Should().Be(1);
+        text.Should().Contain("CONVENTIONS.md").And.Contain(".aider-dtk-instructions.md");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_CrLfFlowStyle_PreservesLineEndingOnRewrittenLine()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfPath, "read: [CONVENTIONS.md]\r\nauto-commits: false\r\n");
+
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var text = await File.ReadAllTextAsync(ConfPath);
+        text.Should().Contain("read: [CONVENTIONS.md, .aider-dtk-instructions.md]\r\n");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_CrLfBlockStyle_PreservesLineEndingOnInsertedLine()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfPath, "read:\r\n  - CONVENTIONS.md\r\nauto-commits: false\r\n");
+
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var text = await File.ReadAllTextAsync(ConfPath);
+        text.Should().Contain("  - .aider-dtk-instructions.md\r\n");
+    }
+
+    [Fact]
     public void ProviderName_ReturnsAider()
     {
         _sut.ProviderName.Should().Be("aider");
