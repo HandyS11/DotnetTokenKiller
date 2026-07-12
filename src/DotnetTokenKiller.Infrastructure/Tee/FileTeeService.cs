@@ -149,17 +149,24 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             return text;
         }
 
-        var bytes = Encoding.UTF8.GetBytes(text);
-        var cut = (int)Math.Min(maxBytes, bytes.Length);
-
-        // Step back over any trailing continuation bytes (10xxxxxx) so the cut never lands
-        // inside a multi-byte sequence, dropping that partial rune entirely.
-        while (cut > 0 && (bytes[cut] & 0xC0) == 0x80)
+        // Walk runes and stop before the budget is exceeded rather than materializing the whole
+        // string as a byte[] — captured output can be very large, and that allocation is the OOM
+        // risk TeeAndHintAsync swallows (silently dropping the log). Slicing on a rune boundary also
+        // guarantees we never split a multi-byte sequence.
+        var chars = 0;
+        var runeBytes = 0;
+        foreach (var rune in text.EnumerateRunes())
         {
-            cut--;
+            if (runeBytes + rune.Utf8SequenceLength > maxBytes)
+            {
+                break;
+            }
+
+            runeBytes += rune.Utf8SequenceLength;
+            chars += rune.Utf16SequenceLength;
         }
 
-        return Encoding.UTF8.GetString(bytes, 0, cut);
+        return text[..chars];
     }
 
     private static void RotateFiles(string teeDir, int maxFiles)

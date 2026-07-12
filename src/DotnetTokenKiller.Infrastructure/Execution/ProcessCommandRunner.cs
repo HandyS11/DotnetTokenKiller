@@ -193,10 +193,14 @@ public sealed class ProcessCommandRunner : ICommandRunner
                 return;
             }
 
-            // Drain the small output so taskkill can't block on a full pipe, then bound the wait.
-            _ = killer.StandardOutput.ReadToEnd();
-            _ = killer.StandardError.ReadToEnd();
-            killer.WaitForExit(milliseconds: 5000);
+            // Bound the wait first so a hung taskkill can never block cleanup indefinitely; only
+            // drain the (tiny, sub-pipe-buffer) output once it has actually exited. If it doesn't
+            // exit in time, leave it — this is a best-effort backstop during cancellation cleanup.
+            if (killer.WaitForExit(milliseconds: 5000))
+            {
+                _ = killer.StandardOutput.ReadToEnd();
+                _ = killer.StandardError.ReadToEnd();
+            }
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
