@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetFormatFilter>(FilterKeys.Format);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
+        services.AddTransient<RtkHookCoexistence>();
         services.AddTransient<IProviderIntegrator, ClaudeCodeIntegrator>();
         services.AddTransient<IProviderIntegrator, GitHubCopilotIntegrator>();
         services.AddTransient<IProviderIntegrator, GeminiCliIntegrator>();

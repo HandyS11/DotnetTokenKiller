@@ -3,6 +3,7 @@ using DotnetTokenKiller.Domain.Integration;
 namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>Installs dtk integration artifacts for Claude Code.</summary>
+/// <param name="rtk">Detects and reconciles an rtk hook so dtk owns dotnet commands.</param>
 /// <remarks>
 /// Creates:
 /// <list type="bullet">
@@ -10,8 +11,16 @@ namespace DotnetTokenKiller.Application.Integration;
 ///   <item><description><c>.claude/hooks/dotnet-to-dtk.py</c></description></item>
 ///   <item><description><c>.claude/settings.json</c> (merged, never overwritten)</description></item>
 /// </list>
+/// Declared <see langword="internal"/> (rather than <see langword="public"/>, its original
+/// accessibility) because its primary constructor takes the <see langword="internal"/>
+/// <see cref="RtkHookCoexistence"/>: a primary constructor is as accessible as its containing
+/// type, and the compiler rejects (CS0051) a public constructor exposing a less-accessible
+/// parameter type. Keeping <see cref="RtkHookCoexistence"/> internal (rather than promoting it to
+/// public) requires this type to be internal too; callers still reach it polymorphically through
+/// the public <see cref="IProviderIntegrator"/> via DI, and tests reach it directly via
+/// <c>InternalsVisibleTo</c>.
 /// </remarks>
-public sealed class ClaudeCodeIntegrator : IProviderIntegrator
+internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk) : IProviderIntegrator
 {
     /// <summary>
     /// Quoted and rooted at <c>$CLAUDE_PROJECT_DIR</c> (the absolute project root Claude Code
@@ -103,6 +112,19 @@ public sealed class ClaudeCodeIntegrator : IProviderIntegrator
                 "Bash",
                 HookCommand),
             context, cancellationToken).ConfigureAwait(false);
+
+        var rtkOutcome = await rtk.ReconcileAsync(directory, cancellationToken).ConfigureAwait(false);
+        if (rtkOutcome.CreatedConfigPath is not null)
+        {
+            context.Created.Add(rtkOutcome.CreatedConfigPath);
+        }
+
+        if (rtkOutcome.UpdatedConfigPath is not null)
+        {
+            context.Updated.Add(rtkOutcome.UpdatedConfigPath);
+        }
+
+        context.Notes.AddRange(rtkOutcome.Notes);
 
         return context.ToResult();
     }

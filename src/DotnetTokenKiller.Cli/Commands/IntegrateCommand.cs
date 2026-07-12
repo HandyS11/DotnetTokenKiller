@@ -134,6 +134,13 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             var normalizedFullPath = Path.GetFullPath(fullPath);
 
             var relative = Path.GetRelativePath(normalizedBaseDir, normalizedFullPath);
+            if (relative.StartsWith("..", StringComparison.Ordinal))
+            {
+                // Files outside the project (e.g. the global rtk config) read better as an
+                // absolute path than as a "../../.." relative walk.
+                return normalizedFullPath.Replace(Path.DirectorySeparatorChar, '/');
+            }
+
             return relative.Replace(Path.DirectorySeparatorChar, '/');
         }
         catch

@@ -8,8 +8,15 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 {
     private const string RepoMarkerFileName = "DotnetTokenKiller.slnx";
 
-    private readonly ClaudeCodeIntegrator _sut = new();
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-claude-test-{Guid.NewGuid()}");
+    private readonly ClaudeCodeIntegrator _sut;
+
+    public ClaudeCodeIntegratorTests()
+    {
+        var userClaudeDir = Path.Combine(_tempDir, "isolated-home", ".claude");
+        var rtkConfigPath = Path.Combine(_tempDir, "isolated-config", "rtk", "config.toml");
+        _sut = new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath));
+    }
 
     public void Dispose()
     {
@@ -295,5 +302,25 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         var json = await File.ReadAllTextAsync(settingsPath);
         json.Should().Contain("dotnet-to-dtk.py");
         json.Should().Contain("some-other-hook.sh");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_RtkHookInProjectSettings_ExcludesDotnetAndAddsNote()
+    {
+        var userClaudeDir = Path.Combine(_tempDir, "rtk-home", ".claude");
+        var rtkConfigPath = Path.Combine(_tempDir, "rtk-config", "rtk", "config.toml");
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath, """
+            { "hooks": { "PreToolUse": [ { "matcher": "Bash",
+              "hooks": [ { "type": "command", "command": "rtk hook claude" } ] } ] } }
+            """);
+        var sut = new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath));
+
+        var result = await sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+
+        result.Notes.Should().ContainSingle(n => n.Contains("dotnet"));
+        result.CreatedFiles.Should().Contain(rtkConfigPath);
+        (await File.ReadAllTextAsync(rtkConfigPath)).Should().Contain("exclude_commands = [\"dotnet\"]");
     }
 }

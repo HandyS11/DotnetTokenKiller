@@ -226,8 +226,12 @@ public class IntegrateCommandTests
 
         try
         {
+            var userClaudeDir = Path.Combine(dir, "isolated-home", ".claude");
+            var rtkConfigPath = Path.Combine(dir, "isolated-config", "rtk", "config.toml");
             var console = new TestConsole();
-            var command = new IntegrateCommand(new IntegrateUseCase([new ClaudeCodeIntegrator()]), console);
+            var command = new IntegrateCommand(
+                new IntegrateUseCase([new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath))]),
+                console);
 
             var exitCode = await command.RunAsync(new IntegrateCommandSettings
             {
