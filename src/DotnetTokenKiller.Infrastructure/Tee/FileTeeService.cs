@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Tee;
@@ -49,13 +50,13 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
 
             var teeDir = GetTeeDir(teeConfig, teeDirOverride);
             Directory.CreateDirectory(teeDir);
+            RestrictToOwnerOnly(teeDir);
 
             // Rotate: delete oldest files if at/over limit
             RotateFiles(teeDir, teeConfig.MaxFiles);
 
-            // Truncate content
-            var maxChars = Math.Max(0, (int)Math.Min(teeConfig.MaxFileSizeBytes, int.MaxValue));
-            var content = rawOutput.Length > maxChars ? rawOutput[..maxChars] : rawOutput;
+            // Truncate to the configured byte budget without splitting a multi-byte UTF-8 sequence.
+            var content = TruncateToUtf8Bytes(rawOutput, teeConfig.MaxFileSizeBytes);
 
             // Write file
             var slug = SanitizeSlug(commandSlug);
@@ -63,7 +64,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             var uniqueSuffix = Guid.NewGuid().ToString("N");
             var fileName = $"{timestamp}_{uniqueSuffix}_{slug}.log";
             var filePath = Path.Combine(teeDir, fileName);
-            await File.WriteAllTextAsync(filePath, content, cancellationToken).ConfigureAwait(false);
+            await WriteOwnerOnlyAsync(filePath, content, cancellationToken).ConfigureAwait(false);
 
             return $"[full output: {filePath}]";
         }
@@ -95,6 +96,77 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         {
             // Intentional: cleanup errors must never surface to the user (but cancellation must propagate)
         }
+    }
+
+    private static void RestrictToOwnerOnly(string teeDir)
+    {
+        // Tee logs can carry secrets from a failed command's output, so both the directory and the
+        // file are kept owner-only (0700 / 0600). On Windows this is a no-op (POSIX modes only).
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        File.SetUnixFileMode(
+            teeDir,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
+    private static async Task WriteOwnerOnlyAsync(string filePath, string content, CancellationToken cancellationToken)
+    {
+        var options = new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None
+        };
+
+        // Keep the file owner-only (0600) on POSIX; UnixCreateMode is unsupported on Windows.
+        if (!OperatingSystem.IsWindows())
+        {
+            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        // Write UTF-8 bytes directly (no BOM), matching the repo's no-BOM policy.
+        var bytes = Encoding.UTF8.GetBytes(content);
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var stream = new FileStream(filePath, options);
+#pragma warning restore CA2007
+        await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string TruncateToUtf8Bytes(string text, long maxBytes)
+    {
+        // MaxFileSizeBytes is a byte budget; slicing the string by char count could overshoot the cap
+        // (multi-byte runes) or split a rune and emit U+FFFD. Cut on a UTF-8 code-point boundary instead.
+        if (maxBytes <= 0)
+        {
+            return string.Empty;
+        }
+
+        if (Encoding.UTF8.GetByteCount(text) <= maxBytes)
+        {
+            return text;
+        }
+
+        // Walk runes and stop before the budget is exceeded rather than materializing the whole
+        // string as a byte[] — captured output can be very large, and that allocation is the OOM
+        // risk TeeAndHintAsync swallows (silently dropping the log). Slicing on a rune boundary also
+        // guarantees we never split a multi-byte sequence.
+        var chars = 0;
+        var runeBytes = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (runeBytes + rune.Utf8SequenceLength > maxBytes)
+            {
+                break;
+            }
+
+            runeBytes += rune.Utf8SequenceLength;
+            chars += rune.Utf16SequenceLength;
+        }
+
+        return text[..chars];
     }
 
     private static void RotateFiles(string teeDir, int maxFiles)
