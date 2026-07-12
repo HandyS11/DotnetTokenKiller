@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Domain.Execution;
 
@@ -53,6 +54,14 @@ public sealed class ProcessCommandRunner : ICommandRunner
             return new CommandResult(await stdOutTask.ConfigureAwait(false), await stdErrTask.ConfigureAwait(false),
                 process.ExitCode);
         }
+        catch (OperationCanceledException)
+        {
+            // The read/wait tasks cancel the instant the token fires, which can unwind this method
+            // before the registration callback's tree-kill has actually reaped the child. Kill and
+            // wait for the whole tree here so the process is provably gone before we return.
+            await KillAndReapAsync(process).ConfigureAwait(false);
+            throw;
+        }
         finally
         {
             await registration.DisposeAsync().ConfigureAwait(false);
@@ -87,6 +96,11 @@ public sealed class ProcessCommandRunner : ICommandRunner
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             return process.ExitCode;
         }
+        catch (OperationCanceledException)
+        {
+            await KillAndReapAsync(process).ConfigureAwait(false);
+            throw;
+        }
         finally
         {
             await registration.DisposeAsync().ConfigureAwait(false);
@@ -108,19 +122,83 @@ public sealed class ProcessCommandRunner : ICommandRunner
         }
     }
 
-    private static void KillProcess(Process process)
+    private static async Task KillAndReapAsync(Process process)
     {
+        KillProcess(process);
+
+        // Bounded wait so cancellation cleanup can never hang: the kill was already issued, and if
+        // the OS is slow to tear the tree down we stop waiting once the grace period elapses.
+        using var grace = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
         {
-            if (!process.HasExited)
+            await process.WaitForExitAsync(grace.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Grace elapsed (or the original token is still firing); nothing more to do here.
+        }
+    }
+
+    private static void KillProcess(Process process)
+    {
+        int processId;
+        try
+        {
+            if (process.HasExited)
             {
-                process.Kill(true);
+                return;
             }
+
+            // Capture the id before the kill so the Windows backstop below can still target the tree.
+            processId = process.Id;
+            process.Kill(true);
         }
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or AggregateException)
         {
             // The process exited between the check and the kill, or the OS refused the kill
             // (already-reaped child / access race). Nothing left to terminate.
+            return;
+        }
+
+        // Backstop: Process.Kill(entireProcessTree: true) has proven unreliable at tearing down a
+        // shell subtree (e.g. powershell) on the Windows CI runner, leaving the child alive until it
+        // exits on its own. taskkill /T force-kills the whole tree by pid. Harmless if already dead.
+        if (OperatingSystem.IsWindows())
+        {
+            TryKillTreeWithTaskkill(processId);
+        }
+    }
+
+    private static void TryKillTreeWithTaskkill(int processId)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("taskkill")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            psi.ArgumentList.Add("/T");
+            psi.ArgumentList.Add("/F");
+            psi.ArgumentList.Add("/PID");
+            psi.ArgumentList.Add(processId.ToString(CultureInfo.InvariantCulture));
+
+            using var killer = Process.Start(psi);
+            if (killer is null)
+            {
+                return;
+            }
+
+            // Drain the small output so taskkill can't block on a full pipe, then bound the wait.
+            _ = killer.StandardOutput.ReadToEnd();
+            _ = killer.StandardError.ReadToEnd();
+            killer.WaitForExit(milliseconds: 5000);
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
+        {
+            // Best-effort backstop: taskkill may be absent or the pid already gone.
         }
     }
 }
