@@ -8,6 +8,7 @@ namespace DotnetTokenKiller.Domain.Tracking;
 /// <param name="AverageSavingsPercentage">Average savings percentage.</param>
 /// <param name="SuccessDetail">Detail for runs that exited with code 0, or <see langword="null"/> if not available.</param>
 /// <param name="FailureDetail">Detail for runs that exited with a non-zero code, or <see langword="null"/> if none.</param>
+/// <param name="TotalExecutionTime">Total wall-clock execution time across these runs.</param>
 public sealed record CommandGainDetail(
     int RunCount,
     long TotalInputTokens,
@@ -15,4 +16,5 @@ public sealed record CommandGainDetail(
     long TotalSavedTokens,
     double AverageSavingsPercentage,
     CommandGainDetail? SuccessDetail = null,
-    CommandGainDetail? FailureDetail = null);
+    CommandGainDetail? FailureDetail = null,
+    TimeSpan TotalExecutionTime = default);
