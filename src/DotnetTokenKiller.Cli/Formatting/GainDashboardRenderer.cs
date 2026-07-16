@@ -97,8 +97,11 @@ internal static class GainDashboardRenderer
     }
 
     /// <summary>Maps a saved-token delta to a color (switch expression: Sonar S3358 bans nested ternaries).</summary>
+    /// <remarks>Internal (rather than private) so tests can assert the color-bucket thresholds directly;
+    /// <see cref="Spectre.Console.Testing.TestConsole"/> strips ANSI sequences from its captured output,
+    /// so threshold mutations would otherwise survive rendering-level tests undetected.</remarks>
     /// <param name="saved">The saved-token delta.</param>
-    private static string SavedColor(long saved) => saved switch
+    internal static string SavedColor(long saved) => saved switch
     {
         > 0 => "green",
         < 0 => "red",
@@ -106,8 +109,11 @@ internal static class GainDashboardRenderer
     };
 
     /// <summary>Maps a savings percentage to a color (switch expression: Sonar S3358 bans nested ternaries).</summary>
+    /// <remarks>Internal (rather than private) so tests can assert the color-bucket thresholds directly;
+    /// <see cref="Spectre.Console.Testing.TestConsole"/> strips ANSI sequences from its captured output,
+    /// so threshold mutations would otherwise survive rendering-level tests undetected.</remarks>
     /// <param name="pct">The savings percentage.</param>
-    private static string PctColor(double pct) => pct switch
+    internal static string PctColor(double pct) => pct switch
     {
         >= 80 => "green",
         >= 40 => "yellow",

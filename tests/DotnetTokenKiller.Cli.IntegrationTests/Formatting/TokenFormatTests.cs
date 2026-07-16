@@ -30,7 +30,9 @@ public class TokenFormatTests
         { TimeSpan.FromMilliseconds(204), "204ms" },
         { TimeSpan.FromSeconds(2.3), "2.3s" },
         { TimeSpan.FromSeconds(59), "59.0s" },
+        { TimeSpan.FromSeconds(59.97), "1m00s" },
         { TimeSpan.FromSeconds((38 * 60) + 12), "38m12s" },
+        { TimeSpan.FromSeconds((59 * 60) + 59.97), "1h00m" },
         { TimeSpan.FromMinutes(60), "1h00m" },
         { TimeSpan.FromMinutes(125), "2h05m" }
     };

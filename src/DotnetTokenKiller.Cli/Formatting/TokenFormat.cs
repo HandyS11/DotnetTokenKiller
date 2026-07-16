@@ -41,17 +41,26 @@ internal static class TokenFormat
             return ((int)Math.Round(value.TotalMilliseconds)).ToString(CultureInfo.InvariantCulture) + "ms";
         }
 
-        if (value.TotalMinutes < 1)
+        // 59.97s rounds to "60.0s" at one-decimal precision; promote to the next unit instead.
+        if (value.TotalMinutes < 1 && Math.Round(value.TotalSeconds, 1) < 60.0)
         {
             return value.TotalSeconds.ToString("F1", CultureInfo.InvariantCulture) + "s";
         }
 
-        if (value.TotalHours < 1)
+        var totalWholeSeconds = (long)Math.Round(value.TotalSeconds);
+
+        // 59m59.97s rounds its seconds up to the next minute, reaching 60m; promote to hours instead.
+        if (value.TotalHours < 1 && totalWholeSeconds < 3_600)
         {
-            return string.Create(CultureInfo.InvariantCulture, $"{(int)value.TotalMinutes}m{value.Seconds:D2}s");
+            var minutes = totalWholeSeconds / 60;
+            var seconds = totalWholeSeconds % 60;
+            return string.Create(CultureInfo.InvariantCulture, $"{minutes}m{seconds:D2}s");
         }
 
-        return string.Create(CultureInfo.InvariantCulture, $"{(int)value.TotalHours}h{value.Minutes:D2}m");
+        var totalWholeMinutes = (long)Math.Round(value.TotalSeconds / 60.0);
+        var hours = totalWholeMinutes / 60;
+        var mins = totalWholeMinutes % 60;
+        return string.Create(CultureInfo.InvariantCulture, $"{hours}h{mins:D2}m");
     }
 
     private static string Millions(long value)
