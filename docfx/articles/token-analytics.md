@@ -22,19 +22,19 @@ DTK Token Savings (Global Scope, last 7 days)
 Total commands:    129
 Without tool:      60.1K
 Used by tool:      8.7K
-Tokens saved:      51.3K (85.4%)
-Total exec time:   4m52s (avg 2.3s)
-Efficiency meter: ████████████████████░░░░ 85.4%
+Tokens saved:      51.4K (85.5%)
+Total exec time:   4m57s (avg 2.3s)
+Efficiency meter: █████████████████████░░░ 85.5%
 
 By Command
 ──────────────────────────────────────────────────────────────────────
- Command         Runs  Without Tool  Used by Tool    Saved   Avg%  Impact
- build (ok)        39         28.4K          4.6K    23.8K  81.2%  ████████░░
- build (fail)       5          2.3K            578    1.7K  62.4%  █░░░░░░░░░
- clean (ok)        18          8.8K            108    8.6K  97.9%  ███░░░░░░░
- restore (ok)      26          2.7K          1.0K     1.6K  47.0%  █░░░░░░░░░
- test (ok)         35         15.9K          2.0K    13.9K  87.4%  █████░░░░░
- test (fail)        6          2.0K            434    1.6K  79.3%  █░░░░░░░░░
+ Command        Runs  Without Tool  Used by Tool     Saved    Avg%  Impact
+ build (ok)       39         28.4K          4.6K     23.8K   83.8%  ██████████
+ build (fail)      5          2.3K            578      1.7K   74.9%  █░░░░░░░░░
+ clean (ok)       18          8.8K            108      8.7K   98.8%  ████░░░░░░
+ restore (ok)     26          2.7K          1.0K      1.7K   63.0%  █░░░░░░░░░
+ test (ok)        35         15.9K          2.0K     13.9K   87.4%  ██████░░░░
+ test (fail)       6          2.0K            434      1.6K   78.3%  █░░░░░░░░░
 ```
 
 ### Columns
