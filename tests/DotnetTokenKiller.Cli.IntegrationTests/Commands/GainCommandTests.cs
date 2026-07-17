@@ -266,28 +266,82 @@ public class GainCommandTests
         console.Output.Should().Contain("Without Tool");
         console.Output.Should().Contain("Used by Tool");
         console.Output.Should().Contain("Saved");
-        console.Output.Should().Contain("Avg Savings");
+        console.Output.Should().Contain("Avg%");
+        console.Output.Should().Contain("Impact");
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithData_DisplaysTotalRowWithCorrectValues()
+    public async Task ExecuteAsync_WithData_DisplaysRecapBlock()
     {
-        // Kills string mutations on "TOTAL" markup and statement mutations on AddRow calls
         var successDetail = new CommandGainDetail(3, 1500, 300, 1200, 80.0);
         var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
         {
             ["build"] = new(3, 1500, 300, 1200, 80.0, successDetail)
         };
-        var summary = new GainSummary(3, 1500, 300, 1200, 80.0, details);
+        var summary = new GainSummary(3, 1500, 300, 1200, 80.0, details, TimeSpan.FromSeconds(2));
         var (command, console, _) = Create(summary);
 
         await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
-        console.Output.Should().Contain("TOTAL");
-        console.Output.Should().Contain("1500"); // TotalInputTokens
-        console.Output.Should().Contain("300"); // TotalOutputTokens
-        console.Output.Should().Contain("1200"); // TotalSavedTokens
-        console.Output.Should().Contain("80.0%"); // AverageSavingsPercentage formatted as F1
+        console.Output.Should().Contain("DTK Token Savings (Global Scope)");
+        console.Output.Should().Contain("Total commands:    3");
+        console.Output.Should().Contain("Without tool:      1.5K");
+        console.Output.Should().Contain("Used by tool:      300");
+        console.Output.Should().Contain("Tokens saved:      1.2K (80.0%)");
+        console.Output.Should().Contain("Efficiency meter:");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ProjectFlag_DisplaysProjectScope()
+    {
+        var successDetail = new CommandGainDetail(1, 1000, 100, 900, 90.0);
+        var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
+        {
+            ["build"] = new(1, 1000, 100, 900, 90.0, successDetail)
+        };
+        var summary = new GainSummary(1, 1000, 100, 900, 90.0, details);
+        var (command, console, _) = Create(summary);
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Project = true
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain("DTK Token Savings (Project Scope)");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NonDefaultDaysAndCommand_DisplaysFiltersInScope()
+    {
+        var successDetail = new CommandGainDetail(1, 1000, 100, 900, 90.0);
+        var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
+        {
+            ["build"] = new(1, 1000, 100, 900, 90.0, successDetail)
+        };
+        var summary = new GainSummary(1, 1000, 100, 900, 90.0, details);
+        var (command, console, _) = Create(summary);
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Days = 7,
+            Command = "build"
+        }, CancellationToken.None);
+
+        console.Output.Should().Contain("last 7 days");
+        console.Output.Should().Contain("command: build");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_JsonMode_IncludesExecutionTime()
+    {
+        var (command, _, writer) = Create();
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Json = true
+        }, CancellationToken.None);
+
+        writer.ToString().Should().Contain("TotalExecutionTime");
     }
 
     [Fact]

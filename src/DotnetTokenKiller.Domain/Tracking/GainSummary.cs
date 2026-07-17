@@ -7,10 +7,12 @@ namespace DotnetTokenKiller.Domain.Tracking;
 /// <param name="TotalSavedTokens">Total tokens saved across all commands.</param>
 /// <param name="AverageSavingsPercentage">Average savings percentage across command types.</param>
 /// <param name="CommandDetails">Per-command breakdown.</param>
+/// <param name="TotalExecutionTime">Total wall-clock execution time across all commands.</param>
 public sealed record GainSummary(
     int TotalCommands,
     long TotalInputTokens,
     long TotalOutputTokens,
     long TotalSavedTokens,
     double AverageSavingsPercentage,
-    IReadOnlyDictionary<string, CommandGainDetail> CommandDetails);
+    IReadOnlyDictionary<string, CommandGainDetail> CommandDetails,
+    TimeSpan TotalExecutionTime = default);

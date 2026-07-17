@@ -178,16 +178,30 @@ dtk gain --json
 Example:
 
 ```sh
-┌─────────┬──────┬──────────────┬──────────────┬─────────┬─────────────┐
-│ Command │ Runs │ Without Tool │ Used by Tool │   Saved │ Avg Savings │
-├─────────┼──────┼──────────────┼──────────────┼─────────┼─────────────┤
-│ build   │  749 │      1925317 │       327044 │ 1598273 │       79.4% │
-│ clean   │  145 │        85875 │          870 │   85005 │       98.0% │
-│ restore │  242 │        28793 │         8959 │   19834 │       46.9% │
-│ test    │ 1011 │       795760 │       201134 │  594626 │       78.9% │
-│         │      │              │              │         │             │
-│ TOTAL   │ 2147 │      2835745 │       538007 │ 2297738 │       81.0% │
-└─────────┴──────┴──────────────┴──────────────┴─────────┴─────────────┘
+DTK Token Savings (Global Scope)
+════════════════════════════════════════════════════════════
+
+Total commands:    1059
+Without tool:      1.0M
+Used by tool:      92.9K
+Tokens saved:      911.2K (90.7%)
+Total exec time:   26m28s (avg 1.5s)
+Efficiency meter: ██████████████████████░░ 90.7%
+
+By Command
+──────────────────────────────────────────────────────────────────────
+ Command        Runs  Without Tool  Used by Tool     Saved    Avg%  Impact
+ build (ok)      151        104.5K          2.3K    102.2K   97.8%  ██░░░░░░░░
+ build (fail)     37         47.7K          6.9K     40.8K   85.5%  █░░░░░░░░░
+
+ clean (ok)        3        241.9K            18    241.9K  100.0%  ██████░░░░
+
+ format (ok)     103             0          1.0K     -1.0K    0.0%  ░░░░░░░░░░
+
+ restore (ok)     89         12.3K          6.5K      5.8K   47.2%  █░░░░░░░░░
+
+ test (ok)       442        420.6K          7.8K    412.8K   98.1%  ██████████
+ test (fail)     234        177.1K         68.4K    108.7K   61.4%  ███░░░░░░░
 ```
 
 To reset tracking data: `dtk reset` (or `dtk reset --force` to skip confirmation).

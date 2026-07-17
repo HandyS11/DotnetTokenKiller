@@ -265,6 +265,23 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetSummaryAsync_AggregatesExecutionTime()
+    {
+        // MakeRecord always stamps 500ms per run.
+        await _sut.RecordAsync(MakeRecord(command: "build", success: true));
+        await _sut.RecordAsync(MakeRecord(command: "build", success: true));
+        await _sut.RecordAsync(MakeRecord(command: "build", success: false));
+
+        var summary = await _sut.GetSummaryAsync(30, null);
+
+        summary.TotalExecutionTime.Should().Be(TimeSpan.FromMilliseconds(1500));
+        var build = summary.CommandDetails["build"];
+        build.TotalExecutionTime.Should().Be(TimeSpan.FromMilliseconds(1500));
+        build.SuccessDetail!.TotalExecutionTime.Should().Be(TimeSpan.FromMilliseconds(1000));
+        build.FailureDetail!.TotalExecutionTime.Should().Be(TimeSpan.FromMilliseconds(500));
+    }
+
+    [Fact]
     public async Task GetSummaryAsync_FiltersByDays()
     {
         await _sut.RecordAsync(MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-10)));

@@ -16,28 +16,58 @@ dtk gain --export csv          # export raw records as CSV
 ### Example Output
 
 ```sh
-┌─────────┬──────┬──────────────┬──────────────┬───────┬─────────────┐
-│ Command │ Runs │ Without Tool │ Used by Tool │ Saved │ Avg Savings │
-├─────────┼──────┼──────────────┼──────────────┼───────┼─────────────┤
-│ build   │   44 │        30720 │         5178 │ 25542 │       77.6% │
-│ clean   │   18 │         8752 │          108 │  8644 │       97.9% │
-│ restore │   26 │         2651 │         1022 │  1629 │       47.0% │
-│ test    │   41 │        17939 │         2434 │ 15505 │       84.1% │
-│         │      │              │              │       │             │
-│ TOTAL   │  129 │        60062 │         8742 │ 51320 │       85.4% │
-└─────────┴──────┴──────────────┴──────────────┴───────┴─────────────┘
+DTK Token Savings (Global Scope, last 7 days)
+════════════════════════════════════════════════════════════
+
+Total commands:    129
+Without tool:      60.1K
+Used by tool:      8.7K
+Tokens saved:      51.4K (85.5%)
+Total exec time:   4m57s (avg 2.3s)
+Efficiency meter: █████████████████████░░░ 85.5%
+
+By Command
+──────────────────────────────────────────────────────────────────────
+ Command        Runs  Without Tool  Used by Tool     Saved    Avg%  Impact
+ build (ok)       39         28.4K          4.6K     23.8K   83.8%  ██████████
+ build (fail)      5          2.3K            578      1.7K   74.9%  █░░░░░░░░░
+
+ clean (ok)       18          8.8K            108      8.7K   98.8%  ████░░░░░░
+
+ restore (ok)     26          2.7K          1.0K      1.7K   63.0%  █░░░░░░░░░
+
+ test (ok)        35         15.9K          2.0K     13.9K   87.4%  ██████░░░░
+ test (fail)       6          2.0K            434      1.6K   78.3%  █░░░░░░░░░
 ```
 
 ### Columns
 
+The header line shows the title and active scope (`Global Scope` or `Project Scope`,
+with `, last N days` and `, command: <name>` suffixes when the corresponding filters are set).
+
+The recap block above the table replaces the old in-table `TOTAL` row:
+
+| Line | Description |
+|------|-------------|
+| **Total commands** | Number of tracked runs across all commands |
+| **Without tool** | Total tokens in the raw `dotnet` output |
+| **Used by tool** | Total tokens in the filtered DTK output |
+| **Tokens saved** | Total tokens saved, with the overall percentage in parentheses |
+| **Total exec time** | Summed wall-clock time, with the per-run average in parentheses |
+| **Efficiency meter** | A 24-character `█`/`░` bar proportional to the overall savings percentage |
+
+The `By Command` table splits each command into `(ok)` / `(fail)` rows, with a blank
+spacer row between commands so each group reads as one block:
+
 | Column | Description |
 |--------|-------------|
-| **Command** | The `dotnet` subcommand (build, test, restore, clean) |
+| **Command** | The `dotnet` subcommand (build, test, restore, clean, format), suffixed `(ok)` or `(fail)` |
 | **Runs** | Number of times the command was executed |
 | **Without Tool** | Total tokens in the raw `dotnet` output |
 | **Used by Tool** | Total tokens in the filtered DTK output |
-| **Saved** | Tokens saved (Without Tool − Used by Tool) |
-| **Avg Savings** | Average percentage reduction across all runs |
+| **Saved** | Tokens saved (Without Tool − Used by Tool); colored green when positive, red when negative, grey when zero |
+| **Avg%** | Average percentage reduction across the row's runs; colored green ≥ 80%, yellow 40–79%, red < 40% |
+| **Impact** | A 10-character `█`/`░` bar proportional to the row's saved tokens relative to the largest row (rows with non-positive savings render an empty bar) |
 
 ## Filtering by Command
 

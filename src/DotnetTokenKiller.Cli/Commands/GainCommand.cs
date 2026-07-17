@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Cli.Formatting;
 using DotnetTokenKiller.Cli.Serialization;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -74,51 +75,24 @@ internal sealed class GainCommand(
             return 0;
         }
 
-        var table = new Table()
-            .AddColumn("Command")
-            .AddColumn(new TableColumn("Runs").RightAligned())
-            .AddColumn(new TableColumn("Without Tool").RightAligned())
-            .AddColumn(new TableColumn("Used by Tool").RightAligned())
-            .AddColumn(new TableColumn("Saved").RightAligned())
-            .AddColumn(new TableColumn("Avg Savings").RightAligned());
+        GainDashboardRenderer.Render(console, summary, BuildScope(settings));
+        return 0;
+    }
 
-        foreach (var (cmd, detail) in summary.CommandDetails)
+    private static string BuildScope(GainCommandSettings settings)
+    {
+        var scope = settings.Project ? "Project Scope" : "Global Scope";
+        if (settings.Days != 30)
         {
-            if (detail.SuccessDetail is { } sd)
-            {
-                table.AddRow(
-                    new Markup($"[green]{cmd.EscapeMarkup()} (ok)[/]"),
-                    new Text(sd.RunCount.ToString(CultureInfo.InvariantCulture)),
-                    new Text(sd.TotalInputTokens.ToString(CultureInfo.InvariantCulture)),
-                    new Text(sd.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)),
-                    new Text(sd.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)),
-                    new Text(sd.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture) + "%"));
-            }
-
-            if (detail.FailureDetail is { } fd)
-            {
-                table.AddRow(
-                    new Markup($"[red]{cmd.EscapeMarkup()} (fail)[/]"),
-                    new Text(fd.RunCount.ToString(CultureInfo.InvariantCulture)),
-                    new Text(fd.TotalInputTokens.ToString(CultureInfo.InvariantCulture)),
-                    new Text(fd.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)),
-                    new Text(fd.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)),
-                    new Text(fd.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture) + "%"));
-            }
+            scope += string.Create(CultureInfo.InvariantCulture, $", last {settings.Days} days");
         }
 
-        table.AddEmptyRow();
+        if (settings.Command is not null)
+        {
+            scope += $", command: {settings.Command}";
+        }
 
-        table.AddRow(
-            new Markup("[bold]TOTAL[/]"),
-            new Markup($"[bold]{summary.TotalCommands.ToString(CultureInfo.InvariantCulture)}[/]"),
-            new Markup($"[bold]{summary.TotalInputTokens.ToString(CultureInfo.InvariantCulture)}[/]"),
-            new Markup($"[bold]{summary.TotalOutputTokens.ToString(CultureInfo.InvariantCulture)}[/]"),
-            new Markup($"[bold]{summary.TotalSavedTokens.ToString(CultureInfo.InvariantCulture)}[/]"),
-            new Markup($"[bold]{summary.AverageSavingsPercentage.ToString("F1", CultureInfo.InvariantCulture)}%[/]"));
-
-        console.Write(table);
-        return 0;
+        return scope;
     }
 
     private static string EscapeCsv(string value)

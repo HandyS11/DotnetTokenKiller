@@ -77,7 +77,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                                   SUM(input_tokens) as total_input,
                                   SUM(output_tokens) as total_output,
                                   SUM(saved_tokens) as total_saved,
-                                  AVG(savings_percentage) as avg_pct
+                                  AVG(savings_percentage) as avg_pct,
+                                  SUM(execution_time_ms) as total_ms
                            FROM commands
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
@@ -282,11 +283,12 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         long totalInput = 0;
         long totalOutput = 0;
         long totalSaved = 0;
+        var totalMs = 0.0;
 
         // Accumulate per-command, per-status rows before building CommandGainDetail
         var grouped =
             new Dictionary<string, List<(bool Success, int RunCount, long SumInput, long SumOutput, long SumSaved, double
-                AvgPct)>>(StringComparer.Ordinal);
+                AvgPct, double SumMs)>>(StringComparer.Ordinal);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -300,11 +302,13 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             var sumOutput = reader.GetInt64(4);
             var sumSaved = reader.GetInt64(5);
             var avgPct = reader.GetDouble(6);
+            var sumMs = reader.GetDouble(7);
 
             totalCommands += runCount;
             totalInput += sumInput;
             totalOutput += sumOutput;
             totalSaved += sumSaved;
+            totalMs += sumMs;
 
             if (!grouped.TryGetValue(cmdName, out var rows))
             {
@@ -312,7 +316,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 grouped[cmdName] = rows;
             }
 
-            rows.Add((success, runCount, sumInput, sumOutput, sumSaved, avgPct));
+            rows.Add((success, runCount, sumInput, sumOutput, sumSaved, avgPct, sumMs));
         }
 
         var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
@@ -325,10 +329,12 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             long totalOutputCmd = 0;
             long totalSavedCmd = 0;
             var weightedPctSum = 0.0;
+            var totalMsCmd = 0.0;
 
-            foreach (var (success, runCount, sumInput, sumOutput, sumSaved, avgPct) in rows)
+            foreach (var (success, runCount, sumInput, sumOutput, sumSaved, avgPct, sumMs) in rows)
             {
-                var statusDetail = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct);
+                var statusDetail = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct,
+                    TotalExecutionTime: TimeSpan.FromMilliseconds(sumMs));
                 if (success)
                 {
                     successDetail = statusDetail;
@@ -343,17 +349,19 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 totalOutputCmd += sumOutput;
                 totalSavedCmd += sumSaved;
                 weightedPctSum += runCount * avgPct;
+                totalMsCmd += sumMs;
             }
 
             // Run-count-weighted average of the per-status SQL AVG(savings_percentage) values,
             // keeping the same per-run-average semantics as SuccessDetail/FailureDetail.
             var avgPctCmd = totalRunsCmd > 0 ? weightedPctSum / totalRunsCmd : 0.0;
             commandDetails[cmdName] = new CommandGainDetail(totalRunsCmd, totalInputCmd, totalOutputCmd, totalSavedCmd,
-                avgPctCmd, successDetail, failureDetail);
+                avgPctCmd, successDetail, failureDetail, TimeSpan.FromMilliseconds(totalMsCmd));
         }
 
         var averagePct = totalInput > 0 ? (double)totalSaved / totalInput * 100.0 : 0.0;
-        return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, commandDetails);
+        return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, commandDetails,
+            TimeSpan.FromMilliseconds(totalMs));
     }
 
     private static async Task<IReadOnlyList<CommandRecord>> ReadHistoryAsync(SqliteCommand cmd, CancellationToken ct)

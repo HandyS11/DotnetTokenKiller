@@ -21,7 +21,8 @@ public class GainSummaryTests
             950,
             4050,
             81.0,
-            commandDetails);
+            commandDetails,
+            TimeSpan.FromSeconds(3));
 
         summary.TotalCommands.Should().Be(10);
         summary.TotalInputTokens.Should().Be(5000);
@@ -32,6 +33,7 @@ public class GainSummaryTests
             .WhoseValue.TotalSavedTokens.Should().Be(850);
         summary.CommandDetails.Should().ContainKey("test")
             .WhoseValue.TotalSavedTokens.Should().Be(1200);
+        summary.TotalExecutionTime.Should().Be(TimeSpan.FromSeconds(3));
     }
 
     [Fact]
