@@ -193,9 +193,13 @@ By Command
  Command        Runs  Without Tool  Used by Tool     Saved    Avg%  Impact
  build (ok)      151        104.5K          2.3K    102.2K   97.8%  ██░░░░░░░░
  build (fail)     37         47.7K          6.9K     40.8K   85.5%  █░░░░░░░░░
+
  clean (ok)        3        241.9K            18    241.9K  100.0%  ██████░░░░
+
  format (ok)     103             0          1.0K     -1.0K    0.0%  ░░░░░░░░░░
+
  restore (ok)     89         12.3K          6.5K      5.8K   47.2%  █░░░░░░░░░
+
  test (ok)       442        420.6K          7.8K    412.8K   98.1%  ██████████
  test (fail)     234        177.1K         68.4K    108.7K   61.4%  ███░░░░░░░
 ```

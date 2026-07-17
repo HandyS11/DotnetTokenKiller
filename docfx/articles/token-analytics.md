@@ -31,8 +31,11 @@ By Command
  Command        Runs  Without Tool  Used by Tool     Saved    Avg%  Impact
  build (ok)       39         28.4K          4.6K     23.8K   83.8%  ██████████
  build (fail)      5          2.3K            578      1.7K   74.9%  █░░░░░░░░░
+
  clean (ok)       18          8.8K            108      8.7K   98.8%  ████░░░░░░
+
  restore (ok)     26          2.7K          1.0K      1.7K   63.0%  █░░░░░░░░░
+
  test (ok)        35         15.9K          2.0K     13.9K   87.4%  ██████░░░░
  test (fail)       6          2.0K            434      1.6K   78.3%  █░░░░░░░░░
 ```
@@ -53,7 +56,8 @@ The recap block above the table replaces the old in-table `TOTAL` row:
 | **Total exec time** | Summed wall-clock time, with the per-run average in parentheses |
 | **Efficiency meter** | A 24-character `█`/`░` bar proportional to the overall savings percentage |
 
-The `By Command` table splits each command into `(ok)` / `(fail)` rows:
+The `By Command` table splits each command into `(ok)` / `(fail)` rows, with a blank
+spacer row between commands so each group reads as one block:
 
 | Column | Description |
 |--------|-------------|

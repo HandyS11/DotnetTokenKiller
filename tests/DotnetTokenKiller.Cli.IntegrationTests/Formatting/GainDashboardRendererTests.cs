@@ -34,6 +34,31 @@ public class GainDashboardRendererTests
     }
 
     [Fact]
+    public void Render_Table_SeparatesCommandGroupsWithSpacerRow()
+    {
+        var buildOk = new CommandGainDetail(3, 1500, 250, 1250, 83.3);
+        var buildFail = new CommandGainDetail(2, 1000, 150, 850, 35.0);
+        var testOk = new CommandGainDetail(4, 2000, 300, 1700, 90.0);
+        var details = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal)
+        {
+            ["build"] = new(5, 2500, 400, 2100, 70.0, buildOk, buildFail),
+            ["test"] = new(4, 2000, 300, 1700, 90.0, testOk)
+        };
+        var summary = new GainSummary(9, 4500, 700, 3800, 80.0, details);
+
+        var console = Render(summary);
+
+        var lines = console.Lines.ToList();
+        var okIndex = lines.FindIndex(l => l.Contains("build (ok)", StringComparison.Ordinal));
+        var failIndex = lines.FindIndex(l => l.Contains("build (fail)", StringComparison.Ordinal));
+        var testIndex = lines.FindIndex(l => l.Contains("test (ok)", StringComparison.Ordinal));
+
+        failIndex.Should().Be(okIndex + 1); // same command: ok/fail rows stay adjacent
+        testIndex.Should().Be(failIndex + 2); // new command: exactly one spacer row between groups
+        lines[failIndex + 1].Trim().Should().BeEmpty(); // the spacer renders blank
+    }
+
+    [Fact]
     public void Render_WritesTitleWithScope()
     {
         var console = Render(MakeSummary(), "Project Scope, last 7 days");

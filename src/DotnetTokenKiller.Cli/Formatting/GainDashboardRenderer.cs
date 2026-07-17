@@ -51,17 +51,17 @@ internal static class GainDashboardRenderer
 
     private static void RenderTable(IAnsiConsole console, GainSummary summary)
     {
-        var rows = new List<(string Label, string Color, CommandGainDetail Detail)>();
+        var rows = new List<(string Command, string Label, string Color, CommandGainDetail Detail)>();
         foreach (var (cmd, detail) in summary.CommandDetails)
         {
             if (detail.SuccessDetail is { } sd)
             {
-                rows.Add(($"{cmd} (ok)", "green", sd));
+                rows.Add((cmd, $"{cmd} (ok)", "green", sd));
             }
 
             if (detail.FailureDetail is { } fd)
             {
-                rows.Add(($"{cmd} (fail)", "red", fd));
+                rows.Add((cmd, $"{cmd} (fail)", "red", fd));
             }
         }
 
@@ -79,8 +79,16 @@ internal static class GainDashboardRenderer
             .AddColumn(new TableColumn("Avg%").RightAligned())
             .AddColumn("Impact");
 
-        foreach (var (label, color, d) in rows)
+        string? previousCommand = null;
+        foreach (var (command, label, color, d) in rows)
         {
+            // Spacer between command groups so ok/fail pairs read as one block.
+            if (previousCommand is not null && !string.Equals(command, previousCommand, StringComparison.Ordinal))
+            {
+                table.AddEmptyRow();
+            }
+
+            previousCommand = command;
             table.AddRow(
                 new Markup($"[{color}]{label.EscapeMarkup()}[/]"),
                 new Text(d.RunCount.ToString(CultureInfo.InvariantCulture)),
