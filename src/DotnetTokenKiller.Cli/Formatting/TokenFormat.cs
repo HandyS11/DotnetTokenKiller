@@ -11,7 +11,9 @@ internal static class TokenFormat
     {
         if (value < 0)
         {
-            return "-" + Tokens(-value);
+            // -long.MinValue overflows back to itself and would recurse forever; clamp first.
+            var magnitude = value == long.MinValue ? long.MaxValue : -value;
+            return "-" + Tokens(magnitude);
         }
 
         if (value < 1_000)
@@ -36,9 +38,11 @@ internal static class TokenFormat
     /// <param name="value">The duration.</param>
     public static string Duration(TimeSpan value)
     {
-        if (value.TotalSeconds < 1)
+        // 999.6ms rounds to "1000ms"; promote to the next unit instead.
+        var wholeMs = (long)Math.Round(value.TotalMilliseconds);
+        if (wholeMs < 1_000)
         {
-            return ((int)Math.Round(value.TotalMilliseconds)).ToString(CultureInfo.InvariantCulture) + "ms";
+            return wholeMs.ToString(CultureInfo.InvariantCulture) + "ms";
         }
 
         // 59.97s rounds to "60.0s" at one-decimal precision; promote to the next unit instead.

@@ -19,6 +19,8 @@ public class TokenFormatTests
     [InlineData(-500, "-500")]
     [InlineData(-1030, "-1.0K")]
     [InlineData(-2_600_000, "-2.6M")]
+    [InlineData(long.MinValue, "-9223372036854.8M")]
+    [InlineData(long.MaxValue, "9223372036854.8M")]
     public void Tokens_FormatsWithKAndMUnits(long value, string expected)
     {
         TokenFormat.Tokens(value).Should().Be(expected);
@@ -28,6 +30,8 @@ public class TokenFormatTests
     {
         { TimeSpan.Zero, "0ms" },
         { TimeSpan.FromMilliseconds(204), "204ms" },
+        { TimeSpan.FromMilliseconds(999.4), "999ms" },
+        { TimeSpan.FromMilliseconds(999.6), "1.0s" },
         { TimeSpan.FromSeconds(2.3), "2.3s" },
         { TimeSpan.FromSeconds(59), "59.0s" },
         { TimeSpan.FromSeconds(59.97), "1m00s" },
