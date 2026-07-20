@@ -901,10 +901,99 @@ public class DotnetTestFilterTests
     {
         // Test host crashed before printing a summary — old code returned "" and lost the failures.
         // With no summary there is no project/elapsed context, so it must not fabricate "0 projects".
+        // The exact assertion pins the empty trailing context: a mutant that seeds `context` with a
+        // non-empty string instead of string.Empty would append it to this summary line.
         const string raw = "  Failed MyTests.T1 [15 ms]\n  Error Message:\n   boom";
         var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
-        result.Should().Contain("T1").And.Contain("boom");
-        result.Should().NotContain("0 projects").And.NotContain("0.00s");
+        result.Should().Be(
+            "FAILURES (1):\n  MyTests.T1 [15 ms]\n    boom\ndotnet test: 1 failed, 0 passed\n");
+    }
+
+    [Fact]
+    public void Apply_MultiLineMessageWithoutExpectedActual_JoinsLinesWithSpaces()
+    {
+        // CompactMessage falls to string.Join(" ", lines) when neither Expected: nor Actual: is
+        // present. A single-line message can't tell " " from "": this needs two message lines so
+        // the separator is observable.
+        const string input = """
+                               Failed MyTests.Multi [1 ms]
+                               Error Message:
+                                 first part
+                                 second part
+                               Stack Trace:
+                                  at MyTests.Multi() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            """
+            FAILURES (1):
+              MyTests.Multi [1 ms]
+                first part second part
+                at ../../../path/Test.cs:line 1
+            dotnet test: 1 failed, 0 passed (1 project, 0.00s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_SummaryReportsMoreFailuresThanParsedHeaders_UsesSummaryCount()
+    {
+        // failedCount = Math.Max(TotalFailed, Failures.Count). When the summary's failed count
+        // exceeds the parsed headers, TotalFailed drives the number — so flipping its '+=' to '-='
+        // (which Math.Max would otherwise mask when the two are equal) now changes the output.
+        const string input = """
+                               Failed MyTests.OnlyOneShown [1 ms]
+                               Error Message:
+                                 boom
+                               Stack Trace:
+                                  at MyTests.OnlyOneShown() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 5, Passed: 0, Skipped: 0, Total: 5, Duration: 10 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            """
+            FAILURES (5):
+              MyTests.OnlyOneShown [1 ms]
+                boom
+                at ../../../path/Test.cs:line 1
+            dotnet test: 5 failed, 0 passed (1 project, 0.01s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_SummaryOnlyFailures_NoParsedHeaders_StillRendersFailureReport()
+    {
+        // A summary reporting failures with no per-test failure lines (Failures.Count == 0) must
+        // still render. This pins the `TotalFailed > 0` half of the verdict condition, which the
+        // `|| Failures.Count > 0` half masks whenever headers were parsed.
+        const string input =
+            "Failed!  - Failed: 2, Passed: 1, Skipped: 0, Total: 3, Duration: 20 ms - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be("FAILURES (2):\ndotnet test: 2 failed, 1 passed (1 project, 0.02s)\n");
+    }
+
+    [Fact]
+    public void Apply_MtpSummaryReportsMoreFailuresThanHeaders_UsesSummaryCounts()
+    {
+        // MTP accumulator counterpart: pins AccumulateMtpSummary's failed/skipped '+=' arithmetic
+        // by making the summary counts exceed the single parsed MTP failure line.
+        const string input =
+            "failed MyTests.T1 (5ms)\nTest summary: total: 8, failed: 3, succeeded: 3, skipped: 2, duration: 1s";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \ndotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1.00s)\n");
     }
 
     [Fact]
