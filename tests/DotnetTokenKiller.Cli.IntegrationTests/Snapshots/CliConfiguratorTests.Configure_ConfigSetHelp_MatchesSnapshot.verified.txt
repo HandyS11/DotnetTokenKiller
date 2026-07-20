@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Set a configuration value
 
 USAGE:

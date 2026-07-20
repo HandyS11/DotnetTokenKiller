@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Show token savings analytics
 
 USAGE:

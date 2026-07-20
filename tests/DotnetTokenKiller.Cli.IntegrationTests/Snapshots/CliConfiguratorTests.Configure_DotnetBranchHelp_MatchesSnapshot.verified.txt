@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Run dotnet commands with filtered output
 
 USAGE:

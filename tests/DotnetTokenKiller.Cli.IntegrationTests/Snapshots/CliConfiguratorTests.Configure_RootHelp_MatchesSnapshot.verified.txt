@@ -1,4 +1,4 @@
-﻿USAGE:
+USAGE:
     dtk [OPTIONS] <COMMAND>
 
 EXAMPLES:

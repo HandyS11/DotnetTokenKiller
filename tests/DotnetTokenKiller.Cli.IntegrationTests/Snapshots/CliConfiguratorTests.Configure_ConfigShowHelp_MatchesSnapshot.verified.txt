@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Display the current configuration
 
 USAGE:

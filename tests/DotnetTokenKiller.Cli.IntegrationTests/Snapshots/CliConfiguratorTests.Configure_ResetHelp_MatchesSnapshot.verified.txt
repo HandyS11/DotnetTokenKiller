@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Clear all tracking data
 
 USAGE:

@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Print shell completion script
 
 USAGE:

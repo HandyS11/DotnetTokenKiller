@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Run diagnostics to verify dtk is set up correctly
 
 USAGE:

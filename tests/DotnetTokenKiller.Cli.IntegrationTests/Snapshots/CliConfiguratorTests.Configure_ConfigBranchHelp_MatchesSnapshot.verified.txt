@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 View or modify dtk configuration
 
 USAGE:

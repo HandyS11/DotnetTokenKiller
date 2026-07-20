@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Run dotnet test with filtered output
 
 USAGE:

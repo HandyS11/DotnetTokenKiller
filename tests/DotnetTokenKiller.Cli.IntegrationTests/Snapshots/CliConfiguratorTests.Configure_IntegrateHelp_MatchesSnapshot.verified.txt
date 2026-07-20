@@ -1,4 +1,4 @@
-﻿DESCRIPTION:
+DESCRIPTION:
 Install dtk integration artifacts for an AI assistant provider
 
 USAGE:
