@@ -8,7 +8,7 @@ namespace DotnetTokenKiller.Cli.IntegrationTests;
 [Trait("Category", "Integration")]
 public class PassthroughIntegrationTests
 {
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Passthrough_UnknownSubcommand_ForwardsToDotnet()
     {
         // "dotnet --info" is not a filtered subcommand, so dtk should pass it through
@@ -20,7 +20,7 @@ public class PassthroughIntegrationTests
         dtkOutput.Should().Contain(".NET SDK");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Passthrough_UnfilteredSubcommand_ForwardsToDotnet()
     {
         // "dotnet help" is not a registered filtered command

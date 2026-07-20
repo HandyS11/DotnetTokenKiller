@@ -23,7 +23,7 @@ public class DotnetBuildIntegrationTests
     private static readonly string SampleAppMultiProject =
         IntegrationTestHelper.SamplePath("SampleApp.MultiProject");
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleApp_Success_OutputStartsWithCheckmark()
     {
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync("build", SampleApp);
@@ -38,7 +38,7 @@ public class DotnetBuildIntegrationTests
         savings.Should().BeGreaterThanOrEqualTo(80.0, "build success should achieve ≥80% token savings");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleApp_Success_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleApp);
@@ -52,7 +52,7 @@ public class DotnetBuildIntegrationTests
             "no blank lines should be present in the output");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppBroken_Failure_OutputStartsWith1Error()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
@@ -61,7 +61,7 @@ public class DotnetBuildIntegrationTests
         output.Trim().Should().StartWith("dotnet build: 1 error");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppBroken_Failure_ErrorContainsShortenedPath()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
@@ -73,7 +73,7 @@ public class DotnetBuildIntegrationTests
         output.Should().MatchRegex(@"\(\d+,\d+\)");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppBroken_Failure_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
@@ -82,7 +82,7 @@ public class DotnetBuildIntegrationTests
         output.Should().NotContain("Build FAILED");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppBroken_Failure_Savings70Percent()
     {
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync(
@@ -96,7 +96,7 @@ public class DotnetBuildIntegrationTests
 
     // ── SampleApp.MultiError ────────────────────────────────────────────
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiError_Failure_OutputStartsWithMultipleErrors()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppMultiError);
@@ -105,7 +105,7 @@ public class DotnetBuildIntegrationTests
         output.Should().MatchRegex(@"^dotnet build: \d+ errors");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiError_Failure_ContainsMultipleErrorCodes()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppMultiError);
@@ -116,7 +116,7 @@ public class DotnetBuildIntegrationTests
         output.Should().Contain("CS0122");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiError_Failure_GroupsErrorsByFile()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppMultiError);
@@ -129,7 +129,7 @@ public class DotnetBuildIntegrationTests
         output.Should().Contain("UndefinedReferences.cs");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiError_Failure_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppMultiError);
@@ -138,7 +138,7 @@ public class DotnetBuildIntegrationTests
         output.Should().NotContain("Build FAILED");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiError_Failure_Savings70Percent()
     {
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync(
@@ -152,7 +152,7 @@ public class DotnetBuildIntegrationTests
 
     // ── SampleApp.Warnings ──────────────────────────────────────────────
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppWarnings_Success_ExitCodeZero()
     {
         // Pass --no-incremental through to dotnet so warnings are always emitted
@@ -162,7 +162,7 @@ public class DotnetBuildIntegrationTests
         exitCode.Should().Be(0);
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppWarnings_Success_OutputContainsWarnings()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -171,7 +171,7 @@ public class DotnetBuildIntegrationTests
         output.Should().MatchRegex(@"dotnet build: 0 errors, \d+ warnings");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppWarnings_Success_ContainsWarningCodes()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -183,7 +183,7 @@ public class DotnetBuildIntegrationTests
         output.Should().Contain("CS8600");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppWarnings_Success_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -193,7 +193,7 @@ public class DotnetBuildIntegrationTests
         output.Should().NotContain("Build succeeded");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppWarnings_Success_Savings70Percent()
     {
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync(
@@ -207,7 +207,7 @@ public class DotnetBuildIntegrationTests
 
     // ── SampleApp.MultiProject ──────────────────────────────────────────
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiProject_Success_OutputStartsWithCheckmark()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -217,7 +217,7 @@ public class DotnetBuildIntegrationTests
         output.TrimEnd().Should().StartWith("✓ dotnet build");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiProject_Success_MentionsMultipleProjects()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -226,7 +226,7 @@ public class DotnetBuildIntegrationTests
         output.Should().Contain("2 projects");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppMultiProject_Success_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
