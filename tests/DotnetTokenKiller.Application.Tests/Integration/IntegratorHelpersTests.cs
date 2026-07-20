@@ -221,8 +221,24 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         File.Exists(path).Should().BeTrue();
         var content = await File.ReadAllTextAsync(path);
-        content.Should().Contain("PreToolUse");
-        content.Should().Contain("python3 hook.py");
+        content.Should().Be(
+            """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": "run_shell_command",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "python3 hook.py"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
         context.Created.Should().ContainSingle();
     }
 
@@ -786,6 +802,330 @@ public sealed class IntegratorHelpersTests : IDisposable
         innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
         context.Updated.Should().ContainSingle();
         context.Skipped.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_EndMarkerFoundAtIndexZero_UsesEndMarkerLengthWhenSplicing()
+    {
+        // Boundary: markers chosen so that BOTH the begin marker and the end marker resolve to
+        // index 0 (the begin marker is a prefix of the end marker). The end-marker offset is
+        // therefore exactly 0 — a valid hit that must NOT be treated as "end marker missing".
+        var context = new IntegrationContext(true);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "<!--/dtk-->\nUser tail");
+        const string section = "<!--dtk-->\nNEW\n<!--/dtk-->";
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!--", "<!--/dtk-->", section, context, CancellationToken.None);
+
+        var content = await File.ReadAllTextAsync(path);
+        content.Should().Be(section + "\nUser tail");
+        context.Updated.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task WriteHookAndSettingsAsync_NewFiles_WritesScriptAndExactSettingsJson()
+    {
+        // Pins the exact hook-entry shape produced by WriteHookAndSettingsAsync: the "matcher",
+        // "type" and "command" property names, the literal "command" type value, and the
+        // indented serializer options used to persist the settings file.
+        var context = new IntegrationContext(false);
+        var scriptPath = Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py");
+        var settingsPath = Path.Combine(_tempDir, "settings.json");
+        const string script = "#!/usr/bin/env python3\nprint('hi')\n";
+        var spec = new HookSpec(scriptPath, script, settingsPath, "PreToolUse", "Bash", "python3 hook.py");
+
+        await IntegratorHelpers.WriteHookAndSettingsAsync(spec, context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(scriptPath)).Should().Be(script);
+        (await File.ReadAllTextAsync(settingsPath)).Should().Be(
+            """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": "Bash",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "python3 hook.py"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+        context.Created.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_EntryWithoutCommandProperty_IsNotTreatedAsLegacyMatch()
+    {
+        // The hook command has no quoted env-var segment, so no legacy command can be derived and
+        // the legacy lookup must be skipped entirely. If it ran anyway with a null needle it would
+        // "match" the existing command-less inner hook and overwrite it instead of appending.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path,
+            """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": "Bash",
+                    "hooks": [
+                      {
+                        "type": "command"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = "python3 hook.py"
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, "python3 hook.py", context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be(
+            """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": "Bash",
+                    "hooks": [
+                      {
+                        "type": "command"
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": "Bash",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "python3 hook.py"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+            """);
+        context.Updated.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_CommandStartingWithQuotedEnvVar_StillReplacesLegacyEntry()
+    {
+        // Boundary: the quoted env-var segment starts at index 0 (no interpreter prefix), so the
+        // derived legacy command is the bare relative path.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string legacyCommand = ".claude/hooks/dotnet-to-dtk.py";
+        const string newCommand = "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dotnet-to-dtk.py";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = legacyCommand
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = newCommand
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, newCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
+        context.Updated.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_EmptyEnvVarName_StillReplacesLegacyEntry()
+    {
+        // Boundary: the closing quote sits immediately after the opening "$ — zero characters
+        // between the quotes — which is the tightest possible quoted segment.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string legacyCommand = "python3 hook.py";
+        const string newCommand = """python3 "$"/hook.py""";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = legacyCommand
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = newCommand
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, newCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
+        context.Updated.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_CommandEndingWithClosingQuote_DerivesNoLegacyAndAppends()
+    {
+        // Boundary: the closing quote is the LAST character of the command, so there is no
+        // character after it to inspect. Legacy derivation must bail out rather than read past
+        // the end of the string.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        const string command = "python3 \"$CLAUDE_PROJECT_DIR\"";
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = command
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, command, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(command);
+        context.Created.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_UnterminatedQuotedEnvVar_DerivesNoLegacyAndAppends()
+    {
+        // Boundary: an opening "$ with no closing quote at all.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        const string command = """/usr/bin/python3 "$CLAUDE_PROJECT_DIR/hook.py""";
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = command
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, command, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(command);
+        context.Created.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_QuotedSegmentWithoutEnvVarSigil_DerivesNoLegacyAndAppends()
+    {
+        // Boundary: the command contains a quoted segment followed by '/', but the quote does not
+        // open an env var ("$). Derivation must stop at the missing "$ and never fall through to
+        // the slicing logic with a negative offset.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        const string command = """python3 "/opt/dtk"/hook.py""";
+        var hookEntry = new JsonObject
+        {
+            ["matcher"] = "Bash",
+            [HooksProperty] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "command",
+                    ["command"] = command
+                }
+            }
+        };
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, command, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(command);
+        context.Created.Should().ContainSingle();
     }
 
     private const string HooksProperty = "hooks";
