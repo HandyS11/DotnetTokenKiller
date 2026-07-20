@@ -15,6 +15,7 @@
     <PackageReference Include="xunit.runner.visualstudio"/>
     <PackageReference Include="FluentAssertions"/>
     <PackageReference Include="Spectre.Console.Testing"/>
+    <PackageReference Include="Verify.Xunit"/>
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

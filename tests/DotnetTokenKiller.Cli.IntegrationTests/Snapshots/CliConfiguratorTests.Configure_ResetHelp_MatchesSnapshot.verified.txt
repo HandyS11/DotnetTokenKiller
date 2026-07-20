@@ -1,0 +1,13 @@
+﻿DESCRIPTION:
+Clear all tracking data
+
+USAGE:
+    dtk reset [OPTIONS]
+
+EXAMPLES:
+    dtk reset
+
+OPTIONS:
+    -h, --help     Prints help information                    
+    -f, --force    Skip confirmation prompt                   
+        --all      Also remove tee logs and configuration file

@@ -1,6 +1,9 @@
 {
   "stryker-config": {
     "solution": "DotnetTokenKiller.slnx",
+    "ignore-methods": [
+      "ConfigureAwait"
+    ],
     "reporters": [
       "json",
       "html",

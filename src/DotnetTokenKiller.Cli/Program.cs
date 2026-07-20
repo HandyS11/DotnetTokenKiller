@@ -1,8 +1,6 @@
-using System.Reflection;
 using System.Text;
 using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli;
-using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Infrastructure;
 using DotnetTokenKiller.Infrastructure.Execution;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,9 +15,6 @@ Console.OutputEncoding = Encoding.UTF8;
 var noColor = Environment.GetEnvironmentVariable("NO_COLOR") is not null;
 
 const string dotnetCmd = "dotnet";
-const string integrateCmd = "integrate";
-const string configBranch = "config";
-const string completionCmd = "completion";
 
 // Canonicalize `dotnet <sub>` casing (e.g. `DOTNET BUILD` -> `dotnet build`) so Spectre's
 // case-sensitive routing resolves it; unknown/passthrough invocations are left untouched.
@@ -55,85 +50,7 @@ try
     var registrar = new DtkTypeRegistrar(services);
     var app = new CommandApp(registrar);
 
-    app.Configure(config =>
-    {
-        config.SetApplicationName("dtk");
-        var version = typeof(Program).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion ?? "0.0.0";
-        config.SetApplicationVersion(version);
-        config.Settings.StrictParsing = false;
-
-        config.AddBranch(dotnetCmd, dotnet =>
-        {
-            dotnet.SetDescription("Run dotnet commands with filtered output");
-            dotnet.AddCommand<DotnetBuildCommand>(ArgumentPreprocessor.BuildSubcommand)
-                .WithDescription("Run dotnet build with filtered output")
-                .WithExample(dotnetCmd, "build", "MyApp.slnx")
-                .WithExample(dotnetCmd, "build", "src/MyApp.csproj", "--no-restore");
-            dotnet.AddCommand<DotnetTestCommand>(ArgumentPreprocessor.TestSubcommand)
-                .WithDescription("Run dotnet test with filtered output")
-                .WithExample(dotnetCmd, "test")
-                .WithExample(dotnetCmd, "test", "--filter", "Category=Unit");
-            dotnet.AddCommand<DotnetRestoreCommand>(ArgumentPreprocessor.RestoreSubcommand)
-                .WithDescription("Run dotnet restore with filtered output")
-                .WithExample(dotnetCmd, "restore");
-            dotnet.AddCommand<DotnetCleanCommand>(ArgumentPreprocessor.CleanSubcommand)
-                .WithDescription("Run dotnet clean with filtered output")
-                .WithExample(dotnetCmd, "clean");
-            dotnet.AddCommand<DotnetFormatCommand>(ArgumentPreprocessor.FormatSubcommand)
-                .WithDescription("Run dotnet format with filtered output")
-                .WithExample(dotnetCmd, "format")
-                .WithExample(dotnetCmd, "format", "--verify-no-changes");
-        });
-
-        config.AddCommand<IntegrateCommand>(integrateCmd)
-            .WithDescription("Install dtk integration artifacts for an AI assistant provider")
-            .WithExample(integrateCmd, "claude")
-            .WithExample(integrateCmd, "claude", "--dir", "/path/to/project", "--force")
-            .WithExample(integrateCmd, "copilot")
-            .WithExample(integrateCmd, "copilot-cli")
-            .WithExample(integrateCmd, "copilot-cli", "--global")
-            .WithExample(integrateCmd, "gemini")
-            .WithExample(integrateCmd, "cursor")
-            .WithExample(integrateCmd, "windsurf")
-            .WithExample(integrateCmd, "aider")
-            .WithExample(integrateCmd, "jetbrains");
-
-        config.AddBranch(configBranch, cfg =>
-        {
-            cfg.SetDescription("View or modify dtk configuration");
-            cfg.AddCommand<ConfigShowCommand>("show")
-                .WithDescription("Display the current configuration")
-                .WithExample(configBranch, "show");
-            cfg.AddCommand<ConfigSetCommand>("set")
-                .WithDescription("Set a configuration value")
-                .WithExample(configBranch, "set", "tracking.enabled", "false")
-                .WithExample(configBranch, "set", "display.emoji", "false")
-                .WithExample(configBranch, "set", "tee.mode", "Always");
-        });
-
-        config.AddCommand<DoctorCommand>("doctor")
-            .WithDescription("Run diagnostics to verify dtk is set up correctly")
-            .WithExample("doctor");
-
-        config.AddCommand<CompletionCommand>(completionCmd)
-            .WithDescription("Print shell completion script")
-            .WithExample(completionCmd, "bash")
-            .WithExample(completionCmd, "zsh")
-            .WithExample(completionCmd, "fish")
-            .WithExample(completionCmd, "powershell");
-
-        config.AddCommand<GainCommand>("gain")
-            .WithDescription("Show token savings analytics")
-            .WithExample("gain")
-            .WithExample("gain", "--days", "7")
-            .WithExample("gain", "--project")
-            .WithExample("gain", "--json");
-        config.AddCommand<ResetCommand>("reset")
-            .WithDescription("Clear all tracking data")
-            .WithExample("reset");
-    });
+    app.Configure(config => CliConfigurator.Configure(config, CliConfigurator.DefaultVersion));
 
     return await app.RunAsync(args).ConfigureAwait(false);
 }

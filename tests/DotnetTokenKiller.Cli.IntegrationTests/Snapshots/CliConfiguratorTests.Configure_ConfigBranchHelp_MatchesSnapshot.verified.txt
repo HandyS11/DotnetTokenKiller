@@ -1,0 +1,18 @@
+﻿DESCRIPTION:
+View or modify dtk configuration
+
+USAGE:
+    dtk config [OPTIONS] <COMMAND>
+
+EXAMPLES:
+    dtk config show
+    dtk config set tracking.enabled false
+    dtk config set display.emoji false
+    dtk config set tee.mode Always
+
+OPTIONS:
+    -h, --help    Prints help information
+
+COMMANDS:
+    show                 Display the current configuration
+    set <key> <value>    Set a configuration value        

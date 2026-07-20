@@ -1,0 +1,19 @@
+﻿DESCRIPTION:
+Run dotnet format with filtered output
+
+USAGE:
+    dtk dotnet format [args] [OPTIONS]
+
+EXAMPLES:
+    dtk dotnet format
+    dtk dotnet format --verify-no-changes
+
+ARGUMENTS:
+    [args]    Arguments to forward to the underlying dotnet process
+
+OPTIONS:
+    -h, --help        Prints help information                                        
+    -v, --verbose     Echo the resolved command line before running                  
+        --vv          Also dump the raw dotnet output and elapsed time               
+        --show-log    Print the path to the full log file when the output was saved  
+    -q, --quiet       Suppress all DTK meta-output; forward only the filtered content
