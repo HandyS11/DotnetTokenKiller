@@ -80,7 +80,8 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
                 $"... and {extra} more violation{(extra == 1 ? "" : "s")}");
         }
 
-        return sb.ToString();
+        // Normalize to '\n' so output stays identical across platforms; AppendLine emits '\r\n' on Windows.
+        return sb.ToString().ReplaceLineEndings("\n");
     }
 
     private string FormatViolationLine(string rawLine)

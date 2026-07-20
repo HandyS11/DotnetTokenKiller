@@ -1,0 +1,17 @@
+DESCRIPTION:
+Print shell completion script
+
+USAGE:
+    dtk completion <shell> [OPTIONS]
+
+EXAMPLES:
+    dtk completion bash
+    dtk completion zsh
+    dtk completion fish
+    dtk completion powershell
+
+ARGUMENTS:
+    <shell>    Shell to generate completion for: bash, zsh, fish, powershell
+
+OPTIONS:
+    -h, --help    Prints help information

@@ -183,7 +183,9 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             }
         }
 
-        return sb.ToString();
+        // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
+        // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.
+        return sb.ToString().ReplaceLineEndings("\n");
     }
 
     // "  Restored /path/Project.csproj (in 123 ms)." — duration may be ms, seconds, or minutes:

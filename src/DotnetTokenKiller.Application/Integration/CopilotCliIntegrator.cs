@@ -114,6 +114,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
             }
         };
 
-        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        // Normalize to '\n'; WriteIndented emits '\r\n' on Windows.
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }).ReplaceLineEndings("\n");
     }
 }

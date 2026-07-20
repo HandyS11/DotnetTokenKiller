@@ -64,7 +64,8 @@ public sealed partial class DotnetCleanFilter(string? rootPath = null) : IOutput
                 $"... and {totalErrors - MaxErrorLines} more error{(totalErrors - MaxErrorLines == 1 ? "" : "s")}");
         }
 
-        return sb.ToString();
+        // Normalize to '\n' so output stays identical across platforms; AppendLine emits '\r\n' on Windows.
+        return sb.ToString().ReplaceLineEndings("\n");
     }
 
     // Noise: "    0 Warning(s)" and "    6 Error(s)" summary lines

@@ -167,7 +167,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             }
         }
 
-        return sb.ToString();
+        // Normalize to '\n' so output stays identical across platforms; AppendLine emits '\r\n' on Windows.
+        return sb.ToString().ReplaceLineEndings("\n");
     }
 
     private static string BuildContext(int projectCount, string elapsed)

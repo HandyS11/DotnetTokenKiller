@@ -1,0 +1,22 @@
+DESCRIPTION:
+Run dotnet commands with filtered output
+
+USAGE:
+    dtk dotnet [OPTIONS] <COMMAND>
+
+EXAMPLES:
+    dtk dotnet build MyApp.slnx
+    dtk dotnet build src/MyApp.csproj --no-restore
+    dtk dotnet test
+    dtk dotnet test --filter Category=Unit
+    dtk dotnet restore
+
+OPTIONS:
+    -h, --help    Prints help information
+
+COMMANDS:
+    build      Run dotnet build with filtered output  
+    test       Run dotnet test with filtered output   
+    restore    Run dotnet restore with filtered output
+    clean      Run dotnet clean with filtered output  
+    format     Run dotnet format with filtered output 

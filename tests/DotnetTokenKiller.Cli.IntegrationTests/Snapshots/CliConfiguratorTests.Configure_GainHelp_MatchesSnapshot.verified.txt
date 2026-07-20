@@ -1,0 +1,19 @@
+DESCRIPTION:
+Show token savings analytics
+
+USAGE:
+    dtk gain [OPTIONS]
+
+EXAMPLES:
+    dtk gain
+    dtk gain --days 7
+    dtk gain --project
+    dtk gain --json
+
+OPTIONS:
+    -h, --help       Prints help information                                                
+        --days       Number of days of history to include (default: 30)                     
+        --project    Filter by current project directory                                    
+        --json       Output raw JSON instead of table                                       
+        --export     Export raw tracking records in the given format (csv)                  
+        --command    Filter results to a specific command (e.g. build, test, restore, clean)

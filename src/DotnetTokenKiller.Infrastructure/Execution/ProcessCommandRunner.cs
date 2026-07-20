@@ -171,6 +171,10 @@ public sealed class ProcessCommandRunner : ICommandRunner
 
     private static void TryKillTreeWithTaskkill(int processId)
     {
+        // Stryker disable all : Windows-only backstop, reached solely via the OperatingSystem.IsWindows()
+        // guard in KillProcess. CI and local mutation runs execute on Linux, so every mutant in this
+        // method is unreachable there and would sit in the report as permanent, unkillable noise. The
+        // guard itself at the call site is still mutated and covered.
         try
         {
             // Absolute path (System32\taskkill.exe) avoids resolving the command through PATH.
@@ -206,5 +210,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
         {
             // Best-effort backstop: taskkill may be absent or the pid already gone.
         }
+
+        // Stryker restore all
     }
 }

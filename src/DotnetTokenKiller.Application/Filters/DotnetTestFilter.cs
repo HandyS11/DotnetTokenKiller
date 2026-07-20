@@ -328,7 +328,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         sb.AppendLine(CultureInfo.InvariantCulture,
             $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{context}");
 
-        return sb.ToString();
+        // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
+        // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.
+        return sb.ToString().ReplaceLineEndings("\n");
     }
 
     private static string CompactMessage(List<string> lines)

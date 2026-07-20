@@ -1,0 +1,22 @@
+USAGE:
+    dtk [OPTIONS] <COMMAND>
+
+EXAMPLES:
+    dtk integrate claude
+    dtk integrate claude --dir /path/to/project --force
+    dtk integrate copilot
+    dtk integrate copilot-cli
+    dtk integrate copilot-cli --global
+
+OPTIONS:
+    -h, --help       Prints help information   
+    -v, --version    Prints version information
+
+COMMANDS:
+    dotnet                  Run dotnet commands with filtered output                      
+    integrate <provider>    Install dtk integration artifacts for an AI assistant provider
+    config                  View or modify dtk configuration                              
+    doctor                  Run diagnostics to verify dtk is set up correctly             
+    completion <shell>      Print shell completion script                                 
+    gain                    Show token savings analytics                                  
+    reset                   Clear all tracking data                                       

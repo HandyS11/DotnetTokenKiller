@@ -1,0 +1,11 @@
+DESCRIPTION:
+Display the current configuration
+
+USAGE:
+    dtk config show [OPTIONS]
+
+EXAMPLES:
+    dtk config show
+
+OPTIONS:
+    -h, --help    Prints help information

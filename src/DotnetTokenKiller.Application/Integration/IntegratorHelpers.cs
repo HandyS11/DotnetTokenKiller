@@ -99,7 +99,9 @@ internal static class IntegratorHelpers
         var trimmed = current.TrimEnd();
         return string.IsNullOrWhiteSpace(trimmed)
             ? section
-            : trimmed + Environment.NewLine + section;
+            // Explicit '\n', not Environment.NewLine, so the written section is byte-identical across
+            // platforms and never introduces a CR into an otherwise LF file.
+            : trimmed + "\n" + section;
     }
 
     private static string ReplaceDtkSection(string content, string marker, string endMarker, string section)
@@ -232,10 +234,11 @@ internal static class IntegratorHelpers
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(
             path,
+            // WriteIndented emits '\r\n' on Windows; normalize so the written JSON is identical everywhere.
             root.ToJsonString(new JsonSerializerOptions
             {
                 WriteIndented = true
-            }),
+            }).ReplaceLineEndings("\n"),
             cancellationToken).ConfigureAwait(false);
 
         (exists ? context.Updated : context.Created).Add(path);

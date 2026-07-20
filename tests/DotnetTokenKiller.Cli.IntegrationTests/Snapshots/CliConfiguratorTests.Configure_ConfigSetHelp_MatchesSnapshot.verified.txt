@@ -1,0 +1,17 @@
+DESCRIPTION:
+Set a configuration value
+
+USAGE:
+    dtk config set <key> <value> [OPTIONS]
+
+EXAMPLES:
+    dtk config set tracking.enabled false
+    dtk config set display.emoji false
+    dtk config set tee.mode Always
+
+ARGUMENTS:
+    <key>      Configuration key in dot-notation (e.g. tracking.enabled) 
+    <value>    New value to assign (use empty string to reset to default)
+
+OPTIONS:
+    -h, --help    Prints help information

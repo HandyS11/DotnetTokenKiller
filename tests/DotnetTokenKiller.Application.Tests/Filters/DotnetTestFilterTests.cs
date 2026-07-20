@@ -119,57 +119,54 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_SummaryWithDurationInSeconds_ParsedCorrectly()
     {
-        // Covers NormalizeDurationToMs "s" case (line 248)
+        // Asserts the whole line, not just "passed": the rendered elapsed time is the only place
+        // the "s" arm of NormalizeDurationToMs is observable, so a loose assertion would let any
+        // multiplier mutation (or deletion of the arm) survive.
         const string input = "Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 2.5 s - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("passed");
+        result.Should().Be("✓ dotnet test: 3 passed (1 project, 2.50s)\n");
     }
 
     [Fact]
     public void Apply_SummaryWithDurationInMinutes_ParsedCorrectly()
     {
-        // Covers NormalizeDurationToMs "m" case (line 249)
         const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("passed");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 60.00s)\n");
     }
 
     [Fact]
     public void Apply_SummaryWithDurationInHours_ParsedCorrectly()
     {
-        // Covers NormalizeDurationToMs "h" case (line 250)
         const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 h - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("passed");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 3600.00s)\n");
     }
 
     [Fact]
     public void Apply_SummaryWithSkippedTests_IncludesSkippedCountInOutput()
     {
-        // Covers TotalSkipped > 0 true branch (condition at line 176)
         const string input = "Passed!  - Failed: 0, Passed: 5, Skipped: 2, Total: 7, Duration: 10 ms - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("2 skipped");
+        result.Should().Be("✓ dotnet test: 5 passed, 2 skipped (1 project, 0.01s)\n");
     }
 
     [Fact]
     public void Apply_SingleProject_UsesSingularProjectForm()
     {
-        // Covers (ProjectCount == 1 ? "" : "s") true branch (condition at line 179)
         const string input = "Passed!  - Failed: 0, Passed: 4, Skipped: 0, Total: 4, Duration: 100 ms - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("1 project");
-        result.Should().NotContain("projects");
+        result.Should().Be("✓ dotnet test: 4 passed (1 project, 0.10s)\n");
     }
 
     [Fact]
@@ -242,7 +239,15 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("3 skipped");
+        result.Should().Be(
+            """
+            FAILURES (1):
+              MyTests.FailingTest [1 ms]
+                Assert failed
+                at ../../../path/Test.cs:line 1
+            dotnet test: 1 failed, 0 passed, 3 skipped (1 project, 0.05s)
+
+            """);
     }
 
     [Fact]
@@ -261,8 +266,15 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("1 project");
-        result.Should().NotContain("projects");
+        result.Should().Be(
+            """
+            FAILURES (1):
+              MyTests.FailingTest [1 ms]
+                Assert failed
+                at ../../../path/Test.cs:line 1
+            dotnet test: 1 failed, 0 passed (1 project, 0.05s)
+
+            """);
     }
 
     [Fact]
@@ -282,7 +294,17 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("2 projects");
+        // Pins the accumulator arithmetic across both summaries: passed 2+3, duration 100+50ms,
+        // project count 1+1. A '+=' flipped to '-=' on any of them changes this string.
+        result.Should().Be(
+            """
+            FAILURES (1):
+              MyTests.FailingTest [1 ms]
+                Assert failed
+                at ../../../path/Test.cs:line 1
+            dotnet test: 1 failed, 5 passed (2 projects, 0.15s)
+
+            """);
     }
 
     [Fact]
@@ -317,7 +339,7 @@ public class DotnetTestFilterTests
 
         var result = filter.Apply(input, exitCode: 0);
 
-        result.Should().Contain("passed");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.01s)\n");
     }
 
     [Fact]
@@ -820,8 +842,58 @@ public class DotnetTestFilterTests
         // .NET 9 Microsoft.Testing.Platform output: lowercase "failed" lines and a "Test summary:" line.
         const string raw =
             "failed MyTests.T1 (12ms)\nTest summary: total: 10, failed: 1, succeeded: 9, skipped: 0, duration: 2.3s";
-        var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
-        result.Should().Contain("failed").And.NotBeNullOrWhiteSpace();
+        var result = _sut.Apply(raw, exitCode: 1);
+
+        // A bare MTP failure line carries no message, so the message row renders as indent-only.
+        // Spelled with \n rather than a raw literal because that trailing indent is significant.
+        result.Should().Be(
+            "FAILURES (1):\n  MyTests.T1 [12ms]\n    \ndotnet test: 1 failed, 9 passed (1 project, 2.30s)\n");
+    }
+
+    [Fact]
+    public void Apply_MtpFailureWithStackFrame_ExtractsSourceReferenceAndMessage()
+    {
+        // MTP emits no "Error Message:"/"Stack Trace:" labels — the message and the stack frame
+        // arrive as bare indented continuation lines. Nothing previously exercised the branch that
+        // pulls a source ref out of those, so every mutant in it went unreached.
+        const string raw = """
+                           failed MyTests.T1 (12ms)
+                             Assert.Equal() Failure
+                             Expected: 1
+                             Actual: 2
+                             at MyTests.T1() in /path/to/Test.cs:line 42
+                           Test summary: total: 2, failed: 1, succeeded: 1, skipped: 0, duration: 2.3s
+                           """;
+
+        var result = _sut.Apply(raw, exitCode: 1);
+
+        result.Should().Be(
+            """
+            FAILURES (1):
+              MyTests.T1 [12ms]
+                Expected: 1, Actual: 2
+                at ../../../path/to/Test.cs:line 42
+            dotnet test: 1 failed, 1 passed (1 project, 2.30s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_MtpFailureWithMultipleStackFrames_KeepsOnlyTheFirstSourceReference()
+    {
+        // Guards the string.IsNullOrEmpty(sourceRef) check: without it, the last frame would win.
+        const string raw = """
+                           failed MyTests.T2 (5ms)
+                             boom
+                             at Inner.Frame() in /path/to/First.cs:line 7
+                             at MyTests.T2() in /path/to/Second.cs:line 99
+                           Test summary: total: 1, failed: 1, succeeded: 0, skipped: 0, duration: 1s
+                           """;
+
+        var result = _sut.Apply(raw, exitCode: 1);
+
+        result.Should().Contain("at ../../../path/to/First.cs:line 7")
+            .And.NotContain("Second.cs");
     }
 
     [Fact]
@@ -829,10 +901,99 @@ public class DotnetTestFilterTests
     {
         // Test host crashed before printing a summary — old code returned "" and lost the failures.
         // With no summary there is no project/elapsed context, so it must not fabricate "0 projects".
+        // The exact assertion pins the empty trailing context: a mutant that seeds `context` with a
+        // non-empty string instead of string.Empty would append it to this summary line.
         const string raw = "  Failed MyTests.T1 [15 ms]\n  Error Message:\n   boom";
         var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
-        result.Should().Contain("T1").And.Contain("boom");
-        result.Should().NotContain("0 projects").And.NotContain("0.00s");
+        result.Should().Be(
+            "FAILURES (1):\n  MyTests.T1 [15 ms]\n    boom\ndotnet test: 1 failed, 0 passed\n");
+    }
+
+    [Fact]
+    public void Apply_MultiLineMessageWithoutExpectedActual_JoinsLinesWithSpaces()
+    {
+        // CompactMessage falls to string.Join(" ", lines) when neither Expected: nor Actual: is
+        // present. A single-line message can't tell " " from "": this needs two message lines so
+        // the separator is observable.
+        const string input = """
+                               Failed MyTests.Multi [1 ms]
+                               Error Message:
+                                 first part
+                                 second part
+                               Stack Trace:
+                                  at MyTests.Multi() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            """
+            FAILURES (1):
+              MyTests.Multi [1 ms]
+                first part second part
+                at ../../../path/Test.cs:line 1
+            dotnet test: 1 failed, 0 passed (1 project, 0.00s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_SummaryReportsMoreFailuresThanParsedHeaders_UsesSummaryCount()
+    {
+        // failedCount = Math.Max(TotalFailed, Failures.Count). When the summary's failed count
+        // exceeds the parsed headers, TotalFailed drives the number — so flipping its '+=' to '-='
+        // (which Math.Max would otherwise mask when the two are equal) now changes the output.
+        const string input = """
+                               Failed MyTests.OnlyOneShown [1 ms]
+                               Error Message:
+                                 boom
+                               Stack Trace:
+                                  at MyTests.OnlyOneShown() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 5, Passed: 0, Skipped: 0, Total: 5, Duration: 10 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            """
+            FAILURES (5):
+              MyTests.OnlyOneShown [1 ms]
+                boom
+                at ../../../path/Test.cs:line 1
+            dotnet test: 5 failed, 0 passed (1 project, 0.01s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_SummaryOnlyFailures_NoParsedHeaders_StillRendersFailureReport()
+    {
+        // A summary reporting failures with no per-test failure lines (Failures.Count == 0) must
+        // still render. This pins the `TotalFailed > 0` half of the verdict condition, which the
+        // `|| Failures.Count > 0` half masks whenever headers were parsed.
+        const string input =
+            "Failed!  - Failed: 2, Passed: 1, Skipped: 0, Total: 3, Duration: 20 ms - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be("FAILURES (2):\ndotnet test: 2 failed, 1 passed (1 project, 0.02s)\n");
+    }
+
+    [Fact]
+    public void Apply_MtpSummaryReportsMoreFailuresThanHeaders_UsesSummaryCounts()
+    {
+        // MTP accumulator counterpart: pins AccumulateMtpSummary's failed/skipped '+=' arithmetic
+        // by making the summary counts exceed the single parsed MTP failure line.
+        const string input =
+            "failed MyTests.T1 (5ms)\nTest summary: total: 8, failed: 3, succeeded: 3, skipped: 2, duration: 1s";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \ndotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1.00s)\n");
     }
 
     [Fact]

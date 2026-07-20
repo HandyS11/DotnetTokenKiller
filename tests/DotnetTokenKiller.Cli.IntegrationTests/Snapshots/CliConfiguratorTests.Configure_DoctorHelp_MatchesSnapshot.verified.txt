@@ -1,0 +1,11 @@
+DESCRIPTION:
+Run diagnostics to verify dtk is set up correctly
+
+USAGE:
+    dtk doctor [OPTIONS]
+
+EXAMPLES:
+    dtk doctor
+
+OPTIONS:
+    -h, --help    Prints help information
