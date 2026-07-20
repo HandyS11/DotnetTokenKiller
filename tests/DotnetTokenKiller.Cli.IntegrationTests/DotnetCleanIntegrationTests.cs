@@ -14,7 +14,7 @@ public class DotnetCleanIntegrationTests
     private static readonly string SampleAppBroken =
         IntegrationTestHelper.SamplePath("SampleApp.Broken");
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Clean_SampleApp_AfterBuild_OutputExactlyCheckmark()
     {
         // Build first as per AC#5: "after a prior successful build"
@@ -28,7 +28,7 @@ public class DotnetCleanIntegrationTests
         lines[0].Trim().Should().StartWith("✓ dotnet clean");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Clean_SampleApp_Savings95Percent()
     {
         // Use --verbosity normal to produce verbose raw output for savings calculation
@@ -44,7 +44,7 @@ public class DotnetCleanIntegrationTests
         savings.Should().BeGreaterThanOrEqualTo(95.0, "clean success should achieve ≥95% token savings");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Clean_SampleAppBroken_SucceedsEvenForBrokenProject()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "clean", SampleAppBroken);

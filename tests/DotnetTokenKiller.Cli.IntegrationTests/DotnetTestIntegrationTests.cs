@@ -23,7 +23,7 @@ public class DotnetTestIntegrationTests
     private static readonly string SampleTestsReqnrollCsproj =
         IntegrationTestHelper.SamplePath("SampleApp.Tests.Reqnroll/SampleApp.Tests.Reqnroll.csproj");
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_AllPass_OutputStartsWithCheckmark()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -35,7 +35,7 @@ public class DotnetTestIntegrationTests
         output.Trim().Should().NotContain("\n");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_AllPass_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -49,7 +49,7 @@ public class DotnetTestIntegrationTests
         output.Should().NotContain("Failed!");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_AllPass_Savings90Percent()
     {
         // --verbosity normal for raw output only; dtk runs with default verbosity
@@ -66,7 +66,7 @@ public class DotnetTestIntegrationTests
         savings.Should().BeGreaterThanOrEqualTo(90.0, "test all-pass should achieve ≥90% token savings");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_WithFailure_OutputStartsWithFailures()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -76,7 +76,7 @@ public class DotnetTestIntegrationTests
         output.Should().StartWith("FAILURES (1):");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_WithFailure_ContainsIntentionallyFailing()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -85,7 +85,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("IntentionallyFailing");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_WithFailure_ContainsSummaryLine()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -94,7 +94,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("dotnet test: 1 failed, 3 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_WithFailure_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -107,7 +107,7 @@ public class DotnetTestIntegrationTests
         output.Should().NotContain("Failed!");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_SampleTests_WithFailure_Savings70Percent()
     {
         // --verbosity normal for raw output only; dtk runs with default verbosity
@@ -123,7 +123,7 @@ public class DotnetTestIntegrationTests
 
     // ── SampleApp.Tests.MultiFailure (xUnit, 12 failures / 9 passes) ───
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MultiFailure_OutputStartsWithFailures()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -133,7 +133,7 @@ public class DotnetTestIntegrationTests
         output.Should().StartWith("FAILURES (12):");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MultiFailure_ContainsSummaryLine()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -142,7 +142,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("dotnet test: 12 failed, 9 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MultiFailure_ContainsDiverseFailureTypes()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -156,7 +156,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("Square_Matches_Expected");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MultiFailure_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -168,7 +168,7 @@ public class DotnetTestIntegrationTests
         output.Should().NotContain("Failed!");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MultiFailure_Savings70Percent()
     {
         var (rawOutput, _) = await IntegrationTestHelper.RunDotnetAsync(
@@ -183,7 +183,7 @@ public class DotnetTestIntegrationTests
 
     // ── SampleApp.Tests.NUnit (3 failures / 5 passes) ──────────────────
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_NUnit_AllPass_OutputStartsWithCheckmark()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -194,7 +194,7 @@ public class DotnetTestIntegrationTests
         output.TrimEnd().Should().StartWith("✓ dotnet test: 5 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_NUnit_WithFailure_OutputStartsWithFailures()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -204,7 +204,7 @@ public class DotnetTestIntegrationTests
         output.Should().StartWith("FAILURES (3):");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_NUnit_WithFailure_ContainsSummaryLine()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -213,7 +213,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("dotnet test: 3 failed, 5 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_NUnit_WithFailure_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -227,7 +227,7 @@ public class DotnetTestIntegrationTests
 
     // ── SampleApp.Tests.MSTest (3 failures / 5 passes) ─────────────────
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MSTest_AllPass_OutputStartsWithCheckmark()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -238,7 +238,7 @@ public class DotnetTestIntegrationTests
         output.TrimEnd().Should().StartWith("✓ dotnet test: 5 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MSTest_WithFailure_OutputStartsWithFailures()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -248,7 +248,7 @@ public class DotnetTestIntegrationTests
         output.Should().StartWith("FAILURES (3):");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MSTest_WithFailure_ContainsSummaryLine()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -257,7 +257,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("dotnet test: 3 failed, 5 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_MSTest_WithFailure_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -271,7 +271,7 @@ public class DotnetTestIntegrationTests
 
     // ── SampleApp.Tests.Reqnroll (2 failures / 5 passes) ───────────────
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_Reqnroll_AllPass_OutputStartsWithCheckmark()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -282,7 +282,7 @@ public class DotnetTestIntegrationTests
         output.TrimEnd().Should().StartWith("✓ dotnet test: 5 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_Reqnroll_WithFailure_OutputStartsWithFailures()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -292,7 +292,7 @@ public class DotnetTestIntegrationTests
         output.Should().StartWith("FAILURES (2):");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_Reqnroll_WithFailure_ContainsSummaryLine()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -301,7 +301,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("dotnet test: 2 failed, 5 passed");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_Reqnroll_WithFailure_ContainsBddScenarioNames()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
@@ -311,7 +311,7 @@ public class DotnetTestIntegrationTests
         output.Should().Contain("Intentionally wrong expectation");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Test_Reqnroll_WithFailure_NoTestRunnerNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(

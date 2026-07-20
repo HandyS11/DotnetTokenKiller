@@ -11,7 +11,7 @@ public class DotnetFormatIntegrationTests
     private static readonly string SampleApp =
         IntegrationTestHelper.SamplePath("SampleApp");
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Format_SampleApp_NothingToFormat_OutputsCheckmark()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "format", SampleApp);
@@ -20,7 +20,7 @@ public class DotnetFormatIntegrationTests
         output.Trim().Should().StartWith("✓ dotnet format");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Format_SampleApp_VerifyNoChanges_ExitCodeZero()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(
@@ -30,7 +30,7 @@ public class DotnetFormatIntegrationTests
         output.Trim().Should().StartWith("✓ dotnet format");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Format_SampleApp_OutputDoesNotContainLoadingConfiguration()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "format", SampleApp);
@@ -38,7 +38,7 @@ public class DotnetFormatIntegrationTests
         output.Should().NotContain("Loading configuration");
     }
 
-    [Fact(Timeout = 60_000)]
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Format_SampleApp_OutputDoesNotContainFormatComplete()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "format", SampleApp);

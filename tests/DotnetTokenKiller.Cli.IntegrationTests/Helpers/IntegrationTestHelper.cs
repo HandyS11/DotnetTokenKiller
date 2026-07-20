@@ -5,6 +5,14 @@ namespace DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 
 internal static class IntegrationTestHelper
 {
+    /// <summary>Per-test timeout (milliseconds) for integration tests that shell out to a
+    /// nested <c>dotnet</c> build/test on a sample project. xunit runs collections in parallel
+    /// up to the logical-CPU count, so several of these heavy subprocesses run at once; on a
+    /// 2-core CI runner under coverage instrumentation (e.g. the SonarQube job) a tight 60s cap
+    /// occasionally tripped even though the work completes. 3 minutes leaves headroom for that
+    /// contention while still failing fast on a genuine hang, well inside the CI job timeout.</summary>
+    internal const int DefaultTimeoutMs = 180_000;
+
     private static readonly string DllPath =
         Path.Combine(AppContext.BaseDirectory, "dtk.dll");
 
