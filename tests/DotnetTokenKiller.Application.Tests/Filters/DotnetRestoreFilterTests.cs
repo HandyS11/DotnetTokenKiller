@@ -77,7 +77,68 @@ public class DotnetRestoreFilterTests
     {
         const string input = "  Restored /path/Proj.fsproj (in 50 ms).";
         var result = _sut.Apply(input, exitCode: 0);
-        result.Should().Contain("(1 project, 0.05s)");
+        result.Should().Be("✓ dotnet restore (1 project, 0.05s)\n");
+    }
+
+    [Fact]
+    public void Apply_DurationInMinutesAndSeconds_ConvertsBothComponents()
+    {
+        // The rendered elapsed time is the only place ParseDurationToMs is observable. Asserting
+        // the whole line pins (minutes * 60_000) + (seconds * 1_000): flipping the '+' to '-',
+        // or either '*' to '/', changes this string.
+        const string input = "Restored /path/Proj.csproj (in 1 min 30 sec).";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (1 project, 90.00s)\n");
+    }
+
+    [Fact]
+    public void Apply_DurationInWholeMinutes_TreatsMissingSecondsAsZero()
+    {
+        // No "sec" component, so the minsec ternary must take its false arm and contribute 0.
+        const string input = "Restored /path/Proj.csproj (in 2 min).";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (1 project, 120.00s)\n");
+    }
+
+    [Fact]
+    public void Apply_DurationInSeconds_ScalesToMilliseconds()
+    {
+        const string input = "Restored /path/Proj.csproj (in 1.5 sec).";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (1 project, 1.50s)\n");
+    }
+
+    [Fact]
+    public void Apply_SlowestRestoreWins_NotTheSumOfAllRestores()
+    {
+        // Restores run in parallel, so the reported elapsed is the max, never the total.
+        const string input = """
+                             Restored /path/A.csproj (in 200 ms).
+                             Restored /path/B.csproj (in 800 ms).
+                             Restored /path/C.csproj (in 100 ms).
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (3 projects, 0.80s)\n");
+    }
+
+    [Fact]
+    public void Apply_CrlfLineEndings_AreSplitSameAsLf()
+    {
+        // Apply splits on both "\r\n" and "\n"; dropping either separator would leave the \r
+        // attached and break the trailing "." match on every line but the last.
+        const string input = "Restored /path/A.csproj (in 100 ms).\r\nRestored /path/B.csproj (in 300 ms).";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (2 projects, 0.30s)\n");
     }
 
     [Fact]
@@ -88,8 +149,14 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet restore: 1 error");
-        result.Should().Contain("NU1101");
+        // Whole-output assertion: the message text and the singular "error" are both mutable and
+        // neither is checked by a StartWith/Contain pair.
+        result.Should().Be(
+            """
+            dotnet restore: 1 error
+              NU1101: Unable to find package (../../../path/proj.csproj)
+
+            """);
     }
 
     [Fact]
@@ -100,9 +167,12 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet restore: 1 error");
-        result.Should().Contain("NU1101");
-        result.Should().NotContain("(");
+        result.Should().Be(
+            """
+            dotnet restore: 1 error
+              NU1101: Unable to find package 'Foo'
+
+            """);
     }
 
     [Fact]
@@ -114,7 +184,13 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet restore: 2 errors");
+        result.Should().Be(
+            """
+            dotnet restore: 2 errors
+              NU1101: Package not found (../../../path/a.csproj)
+              NU1102: Version mismatch (../../../path/b.csproj)
+
+            """);
     }
 
     [Fact]
