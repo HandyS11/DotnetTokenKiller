@@ -569,10 +569,9 @@ public sealed class AiderIntegratorTests : IDisposable
 
     private static string AppendedTo(string existingContent, string section)
     {
-        // Mirrors IntegratorHelpers.AppendSection: the retained (right-trimmed) user content, then
-        // Environment.NewLine, then the dtk section. Environment.NewLine keeps the expectation
-        // correct on both Linux and Windows without weakening the rest of the exact comparison.
-        return existingContent + Environment.NewLine + section;
+        // Mirrors IntegratorHelpers.AppendSection, which joins with an explicit '\n' so the written
+        // file is byte-identical on every platform (and never carries a stray CR).
+        return existingContent + "\n" + section;
     }
 
     private static int CountTopLevelKeys(string yaml, string key)
