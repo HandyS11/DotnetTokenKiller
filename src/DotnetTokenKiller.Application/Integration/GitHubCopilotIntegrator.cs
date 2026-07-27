@@ -11,7 +11,7 @@ public sealed class GitHubCopilotIntegrator : IProviderIntegrator
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
 
-    private const string CopilotSection =
+    private static readonly string CopilotSection =
         $"""
         {SectionMarker}
         ## DotnetTokenKiller (dtk)

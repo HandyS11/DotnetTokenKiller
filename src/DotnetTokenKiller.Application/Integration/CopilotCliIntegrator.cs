@@ -24,14 +24,14 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     private const string HookScriptName = "dotnet-to-dtk.py";
     private const string HookJsonName = "dtk-dotnet.json";
 
-    private const string CopilotSection =
+    private static readonly string CopilotSection =
         $"""
         {SectionMarker}
         ## DotnetTokenKiller (dtk)
 
         {IntegrationInstructions.Markdown}
 
-        A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` rewrites `dotnet build|test|restore|clean|format`
+        A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` rewrites `dotnet {IntegrationInstructions.SubcommandAlternation}`
         to `dtk dotnet ...` automatically. The hook shells out to `python3`; on Windows (where the launcher is
         usually `python`, not `python3`), edit the `bash` command in that file if it doesn't fire.
         {SectionEndMarker}

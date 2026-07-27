@@ -112,6 +112,34 @@ public sealed class SubcommandBindingTests
             + "agent sessions silently stop rewriting the newest subcommand");
     }
 
+    [Fact]
+    public void IntegrationProse_ListsEveryCanonicalSubcommand()
+    {
+        // Pinned literals, for the same reason as the hook assertions above: deriving these from
+        // DotnetSubcommands.Ordered would make the expectation move in lockstep with the source, and
+        // the test could never fail. Adding a subcommand means editing these by hand.
+        const string expectedProse = "build, test, restore, clean, and format";
+        const string expectedAlternation = "build|test|restore|clean|format";
+
+        IntegrationInstructions.SubcommandProse.Should().Be(
+            expectedProse,
+            "the shared instructions must name every dtk-handled subcommand, or users are told to "
+            + "keep using raw dotnet for the newest one");
+        IntegrationInstructions.SubcommandAlternation.Should().Be(expectedAlternation);
+    }
+
+    [Fact]
+    public void SharedInstructions_MentionEverySubcommandInTheIntro()
+    {
+        foreach (var subcommand in DotnetSubcommands.Ordered)
+        {
+            IntegrationInstructions.Intro.Should().Contain(
+                subcommand,
+                "'{0}' is canonical, so the instructions embedded by every provider must mention it",
+                subcommand);
+        }
+    }
+
     /// <summary>
     /// Walks up from the test assembly to the directory holding <c>DotnetTokenKiller.slnx</c>.
     /// xunit 2.x has no runtime skip, and the test project only ever runs from inside the repo,

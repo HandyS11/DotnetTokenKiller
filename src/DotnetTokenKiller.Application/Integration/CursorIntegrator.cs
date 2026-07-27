@@ -11,7 +11,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </remarks>
 public sealed class CursorIntegrator : IProviderIntegrator
 {
-    private const string CursorRule =
+    private static readonly string CursorRule =
         $"""
         ---
         description: Use dtk instead of dotnet for build, test, restore, clean, and format commands

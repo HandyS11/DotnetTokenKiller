@@ -56,7 +56,7 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
         # /dtk
         """;
 
-    private const string InstructionsMarkdown =
+    private static readonly string InstructionsMarkdown =
         $"""
         # DotnetTokenKiller (dtk)
 

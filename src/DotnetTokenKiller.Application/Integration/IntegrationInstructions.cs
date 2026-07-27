@@ -1,3 +1,5 @@
+using DotnetTokenKiller.Domain;
+
 namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>
@@ -9,13 +11,22 @@ namespace DotnetTokenKiller.Application.Integration;
 internal static class IntegrationInstructions
 {
     /// <summary>
+    /// The canonical subcommands as an Oxford-comma prose list, e.g.
+    /// <c>build, test, restore, clean, and format</c>.
+    /// </summary>
+    internal static readonly string SubcommandProse = BuildProse(DotnetSubcommands.Ordered);
+
+    /// <summary>The canonical subcommands as a <c>build|test|…</c> alternation, in display order.</summary>
+    internal static readonly string SubcommandAlternation = string.Join("|", DotnetSubcommands.Ordered);
+
+    /// <summary>
     /// Introductory sentence describing dtk's purpose. Used standalone (followed by a "## Usage"
     /// subheading) by Aider, Cursor, and Windsurf, or as the lead-in of <see cref="Markdown"/> for
     /// providers that embed the instructions directly under their own heading.
     /// </summary>
-    internal const string Intro =
-        """
-        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+    internal static readonly string Intro =
+        $"""
+        Use `dtk` instead of raw `dotnet` for {SubcommandProse} commands.
         `dtk` filters output to actionable signal only, reducing noise by 50-97%.
         """;
 
@@ -44,10 +55,18 @@ internal static class IntegrationInstructions
     /// used when no separate "## Usage" subheading sits between them (Gemini CLI, GitHub Copilot,
     /// JetBrains AI).
     /// </summary>
-    internal const string Markdown =
+    internal static readonly string Markdown =
         $"""
         {Intro}
 
         {UsageBody}
         """;
+
+    private static string BuildProse(IReadOnlyList<string> names) =>
+        names.Count switch
+        {
+            0 => string.Empty,
+            1 => names[0],
+            _ => $"{string.Join(", ", names.Take(names.Count - 1))}, and {names[^1]}"
+        };
 }
