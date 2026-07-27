@@ -5,6 +5,29 @@ namespace DotnetTokenKiller.Domain;
 /// completion, the keyed filter registrations, and the generated agent hook scripts all derive
 /// from it, so a new subcommand cannot be half-added.
 /// </summary>
+/// <remarks>
+/// Adding a subcommand touches every one of these, in order:
+/// <list type="number">
+///   <item><description>Add the <c>const</c> and an <see cref="Ordered"/> entry here.</description></item>
+///   <item><description>
+///   Add the filter class, its <see cref="Filters.FilterKeys"/> constant, and its
+///   <c>AddKeyedTransient</c> registration in <c>ServiceCollectionExtensions.AddApplication</c>.
+///   </description></item>
+///   <item><description>
+///   Add the <c>Dotnet*Command</c> and its registration in <c>CliConfigurator</c>.
+///   </description></item>
+///   <item><description>Update the two pinned literals in <c>SubcommandBindingTests</c>.</description></item>
+///   <item><description>
+///   Regenerate <c>.claude/hooks/dotnet-to-dtk.py</c> from <c>HookScriptTemplates.ClaudeHook</c>
+///   (e.g. run <c>dtk integrate claude</c> against a scratch directory and copy the result over).
+///   </description></item>
+///   <item><description>
+///   Update the subcommand prose in <c>src/DotnetTokenKiller.Application/Integration/</c> —
+///   <c>IntegrationInstructions.cs</c> and <c>CopilotCliIntegrator.cs</c> still hardcode the list
+///   in the instruction text shipped to users, and nothing guards them.
+///   </description></item>
+/// </list>
+/// </remarks>
 public static class DotnetSubcommands
 {
     /// <summary>The <c>dotnet build</c> subcommand.</summary>

@@ -85,9 +85,9 @@ quantify whether the hook is actually working.
 
 | Location | Layer | Order | Bound to canonical? |
 |---|---|---|---|
-| `ArgumentPreprocessor.KnownSubcommandsOrdered` | Cli | display | canonical (`DotnetSubcommands.Ordered`, via Spectre registration test) |
+| `CliConfigurator` / `ArgumentPreprocessor` (Cli) | Cli | display | canonical (`DotnetSubcommands.Ordered`, via Spectre registration test) |
 | `FilterKeys` | Domain | — | canonical (aliases `DotnetSubcommands` consts) |
-| `_DTK_SUBCOMMANDS` in `HookScriptTemplates.cs:54` | Application | alphabetical | canonical (generated from `DotnetSubcommands.Sorted`, bound by test) |
+| `_DTK_SUBCOMMANDS` in `HookScriptTemplates.cs` | Application | alphabetical | canonical (generated from `DotnetSubcommands.Sorted`, bound by test) |
 | `.claude/hooks/dotnet-to-dtk.py` | repo | alphabetical | canonical (locked byte-identical to the generated template by test) |
 
 The canonical list lives in `Cli` while the hook template that needs it lives in `Application` —

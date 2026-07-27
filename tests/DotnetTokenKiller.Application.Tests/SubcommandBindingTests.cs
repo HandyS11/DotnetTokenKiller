@@ -9,8 +9,10 @@ namespace DotnetTokenKiller.Application.Tests;
 
 /// <summary>
 /// Binds the Application layer's restatements of the supported subcommands back to
-/// <see cref="DotnetSubcommands"/>. These are the seams generation cannot close: a registration
-/// that is simply absent produces no compile error and no runtime error until a user hits it.
+/// <see cref="DotnetSubcommands"/>, and locks this repo's own committed hook to the generated
+/// template. These are the seams generation cannot close: a registration that is simply absent,
+/// or a committed file that drifts from what would now be generated, produces no compile error
+/// and no runtime error until a user hits it.
 /// </summary>
 public sealed class SubcommandBindingTests
 {
@@ -39,7 +41,10 @@ public sealed class SubcommandBindingTests
             .Select(descriptor => descriptor.ServiceKey)
             .OfType<string>();
 
-        keys.Should().BeEquivalentTo(DotnetSubcommands.Ordered);
+        keys.Should().BeEquivalentTo(
+            DotnetSubcommands.Ordered,
+            "a filter registered under a typo'd or orphaned key would resolve for no dtk-handled subcommand "
+            + "while still silently satisfying container validation");
     }
 
     [Fact]
@@ -52,14 +57,19 @@ public sealed class SubcommandBindingTests
         // it forces whoever adds one to also regenerate the committed hook.
         const string expectedTuple = "_DTK_SUBCOMMANDS = (\"build\", \"clean\", \"format\", \"restore\", \"test\")";
 
-        foreach (var hook in new[]
+        foreach (var (name, hook) in new (string Name, string Hook)[]
                  {
-                     HookScriptTemplates.ClaudeHook,
-                     HookScriptTemplates.GeminiHook,
-                     HookScriptTemplates.CopilotCliHook
+                     ("Claude", HookScriptTemplates.ClaudeHook),
+                     ("Gemini", HookScriptTemplates.GeminiHook),
+                     ("Copilot CLI", HookScriptTemplates.CopilotCliHook)
                  })
         {
-            hook.Should().Contain(expectedTuple);
+            hook.Should().Contain(
+                expectedTuple,
+                "the {0} hook's subcommand tuple must match the canonical set — if it doesn't, regenerate "
+                + "'.claude/hooks/dotnet-to-dtk.py' from HookScriptTemplates.ClaudeHook and update this pinned "
+                + "literal, rather than editing the literal alone",
+                name);
         }
     }
 
@@ -72,13 +82,22 @@ public sealed class SubcommandBindingTests
         // subcommand requires updating this literal, which forces regenerating the hooks too.
         const string expected = "rewrites `dotnet build|test|restore|clean|format`";
 
-        HookScriptTemplates.ClaudeHook.Should().Contain(expected);
-        HookScriptTemplates.GeminiHook.Should().Contain(expected);
-        HookScriptTemplates.CopilotCliHook.Should().Contain(expected);
+        HookScriptTemplates.ClaudeHook.Should().Contain(
+            expected,
+            "the Claude hook's docstring must list every canonical subcommand, or a user reading it would "
+            + "not know the hook covers the newest one");
+        HookScriptTemplates.GeminiHook.Should().Contain(
+            expected,
+            "the Gemini hook's docstring must list every canonical subcommand, or a user reading it would "
+            + "not know the hook covers the newest one");
+        HookScriptTemplates.CopilotCliHook.Should().Contain(
+            expected,
+            "the Copilot CLI hook's docstring must list every canonical subcommand, or a user reading it "
+            + "would not know the hook covers the newest one");
     }
 
     [Fact]
-    public void RepoClaudeHook_IsByteIdenticalToTheGeneratedHook()
+    public void RepoClaudeHook_MatchesTheGeneratedHook()
     {
         var repoRoot = FindRepoRoot();
         var hookPath = Path.Combine(repoRoot, ".claude", "hooks", "dotnet-to-dtk.py");

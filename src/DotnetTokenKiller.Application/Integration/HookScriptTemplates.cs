@@ -56,7 +56,7 @@ internal static class HookScriptTemplates
 
     /// <summary>
     /// Imports, the subcommand pattern, the quote-aware boundary scanner, and <c>rewrite()</c> — identical for
-    /// both hooks.
+    /// all three hooks.
     /// </summary>
     private static readonly string SharedCore = $$""""
         import json
