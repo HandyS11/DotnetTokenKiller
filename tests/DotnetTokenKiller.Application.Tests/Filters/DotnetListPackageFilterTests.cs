@@ -296,8 +296,7 @@ public class DotnetListPackageFilterTests
 
         var result = _sut.Apply(sb.ToString(), exitCode: 0);
 
-        result.Should().Contain("… and ")
-            .And.Contain("more package")
+        result.Should().Contain("… and 10 more packages")
             .And.Contain("use --show-log for full output");
     }
 
@@ -320,7 +319,7 @@ public class DotnetListPackageFilterTests
                                > Direct               1.0.0       1.0.0
                             """;
 
-        _sut.Apply(input, exitCode: 1).Should().NotContain("✓");
+        _sut.Apply(input, exitCode: 1).Should().Contain("Direct 1.0.0").And.NotContain("✓");
     }
 
     private static string LoadFixture(string resourceName)
