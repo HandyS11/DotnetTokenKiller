@@ -1,1 +1,1 @@
-﻿✓ dotnet test: 1 passed (1 project, 0.05s)
+✓ dotnet test: 1 passed (1 project, 0.05s)
