@@ -261,6 +261,12 @@ public sealed class DoctorCommandTests : IDisposable
         {
             return Task.FromResult(exitCode);
         }
+
+        public Task<CommandResult> RunStreamedAsync(string command, IReadOnlyList<string> args,
+            TextWriter stdOutSink, TextWriter stdErrSink, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CommandResult(string.Empty, string.Empty, exitCode));
+        }
     }
 
     /// <summary>Config provider returning null for DbPath and Tee.Directory to trigger default path resolution.</summary>

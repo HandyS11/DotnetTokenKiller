@@ -20,4 +20,20 @@ public interface ICommandRunner
         string command,
         IReadOnlyList<string> args,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs the command, writing each line of output to the given sinks as it arrives while also
+    /// accumulating it, so the output can be measured without withholding it from the user.
+    /// </summary>
+    /// <param name="command">The executable to run.</param>
+    /// <param name="args">Arguments to pass to the executable.</param>
+    /// <param name="stdOutSink">Receives standard output, line by line, as it is produced.</param>
+    /// <param name="stdErrSink">Receives standard error, line by line, as it is produced.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<CommandResult> RunStreamedAsync(
+        string command,
+        IReadOnlyList<string> args,
+        TextWriter stdOutSink,
+        TextWriter stdErrSink,
+        CancellationToken cancellationToken = default);
 }

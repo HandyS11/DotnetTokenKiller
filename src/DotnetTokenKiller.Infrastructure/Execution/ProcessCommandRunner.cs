@@ -69,6 +69,88 @@ public sealed class ProcessCommandRunner : ICommandRunner
     }
 
     /// <inheritdoc/>
+    public async Task<CommandResult> RunStreamedAsync(
+        string command,
+        IReadOnlyList<string> args,
+        TextWriter stdOutSink,
+        TextWriter stdErrSink,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(stdOutSink);
+        ArgumentNullException.ThrowIfNull(stdErrSink);
+
+        var psi = new ProcessStartInfo(command)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            UseShellExecute = false,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = StartProcess(psi, command);
+
+        // Close stdin immediately so a child that reads it sees EOF and exits instead of hanging
+        // forever waiting for input this non-interactive capture will never provide.
+        process.StandardInput.Close();
+
+#pragma warning disable CA2016 // CancellationToken is handled via registration below
+        var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
+#pragma warning restore CA2016
+        try
+        {
+            // CRITICAL: pump both streams concurrently — sequential reads deadlock on large output
+            var stdOutTask = PumpAsync(process.StandardOutput, stdOutSink, cancellationToken);
+            var stdErrTask = PumpAsync(process.StandardError, stdErrSink, cancellationToken);
+            await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return new CommandResult(await stdOutTask.ConfigureAwait(false),
+                await stdErrTask.ConfigureAwait(false), process.ExitCode);
+        }
+        catch (OperationCanceledException)
+        {
+            await KillAndReapAsync(process).ConfigureAwait(false);
+            throw;
+        }
+        finally
+        {
+            await registration.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Copies a stream to a sink line by line, returning everything it copied.</summary>
+    /// <param name="reader">The child process stream to read.</param>
+    /// <param name="sink">The destination to echo each line to as it arrives.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<string> PumpAsync(
+        StreamReader reader,
+        TextWriter sink,
+        CancellationToken cancellationToken)
+    {
+        var builder = new StringBuilder();
+
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            // Flush per line: the whole point of streaming is that the user sees progress, and a
+            // buffered sink would defeat that on a long-running publish.
+            await sink.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await sink.FlushAsync(cancellationToken).ConfigureAwait(false);
+            builder.AppendLine(line);
+        }
+
+        return builder.ToString();
+    }
+
+    /// <inheritdoc/>
     public async Task<int> RunPassthroughAsync(
         string command,
         IReadOnlyList<string> args,
