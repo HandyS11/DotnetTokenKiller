@@ -65,7 +65,17 @@ internal static class HookScriptTemplates
 
         _DTK_SUBCOMMANDS = ({{SubcommandTuple}})
 
-        _PATTERN = re.compile(r"\bdotnet\s+(" + "|".join(_DTK_SUBCOMMANDS) + r")\b")
+        # Multi-token subcommands are declared with spaces ("list package") but must match any run
+        # of whitespace between their tokens. Longest-first ordering matters because Python's
+        # alternation is first-match-wins: a subcommand that prefixes a longer one would shadow it.
+        _PATTERN = re.compile(
+            r"\bdotnet\s+("
+            + "|".join(
+                s.replace(" ", r"\s+")
+                for s in sorted(_DTK_SUBCOMMANDS, key=len, reverse=True)
+            )
+            + r")\b"
+        )
 
         # Characters that may legitimately precede the `dotnet` token at a command
         # boundary. Anything else (a slash, a quote, a letter) means we are inside a
