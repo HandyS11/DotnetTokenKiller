@@ -1,1 +1,1 @@
-✓ dotnet test: 0 tests found
+﻿⚠ dotnet test: 0 tests found (no assembly matched)
