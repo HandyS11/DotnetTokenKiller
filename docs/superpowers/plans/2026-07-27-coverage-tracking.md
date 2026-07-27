@@ -1146,17 +1146,50 @@ Add to `GainReportUseCase.cs`:
 Run: `dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~SqliteTrackerTests"`
 Expected: PASS, including the eight new tests.
 
-- [ ] **Step 5: Verify nothing else broke**
+- [ ] **Step 5: Update the two hand-written `ITracker` fakes**
+
+Adding a member to `ITracker` breaks every hand-written implementation. NSubstitute substitutes generate new members automatically, but this repo has **two** hand-written fakes that do not, and the build fails without them:
+
+- `tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/ResetCommandTests.cs:126` — `private sealed class StubTracker : ITracker`
+- `tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/GainCommandTests.cs:364` — `private sealed class StubTracker : ITracker`
+
+Add to the `ResetCommandTests` fake (which records nothing and only needs to compile):
+
+```csharp
+        public Task<CoverageSummary> GetCoverageAsync(int days, string? projectPath,
+            string? commandFilter = null, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CoverageSummary([], 0, 0));
+        }
+```
+
+Add to the `GainCommandTests` fake, which Task 9 will drive from its tests, so give it a settable property and record the filters the way its siblings already do (match the existing `LastProjectPath` / `LastCommandFilter` assignment style in that class):
+
+```csharp
+        public CoverageSummary Coverage { get; init; } = new([], 0, 0);
+
+        public Task<CoverageSummary> GetCoverageAsync(int days, string? projectPath,
+            string? commandFilter = null, CancellationToken cancellationToken = default)
+        {
+            LastProjectPath = projectPath;
+            LastCommandFilter = commandFilter;
+            return Task.FromResult(Coverage);
+        }
+```
+
+- [ ] **Step 6: Verify nothing else broke**
 
 Run: `dtk dotnet test DotnetTokenKiller.slnx`
-Expected: PASS. Any test double implementing `ITracker` now needs `GetCoverageAsync`; NSubstitute substitutes generate it automatically, so no test changes should be needed. If a hand-written fake exists, add the method returning `new CoverageSummary([], 0, 0)`.
+Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
 git add src/DotnetTokenKiller.Domain/Tracking/CoverageSummary.cs \
         src/DotnetTokenKiller.Domain/Tracking/ITracker.cs \
+        tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/ResetCommandTests.cs \
+        tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/GainCommandTests.cs \
         src/DotnetTokenKiller.Infrastructure/Tracking/SqliteTracker.cs \
         src/DotnetTokenKiller.Application/UseCases/GainReportUseCase.cs \
         tests/DotnetTokenKiller.Infrastructure.Tests/Tracking/SqliteTrackerTests.cs
@@ -1220,9 +1253,8 @@ Append to `ProcessCommandRunnerTests`. Match the existing file's conventions for
     }
 
     [Fact]
-    public async Task RunStreamedAsync_HandlesOutputLargerThanThePipeBuffer()
+    public async Task RunStreamedAsync_EchoesEveryLineOfMultiLineOutput()
     {
-        // Both streams must be pumped concurrently; a sequential reader deadlocks here.
         var stdOut = new StringWriter();
         var sut = new ProcessCommandRunner();
 
@@ -1231,8 +1263,11 @@ Append to `ProcessCommandRunnerTests`. Match the existing file's conventions for
 
         result.ExitCode.Should().Be(0);
         stdOut.ToString().Should().Contain(".NET SDK");
+        stdOut.ToString().Split('\n').Length.Should().BeGreaterThan(5);
     }
 ```
+
+**Note on what is not tested here.** The concurrent-pump requirement (a sequential reader deadlocks once a child fills the ~64 KB pipe buffer) has no cheap, reliable cross-platform test — no `dotnet` subcommand produces that much output quickly. `dotnet --info` is a few KB, so the test above proves multi-line echoing, not deadlock avoidance. Do **not** rename it to claim otherwise. The requirement is enforced by the `Task.WhenAll` structure and its `CRITICAL:` comment, copied from `RunCapturedAsync` which has the same untested constraint.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1352,18 +1387,35 @@ Add to `ProcessCommandRunner.cs`, after `RunCapturedAsync`:
 Run: `dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~RunStreamedAsync"`
 Expected: PASS — 4 tests.
 
-- [ ] **Step 5: Verify nothing else broke**
+- [ ] **Step 5: Update the hand-written `ICommandRunner` fake**
+
+NSubstitute substitutes pick up the new member automatically, but one hand-written fake does not and the build fails without it:
+
+`tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/DoctorCommandTests.cs:247` — `private sealed class StubCommandRunner(int exitCode) : ICommandRunner`
+
+Add to it:
+
+```csharp
+        public Task<CommandResult> RunStreamedAsync(string command, IReadOnlyList<string> args,
+            TextWriter stdOutSink, TextWriter stdErrSink, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CommandResult(string.Empty, string.Empty, exitCode));
+        }
+```
+
+- [ ] **Step 6: Verify nothing else broke**
 
 Run: `dtk dotnet test DotnetTokenKiller.slnx`
-Expected: PASS. `ICommandRunner` gained a member; NSubstitute substitutes handle it automatically.
+Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
 git add src/DotnetTokenKiller.Domain/Execution/ICommandRunner.cs \
         src/DotnetTokenKiller.Infrastructure/Execution/ProcessCommandRunner.cs \
-        tests/DotnetTokenKiller.Infrastructure.Tests/Execution/ProcessCommandRunnerTests.cs
+        tests/DotnetTokenKiller.Infrastructure.Tests/Execution/ProcessCommandRunnerTests.cs \
+        tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/DoctorCommandTests.cs
 git commit -m "feat(infra): add streaming runner that echoes output while measuring it"
 ```
 
@@ -1904,14 +1956,74 @@ git commit -m "feat(app): measure and record unfiltered passthrough runs"
 
 - [ ] **Step 1: Write the failing test**
 
-The existing tests in `PassthroughIntegrationTests.cs` already assert behaviour that must not regress — leave them. Read `tests/DotnetTokenKiller.Cli.IntegrationTests/Helpers/IntegrationTestHelper.cs` first to see how it isolates `DTK_DB_PATH` and `DTK_CONFIG_PATH`; if it has no per-test DB isolation helper, set `DTK_DB_PATH` explicitly as below. Append:
+The existing tests in `PassthroughIntegrationTests.cs` assert behaviour that must not regress — leave them untouched.
+
+`IntegrationTestHelper.RunProcessAsync` already redirects `DTK_DB_PATH` into a fresh per-invocation temp directory, but it never tells the caller where. Without that path a test cannot prove a row was written, so add an overload that returns it. In `IntegrationTestHelper.cs`, extract the isolated-directory choice so both entry points share it:
+
+```csharp
+    /// <summary>Runs dtk and also returns the isolated tracking-database path it wrote to,
+    /// so a test can assert on what was recorded.</summary>
+    internal static async Task<(string Output, int ExitCode, string DbPath)> RunDtkWithDbAsync(
+        params string[] args)
+    {
+        var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
+        var dbPath = Path.Combine(isolatedDir, "tracking.db");
+        var (output, exitCode) = await RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir);
+        return (output, exitCode, dbPath);
+    }
+```
+
+and change `RunProcessAsync` to take the directory as a parameter, with the existing callers passing a freshly generated one:
+
+```csharp
+    private static Task<(string Output, int ExitCode)> RunProcessAsync(
+        string executable, IEnumerable<string> args)
+    {
+        return RunProcessAsync(executable, args, Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N")));
+    }
+
+    private static async Task<(string Output, int ExitCode)> RunProcessAsync(
+        string executable, IEnumerable<string> args, string isolatedDir)
+    {
+        // ...body unchanged, minus the local `isolatedDir` declaration...
+    }
+```
+
+Then append to `PassthroughIntegrationTests`:
 
 ```csharp
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Passthrough_MeasurableSubcommand_StillPrintsOutputAndReturnsExitCode()
+    public async Task Passthrough_MeasurableSubcommand_RecordsAMeasuredRow()
     {
-        // The streaming path must not swallow output. `dotnet list package` needs a project, so
-        // run it somewhere it will fail — the failure output still has to reach the caller.
+        // The deliverable of this task: an unfiltered run now leaves a trace. `dotnet list package`
+        // needs a project, so it fails here — a failed run must still be recorded and measured.
+        var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "list", "package");
+
+        var rows = ReadCommandRows(dbPath);
+
+        rows.Should().ContainSingle();
+        rows[0].Command.Should().Be("list package");
+        rows[0].Outcome.Should().Be("PassthroughMeasured");
+        rows[0].InputTokens.Should().BeGreaterThan(0);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_UnmeasurableSubcommand_RecordsAnUnmeasuredRow()
+    {
+        var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "--version");
+
+        var rows = ReadCommandRows(dbPath);
+
+        rows.Should().ContainSingle();
+        rows[0].Command.Should().Be("--version");
+        rows[0].Outcome.Should().Be("PassthroughUnmeasured");
+        rows[0].InputTokens.Should().Be(0);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_MeasurableSubcommand_StillPrintsOutput()
+    {
+        // Streaming must not swallow what the user would otherwise have seen.
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "list", "package");
 
         exitCode.Should().NotBe(0);
@@ -1926,12 +2038,32 @@ The existing tests in `PassthroughIntegrationTests.cs` already assert behaviour 
 
         dtkExit.Should().Be(dotnetExit);
     }
+
+    private static List<(string Command, string Outcome, long InputTokens)> ReadCommandRows(string dbPath)
+    {
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT command, outcome, input_tokens FROM commands ORDER BY id";
+
+        var rows = new List<(string, string, long)>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2)));
+        }
+
+        return rows;
+    }
 ```
 
-- [ ] **Step 2: Run test to verify it fails or passes for the wrong reason**
+Add `using Microsoft.Data.Sqlite;` to the test file. If `DotnetTokenKiller.Cli.IntegrationTests.csproj` does not already reference `Microsoft.Data.Sqlite`, add the `PackageReference` (no `Version` attribute — the version lives in `Directory.Packages.props`, which already pins it for the Infrastructure project).
+
+- [ ] **Step 2: Run test to verify it fails**
 
 Run: `dtk dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests --filter "FullyQualifiedName~PassthroughIntegrationTests"`
-Expected: these two may already PASS against the current inherited-stdio path. That is fine — they are regression guards for the rewiring in Step 3, and Step 5 is what proves the new path is actually taken.
+Expected: the two `Records*Row` tests FAIL — today's passthrough branch writes nothing, so the database has no `commands` table and `ReadCommandRows` throws. The two behavioural tests (`StillPrintsOutput`, `MatchesRawDotnetExitCode`) PASS already; they are regression guards for the rewiring, not the new deliverable.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -2040,30 +2172,12 @@ The `using DotnetTokenKiller.Infrastructure.Execution;` at the top of `Program.c
 Run: `dtk dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests --filter "FullyQualifiedName~PassthroughIntegrationTests"`
 Expected: PASS — output still reaches the caller and exit codes still match raw dotnet.
 
-- [ ] **Step 5: Verify the row is actually written**
-
-This is the step that proves the wiring, not just that nothing broke. Run against a throwaway database:
-
-```bash
-dtk dotnet build DotnetTokenKiller.slnx
-export DTK_DB_PATH=/tmp/dtk-passthrough-check.db
-rm -f "$DTK_DB_PATH"
-dotnet run --project src/DotnetTokenKiller.Cli -- dotnet --version
-dotnet run --project src/DotnetTokenKiller.Cli -- dotnet list package
-sqlite3 "$DTK_DB_PATH" "SELECT command, outcome, input_tokens FROM commands;"
-unset DTK_DB_PATH
-```
-
-Expected: two rows — `--version|PassthroughUnmeasured|0` and `list package|PassthroughMeasured|<non-zero>`.
-
-If `sqlite3` is unavailable, run `dotnet run --project src/DotnetTokenKiller.Cli -- gain --coverage` after Task 9 instead and read the rows from the report.
-
-- [ ] **Step 6: Verify nothing else broke**
+- [ ] **Step 5: Verify nothing else broke**
 
 Run: `dtk dotnet test DotnetTokenKiller.slnx`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
@@ -2071,7 +2185,7 @@ git add src/DotnetTokenKiller.Infrastructure/Tracking/TrackerFactory.cs \
         src/DotnetTokenKiller.Infrastructure/DependencyInjection.cs \
         src/DotnetTokenKiller.Cli/PassthroughEntryPoint.cs \
         src/DotnetTokenKiller.Cli/Program.cs \
-        tests/DotnetTokenKiller.Cli.IntegrationTests/PassthroughIntegrationTests.cs
+        tests/DotnetTokenKiller.Cli.IntegrationTests/
 git commit -m "feat(cli): track passthrough runs without building the DI container"
 ```
 
@@ -2089,14 +2203,28 @@ git commit -m "feat(cli): track passthrough runs without building the DI contain
 
 - [ ] **Step 1: Write the failing test**
 
-Read both test files first to match their existing setup (how they build a `GainCommand` and stub the tracker). Append to `GainCommandTests`:
+`GainCommandTests` already has a `private static (GainCommand command, TestConsole console, StringWriter writer) Create(GainSummary? summary = null)` helper backed by its `StubTracker`. Task 4 Step 5 added a `Coverage` property to that fake. Add a sibling helper next to `Create` so the coverage tests read the same way:
+
+```csharp
+    private static (GainCommand command, TestConsole console, StringWriter writer) CreateForCoverage(
+        CoverageSummary coverage)
+    {
+        var console = new TestConsole();
+        var writer = new StringWriter();
+        var tracker = new StubTracker
+        {
+            Coverage = coverage
+        };
+        return (new GainCommand(new GainReportUseCase(tracker), console, writer), console, writer);
+    }
+```
+
+Then append these tests to `GainCommandTests`:
 
 ```csharp
     [Fact]
-    public async Task RunAsync_Coverage_ReportsUnfilteredCommands()
+    public async Task ExecuteAsync_Coverage_ReportsUnfilteredCommands()
     {
-        // Substitute the tracker so the report has known contents; follow the arrangement the
-        // other tests in this file already use to construct the command under test.
         var coverage = new CoverageSummary(
             [
                 new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12)),
@@ -2104,31 +2232,108 @@ Read both test files first to match their existing setup (how they build a `Gain
             ],
             34,
             48_000);
+        var (command, console, _) = CreateForCoverage(coverage);
 
-        // Arrange the tracker substitute to return `coverage` from GetCoverageAsync, then:
-        var exitCode = await sut.RunAsync(new GainCommandSettings { Coverage = true }, CancellationToken.None);
+        var exitCode = await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true
+        }, CancellationToken.None);
 
         exitCode.Should().Be(0);
-        var text = console.Output;
-        text.Should().Contain("publish");
-        text.Should().Contain("PassthroughMeasured");
+        console.Output.Should().Contain("publish");
+        console.Output.Should().Contain("PassthroughMeasured");
     }
 
     [Fact]
-    public async Task RunAsync_Coverage_WithNoData_PrintsAFriendlyMessage()
+    public async Task ExecuteAsync_Coverage_NoData_WritesNoDataMessage()
     {
-        // Arrange GetCoverageAsync to return an empty summary, then:
-        var exitCode = await sut.RunAsync(new GainCommandSettings { Coverage = true }, CancellationToken.None);
+        var (command, console, _) = CreateForCoverage(new CoverageSummary([], 0, 0));
+
+        var exitCode = await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true
+        }, CancellationToken.None);
 
         exitCode.Should().Be(0);
         console.Output.Should().Contain("No data yet");
     }
 
     [Fact]
-    public async Task CsvHeader_EndsWithOutcome()
+    public async Task ExecuteAsync_CoverageJson_WritesParseableJsonWithNamedOutcomes()
+    {
+        var coverage = new CoverageSummary(
+            [new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12))],
+            4,
+            48_000);
+        var (command, _, writer) = CreateForCoverage(coverage);
+
+        var exitCode = await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true,
+            Json = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        var json = writer.ToString();
+        // The outcome must serialize as its name, not as the integer 3, or the JSON is unreadable.
+        json.Should().Contain("PassthroughMeasured");
+        var act = () => JsonDocument.Parse(json);
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Coverage_PassesFiltersToTheUseCase()
+    {
+        var tracker = new StubTracker
+        {
+            Coverage = new CoverageSummary([], 0, 0)
+        };
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), new StringWriter());
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true,
+            Project = true,
+            Command = "publish"
+        }, CancellationToken.None);
+
+        tracker.LastProjectPath.Should().Be(Environment.CurrentDirectory);
+        tracker.LastCommandFilter.Should().Be("publish");
+    }
+
+    [Fact]
+    public void CsvHeader_EndsWithOutcome()
     {
         // The export must carry the new dimension or the CSV silently loses it.
         GainCommand.CsvHeader.Should().EndWith(",outcome");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ExportCsv_WritesTheOutcomeColumn()
+    {
+        var writer = new StringWriter();
+        var tracker = new StubTracker
+        {
+            History =
+            [
+                new CommandRecord(
+                    new DateTimeOffset(2025, 1, 15, 10, 0, 0, TimeSpan.Zero),
+                    "publish",
+                    "/my/project",
+                    new TokenStatistics(1000, 1000, 0, 0.0),
+                    TimeSpan.FromMilliseconds(500),
+                    success: true,
+                    outcome: RunOutcome.PassthroughMeasured)
+            ]
+        };
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), writer);
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Export = "csv"
+        }, CancellationToken.None);
+
+        writer.ToString().Should().Contain("PassthroughMeasured");
     }
 ```
 
@@ -2372,4 +2577,11 @@ git commit -m "docs: mark gap-analysis §1 and §3 resolved"
 
 **Type consistency.** `RunOutcome` / `RunOutcomes.CountedInSavings` / `RunOutcomes.IsPassthrough` (Task 1) are used under those exact names in Tasks 3, 4, 6, 7, 9. `PassthroughSubcommands.CommandName` / `.IsMeasurable` / `.Measurable` / `.Unknown` (Task 2) are used under those names in Tasks 2 and 7. `RunStreamedAsync(command, args, stdOutSink, stdErrSink, ct)` (Task 5) is called with that argument order in Task 7. `CoverageSummary(Entries, TotalRuns, TotalUnfilteredInputTokens)` and `CoverageDetail(Command, Outcome, RunCount, TotalInputTokens, TotalExecutionTime)` (Task 4) are constructed positionally in that order in Task 9's tests. `TrackerFactory.Create(DtkConfig)` (Task 8) is called from both the DI registration and `PassthroughEntryPoint`.
 
-**Known soft spots for the implementer.** Task 8 Step 1 and Task 9 Step 1 both say to read the existing test file first and match its arrangement, because the exact substitute-wiring in `GainCommandTests` and the env-var isolation in `IntegrationTestHelper` were not read while writing this plan. Those are the only two places where the plan defers to what is already on disk; everywhere else the code is given in full.
+**Pre-flight corrections (applied before execution began).** A scan against the real test sources found four defects in the first draft of this plan, all now fixed above:
+
+1. Tasks 4 and 5 claimed NSubstitute would absorb the new interface members. It does not for hand-written fakes, and this repo has three: `StubTracker` in `ResetCommandTests.cs:126`, `StubTracker` in `GainCommandTests.cs:364`, and `StubCommandRunner` in `DoctorCommandTests.cs:247`. Both tasks now name them with the code to add.
+2. Task 5's large-output test was named `HandlesOutputLargerThanThePipeBuffer` but ran `dotnet --info`, a few KB — the name claimed a deadlock guarantee the test could not provide. Renamed to what it actually verifies, with an explicit note that the concurrent-pump requirement is untested and why.
+3. Task 9's test bodies contained prose placeholders and referenced undefined variables. Rewritten against the real `Create` helper and `StubTracker` in `GainCommandTests`.
+4. Task 8's deliverable — that a row is written — was verified by a manual `sqlite3` shell check rather than a test, because `IntegrationTestHelper` hides the isolated database path. It now adds a `RunDtkWithDbAsync` overload that returns that path, making the deliverable a real test that fails before the change.
+
+**Remaining soft spot.** Task 8 Step 3's `RunProcessAsync` refactor is described as a signature change plus "body unchanged"; the implementer must apply it against the file as it stands rather than retyping the body from this plan.
