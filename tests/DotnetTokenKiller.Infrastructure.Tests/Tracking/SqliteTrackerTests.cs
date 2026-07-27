@@ -648,4 +648,120 @@ public class SqliteTrackerTests : IAsyncDisposable
             }
         }
     }
+
+    [Fact]
+    public async Task GetCoverageAsync_RanksByInputTokensDescending()
+    {
+        await _sut.RecordAsync(MakeRecord("pack", inputTokens: 500, outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 9000, outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("list package", inputTokens: 3000,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Select(e => e.Command)
+            .Should().ContainInOrder("publish", "list package", "pack");
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_BreaksTokenTiesByRunCount()
+    {
+        // Every PassthroughUnmeasured row has zero tokens. Without the tiebreak the most-run
+        // unmeasured command would sort arbitrarily and stay invisible.
+        for (var i = 0; i < 5; i++)
+        {
+            await _sut.RecordAsync(MakeRecord("watch", inputTokens: 0,
+                outcome: RunOutcome.PassthroughUnmeasured));
+        }
+
+        await _sut.RecordAsync(MakeRecord("run", inputTokens: 0, outcome: RunOutcome.PassthroughUnmeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Select(e => e.Command).Should().ContainInOrder("watch", "run");
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_GroupsByCommandAndOutcome()
+    {
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 100,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 200,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 0,
+            outcome: RunOutcome.PassthroughUnmeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        var measured = coverage.Entries.Should()
+            .ContainSingle(e => e.Command == "publish" && e.Outcome == RunOutcome.PassthroughMeasured).Subject;
+        measured.RunCount.Should().Be(2);
+        measured.TotalInputTokens.Should().Be(300);
+
+        coverage.Entries.Should()
+            .ContainSingle(e => e.Command == "publish" && e.Outcome == RunOutcome.PassthroughUnmeasured);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_IncludesFilteredRuns_SoCoveredAndUncoveredCanBeCompared()
+    {
+        await _sut.RecordAsync(MakeRecord("build", inputTokens: 7000));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 100,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Should().Contain(e => e.Command == "build" && e.Outcome == RunOutcome.Filtered);
+        coverage.TotalRuns.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_TotalUnfilteredInputTokens_CountsOnlyPassthroughRows()
+    {
+        await _sut.RecordAsync(MakeRecord("build", inputTokens: 7000));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 400,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("pack", inputTokens: 600,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.TotalUnfilteredInputTokens.Should().Be(1000);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_HonoursTheCommandFilter()
+    {
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 400,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("pack", inputTokens: 600,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null, "publish");
+
+        coverage.Entries.Should().ContainSingle().Which.Command.Should().Be("publish");
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_HonoursTheProjectFilter()
+    {
+        await _sut.RecordAsync(MakeRecord("publish", "/a", inputTokens: 400,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", "/b", inputTokens: 600,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, "/a");
+
+        coverage.Entries.Should().ContainSingle().Which.TotalInputTokens.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_ReturnsEmpty_WhenNothingRecorded()
+    {
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Should().BeEmpty();
+        coverage.TotalRuns.Should().Be(0);
+        coverage.TotalUnfilteredInputTokens.Should().Be(0);
+    }
 }

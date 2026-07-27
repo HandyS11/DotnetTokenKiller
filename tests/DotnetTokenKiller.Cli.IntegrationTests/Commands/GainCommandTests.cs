@@ -368,6 +368,8 @@ public class GainCommandTests
 
         public IReadOnlyList<CommandRecord> History { get; init; } = [];
 
+        public CoverageSummary Coverage { get; init; } = new([], 0, 0);
+
         public string? LastProjectPath { get; private set; }
 
         public string? LastCommandFilter { get; private set; }
@@ -389,6 +391,14 @@ public class GainCommandTests
             string? commandFilter = null, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(History);
+        }
+
+        public Task<CoverageSummary> GetCoverageAsync(int days, string? projectPath,
+            string? commandFilter = null, CancellationToken cancellationToken = default)
+        {
+            LastProjectPath = projectPath;
+            LastCommandFilter = commandFilter;
+            return Task.FromResult(Coverage);
         }
 
         public Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)

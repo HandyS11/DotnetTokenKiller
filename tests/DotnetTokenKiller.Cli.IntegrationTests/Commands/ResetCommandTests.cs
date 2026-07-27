@@ -155,6 +155,12 @@ public class ResetCommandTests
             WasReset = true;
             return Task.CompletedTask;
         }
+
+        public Task<CoverageSummary> GetCoverageAsync(int days, string? projectPath,
+            string? commandFilter = null, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CoverageSummary([], 0, 0));
+        }
     }
 
     private sealed class StubConfigProvider : IConfigProvider

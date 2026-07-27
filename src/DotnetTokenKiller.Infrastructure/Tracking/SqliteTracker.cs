@@ -123,6 +123,30 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     }
 
     /// <inheritdoc/>
+    public Task<CoverageSummary> GetCoverageAsync(
+        int days,
+        string? projectPath,
+        string? commandFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+                           SELECT command, outcome,
+                                  COUNT(*) as run_count,
+                                  SUM(input_tokens) as total_input,
+                                  SUM(execution_time_ms) as total_ms
+                           FROM commands
+                           WHERE timestamp >= @since
+                             AND (@path IS NULL OR project_path = @path)
+                             AND (@cmd IS NULL OR command = @cmd)
+                           GROUP BY command, outcome
+                           ORDER BY total_input DESC, run_count DESC
+                           """;
+
+        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadCoverageAsync, null,
+            cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task CleanupAsync(int retentionDays, CancellationToken cancellationToken = default)
     {
         await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -417,6 +441,40 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         }
 
         return results;
+    }
+
+    private static async Task<CoverageSummary> ReadCoverageAsync(SqliteCommand cmd, CancellationToken ct)
+    {
+        var entries = new List<CoverageDetail>();
+        var totalRuns = 0;
+        long totalUnfiltered = 0;
+
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+#pragma warning restore CA2007
+        while (await reader.ReadAsync(ct).ConfigureAwait(false))
+        {
+            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(1), out var parsed)
+                ? parsed
+                : RunOutcome.Filtered;
+            var runCount = reader.GetInt32(2);
+            var inputTokens = reader.GetInt64(3);
+
+            entries.Add(new CoverageDetail(
+                reader.GetString(0),
+                outcome,
+                runCount,
+                inputTokens,
+                TimeSpan.FromMilliseconds(reader.GetDouble(4))));
+
+            totalRuns += runCount;
+            if (RunOutcomes.IsPassthrough(outcome))
+            {
+                totalUnfiltered += inputTokens;
+            }
+        }
+
+        return new CoverageSummary(entries, totalRuns, totalUnfiltered);
     }
 
     private async Task CleanupCoreAsync(int days, CancellationToken cancellationToken)
