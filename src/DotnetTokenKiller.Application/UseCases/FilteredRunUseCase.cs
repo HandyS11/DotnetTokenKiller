@@ -143,7 +143,8 @@ public sealed class FilteredRunUseCase(
 
         return filtered
             .Replace("✓", "ok:", StringComparison.Ordinal)
-            .Replace("✗", "FAIL:", StringComparison.Ordinal);
+            .Replace("✗", "FAIL:", StringComparison.Ordinal)
+            .Replace("⚠", "WARN:", StringComparison.Ordinal);
     }
 
     /// <summary>Builds a fallback message for failed commands whose output the filter could not parse.</summary>
