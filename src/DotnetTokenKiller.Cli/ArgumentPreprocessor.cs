@@ -1,3 +1,5 @@
+using DotnetTokenKiller.Domain;
+
 namespace DotnetTokenKiller.Cli;
 
 /// <summary>
@@ -13,41 +15,8 @@ namespace DotnetTokenKiller.Cli;
 /// </remarks>
 internal static class ArgumentPreprocessor
 {
-    /// <summary>Subcommand name for <c>dotnet build</c>. Used in both the command registration and passthrough detection.</summary>
-    internal const string BuildSubcommand = "build";
-
-    /// <summary>Subcommand name for <c>dotnet test</c>. Used in both the command registration and passthrough detection.</summary>
-    internal const string TestSubcommand = "test";
-
-    /// <summary>Subcommand name for <c>dotnet restore</c>. Used in both the command registration and passthrough detection.</summary>
-    internal const string RestoreSubcommand = "restore";
-
-    /// <summary>Subcommand name for <c>dotnet clean</c>. Used in both the command registration and passthrough detection.</summary>
-    internal const string CleanSubcommand = "clean";
-
-    /// <summary>Subcommand name for <c>dotnet format</c>. Used in both the command registration and passthrough detection.</summary>
-    internal const string FormatSubcommand = "format";
-
     /// <summary>The <c>dotnet</c> driver command that dtk-handled invocations begin with.</summary>
     private const string DotnetCommand = "dotnet";
-
-    /// <summary>
-    /// Dotnet subcommands handled by dtk, in canonical (lowercase, display) order. This is the
-    /// single source of truth: the command registrations in Program.cs and the shell-completion
-    /// scripts both derive from it, so a new subcommand can never silently drift out of sync.
-    /// </summary>
-    internal static readonly IReadOnlyList<string> KnownSubcommandsOrdered =
-    [
-        BuildSubcommand,
-        TestSubcommand,
-        RestoreSubcommand,
-        CleanSubcommand,
-        FormatSubcommand
-    ];
-
-    /// <summary>Case-insensitive lookup over <see cref="KnownSubcommandsOrdered"/>.</summary>
-    internal static readonly IReadOnlySet<string> KnownSubcommands =
-        new HashSet<string>(KnownSubcommandsOrdered, StringComparer.OrdinalIgnoreCase);
 
     private static readonly HashSet<string> DtkOptions =
         new(StringComparer.Ordinal)
@@ -73,12 +42,12 @@ internal static class ArgumentPreprocessor
     {
         if (args.Length < 2 ||
             !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) ||
-            !KnownSubcommands.Contains(args[1]))
+            !DotnetSubcommands.All.Contains(args[1]))
         {
             return args;
         }
 
-        var canonicalSub = KnownSubcommandsOrdered.First(
+        var canonicalSub = DotnetSubcommands.Ordered.First(
             s => string.Equals(s, args[1], StringComparison.OrdinalIgnoreCase));
 
         if (string.Equals(args[0], DotnetCommand, StringComparison.Ordinal) &&
@@ -102,7 +71,7 @@ internal static class ArgumentPreprocessor
     {
         return args.Length >= 2 &&
                string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
-               !KnownSubcommands.Contains(args[1]);
+               !DotnetSubcommands.All.Contains(args[1]);
     }
 
     /// <summary>
@@ -119,7 +88,7 @@ internal static class ArgumentPreprocessor
     {
         if (args.Length <= 2 ||
             !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) ||
-            !KnownSubcommands.Contains(args[1]))
+            !DotnetSubcommands.All.Contains(args[1]))
         {
             return args;
         }

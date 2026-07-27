@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Domain;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -7,7 +8,7 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Prints a shell completion script for dtk.</summary>
 /// <remarks>
 /// The <c>__DOTNET_CMDS_*__</c> placeholders in the templates are filled at runtime from
-/// <see cref="ArgumentPreprocessor.KnownSubcommandsOrdered"/>, so the supported dotnet subcommands
+/// <see cref="DotnetSubcommands.Ordered"/>, so the supported dotnet subcommands
 /// (build/test/restore/clean/format) can never drift between the CLI and its completions.
 /// </remarks>
 /// <param name="console">The Spectre.Console output sink for human-facing errors.</param>
@@ -201,21 +202,21 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
 
     /// <summary>Space-separated dotnet subcommand list for the bash script.</summary>
     private static readonly string BashDotnetCommands =
-        string.Join(' ', ArgumentPreprocessor.KnownSubcommandsOrdered);
+        string.Join(' ', DotnetSubcommands.Ordered);
 
     private static readonly string PowerShellDotnetCommands =
-        string.Join(", ", ArgumentPreprocessor.KnownSubcommandsOrdered.Select(sub => $"'{sub}'"));
+        string.Join(", ", DotnetSubcommands.Ordered.Select(sub => $"'{sub}'"));
 
     private static readonly string ZshDotnetCommands =
         string.Join(
             "\n        ",
-            ArgumentPreprocessor.KnownSubcommandsOrdered.Select(
+            DotnetSubcommands.Ordered.Select(
                 sub => $"'{sub}:Run dotnet {sub} with filtered output'"));
 
     private static readonly string FishDotnetCommands =
         string.Join(
             '\n',
-            ArgumentPreprocessor.KnownSubcommandsOrdered.Select(
+            DotnetSubcommands.Ordered.Select(
                 sub => $"complete -c dtk -f -n '__fish_seen_subcommand_from dotnet' -a {sub} -d 'Run dotnet {sub} with filtered output'"));
 
     /// <inheritdoc/>
