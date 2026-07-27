@@ -144,6 +144,45 @@ public sealed class CompletionCommandTests
         exitCode.Should().Be(0);
     }
 
+    [Fact]
+    public void CompletionCandidates_MultiTokenSubcommand_YieldsItsFirstTokenOnly()
+    {
+        CompletionCommand.CompletionCandidates(["build", "list package"])
+            .Should().Equal("build", "list");
+    }
+
+    [Fact]
+    public void CompletionCandidates_TwoSubcommandsSharingAFirstToken_AreDeduplicated()
+    {
+        CompletionCommand.CompletionCandidates(["list package", "list reference"])
+            .Should().Equal("list");
+    }
+
+    [Fact]
+    public async Task RunAsync_FishScript_EmitsNoCandidateContainingASpace()
+    {
+        var (command, _, writer) = Create();
+
+        await command.RunAsync(new CompletionCommandSettings
+        {
+            Shell = "fish"
+        }, CancellationToken.None);
+
+        var output = writer.ToString();
+
+        // `complete ... -a list package -d '...'` is malformed: fish reads `package` as another
+        // argument to `complete`, so the whole completion silently stops working.
+        // Some static sections of the fish template pad the candidate with extra trailing spaces
+        // for column alignment (e.g. `-a dotnet     -d '...'`); that padding is collapsed by
+        // fish's own word-splitting and is harmless, so it is trimmed here before asserting —
+        // only a genuine embedded space (a real second token) should fail this check.
+        foreach (var line in output.Split('\n').Where(l => l.Contains(" -a ", StringComparison.Ordinal)))
+        {
+            var candidate = line.Split(" -a ")[1].Split(" -d ")[0].Trim();
+            candidate.Should().NotContain(" ", "candidate '{0}' would break the generated script", candidate);
+        }
+    }
+
     private static (CompletionCommand command, TestConsole console, StringWriter writer) Create()
     {
         var console = new TestConsole();
