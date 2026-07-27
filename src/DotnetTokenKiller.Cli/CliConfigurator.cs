@@ -1,5 +1,6 @@
 using System.Reflection;
 using DotnetTokenKiller.Cli.Commands;
+using DotnetTokenKiller.Domain;
 using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli;
@@ -43,21 +44,21 @@ internal static class CliConfigurator
         config.AddBranch(DotnetCommand, dotnet =>
         {
             dotnet.SetDescription("Run dotnet commands with filtered output");
-            dotnet.AddCommand<DotnetBuildCommand>(ArgumentPreprocessor.BuildSubcommand)
+            dotnet.AddCommand<DotnetBuildCommand>(DotnetSubcommands.Build)
                 .WithDescription("Run dotnet build with filtered output")
                 .WithExample(DotnetCommand, "build", "MyApp.slnx")
                 .WithExample(DotnetCommand, "build", "src/MyApp.csproj", "--no-restore");
-            dotnet.AddCommand<DotnetTestCommand>(ArgumentPreprocessor.TestSubcommand)
+            dotnet.AddCommand<DotnetTestCommand>(DotnetSubcommands.Test)
                 .WithDescription("Run dotnet test with filtered output")
                 .WithExample(DotnetCommand, "test")
                 .WithExample(DotnetCommand, "test", "--filter", "Category=Unit");
-            dotnet.AddCommand<DotnetRestoreCommand>(ArgumentPreprocessor.RestoreSubcommand)
+            dotnet.AddCommand<DotnetRestoreCommand>(DotnetSubcommands.Restore)
                 .WithDescription("Run dotnet restore with filtered output")
                 .WithExample(DotnetCommand, "restore");
-            dotnet.AddCommand<DotnetCleanCommand>(ArgumentPreprocessor.CleanSubcommand)
+            dotnet.AddCommand<DotnetCleanCommand>(DotnetSubcommands.Clean)
                 .WithDescription("Run dotnet clean with filtered output")
                 .WithExample(DotnetCommand, "clean");
-            dotnet.AddCommand<DotnetFormatCommand>(ArgumentPreprocessor.FormatSubcommand)
+            dotnet.AddCommand<DotnetFormatCommand>(DotnetSubcommands.Format)
                 .WithDescription("Run dotnet format with filtered output")
                 .WithExample(DotnetCommand, "format")
                 .WithExample(DotnetCommand, "format", "--verify-no-changes");

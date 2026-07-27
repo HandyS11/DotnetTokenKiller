@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Domain;
 using FluentAssertions;
 using Spectre.Console.Testing;
 using Xunit;
@@ -35,7 +36,7 @@ public sealed class CompletionCommandTests
     [InlineData("powershell")]
     public async Task ExecuteAsync_Script_OffersEveryDotnetSubcommand(string shell)
     {
-        // Anti-drift: the completion lists are generated from ArgumentPreprocessor.KnownSubcommands,
+        // Anti-drift: the completion lists are generated from DotnetSubcommands.Ordered,
         // so every supported subcommand (including 'format') must appear in every shell script.
         var (command, _, writer) = Create();
 
@@ -45,7 +46,7 @@ public sealed class CompletionCommandTests
         }, CancellationToken.None);
 
         var script = writer.ToString();
-        foreach (var subcommand in ArgumentPreprocessor.KnownSubcommands)
+        foreach (var subcommand in DotnetSubcommands.All)
         {
             script.Should().Contain(subcommand, "the {0} completion must offer '{1}'", shell, subcommand);
         }

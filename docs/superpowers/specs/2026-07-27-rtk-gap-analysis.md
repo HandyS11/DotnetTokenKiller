@@ -85,18 +85,24 @@ quantify whether the hook is actually working.
 
 | Location | Layer | Order | Bound to canonical? |
 |---|---|---|---|
-| `ArgumentPreprocessor.KnownSubcommandsOrdered` | Cli | display | canonical (routing + completion) |
-| `FilterKeys` | Domain | — | no (5 hand-written consts) |
-| `_DTK_SUBCOMMANDS` in `HookScriptTemplates.cs:54` | Application | alphabetical | **no** |
-| `.claude/hooks/dotnet-to-dtk.py` | repo | alphabetical | must stay verbatim-equal to template |
+| `CliConfigurator` / `ArgumentPreprocessor` (Cli) | Cli | display | canonical (`DotnetSubcommands.Ordered`, via Spectre registration test) |
+| `FilterKeys` | Domain | — | canonical (aliases `DotnetSubcommands` consts) |
+| `_DTK_SUBCOMMANDS` in `HookScriptTemplates.cs` | Application | alphabetical | canonical (generated from `DotnetSubcommands.Sorted`, bound by test) |
+| `.claude/hooks/dotnet-to-dtk.py` | repo | alphabetical | canonical (locked byte-identical to the generated template by test) |
 
 The canonical list lives in `Cli` while the hook template that needs it lives in `Application` —
 that layering is what forced the copy.
 
-**Failure mode:** add a `publish` filter, register the command, ship — and forget the tuple at
-`HookScriptTemplates.cs:54`. The hook never rewrites `dotnet publish`, the agent keeps running it
-raw, and the new filter sees 0% adoption with no error anywhere. Nothing in the test suite catches
-this today, and it worsens with every subcommand added.
+**Failure mode:** add a `publish` filter, register the command, ship — and forget the tuple in
+`HookScriptTemplates.cs`. The hook never rewrites `dotnet publish`, the agent keeps running it
+raw, and the new filter sees 0% adoption with no error anywhere. Nothing in the test suite caught
+this at the time of the analysis, and it worsened with every subcommand added.
+
+> **Resolved 2026-07-27.** The canonical list now lives in `DotnetTokenKiller.Domain.DotnetSubcommands`.
+> `FilterKeys` aliases its constants, the Cli copy is gone, the hook's tuple and docstrings are
+> generated from it, and binding tests cover the DI keys, the Spectre registrations, the generated
+> hook, and this repo's committed `.claude/hooks/dotnet-to-dtk.py`.
+> See [the design](2026-07-27-subcommand-single-source-of-truth-design.md).
 
 ## 8. `doctor` does not check the most fragile thing
 
