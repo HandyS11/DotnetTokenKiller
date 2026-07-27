@@ -93,6 +93,33 @@ public class DotnetListPackageFilterTests
         _sut.Apply(string.Empty, exitCode: 0).Should().BeEmpty();
     }
 
+    [Fact]
+    public void Apply_ProjectWithZeroPackages_DoesNotFalselyClaimSharedPackages()
+    {
+        // Gamma has a header but no table rows at all — legitimate output for a project with no
+        // package references. It must still count as one of the 3 projects and block "shared",
+        // even though it never becomes a key in the by-project package map.
+        const string input = """
+                            Project 'Alpha' has the following package references
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved
+                               > Shared               1.0.0       1.0.0
+
+                            Project 'Beta' has the following package references
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved
+                               > Shared               1.0.0       1.0.0
+
+                            Project 'Gamma' has the following package references
+                               [net10.0]:
+                            """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().NotContain("all projects:",
+            "Gamma is one of the 3 projects and has no packages, so Shared is not present in every project");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetListPackageFilterTests).Assembly;

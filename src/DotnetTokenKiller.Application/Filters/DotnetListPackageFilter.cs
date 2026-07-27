@@ -171,12 +171,15 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
 
         // Strict all-or-nothing: present in every project at the same version. A near-universal
         // package stays on its projects' own lines rather than becoming an "except X" special case.
-        var shared = byProject.Count > 1
-            ? byProject.Values.Skip(1).Aggregate(
-                new HashSet<string>(byProject.Values.First(), StringComparer.Ordinal),
-                (acc, next) =>
+        // Eligibility is derived from state.Projects, not byProject: a project whose header line
+        // parsed but which produced zero rows (a legitimate "no packages" project) is still one of
+        // the projects, and must contribute an empty set to the intersection so it blocks "shared".
+        var shared = state.Projects.Count > 1
+            ? state.Projects.Skip(1).Aggregate(
+                new HashSet<string>(byProject.GetValueOrDefault(state.Projects.First(), []), StringComparer.Ordinal),
+                (acc, proj) =>
                 {
-                    acc.IntersectWith(next);
+                    acc.IntersectWith(byProject.GetValueOrDefault(proj, []));
                     return acc;
                 })
             : [];

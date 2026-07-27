@@ -1,4 +1,4 @@
-﻿✓ dotnet list package (8 projects, 21 packages)
+✓ dotnet list package (8 projects, 21 packages)
   all projects: Microsoft.CodeAnalysis.NetAnalyzers 10.0.302, Microsoft.VisualStudio.Threading.Analyzers 18.7.23, Roslynator.Analyzers 4.15.0, Roslynator.Formatting.Analyzers 4.15.0, SonarAnalyzer.CSharp 10.29.0.143774
   DotnetTokenKiller.Application: Microsoft.Extensions.DependencyInjection 10.0.10, Microsoft.ML.Tokenizers 2.0.0, Microsoft.ML.Tokenizers.Data.Cl100kBase 2.0.0, Microsoft.ML.Tokenizers.Data.O200kBase 2.0.0, Tomlyn 2.10.1
   DotnetTokenKiller.Application.Tests: FluentAssertions 8.10.0, Microsoft.NET.Test.Sdk 18.8.1, NSubstitute 6.0.0, Spectre.Console.Testing 0.57.2, Verify.Xunit 31.12.5, coverlet.collector 10.0.1, xunit 2.9.3, xunit.runner.visualstudio 3.1.5
