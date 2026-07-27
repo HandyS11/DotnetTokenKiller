@@ -374,4 +374,20 @@ public sealed class ProcessCommandRunnerTests
         stdOut.ToString().Should().Contain(".NET SDK");
         stdOut.ToString().Split('\n').Length.Should().BeGreaterThan(5);
     }
+
+    [Fact]
+    public async Task RunStreamedAsync_ReturnsTextUsingTheSinksNewLine_WhenSinkNewLineIsNonDefault()
+    {
+        // TextWriter.WriteLineAsync terminates lines with the sink's own NewLine, not
+        // Environment.NewLine. The returned string must mirror exactly what was echoed to the
+        // sink, so a distinctive non-default NewLine here makes any mismatch unambiguous.
+        var stdOut = new StringWriter { NewLine = "<EOL>" };
+        var sut = new ProcessCommandRunner();
+
+        var result = await sut.RunStreamedAsync(
+            "dotnet", ["--info"], stdOut, TextWriter.Null);
+
+        result.ExitCode.Should().Be(0);
+        result.StdOut.Should().Be(stdOut.ToString());
+    }
 }

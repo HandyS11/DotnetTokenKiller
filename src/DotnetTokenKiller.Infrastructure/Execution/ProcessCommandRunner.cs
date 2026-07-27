@@ -138,13 +138,19 @@ public sealed class ProcessCommandRunner : ICommandRunner
     {
         var builder = new StringBuilder();
 
+        // TextWriter.WriteLineAsync terminates lines with sink.NewLine, which is a settable
+        // per-writer property. Captured once so the accumulated text mirrors exactly what was
+        // written to the sink, rather than always using Environment.NewLine like
+        // StringBuilder.AppendLine would.
+        var newLine = sink.NewLine;
+
         while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
             // Flush per line: the whole point of streaming is that the user sees progress, and a
             // buffered sink would defeat that on a long-running publish.
             await sink.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
             await sink.FlushAsync(cancellationToken).ConfigureAwait(false);
-            builder.AppendLine(line);
+            builder.Append(line).Append(newLine);
         }
 
         return builder.ToString();

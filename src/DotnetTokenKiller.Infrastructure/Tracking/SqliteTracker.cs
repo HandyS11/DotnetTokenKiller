@@ -424,8 +424,9 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
             // An outcome written by a newer dtk that this build does not know is treated as
-            // Filtered rather than crashing the report.
-            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(9), out var parsed)
+            // Filtered rather than crashing the report. Case-insensitive so a value differing
+            // only in case (e.g. a manual database edit) still parses instead of falling back.
+            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(9), ignoreCase: true, out var parsed)
                 ? parsed
                 : RunOutcome.Filtered;
 
@@ -454,7 +455,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 #pragma warning restore CA2007
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
-            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(1), out var parsed)
+            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(1), ignoreCase: true, out var parsed)
                 ? parsed
                 : RunOutcome.Filtered;
             var runCount = reader.GetInt32(2);

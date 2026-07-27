@@ -607,6 +607,28 @@ public class SqliteTrackerTests : IAsyncDisposable
         coverage.Entries.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
     }
 
+    [Fact]
+    public async Task GetHistoryAsync_DifferentlyCasedOutcome_ParsesInsteadOfFallingBackToFiltered()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "passthroughmeasured");
+
+        var history = await _sut.GetHistoryAsync(1, null, "bogus-cmd");
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.PassthroughMeasured);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_DifferentlyCasedOutcome_ParsesInsteadOfFallingBackToFiltered()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "passthroughmeasured");
+
+        var coverage = await _sut.GetCoverageAsync(1, null, "bogus-cmd");
+
+        coverage.Entries.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.PassthroughMeasured);
+    }
+
     /// <summary>
     /// Inserts a row directly through the tracker's own live connection (found via reflection),
     /// bypassing <see cref="SqliteTracker.RecordAsync"/> so an outcome string outside the
