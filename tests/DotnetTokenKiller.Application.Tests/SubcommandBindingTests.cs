@@ -45,6 +45,13 @@ public sealed class SubcommandBindingTests
     [Fact]
     public void GeneratedHooks_DeclareExactlyTheCanonicalSubcommands()
     {
+        // Pinned to the literal, known-good bytes rather than recomputed from
+        // DotnetSubcommands.Sorted: if the source list shrinks or grows, the expectation must
+        // not shrink or grow in lockstep with it, or this test could never fail. Adding a
+        // subcommand means updating this literal by hand — that is the intended tripwire, since
+        // it forces whoever adds one to also regenerate the committed hook.
+        const string expectedTuple = "_DTK_SUBCOMMANDS = (\"build\", \"clean\", \"format\", \"restore\", \"test\")";
+
         foreach (var hook in new[]
                  {
                      HookScriptTemplates.ClaudeHook,
@@ -52,9 +59,6 @@ public sealed class SubcommandBindingTests
                      HookScriptTemplates.CopilotCliHook
                  })
         {
-            var expectedTuple =
-                $"_DTK_SUBCOMMANDS = ({string.Join(", ", DotnetSubcommands.Sorted.Select(s => $"\"{s}\""))})";
-
             hook.Should().Contain(expectedTuple);
         }
     }
@@ -62,11 +66,15 @@ public sealed class SubcommandBindingTests
     [Fact]
     public void GeneratedHooks_DocumentEveryCanonicalSubcommand()
     {
-        var alternation = string.Join("|", DotnetSubcommands.Ordered);
+        // Pinned to the literal, known-good bytes for the same reason as the tuple assertion
+        // above: deriving the expected alternation from DotnetSubcommands.Ordered would make the
+        // test move in lockstep with the thing it is supposed to be pinning. Adding a
+        // subcommand requires updating this literal, which forces regenerating the hooks too.
+        const string expected = "rewrites `dotnet build|test|restore|clean|format`";
 
-        HookScriptTemplates.ClaudeHook.Should().Contain($"rewrites `dotnet {alternation}`");
-        HookScriptTemplates.GeminiHook.Should().Contain($"rewrites `dotnet {alternation}`");
-        HookScriptTemplates.CopilotCliHook.Should().Contain($"rewrites `dotnet {alternation}`");
+        HookScriptTemplates.ClaudeHook.Should().Contain(expected);
+        HookScriptTemplates.GeminiHook.Should().Contain(expected);
+        HookScriptTemplates.CopilotCliHook.Should().Contain(expected);
     }
 
     [Fact]
