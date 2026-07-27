@@ -1065,8 +1065,8 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_NoTestsLineWithSkippedSummary_ReportsSkipped()
     {
-        // Kills the mutant that drops the TotalSkipped clause: skipped tests are evidence that tests
-        // exist, so "0 tests found" must not win.
+        // Regression for the invariant: a skipped-only run alongside an unrelated no-match line must
+        // still report the skipped count via the skipped-only branch, not "0 tests found".
         const string input =
             "No test matches the given testcase filter `X` in /test/project/root/tests/A.Tests.dll\n" +
             "Passed!  - Failed:     0, Passed:     0, Skipped:     4, Total:     4, Duration: 10 ms - A.Tests.dll";
