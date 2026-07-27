@@ -165,10 +165,14 @@ convention.
 **Intentionally updated assertions.** These pin the current string and change *deliberately* as part
 of the behavior change — they must be updated, not weakened:
 
-- `DotnetTestFilterTests.cs:72` — `Apply_ZeroTestsFixture_ReturnsZeroTestsMessage`
+- `DotnetTestFilterTests.cs:72` — `Apply_ZeroTestsFixture_ReturnsZeroTestsMessage` (exact `Be`)
 - `DotnetTestFilterTests.cs:330` — `Apply_ZeroTestsFromAllSummariesZero_ReturnsZeroTestsMessage`
-- `DotnetTestFilterTests.cs:596` — `Apply_NoTestsPattern_SetsZeroTestsFlag`
+  (exact `Be`)
 - `Snapshots/DotnetTestFilterTests.Apply_ZeroTestsFixture_MatchesSnapshot.verified.txt`
+
+`DotnetTestFilterTests.cs:596` (`Apply_NoTestsPattern_SetsZeroTestsFlag`) asserts
+`Contain("0 tests found")` and still passes unchanged; it gets strengthened to an exact assertion on
+the parenthetical branch as an improvement, not a repair.
 
 ## Files Touched
 
