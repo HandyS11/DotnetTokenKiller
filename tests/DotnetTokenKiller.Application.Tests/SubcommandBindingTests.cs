@@ -68,4 +68,42 @@ public sealed class SubcommandBindingTests
         HookScriptTemplates.GeminiHook.Should().Contain($"rewrites `dotnet {alternation}`");
         HookScriptTemplates.CopilotCliHook.Should().Contain($"rewrites `dotnet {alternation}`");
     }
+
+    [Fact]
+    public void RepoClaudeHook_IsByteIdenticalToTheGeneratedHook()
+    {
+        var repoRoot = FindRepoRoot();
+        var hookPath = Path.Combine(repoRoot, ".claude", "hooks", "dotnet-to-dtk.py");
+
+        File.Exists(hookPath).Should().BeTrue("this repo ships its own copy of the Claude hook at {0}", hookPath);
+
+        var committed = File.ReadAllText(hookPath);
+
+        committed.Should().Be(
+            HookScriptTemplates.ClaudeHook,
+            "the committed hook must be regenerated whenever the template changes, or this repo's own "
+            + "agent sessions silently stop rewriting the newest subcommand");
+    }
+
+    /// <summary>
+    /// Walks up from the test assembly to the directory holding <c>DotnetTokenKiller.slnx</c>.
+    /// xunit 2.x has no runtime skip, and the test project only ever runs from inside the repo,
+    /// so not finding it is a failure rather than a skip.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// No ancestor of <see cref="AppContext.BaseDirectory"/> contains <c>DotnetTokenKiller.slnx</c>.
+    /// </exception>
+    private static string FindRepoRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "DotnetTokenKiller.slnx")))
+            {
+                return dir.FullName;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Could not locate DotnetTokenKiller.slnx above {AppContext.BaseDirectory}.");
+    }
 }
