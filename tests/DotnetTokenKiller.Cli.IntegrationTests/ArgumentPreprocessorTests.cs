@@ -307,4 +307,43 @@ public sealed class ArgumentPreprocessorTests
             return 0;
         }
     }
+
+    // ── Token-sequence matching regression guards ───────────────────────────
+    // These pin today's single-token behaviour so a later switch to TryMatch-based
+    // routing (which must support multi-token subcommands like `list package`)
+    // provably changes nothing for these cases.
+
+    [Fact]
+    public void IsPassthrough_ListReference_IsPassthrough()
+    {
+        // `list package` will be filtered but `list reference` must never be: it is the case that
+        // makes first-token matching wrong. The guarantee is dispatch order — IsPassthrough runs
+        // before Spectre, so this never reaches the `dotnet list` branch.
+        ArgumentPreprocessor.IsPassthrough(["dotnet", "list", "reference"]).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsPassthrough_BareList_IsPassthrough()
+    {
+        ArgumentPreprocessor.IsPassthrough(["dotnet", "list"]).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsPassthrough_KnownSingleTokenSubcommand_IsNotPassthrough()
+    {
+        ArgumentPreprocessor.IsPassthrough(["dotnet", "build"]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void InsertSeparator_SingleTokenSubcommand_SeparatesAfterOneToken()
+    {
+        ArgumentPreprocessor.InsertSeparator(["dotnet", "build", "MyApp.slnx"])
+            .Should().Equal("dotnet", "build", "--", "MyApp.slnx");
+    }
+
+    [Fact]
+    public void Normalize_UppercaseSubcommand_IsCanonicalized()
+    {
+        ArgumentPreprocessor.Normalize(["DOTNET", "BUILD"]).Should().Equal("dotnet", "build");
+    }
 }
