@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Filters;
 using FluentAssertions;
@@ -39,5 +40,32 @@ public sealed class SubcommandBindingTests
             .OfType<string>();
 
         keys.Should().BeEquivalentTo(DotnetSubcommands.Ordered);
+    }
+
+    [Fact]
+    public void GeneratedHooks_DeclareExactlyTheCanonicalSubcommands()
+    {
+        foreach (var hook in new[]
+                 {
+                     HookScriptTemplates.ClaudeHook,
+                     HookScriptTemplates.GeminiHook,
+                     HookScriptTemplates.CopilotCliHook
+                 })
+        {
+            var expectedTuple =
+                $"_DTK_SUBCOMMANDS = ({string.Join(", ", DotnetSubcommands.Sorted.Select(s => $"\"{s}\""))})";
+
+            hook.Should().Contain(expectedTuple);
+        }
+    }
+
+    [Fact]
+    public void GeneratedHooks_DocumentEveryCanonicalSubcommand()
+    {
+        var alternation = string.Join("|", DotnetSubcommands.Ordered);
+
+        HookScriptTemplates.ClaudeHook.Should().Contain($"rewrites `dotnet {alternation}`");
+        HookScriptTemplates.GeminiHook.Should().Contain($"rewrites `dotnet {alternation}`");
+        HookScriptTemplates.CopilotCliHook.Should().Contain($"rewrites `dotnet {alternation}`");
     }
 }
