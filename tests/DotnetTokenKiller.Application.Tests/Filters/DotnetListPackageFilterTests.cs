@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using DotnetTokenKiller.Application.Filters;
 using FluentAssertions;
 
@@ -246,6 +248,79 @@ public class DotnetListPackageFilterTests
                             """;
 
         _sut.Apply(input, exitCode: 0).Should().Contain("Risky 1.0.0 — Critical Bugs → Safe >= 2.0.0");
+    }
+
+    [Fact]
+    public void Apply_TransitiveTable_ParsesRowsWithoutARequestedColumn()
+    {
+        const string input = """
+                            Project 'Alpha' has the following package references
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved
+                               > Direct               1.0.0       1.0.0
+
+                               Transitive Package                 Resolved
+                               > Indirect                         3.2.1
+                            """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Contain("Direct 1.0.0").And.Contain("Indirect 3.2.1");
+    }
+
+    [Fact]
+    public void Apply_FloatingVersion_ShowsRequestedAndResolved()
+    {
+        const string input = """
+                            Project 'Alpha' has the following package references
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved
+                               > Floating             1.0.*       1.0.7
+                            """;
+
+        _sut.Apply(input, exitCode: 0).Should().Contain("Floating 1.0.*→1.0.7");
+    }
+
+    [Fact]
+    public void Apply_MoreGroupsThanTheCap_StatesWhatWasOmitted()
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < 40; i++)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Project 'P{i:D2}' has the following package references")
+                .AppendLine("   [net10.0]:")
+                .AppendLine("   Top-level Package      Requested   Resolved")
+                .AppendLine(CultureInfo.InvariantCulture, $"   > Only{i:D2}                1.0.0       1.0.0")
+                .AppendLine();
+        }
+
+        var result = _sut.Apply(sb.ToString(), exitCode: 0);
+
+        result.Should().Contain("… and ")
+            .And.Contain("more package")
+            .And.Contain("use --show-log for full output");
+    }
+
+    [Fact]
+    public void Apply_FailedRunWithUnparseableOutput_ReturnsEmptyForRawTailFallback()
+    {
+        const string input = "MSBUILD : error MSB1003: Specify a project or solution file.";
+
+        _sut.Apply(input, exitCode: 1).Should().BeEmpty(
+            "an empty result is what makes FilteredRunUseCase fall back to the raw tail");
+    }
+
+    [Fact]
+    public void Apply_FailedRunWithParseableOutput_OmitsTheSuccessGlyph()
+    {
+        const string input = """
+                            Project 'Alpha' has the following package references
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved
+                               > Direct               1.0.0       1.0.0
+                            """;
+
+        _sut.Apply(input, exitCode: 1).Should().NotContain("✓");
     }
 
     private static string LoadFixture(string resourceName)
