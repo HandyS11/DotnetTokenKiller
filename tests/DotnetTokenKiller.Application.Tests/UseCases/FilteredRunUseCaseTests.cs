@@ -860,4 +860,70 @@ public class FilteredRunUseCaseTests
             Environment.SetEnvironmentVariable("NO_COLOR", saved);
         }
     }
+
+    [Fact]
+    public async Task RunAsync_RecordsFiltered_WhenTheFilterSucceeds()
+    {
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.Filtered),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsFilterFaulted_WhenTheFilterThrows()
+    {
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_RecordsRawTailFallback_WhenAFailedCommandFiltersToNothing()
+    {
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("line one\nline two\n", "", 1));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("   ");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.RawTailFallback),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_PrefersFilterFaulted_WhenTheFilterThrowsOnAFailedCommand()
+    {
+        // A throwing filter yields the raw text, which is non-empty, so the raw-tail branch cannot
+        // also fire. The two outcomes are mutually exclusive by construction, not by ordering.
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("some raw output", "", 1));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Any<CancellationToken>());
+    }
 }
