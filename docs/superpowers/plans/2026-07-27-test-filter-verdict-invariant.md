@@ -281,9 +281,11 @@ with:
 ```csharp
         // A "nothing ran" verdict requires that no assembly produced evidence of a test.
         // ZeroTestsFound is per-assembly: in a multi-project run, one assembly matching nothing must
-        // never override another's real results. Stated in full rather than relying on the earlier
-        // skipped-only and failure branches, so the guard survives reordering and each clause is
-        // individually mutation-testable.
+        // never override another's real results. Stated in full — rather than relying on the earlier
+        // skipped-only and failure branches — so the guard is self-contained and survives a future
+        // reordering of those branches. TotalSkipped: 0 is currently shadowed by the skipped-only
+        // branch above (it always returns first when TotalSkipped > 0), so that conjunct is defensive,
+        // not load-bearing.
         var noTestEvidence = state is { TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0 }
                              && state.Failures.Count == 0;
         if (exitCode == 0 && noTestEvidence && (state.ZeroTestsFound || state.ProjectCount > 0))
@@ -370,8 +372,8 @@ Each test kills one mutant of the new condition. Append to `DotnetTestFilterTest
     [Fact]
     public void Apply_NoTestsLineWithSkippedSummary_ReportsSkipped()
     {
-        // Kills the mutant that drops the TotalSkipped clause: skipped tests are evidence that tests
-        // exist, so "0 tests found" must not win.
+        // Regression for the invariant: a skipped-only run alongside an unrelated no-match line must
+        // still report the skipped count via the skipped-only branch, not "0 tests found".
         const string input =
             "No test matches the given testcase filter `X` in /test/project/root/tests/A.Tests.dll\n" +
             "Passed!  - Failed:     0, Passed:     0, Skipped:     4, Total:     4, Duration: 10 ms - A.Tests.dll";

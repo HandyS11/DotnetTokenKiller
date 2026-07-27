@@ -322,7 +322,8 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_ZeroTestsFromAllSummariesZero_ReturnsZeroTestsMessage()
     {
-        // Covers state is { ProjectCount: > 0, TotalPassed: 0, TotalFailed: 0 } branch (line 162)
+        // Covers the noTestEvidence guard's ProjectCount > 0 disjunct: an all-zero summary with no
+        // explicit "No test matches"/"No test is available" line still reports "0 tests found".
         const string input = "Passed!  - Failed: 0, Passed: 0, Skipped: 0, Total: 0, Duration: 5 ms - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
@@ -1087,5 +1088,34 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+    }
+
+    [Fact]
+    public void Apply_ZeroExitWithFailedSummary_NeverReportsZeroTestsFound()
+    {
+        // Kills the `TotalFailed: 0` clause of noTestEvidence: a "Failed!" summary on exit 0 carries
+        // TotalFailed > 0, so the guard must not fire. The success formatter never prints TotalFailed,
+        // so the pinned output is the plain passed-count line, not a failure report.
+        const string input = "Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - T.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 0 passed (1 project, 0.01s)\n");
+    }
+
+    [Fact]
+    public void Apply_ZeroExitNoMatchLineWithParsedFailureHeaderAndNoSummary_ReturnsEmpty()
+    {
+        // Kills the `Failures.Count == 0` clause of noTestEvidence: a parsed failure header gives
+        // Failures.Count > 0, so noTestEvidence is false and the guard cannot fire. With no summary
+        // line, ProjectCount stays 0 too, so FormatOutput falls through to the ProjectCount == 0
+        // branch and returns empty — this pins that (odd but pre-existing) fallthrough, not a fix.
+        const string input =
+            "No test is available in /test/project/root/tests/A.Tests.dll\n" +
+            "  Failed MyTests.T1 [5 ms]";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().BeEmpty();
     }
 }

@@ -95,11 +95,12 @@ if (exitCode == 0 && noTestEvidence && (state.ZeroTestsFound || state.ProjectCou
 ```
 
 The skipped-only branch (`:261-264`) returns before this, and failures are handled earlier by
-`FormatFailures`, so parts of `noTestEvidence` are redundant against today's control flow. It is
-stated explicitly anyway so the guard is self-contained, survives future reordering, and exposes
-each clause to mutation testing individually.
+`FormatFailures`, so the `TotalSkipped: 0` conjunct of `noTestEvidence` is currently shadowed by that
+earlier branch and can never be individually killed by a mutation test there. It is stated explicitly
+anyway so the guard is self-contained and survives a future reordering of those branches — it is
+defensive, not load-bearing.
 
-Post-fix output for the reproduction: `✓ dotnet test: 1 passed (1 project, 52ms)`.
+Post-fix output for the reproduction: `✓ dotnet test: 1 passed (1 project, 0.05s)`.
 
 Note on wording: `ProjectCount` counts assemblies that *printed a summary*, so "1 project" means one
 project reported results. Listing the non-matching assemblies was considered and rejected (YAGNI —
@@ -122,7 +123,7 @@ rather than by analogy to the `test` case:
 | `DotnetRestoreFilter` | compliant | `AllUpToDate` gated on `totalProjects == 0` | `All projects are up-to-date for restore` **plus** a restored/up-to-date project line → counts reported, not the bare "all up-to-date" verdict |
 | `DotnetFormatFilter` | compliant | Empty-input synthesis gated on empty **and** `exitCode == 0`; violations return earlier | A real violation line **plus** a `Format complete in …ms` line → violation reported, not "nothing to format" |
 | `DotnetBuildFilter` | compliant | Verdict derived from parsed diagnostic counts | A real diagnostic **plus** a `0 Error(s)` / `0 Warning(s)` MSBuild summary line → diagnostic reported, not a clean verdict |
-| `DotnetCleanFilter` | compliant | Purely evidence-driven; emits nothing when no errors found | A real error line **plus** the `\d+ Error(s)` noise summary it filters → error survives |
+| `DotnetCleanFilter` | not applicable | Exit-code-driven, not evidence-driven: it returns `✓ dotnet clean\n` unconditionally on exit 0, before parsing anything, so it has no evidence-gated zero verdict to test | Its invariant test instead covers noise-vs-signal at exit 1: a real error line **plus** the `\d+ Error(s)` noise summary it filters → error survives |
 
 If the audit contradicts an expectation, that filter gets the same treatment as `test`. If it
 confirms them, the tests are the regression net that keeps it true.
@@ -148,7 +149,7 @@ dtk dotnet test tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Appl
 A welcome side effect of this fix: that caveat disappears afterwards, and the single-test invocation
 documented in `CLAUDE.md` starts working as written.
 
-**New fixture.** `Fixtures/dotnet_test_multiproject_partial_match.txt` — the real 26-line captured
+**New fixture.** `Fixtures/dotnet_test_multiproject_partial_match.txt` — the real 25-line captured
 output from the reproduction, not hand-written, matching the existing `Fixtures/dotnet_test_*.txt`
 convention.
 
@@ -198,6 +199,18 @@ are historical records and stay as written.
 4. Build clean under `TreatWarningsAsErrors`; `dotnet format --verify-no-changes` clean; mutation
    score not regressed.
 5. The `dtk-test-filter-quirk` memory is deleted — it documents a workaround this fix removes.
+
+**Amendment (2026-07-27, final fix wave):** criteria 4 and 5 were not met exactly as written above,
+and are recorded here rather than silently rewritten:
+
+- **Criterion 4** is unverified locally: the local Stryker run was killed at a 20-minute time-box with
+  no report produced. Mutation score is instead covered by CI's
+  `.github/workflows/mutation-testing.yml`, which runs Stryker without a local time-box.
+- **Criterion 5** was deliberately changed from *delete* to *update*: the fix is unreleased (no dtk
+  build containing it has shipped), and the globally installed `dtk` is still `<= 0.6.0`, which still
+  has the bug. Deleting the memory would have removed a workaround that is still needed for that
+  installed binary. The memory was updated in place instead to record the fix's status and point at
+  the workaround until a fixed release is installed.
 
 ## Out of Scope
 
