@@ -2,7 +2,6 @@ using System.Text;
 using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Infrastructure;
-using DotnetTokenKiller.Infrastructure.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -20,11 +19,11 @@ const string dotnetCmd = "dotnet";
 // case-sensitive routing resolves it; unknown/passthrough invocations are left untouched.
 args = ArgumentPreprocessor.Normalize(args);
 
-// Passthrough: run any unsupported dotnet subcommand directly without extra DI
+// Passthrough: run any unsupported dotnet subcommand directly, recording what it cost so the
+// coverage report can rank which subcommand is worth filtering next.
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
-    var runner = new ProcessCommandRunner();
-    return await runner.RunPassthroughAsync(dotnetCmd, args[1..]).ConfigureAwait(false);
+    return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..]).ConfigureAwait(false);
 }
 
 // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
