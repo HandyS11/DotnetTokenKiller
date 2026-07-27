@@ -9,7 +9,7 @@ namespace DotnetTokenKiller.Application.Filters;
 /// <summary>Condenses <c>dotnet list package</c> output, in all four of its variants.</summary>
 /// <remarks>
 /// The variant is detected from marker phrases in the output rather than from arguments, because
-/// <see cref="IOutputFilter"/>'s Apply method does not receive them. Table rows are mapped onto the
+/// <see cref="IOutputFilter.Apply"/> does not receive them. Table rows are mapped onto the
 /// column names of the header row above them, which is what makes multi-word cell values
 /// (<c>Critical Bugs</c>) and the <c>Transitive Package</c> sub-table's missing <c>Requested</c>
 /// column parse correctly.
