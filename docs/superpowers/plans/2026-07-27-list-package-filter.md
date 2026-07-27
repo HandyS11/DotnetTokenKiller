@@ -68,6 +68,26 @@ strictly better rather than merely fixing it:
 - **Two further pinned literals exist that Task 10 must update**, beyond the three already listed
   there. They are enumerated in Task 10 Step 1.
 
+### Correction applied after Task 9 recon (2026-07-28)
+
+Task 9's implementer found that `IntegrationInstructions.Intro` and `CopilotCliIntegrator` are **not**
+the only places hardcoding the subcommand list in user-facing prose. Three more exist, in three
+distinct shapes:
+
+| Site | Shape |
+|---|---|
+| `CursorIntegrator.cs:17` | `build, test, restore, clean, and format` — byte-identical to `SubcommandProse` |
+| `AiderIntegrator.cs:38,54` | `build/test/restore/clean/format` — slash-joined |
+| `ClaudeCodeIntegrator.cs:64` | `` `dotnet build`, `test`, `restore`, `clean`, and `format` `` — backticked Oxford list |
+
+All three are folded into Task 9, because leaving them uncovered means Task 10 makes `list package`
+canonical while dtk's own instructions still advertise only five subcommands — exactly the silent
+failure §7 of the gap analysis describes. Each new generated form takes its own pinned literal in
+`SubcommandBindingTests`, preserving the tripwire property.
+
+Also from that recon: `UsageBody` must stay `const`. CA1802 forces it, because its own text
+interpolates no computed value. Task 9's original text saying to convert it was wrong.
+
 ## File Structure
 
 | File | Responsibility |
