@@ -69,7 +69,7 @@ public class DotnetTestFilterTests
     public void Apply_ZeroTestsFixture_ReturnsZeroTestsMessage()
     {
         var fixture = LoadFixture("dotnet_test_zero.txt");
-        _sut.Apply(fixture, exitCode: 0).Should().Be("✓ dotnet test: 0 tests found\n");
+        _sut.Apply(fixture, exitCode: 0).Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
     }
 
     [Fact]
@@ -322,12 +322,13 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_ZeroTestsFromAllSummariesZero_ReturnsZeroTestsMessage()
     {
-        // Covers state is { ProjectCount: > 0, TotalPassed: 0, TotalFailed: 0 } branch (line 162)
+        // Covers the noTestEvidence guard's ProjectCount > 0 disjunct: an all-zero summary with no
+        // explicit "No test matches"/"No test is available" line still reports "0 tests found".
         const string input = "Passed!  - Failed: 0, Passed: 0, Skipped: 0, Total: 0, Duration: 5 ms - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 0 tests found\n");
+        result.Should().Be("⚠ dotnet test: 0 tests found\n");
     }
 
     [Fact]
@@ -593,7 +594,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("0 tests found");
+        result.Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
     }
 
     [Fact]
@@ -1026,5 +1027,95 @@ public class DotnetTestFilterTests
         using var stream = assembly.GetManifestResourceStream(fullName)!;
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    [Fact]
+    public void Apply_MultiProjectPartialMatch_ReportsPassedCount()
+    {
+        // Regression: in a multi-project run, a per-assembly "No test matches" line must not
+        // discard another assembly's real results. Ground truth for this fixture is 1 passed.
+        var fixture = LoadFixture("dotnet_test_multiproject_partial_match.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.05s)\n");
+    }
+
+    [Fact]
+    public Task Apply_MultiProjectPartialMatch_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_multiproject_partial_match.txt");
+        var result = _sut.Apply(fixture, exitCode: 0);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_NoTestsLineWithPassedSummary_PrefersPassedCount()
+    {
+        // Kills the mutant that drops `noTestEvidence` from the guard: a passing summary alongside a
+        // no-match line must report the pass.
+        const string input =
+            "No test matches the given testcase filter `X` in /test/project/root/tests/A.Tests.dll\n" +
+            "Passed!  - Failed:     0, Passed:     3, Skipped:     0, Total:     3, Duration: 10 ms - A.Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 3 passed (1 project, 0.01s)\n");
+    }
+
+    [Fact]
+    public void Apply_NoTestsLineWithSkippedSummary_ReportsSkipped()
+    {
+        // Regression for the invariant: a skipped-only run alongside an unrelated no-match line must
+        // still report the skipped count via the skipped-only branch, not "0 tests found".
+        const string input =
+            "No test matches the given testcase filter `X` in /test/project/root/tests/A.Tests.dll\n" +
+            "Passed!  - Failed:     0, Passed:     0, Skipped:     4, Total:     4, Duration: 10 ms - A.Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Contain("4 skipped").And.NotContain("0 tests found");
+    }
+
+    [Fact]
+    public void Apply_NoTestsLineOnly_ReportsZeroWithNoAssemblyMatched()
+    {
+        // Kills the mutant that drops `state.ZeroTestsFound` from the disjunction: with no summary at
+        // all, ProjectCount is 0, so only ZeroTestsFound can produce the verdict.
+        const string input =
+            "No test matches the given testcase filter `X` in /test/project/root/tests/A.Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+    }
+
+    [Fact]
+    public void Apply_ZeroExitWithFailedSummary_NeverReportsZeroTestsFound()
+    {
+        // Kills the `TotalFailed: 0` clause of noTestEvidence: a "Failed!" summary on exit 0 carries
+        // TotalFailed > 0, so the guard must not fire. The success formatter never prints TotalFailed,
+        // so the pinned output is the plain passed-count line, not a failure report.
+        const string input = "Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - T.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 0 passed (1 project, 0.01s)\n");
+    }
+
+    [Fact]
+    public void Apply_ZeroExitNoMatchLineWithParsedFailureHeaderAndNoSummary_ReturnsEmpty()
+    {
+        // Kills the `Failures.Count == 0` clause of noTestEvidence: a parsed failure header gives
+        // Failures.Count > 0, so noTestEvidence is false and the guard cannot fire. With no summary
+        // line, ProjectCount stays 0 too, so FormatOutput falls through to the ProjectCount == 0
+        // branch and returns empty — this pins that (odd but pre-existing) fallthrough, not a fix.
+        const string input =
+            "No test is available in /test/project/root/tests/A.Tests.dll\n" +
+            "  Failed MyTests.T1 [5 ms]";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().BeEmpty();
     }
 }

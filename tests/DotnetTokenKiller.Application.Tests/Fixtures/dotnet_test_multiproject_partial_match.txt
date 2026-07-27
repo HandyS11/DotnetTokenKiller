@@ -1,0 +1,25 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  DotnetTokenKiller.Domain -> /test/project/root/src/DotnetTokenKiller.Domain/bin/Debug/net10.0/DotnetTokenKiller.Domain.dll
+  DotnetTokenKiller.Infrastructure -> /test/project/root/src/DotnetTokenKiller.Infrastructure/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.dll
+  DotnetTokenKiller.Application -> /test/project/root/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
+  DotnetTokenKiller.Domain.Tests -> /test/project/root/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll
+Test run for /test/project/root/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+  DotnetTokenKiller.Infrastructure.Tests -> /test/project/root/tests/DotnetTokenKiller.Infrastructure.Tests/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.Tests.dll
+  DotnetTokenKiller.Cli -> /test/project/root/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/dtk.dll
+Test run for /test/project/root/tests/DotnetTokenKiller.Infrastructure.Tests/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.Tests.dll (.NETCoreApp,Version=v10.0)
+  DotnetTokenKiller.Application.Tests -> /test/project/root/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll
+Test run for /test/project/root/tests/DotnetTokenKiller.Application.Tests/bin/Debug/net10.0/DotnetTokenKiller.Application.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+A total of 1 test files matched the specified pattern.
+  DotnetTokenKiller.Cli.IntegrationTests -> /test/project/root/tests/DotnetTokenKiller.Cli.IntegrationTests/bin/Debug/net10.0/DotnetTokenKiller.Cli.IntegrationTests.dll
+Test run for /test/project/root/tests/DotnetTokenKiller.Cli.IntegrationTests/bin/Debug/net10.0/DotnetTokenKiller.Cli.IntegrationTests.dll (.NETCoreApp,Version=v10.0)
+No test matches the given testcase filter `FullyQualifiedName~CopilotCliHook_ReusesSharedRewriteCore` in /test/project/root/tests/DotnetTokenKiller.Domain.Tests/bin/Debug/net10.0/DotnetTokenKiller.Domain.Tests.dll
+
+A total of 1 test files matched the specified pattern.
+No test matches the given testcase filter `FullyQualifiedName~CopilotCliHook_ReusesSharedRewriteCore` in /test/project/root/tests/DotnetTokenKiller.Infrastructure.Tests/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.Tests.dll
+
+
+Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 52 ms - DotnetTokenKiller.Application.Tests.dll (net10.0)
+No test matches the given testcase filter `FullyQualifiedName~CopilotCliHook_ReusesSharedRewriteCore` in /test/project/root/tests/DotnetTokenKiller.Cli.IntegrationTests/bin/Debug/net10.0/DotnetTokenKiller.Cli.IntegrationTests.dll

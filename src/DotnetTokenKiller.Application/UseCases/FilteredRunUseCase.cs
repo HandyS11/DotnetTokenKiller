@@ -130,7 +130,7 @@ public sealed class FilteredRunUseCase(
         }
     }
 
-    /// <summary>Replaces ✓/✗ glyphs with ASCII equivalents when emoji are disabled or NO_COLOR is set.</summary>
+    /// <summary>Replaces ✓/✗/⚠ glyphs with ASCII equivalents when emoji are disabled or NO_COLOR is set.</summary>
     /// <param name="filtered">The filtered output text.</param>
     /// <param name="config">The DTK configuration.</param>
     /// <returns>The output with glyphs normalized according to configuration and environment.</returns>
@@ -143,7 +143,8 @@ public sealed class FilteredRunUseCase(
 
         return filtered
             .Replace("✓", "ok:", StringComparison.Ordinal)
-            .Replace("✗", "FAIL:", StringComparison.Ordinal);
+            .Replace("✗", "FAIL:", StringComparison.Ordinal)
+            .Replace("⚠", "WARN:", StringComparison.Ordinal);
     }
 
     /// <summary>Builds a fallback message for failed commands whose output the filter could not parse.</summary>

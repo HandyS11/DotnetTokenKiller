@@ -803,4 +803,61 @@ public class FilteredRunUseCaseTests
             Environment.SetEnvironmentVariable("NO_COLOR", saved);
         }
     }
+
+    [Fact]
+    public async Task RunAsync_ReplacesWarnGlyph_WhenDisplayEmojiDisabled()
+    {
+        await using var writer = new StringWriter();
+        var configProvider = Substitute.For<IConfigProvider>();
+        var config = DtkConfig.Default with
+        {
+            Display = new DisplayConfig(Emoji: false)
+        };
+        configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
+        var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("raw output", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ dotnet test: 0 tests found\n");
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        var output = writer.ToString();
+        output.Should().NotContain("⚠");
+        output.Should().Contain("WARN: dotnet test: 0 tests found");
+    }
+
+    [Fact]
+    public async Task RunAsync_NoColorEnvVar_ReplacesWarnGlyphWithWarn()
+    {
+        // Kills the string mutation "⚠" → "" on the NO_COLOR branch.
+        var saved = Environment.GetEnvironmentVariable("NO_COLOR");
+        Environment.SetEnvironmentVariable("NO_COLOR", "1");
+        try
+        {
+            await using var writer = new StringWriter();
+            var configProvider = Substitute.For<IConfigProvider>();
+            configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
+            var sut = new FilteredRunUseCase(_runner, _tracker, _teeService, writer, configProvider);
+
+            _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+                .Returns(new CommandResult("output", "", 0));
+            _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ nothing matched\n");
+            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+                    Arg.Any<CancellationToken>())
+                .Returns((string?)null);
+
+            await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+            var output = writer.ToString();
+            output.Should().NotContain("⚠");
+            output.Should().Contain("WARN: nothing matched");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NO_COLOR", saved);
+        }
+    }
 }

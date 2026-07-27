@@ -263,11 +263,20 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return $"✓ dotnet test: {state.TotalSkipped} skipped, 0 executed\n";
         }
 
-        // Genuine "nothing to run": explicit no-tests pattern or an all-zero summary.
-        var zeroTestsSignal = state.ZeroTestsFound || state is { ProjectCount: > 0, TotalPassed: 0 };
-        if (exitCode == 0 && zeroTestsSignal)
+        // A "nothing ran" verdict requires that no assembly produced evidence of a test.
+        // ZeroTestsFound is per-assembly: in a multi-project run, one assembly matching nothing must
+        // never override another's real results. Stated in full — rather than relying on the earlier
+        // skipped-only and failure branches — so the guard is self-contained and survives a future
+        // reordering of those branches. TotalSkipped: 0 is currently shadowed by the skipped-only
+        // branch above (it always returns first when TotalSkipped > 0), so that conjunct is defensive,
+        // not load-bearing.
+        var noTestEvidence = state is { TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0 }
+                             && state.Failures.Count == 0;
+        if (exitCode == 0 && noTestEvidence && (state.ZeroTestsFound || state.ProjectCount > 0))
         {
-            return "✓ dotnet test: 0 tests found\n";
+            return state.ZeroTestsFound
+                ? "⚠ dotnet test: 0 tests found (no assembly matched)\n"
+                : "⚠ dotnet test: 0 tests found\n";
         }
 
         if (state.ProjectCount == 0)

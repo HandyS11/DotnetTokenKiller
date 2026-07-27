@@ -196,6 +196,21 @@ public class DotnetFormatFilterTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Apply_ViolationWithFormatCompleteLine_ReportsViolation()
+    {
+        // Invariant: "nothing to format" is only valid when no violation was parsed.
+        const string input =
+            "/test/project/root/src/App.cs(1,1): error WHITESPACE: Fix whitespace formatting.\n" +
+            "Format complete in 2345ms.";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be(
+            "dotnet format: 1 violation\nsrc/App.cs(1,1): error WHITESPACE: Fix whitespace formatting.\n");
+        result.Should().NotContain("nothing to format");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetFormatFilterTests).Assembly;

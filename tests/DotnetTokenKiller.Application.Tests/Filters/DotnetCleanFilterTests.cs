@@ -179,6 +179,19 @@ public class DotnetCleanFilterTests
         result.Should().NotContain("✓");
     }
 
+    [Fact]
+    public void Apply_ErrorWithNoiseCountSummary_KeepsError()
+    {
+        // Invariant: the "N Error(s)" summary is stripped as noise, but the real error survives.
+        const string input = "/test/project/root/src/App.csproj : error MSB3231: Unable to remove directory.\n" +
+                             "    6 Error(s)";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Contain("MSB3231");
+        result.Should().NotContain("6 Error(s)");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetCleanFilterTests).Assembly;

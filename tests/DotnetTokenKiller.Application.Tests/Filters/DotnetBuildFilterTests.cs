@@ -807,6 +807,23 @@ public class DotnetBuildFilterTests
         result.Should().Be("\u2713 dotnet build (3.50s)\n");
     }
 
+    [Fact]
+    public void Apply_WarningWithZeroCountSummaryLines_ReportsWarning()
+    {
+        // Invariant: a clean "✓ dotnet build" verdict is only valid when no diagnostic was parsed.
+        // The trailing MSBuild count lines are noise and must not override the parsed warning.
+        const string input =
+            "/test/project/root/src/App.cs(9,13): warning CS0168: The variable 'x' is declared but never used\n" +
+            "    0 Error(s)\n" +
+            "    0 Warning(s)";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Contain("CS0168");
+        result.Should().Contain("1 warning");
+        result.Should().NotStartWith("✓ dotnet build");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetBuildFilterTests).Assembly;
