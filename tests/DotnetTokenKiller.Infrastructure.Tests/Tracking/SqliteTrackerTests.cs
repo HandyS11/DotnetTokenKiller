@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tracking;
@@ -25,7 +26,8 @@ public class SqliteTrackerTests : IAsyncDisposable
         int savedTokens = 850,
         double savingsPct = 85.0,
         DateTimeOffset? timestamp = null,
-        bool success = true)
+        bool success = true,
+        RunOutcome outcome = RunOutcome.Filtered)
     {
         return new CommandRecord(
             timestamp ?? DateTimeOffset.UtcNow,
@@ -33,7 +35,8 @@ public class SqliteTrackerTests : IAsyncDisposable
             projectPath,
             new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
             TimeSpan.FromMilliseconds(500),
-            success);
+            success,
+            outcome);
     }
 
     [Fact]
@@ -527,6 +530,121 @@ public class SqliteTrackerTests : IAsyncDisposable
             if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
             {
                 Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RecordAsync_RoundTripsOutcome()
+    {
+        await _sut.RecordAsync(MakeRecord(outcome: RunOutcome.PassthroughMeasured));
+
+        var history = await _sut.GetHistoryAsync(1, null);
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.PassthroughMeasured);
+    }
+
+    [Fact]
+    public async Task RecordAsync_DefaultsToFiltered_WhenOutcomeNotSupplied()
+    {
+        await _sut.RecordAsync(MakeRecord());
+
+        var history = await _sut.GetHistoryAsync(1, null);
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_IsUnchanged_WhenPassthroughRowsAreAdded()
+    {
+        // The guarantee that shipping coverage tracking does not move anybody's gain numbers.
+        // If the outcome exclusion is ever dropped, this fails loudly.
+        await _sut.RecordAsync(MakeRecord("build", inputTokens: 1000, outputTokens: 100, savedTokens: 900));
+        var before = await _sut.GetSummaryAsync(1, null);
+
+        await _sut.RecordAsync(MakeRecord(
+            "publish",
+            inputTokens: 50_000,
+            outputTokens: 50_000,
+            savedTokens: 0,
+            savingsPct: 0.0,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("run", inputTokens: 0, outputTokens: 0, savedTokens: 0,
+            savingsPct: 0.0, outcome: RunOutcome.PassthroughUnmeasured));
+
+        var after = await _sut.GetSummaryAsync(1, null);
+
+        after.TotalCommands.Should().Be(before.TotalCommands);
+        after.TotalInputTokens.Should().Be(before.TotalInputTokens);
+        after.TotalOutputTokens.Should().Be(before.TotalOutputTokens);
+        after.TotalSavedTokens.Should().Be(before.TotalSavedTokens);
+        after.AverageSavingsPercentage.Should().BeApproximately(before.AverageSavingsPercentage, 0.001);
+        after.CommandDetails.Should().NotContainKey("publish");
+        after.CommandDetails.Should().NotContainKey("run");
+    }
+
+    [Theory]
+    [InlineData(RunOutcome.RawTailFallback)]
+    [InlineData(RunOutcome.FilterFaulted)]
+    public async Task GetSummaryAsync_IncludesDegradedFilteredRuns(RunOutcome outcome)
+    {
+        // These ran a filter — badly — so they still represent real savings and stay in the math.
+        await _sut.RecordAsync(MakeRecord("build", outcome: outcome));
+
+        var summary = await _sut.GetSummaryAsync(1, null);
+
+        summary.TotalCommands.Should().Be(1);
+        summary.CommandDetails.Should().ContainKey("build");
+    }
+
+    [Fact]
+    public async Task Schema_AddsOutcomeColumnToLegacyDatabase_DefaultingExistingRowsToFiltered()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"dtk-legacy-{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+        try
+        {
+            // Build the pre-outcome schema by hand and seed a row, as an older dtk would have.
+            await using (var legacy = new SqliteConnection(connectionString))
+            {
+                await legacy.OpenAsync();
+                await using var cmd = legacy.CreateCommand();
+                cmd.CommandText = """
+                                  CREATE TABLE commands (
+                                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                      timestamp TEXT NOT NULL,
+                                      command TEXT NOT NULL,
+                                      project_path TEXT NOT NULL,
+                                      input_tokens INTEGER NOT NULL,
+                                      output_tokens INTEGER NOT NULL,
+                                      saved_tokens INTEGER NOT NULL,
+                                      savings_percentage REAL NOT NULL,
+                                      execution_time_ms REAL NOT NULL,
+                                      success INTEGER NOT NULL DEFAULT 1
+                                  );
+                                  INSERT INTO commands
+                                      (timestamp, command, project_path, input_tokens, output_tokens,
+                                       saved_tokens, savings_percentage, execution_time_ms, success)
+                                  VALUES (@ts, 'build', '/legacy', 900, 90, 810, 90.0, 12.0, 1);
+                                  """;
+                cmd.Parameters.AddWithValue("@ts",
+                    DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            await using var tracker = new SqliteTracker(connectionString);
+            var history = await tracker.GetHistoryAsync(1, null);
+
+            var stored = history.Should().ContainSingle().Subject;
+            stored.Command.Should().Be("build");
+            stored.Outcome.Should().Be(RunOutcome.Filtered);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath))
+            {
+                File.Delete(dbPath);
             }
         }
     }

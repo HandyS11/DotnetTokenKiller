@@ -11,6 +11,14 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     : ITracker, IDisposable, IAsyncDisposable
 {
     private const int HistoryLimit = 500;
+
+    /// <summary>
+    /// The SQL literal list of outcomes that count toward savings, derived from
+    /// <see cref="RunOutcomes.CountedInSavings"/> so the two can never disagree.
+    /// </summary>
+    private static readonly string CountedInSavingsSqlList =
+        string.Join(", ", RunOutcomes.CountedInSavings.Select(o => $"'{o}'"));
+
     private readonly SqliteConnection _connection = new(connectionString);
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private bool _initialized;
@@ -43,8 +51,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 #pragma warning restore CA2007
             cmd.CommandText = """
                               INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms, success)
-                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success)
+                                  saved_tokens, savings_percentage, execution_time_ms, success, outcome)
+                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success, @outcome)
                               """;
             cmd.Parameters.AddWithValue("@ts",
                 record.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
@@ -56,6 +64,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
             cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
             cmd.Parameters.AddWithValue("@success", record.Success ? 1 : 0);
+            cmd.Parameters.AddWithValue("@outcome", record.Outcome.ToString());
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -71,21 +80,22 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         string? commandFilter = null,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
-                           SELECT command, success,
-                                  COUNT(*) as run_count,
-                                  SUM(input_tokens) as total_input,
-                                  SUM(output_tokens) as total_output,
-                                  SUM(saved_tokens) as total_saved,
-                                  AVG(savings_percentage) as avg_pct,
-                                  SUM(execution_time_ms) as total_ms
-                           FROM commands
-                           WHERE timestamp >= @since
-                             AND (@path IS NULL OR project_path = @path)
-                             AND (@cmd IS NULL OR command = @cmd)
-                           GROUP BY command, success
-                           ORDER BY command, success DESC
-                           """;
+        var sql = $"""
+                   SELECT command, success,
+                          COUNT(*) as run_count,
+                          SUM(input_tokens) as total_input,
+                          SUM(output_tokens) as total_output,
+                          SUM(saved_tokens) as total_saved,
+                          AVG(savings_percentage) as avg_pct,
+                          SUM(execution_time_ms) as total_ms
+                   FROM commands
+                   WHERE timestamp >= @since
+                     AND (@path IS NULL OR project_path = @path)
+                     AND (@cmd IS NULL OR command = @cmd)
+                     AND outcome IN ({CountedInSavingsSqlList})
+                   GROUP BY command, success
+                   ORDER BY command, success DESC
+                   """;
 
         return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, null, cancellationToken);
     }
@@ -99,7 +109,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     {
         const string sql = """
                            SELECT timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms, success
+                                  saved_tokens, savings_percentage, execution_time_ms, success, outcome
                            FROM commands
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
@@ -208,35 +218,51 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                                     saved_tokens INTEGER NOT NULL,
                                     savings_percentage REAL NOT NULL,
                                     execution_time_ms REAL NOT NULL,
-                                    success INTEGER NOT NULL DEFAULT 1
+                                    success INTEGER NOT NULL DEFAULT 1,
+                                    outcome TEXT NOT NULL DEFAULT 'Filtered'
                                 );
                                 CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
                                 CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
                                 """;
         await createCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
-        // Migration for databases created before the success column existed. Fresh databases
-        // already have it (see CREATE TABLE above) so this ALTER only runs on legacy files.
+        // Migrations for databases created before these columns existed. Fresh databases already
+        // have them (see CREATE TABLE above) so these only run on legacy files.
+        await EnsureColumnAsync("success", "INTEGER NOT NULL DEFAULT 1", ct).ConfigureAwait(false);
+        await EnsureColumnAsync("outcome", "TEXT NOT NULL DEFAULT 'Filtered'", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Adds a column to the commands table if it is not already present.</summary>
+    /// <param name="columnName">The column to ensure exists.</param>
+    /// <param name="columnDefinition">The SQL type and constraints for the column.</param>
+    /// <param name="ct">Cancellation token.</param>
+    private async Task EnsureColumnAsync(string columnName, string columnDefinition, CancellationToken ct)
+    {
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var checkCmd = _connection.CreateCommand();
 #pragma warning restore CA2007
-        checkCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('commands') WHERE name='success'";
+        checkCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('commands') WHERE name = @name";
+        checkCmd.Parameters.AddWithValue("@name", columnName);
         var columnExists = (long)(await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false))! > 0;
-        if (!columnExists)
+        if (columnExists)
         {
-            try
-            {
+            return;
+        }
+
+        try
+        {
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-                await using var alterCmd = _connection.CreateCommand();
+            await using var alterCmd = _connection.CreateCommand();
 #pragma warning restore CA2007
-                alterCmd.CommandText = "ALTER TABLE commands ADD COLUMN success INTEGER NOT NULL DEFAULT 1";
-                await alterCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-            }
-            catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
-            {
-                // A concurrent initializer added the column between our pragma check and this ALTER.
-                // The column now exists, which is all we required — the losing racer is fine.
-            }
+#pragma warning disable CA2100, S2077 // columnName and columnDefinition are caller-supplied constant literals
+            alterCmd.CommandText = $"ALTER TABLE commands ADD COLUMN {columnName} {columnDefinition}";
+#pragma warning restore CA2100, S2077
+            await alterCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+        {
+            // A concurrent initializer added the column between our pragma check and this ALTER.
+            // The column now exists, which is all we required — the losing racer is fine.
         }
     }
 
@@ -373,6 +399,12 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 #pragma warning restore CA2007
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
+            // An outcome written by a newer dtk that this build does not know is treated as
+            // Filtered rather than crashing the report.
+            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(9), out var parsed)
+                ? parsed
+                : RunOutcome.Filtered;
+
             results.Add(new CommandRecord(
                 DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture,
                     DateTimeStyles.RoundtripKind),
@@ -380,7 +412,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 reader.GetString(2),
                 new TokenStatistics(reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetDouble(6)),
                 TimeSpan.FromMilliseconds(reader.GetDouble(7)),
-                reader.GetInt32(8) != 0));
+                reader.GetInt32(8) != 0,
+                outcome));
         }
 
         return results;
