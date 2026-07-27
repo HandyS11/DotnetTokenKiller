@@ -10,13 +10,15 @@ public sealed record CommandRecord
     /// <param name="tokens">Token usage statistics for the run.</param>
     /// <param name="executionTime">Total wall-clock time for the command.</param>
     /// <param name="success">Whether the command exited with code 0.</param>
+    /// <param name="outcome">How the run produced its output.</param>
     public CommandRecord(
         DateTimeOffset timestamp,
         string command,
         string projectPath,
         TokenStatistics tokens,
         TimeSpan executionTime,
-        bool success = true)
+        bool success = true,
+        RunOutcome outcome = RunOutcome.Filtered)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
         ArgumentNullException.ThrowIfNull(tokens);
@@ -30,6 +32,7 @@ public sealed record CommandRecord
         SavingsPercentage = tokens.SavingsPercentage;
         ExecutionTime = executionTime;
         Success = success;
+        Outcome = outcome;
     }
 
     /// <summary>When the command ran.</summary>
@@ -58,4 +61,7 @@ public sealed record CommandRecord
 
     /// <summary>Whether the command exited with code 0.</summary>
     public bool Success { get; init; }
+
+    /// <summary>How the run produced its output.</summary>
+    public RunOutcome Outcome { get; init; } = RunOutcome.Filtered;
 }
