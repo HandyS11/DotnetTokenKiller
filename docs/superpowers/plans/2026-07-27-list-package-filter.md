@@ -49,12 +49,31 @@ included here because the spec's own success criterion cannot be met without the
    different versions per TFM, both rows survive but which TFM is which is lost. Accepted
    simplification; noted in Task 3.
 
+### Corrections applied after Task 1 recon (2026-07-27)
+
+The first implementer's recon found two consumers of `DotnetSubcommands.All` that the original
+draft of this plan missed, both in test code. Three corrections follow, and they make the plan
+strictly better rather than merely fixing it:
+
+- **`All` is kept, not deleted.** `DotnetSubcommandsTests.All_ContainsEveryOrderedEntry_CaseInsensitively`
+  and `CompletionCommandTests.ExecuteAsync_Script_OffersEveryDotnetSubcommand` both use it as a
+  canonical-name *set*, which stays coherent when a name contains a space — that is a legitimate
+  non-routing use. Deleting it would mean rewriting those tests for no gain. The hazard it posed
+  (a future caller routing with it) is handled by a doc comment pointing at `TryMatch` instead.
+  Consequence: **Task 1 becomes purely additive, so the tree builds between Tasks 1 and 2 and each
+  commits independently.** Task 1's Step 5/6 and Task 2's Step 6 are amended accordingly.
+- **`tests/DotnetTokenKiller.Domain.Tests/DotnetSubcommandsTests.cs` already exists** with four
+  tests. Task 1 **appends** to it; it must not be created from scratch, which would silently delete
+  them.
+- **Two further pinned literals exist that Task 10 must update**, beyond the three already listed
+  there. They are enumerated in Task 10 Step 1.
+
 ## File Structure
 
 | File | Responsibility |
 |---|---|
 | `src/DotnetTokenKiller.Domain/SubcommandMatch.cs` | **new** — value type: canonical name + token count |
-| `src/DotnetTokenKiller.Domain/DotnetSubcommands.cs` | canonical list; gains `TryMatch`, loses `All` |
+| `src/DotnetTokenKiller.Domain/DotnetSubcommands.cs` | canonical list; gains `TryMatch`, keeps `All` |
 | `src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs` | gains `ListPackage` |
 | `src/DotnetTokenKiller.Application/Filters/DotnetListPackageFilter.cs` | **new** — the filter |
 | `src/DotnetTokenKiller.Application/UseCases/FilteredRunUseCase.cs` | tracking slug via `TryMatch` |
@@ -82,7 +101,8 @@ suite stays green.
 **Files:**
 - Create: `src/DotnetTokenKiller.Domain/SubcommandMatch.cs`
 - Modify: `src/DotnetTokenKiller.Domain/DotnetSubcommands.cs`
-- Test: `tests/DotnetTokenKiller.Domain.Tests/DotnetSubcommandsTests.cs`
+- Test: **append to the existing** `tests/DotnetTokenKiller.Domain.Tests/DotnetSubcommandsTests.cs`
+  (it already holds four tests — do not recreate the file)
 
 **Interfaces:**
 - Produces: `SubcommandMatch(string Name, int TokenCount)` (readonly record struct);
@@ -91,17 +111,12 @@ suite stays green.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/DotnetTokenKiller.Domain.Tests/DotnetSubcommandsTests.cs`. The internal overload is the
-seam that lets multi-token matching be tested before any multi-token subcommand exists:
+**Append** these tests to the existing `tests/DotnetTokenKiller.Domain.Tests/DotnetSubcommandsTests.cs`,
+inside its existing `DotnetSubcommandsTests` class, leaving its four current tests untouched. The
+internal overload is the seam that lets multi-token matching be tested before any multi-token
+subcommand exists:
 
 ```csharp
-using DotnetTokenKiller.Domain;
-using FluentAssertions;
-
-namespace DotnetTokenKiller.Domain.Tests;
-
-public class DotnetSubcommandsTests
-{
     [Fact]
     public void TryMatch_SingleTokenSubcommand_ReturnsNameAndOneToken()
     {
@@ -166,8 +181,10 @@ public class DotnetSubcommandsTests
     {
         DotnetSubcommands.TryMatch(["list"], ["list package"], out _).Should().BeFalse();
     }
-}
 ```
+
+The existing file already has the `using` directives, namespace, and class declaration these tests
+need — append inside the class and add nothing else.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -193,9 +210,26 @@ namespace DotnetTokenKiller.Domain;
 public readonly record struct SubcommandMatch(string Name, int TokenCount);
 ```
 
-In `DotnetSubcommands.cs`, **delete** the `All` member and add the matching API. `All` is a
-single-token membership test that cannot express `list package`; leaving it in place invites a future
-caller to route with it and silently mishandle multi-token subcommands.
+In `DotnetSubcommands.cs`, **keep** `All` and add the matching API alongside it. `All` remains a
+correct set of canonical *names* even when a name contains a space, and two existing tests use it
+that way. What it cannot do is route an argv list, so amend its doc comment to say so and point at
+`TryMatch`:
+
+```csharp
+    /// <summary>
+    /// The canonical names as a case-insensitive set, for asserting membership and binding other
+    /// restatements of the list back to it.
+    /// </summary>
+    /// <remarks>
+    /// Not usable for routing an argument list: a multi-token name such as <c>list package</c> is one
+    /// entry here, so <c>All.Contains(args[1])</c> would never match it. Use
+    /// <see cref="TryMatch(IReadOnlyList{string}, out SubcommandMatch)"/> for that.
+    /// </remarks>
+    public static readonly IReadOnlySet<string> All =
+        new HashSet<string>(Ordered, StringComparer.OrdinalIgnoreCase);
+```
+
+Then add the matching API:
 
 ```csharp
     /// <summary>
@@ -290,21 +324,22 @@ dtk dotnet test tests/DotnetTokenKiller.Domain.Tests --filter "FullyQualifiedNam
 
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Verify the expected breakage, and only the expected breakage**
+- [ ] **Step 5: Verify nothing else broke**
 
 ```bash
-dtk dotnet build DotnetTokenKiller.slnx
+dtk dotnet build DotnetTokenKiller.slnx && dtk dotnet test DotnetTokenKiller.slnx
 ```
 
-Expected: FAIL — removing `All` breaks `ArgumentPreprocessor`'s three call sites. That is intended and
-is exactly Task 2's work. Do **not** patch them here. If the build shows breakage anywhere *other*
-than `ArgumentPreprocessor.cs`, stop and report it: this plan assumed those were the only consumers,
-and a fourth would need its own task.
+Expected: build succeeds and the full suite passes. This task is purely additive — `All` is retained
+and nothing yet calls `TryMatch` — so a failure here means the new members broke something
+unexpected, not that a later task will fix it.
 
-- [ ] **Step 6: Do not commit yet**
+- [ ] **Step 6: Commit**
 
-The tree does not build between Tasks 1 and 2, so both land in one commit at the end of Task 2.
-Proceed directly to Task 2.
+```bash
+git add src/DotnetTokenKiller.Domain tests/DotnetTokenKiller.Domain.Tests
+git commit -m "feat: match dotnet subcommands as token sequences"
+```
 
 ---
 
@@ -368,8 +403,11 @@ first and match its existing naming style.
 dtk dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests --filter "FullyQualifiedName~ArgumentPreprocessorTests"
 ```
 
-Expected: FAIL to compile — `ArgumentPreprocessor` still references the deleted
-`DotnetSubcommands.All`.
+Expected: the three new `IsPassthrough`/`InsertSeparator`/`Normalize` assertions PASS already,
+because the existing single-token behaviour satisfies them — `list reference` and bare `list` are
+passthrough today for the same reason they must stay passthrough afterwards. They are the regression
+guards that prove this refactor changes nothing for the existing five. Confirm they pass **before**
+you touch `ArgumentPreprocessor`, so that their passing afterwards means something.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -493,9 +531,8 @@ Expected: build succeeds; full suite passes (1067 pre-existing tests plus the 13
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/DotnetTokenKiller.Domain src/DotnetTokenKiller.Cli/ArgumentPreprocessor.cs \
-        tests/DotnetTokenKiller.Domain.Tests tests/DotnetTokenKiller.Cli.IntegrationTests
-git commit -m "refactor: match dotnet subcommands as token sequences"
+git add src/DotnetTokenKiller.Cli/ArgumentPreprocessor.cs tests/DotnetTokenKiller.Cli.IntegrationTests
+git commit -m "refactor: route dotnet subcommands through token-sequence matching"
 ```
 
 ---
@@ -1884,7 +1921,9 @@ another, and the pinned hook literals fail a third. Everything here lands in one
 - Modify: `.claude/hooks/dotnet-to-dtk.py`
 - Test: `tests/DotnetTokenKiller.Application.Tests/SubcommandBindingTests.cs`,
   `tests/DotnetTokenKiller.Application.Tests/UseCases/FilteredRunUseCaseTests.cs`,
-  `tests/DotnetTokenKiller.Cli.IntegrationTests/ArgumentPreprocessorTests.cs`
+  `tests/DotnetTokenKiller.Cli.IntegrationTests/ArgumentPreprocessorTests.cs`,
+  `tests/DotnetTokenKiller.Domain.Tests/DotnetSubcommandsTests.cs`,
+  `tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/CompletionCommandTests.cs`
 
 **Interfaces:**
 - Consumes: `DotnetListPackageFilter` (Tasks 3–6), `DotnetSubcommands.TryMatch` (Task 1),
@@ -1893,7 +1932,30 @@ another, and the pinned hook literals fail a third. Everything here lands in one
 
 - [ ] **Step 1: Write the failing test**
 
-Update the pinned literals. In `SubcommandBindingTests`, change the three constants:
+There are **five** pinned literals to update, not three. Two live outside `SubcommandBindingTests`
+and were found during Task 1's recon:
+
+In `tests/DotnetTokenKiller.Domain.Tests/DotnetSubcommandsTests.cs`:
+
+```csharp
+        DotnetSubcommands.Ordered.Should().Equal("build", "test", "restore", "clean", "format", "list package");
+```
+
+In `tests/DotnetTokenKiller.Cli.IntegrationTests/Commands/CompletionCommandTests.cs`,
+`ExecuteAsync_Script_OffersEveryDotnetSubcommand` iterates `DotnetSubcommands.All` and asserts each
+name appears verbatim in the script. That is no longer the contract: Task 8 deliberately emits only
+first tokens, so `"list package"` will never appear. Preserve the test's anti-drift *intent* by
+iterating the candidates the scripts are actually generated from:
+
+```csharp
+        foreach (var subcommand in CompletionCommand.CompletionCandidates(DotnetSubcommands.Ordered))
+```
+
+Leave its comment accurate by extending it: the completion lists are generated from
+`CompletionCandidates(DotnetSubcommands.Ordered)`, so every candidate must appear in every shell
+script, and a multi-token subcommand contributes only its first token.
+
+Then, in `SubcommandBindingTests`, change the three constants:
 
 ```csharp
         const string expectedTuple =
