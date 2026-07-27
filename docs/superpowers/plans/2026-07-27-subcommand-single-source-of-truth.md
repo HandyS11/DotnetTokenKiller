@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Executed 2026-07-27. All six tasks complete; the unchecked boxes below are the plan as written, not work outstanding. One correction was made mid-execution — see Task 6.
+
 **Goal:** Make the set of dtk-handled dotnet subcommands exist in exactly one place, so adding a subcommand can never silently miss the agent hook.
 
 **Architecture:** A new `DotnetSubcommands` type in the Domain layer becomes canonical. `FilterKeys` aliases its `const`s (so DI keys cannot diverge by construction), the Cli layer's private copies are deleted, and the Python hook's subcommand tuple and docstrings are generated from it. Four binding tests — each living in the layer that owns the binding — cover the seams that generation cannot close.
@@ -721,6 +723,15 @@ Expected FAILURES — all of these, by name:
 | `SubcommandBindingTests.GeneratedHooks_DocumentEveryCanonicalSubcommand` | docstring alternation drops `format` |
 | `SubcommandBindingTests.RepoClaudeHook_IsByteIdenticalToTheGeneratedHook` | committed file still has `format` |
 | `SubcommandRegistrationTests.DotnetBranch_RegistersExactlyTheCanonicalSubcommands` | help still lists `format` |
+
+> **Correction, made during execution.** The two `GeneratedHooks_*` rows above were wrong as
+> written. Both tests computed their expected string from `DotnetSubcommands` — the same source the
+> production code generates from — so when `Ordered` lost `Format`, expectation and production
+> shrank together and both tests **passed**. They were vacuous with respect to exactly this
+> mutation. Both were re-pinned to literal expected bytes (commit `df2d9cb`) before the experiment
+> was run, after which all seven rows failed as tabulated. The cost — hand-updating two literals
+> when a subcommand is added — is the tripwire, not a regression: it forces whoever adds one to
+> also regenerate the committed hook.
 
 `EverySubcommand_ResolvesAKeyedOutputFilter` is expected to still **pass** — it only checks that
 each canonical subcommand has a filter, and a shorter list trivially satisfies it. That is why

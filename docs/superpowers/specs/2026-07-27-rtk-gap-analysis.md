@@ -93,10 +93,10 @@ quantify whether the hook is actually working.
 The canonical list lives in `Cli` while the hook template that needs it lives in `Application` —
 that layering is what forced the copy.
 
-**Failure mode:** add a `publish` filter, register the command, ship — and forget the tuple at
-`HookScriptTemplates.cs:54`. The hook never rewrites `dotnet publish`, the agent keeps running it
-raw, and the new filter sees 0% adoption with no error anywhere. Nothing in the test suite catches
-this today, and it worsens with every subcommand added.
+**Failure mode:** add a `publish` filter, register the command, ship — and forget the tuple in
+`HookScriptTemplates.cs`. The hook never rewrites `dotnet publish`, the agent keeps running it
+raw, and the new filter sees 0% adoption with no error anywhere. Nothing in the test suite caught
+this at the time of the analysis, and it worsened with every subcommand added.
 
 > **Resolved 2026-07-27.** The canonical list now lives in `DotnetTokenKiller.Domain.DotnetSubcommands`.
 > `FilterKeys` aliases its constants, the Cli copy is gone, the hook's tuple and docstrings are

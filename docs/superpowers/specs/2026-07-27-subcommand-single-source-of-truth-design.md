@@ -1,8 +1,15 @@
 # Subcommand List — Single Source of Truth
 
 **Date:** 2026-07-27
-**Status:** Design approved, not yet implemented
+**Status:** Implemented — see [the plan](../plans/2026-07-27-subcommand-single-source-of-truth.md)
 **Implements:** §7 of [2026-07-27-rtk-gap-analysis.md](2026-07-27-rtk-gap-analysis.md)
+
+Three things below were superseded during implementation. The plan records the reasoning; in
+short: the binding tests moved into the layer each one guards rather than all living in
+`Cli.IntegrationTests`; the repo-hook parity test fails rather than skips when it cannot find the
+repo root, because xunit 2.9.3 has no runtime skip; and the two generated-hook tests are pinned to
+literal expected bytes rather than deriving their expectation from `DotnetSubcommands`, which had
+made them incapable of failing under the very mutation meant to prove them.
 
 ## Problem
 
