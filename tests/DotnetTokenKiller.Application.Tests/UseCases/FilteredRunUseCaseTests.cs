@@ -912,10 +912,34 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_PrefersFilterFaulted_WhenTheFilterThrowsOnAFailedCommand()
     {
-        // A throwing filter yields the raw text, which is non-empty, so the raw-tail branch cannot
-        // also fire. The two outcomes are mutually exclusive by construction, not by ordering.
+        // A throwing filter yields the raw text unchanged. Here the raw text is non-empty, so the
+        // raw-tail branch does not also fire — this test alone would still pass even if the switch
+        // arms below were reordered. RunAsync_PrefersFilterFaulted_WhenBothConditionsOverlap is the
+        // one that requires the ordering.
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("some raw output", "", 1));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_PrefersFilterFaulted_WhenBothConditionsOverlap()
+    {
+        // Empty raw output plus a non-zero exit code plus a throwing filter makes filterFaulted and
+        // usedRawTailFallback both true at once (a faulted filter yields the raw text unchanged, and
+        // that raw text is itself empty/whitespace here, so the raw-tail branch's own condition is
+        // also satisfied). This is the only case that exercises the switch's ordering: reordering
+        // the arms so (false, true) is matched before (true, _) would flip this outcome to
+        // RawTailFallback while leaving every other test in this file green.
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
         _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns((string?)null);

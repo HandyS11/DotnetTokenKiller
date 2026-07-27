@@ -55,7 +55,7 @@ public sealed class PassthroughRunUseCase(
             var passthroughExit = await commandRunner.RunPassthroughAsync(command, dotnetArgs, cancellationToken)
                 .ConfigureAwait(false);
             stopwatch.Stop();
-            await TrackAsync(commandName, 0, stopwatch.Elapsed, passthroughExit,
+            await TrackAsync(commandName, null, config.Tracking.Tokenizer, stopwatch.Elapsed, passthroughExit,
                     RunOutcome.PassthroughUnmeasured, cancellationToken)
                 .ConfigureAwait(false);
             return passthroughExit;
@@ -66,25 +66,36 @@ public sealed class PassthroughRunUseCase(
             .ConfigureAwait(false);
         stopwatch.Stop();
 
-        var stripped = AnsiStrip.Strip(result.StdOut + result.StdErr);
-        var tokens = TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
-        await TrackAsync(commandName, tokens, stopwatch.Elapsed, result.ExitCode,
-                RunOutcome.PassthroughMeasured, cancellationToken)
+        // The child's exit code above is already captured before any of this runs, so a throw from
+        // here on — including from stripping/tokenizing a very large captured output — cannot alter
+        // what dtk returns; TrackAsync's try/catch covers stripping and estimation as well as the
+        // store write.
+        await TrackAsync(commandName, result.StdOut + result.StdErr, config.Tracking.Tokenizer, stopwatch.Elapsed,
+                result.ExitCode, RunOutcome.PassthroughMeasured, cancellationToken)
             .ConfigureAwait(false);
 
         return result.ExitCode;
     }
 
-    /// <summary>Records the run, swallowing any failure so tracking cannot break the workflow.</summary>
+    /// <summary>
+    /// Estimates the token count (when measured) and records the run, swallowing any failure —
+    /// including one raised while stripping or tokenizing a large captured output — so tracking
+    /// cannot break the workflow.
+    /// </summary>
     /// <param name="commandName">The allowlisted command name.</param>
-    /// <param name="tokens">Raw output tokens, or zero when the run was not measured.</param>
+    /// <param name="rawOutput">
+    /// The combined, un-stripped child stdout/stderr to measure, or <see langword="null"/> when the
+    /// run was not measured, in which case zero tokens are recorded without stripping or estimating.
+    /// </param>
+    /// <param name="tokenizerModel">The tokenizer model to use when estimating.</param>
     /// <param name="elapsed">Wall-clock time for the run.</param>
     /// <param name="exitCode">The child process exit code.</param>
     /// <param name="outcome">Which passthrough outcome this run had.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     private async Task TrackAsync(
         string commandName,
-        int tokens,
+        string? rawOutput,
+        TokenizerModel tokenizerModel,
         TimeSpan elapsed,
         int exitCode,
         RunOutcome outcome,
@@ -92,6 +103,10 @@ public sealed class PassthroughRunUseCase(
     {
         try
         {
+            var tokens = rawOutput is null
+                ? 0
+                : TokenEstimator.Estimate(AnsiStrip.Strip(rawOutput), tokenizerModel);
+
             // No filter ran, so every input token also reached the caller: output equals input and
             // savings are zero. Recording a negative or synthesized saving here would corrupt the
             // very ranking this exists to produce.

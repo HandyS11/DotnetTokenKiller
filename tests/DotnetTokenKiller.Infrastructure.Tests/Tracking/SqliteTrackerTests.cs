@@ -583,6 +583,55 @@ public class SqliteTrackerTests : IAsyncDisposable
         after.CommandDetails.Should().NotContainKey("run");
     }
 
+    [Fact]
+    public async Task GetHistoryAsync_UnrecognizedOutcome_FallsBackToFiltered()
+    {
+        // Bypasses RecordAsync (which only accepts the enum) via a raw INSERT, simulating a row
+        // written by a newer dtk with an outcome value this build does not know.
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "TotallyUnknownOutcome");
+
+        var history = await _sut.GetHistoryAsync(1, null, "bogus-cmd");
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_UnrecognizedOutcome_FallsBackToFiltered()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "TotallyUnknownOutcome");
+
+        var coverage = await _sut.GetCoverageAsync(1, null, "bogus-cmd");
+
+        coverage.Entries.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
+    }
+
+    /// <summary>
+    /// Inserts a row directly through the tracker's own live connection (found via reflection),
+    /// bypassing <see cref="SqliteTracker.RecordAsync"/> so an outcome string outside the
+    /// <see cref="RunOutcome"/> enum can be persisted, the way a newer dtk build might.
+    /// </summary>
+    /// <param name="command">The command name to store on the row.</param>
+    /// <param name="outcome">The raw, possibly-unrecognized outcome string to store on the row.</param>
+    private async Task InsertRawOutcomeRowAsync(string command, string outcome)
+    {
+        var connectionField = typeof(SqliteTracker)
+            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var connection = (SqliteConnection)connectionField.GetValue(_sut)!;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
+                              saved_tokens, savings_percentage, execution_time_ms, success, outcome)
+                          VALUES (@ts, @cmd, '/proj', 100, 100, 0, 0.0, 10.0, 1, @outcome)
+                          """;
+        cmd.Parameters.AddWithValue("@ts", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("@cmd", command);
+        cmd.Parameters.AddWithValue("@outcome", outcome);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     [Theory]
     [InlineData(RunOutcome.RawTailFallback)]
     [InlineData(RunOutcome.FilterFaulted)]

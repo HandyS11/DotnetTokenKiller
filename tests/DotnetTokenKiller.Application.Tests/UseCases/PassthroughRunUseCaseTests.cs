@@ -152,6 +152,26 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_MeasuredRunWithSubstantialOutput_TrackingThrows_KeepsTheExitCode()
+    {
+        // The exit code is captured before AnsiStrip.Strip/TokenEstimator.Estimate run. Both now
+        // execute inside TrackAsync's try/catch alongside RecordAsync, so a large, ANSI-laden
+        // captured output that exercises stripping and tokenization in full, followed by a failing
+        // store write, must still leave the child's exit code untouched.
+        var largeOutput = string.Join('\n',
+            Enumerable.Repeat("[32mBuild succeeded.[0m 0 Warning(s) 0 Error(s)", 5000));
+        _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
+                Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(largeOutput, "", 3));
+        _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("db error"));
+
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+
+        exitCode.Should().Be(3);
+    }
+
+    [Fact]
     public async Task RunAsync_CountsStderrTowardTheMeasuredTotal()
     {
         _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),

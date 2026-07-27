@@ -77,10 +77,12 @@ public sealed class FilteredRunUseCase(
             usedRawTailFallback = true;
         }
 
-        // A faulted filter normally yields non-empty raw text, so the raw-tail branch above usually
-        // cannot also have fired. But when the captured raw output is itself empty or whitespace on
-        // a failed command, both conditions hold at once. Checking faulted first is what resolves
-        // that case in favour of FilterFaulted, and that ordering is deliberate.
+        // A faulted filter yields the raw text unchanged (see ApplyFilterSafelyAsync), so when the
+        // captured raw output is itself empty or whitespace on a failed command, filterFaulted and
+        // usedRawTailFallback are BOTH true at once — the two outcomes are not mutually exclusive.
+        // The switch below resolves that overlap by checking a faulted filter ahead of the raw-tail
+        // fallback, so FilterFaulted wins; that ordering is deliberate, not incidental, and is
+        // covered by RunAsync_PrefersFilterFaulted_WhenBothConditionsOverlap.
         var outcome = (filterFaulted, usedRawTailFallback) switch
         {
             (true, _) => RunOutcome.FilterFaulted,

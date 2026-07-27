@@ -226,8 +226,8 @@ Unfiltered tokens: 48.0K
 ╭─────────┬──────────────────────┬──────┬────────────╮
 │ Command │ Outcome              │ Runs │ Raw tokens │
 ├─────────┼──────────────────────┼──────┼────────────┤
-│ publish │ PassthroughMeasured  │    4 │      48.0K │
 │ build   │ Filtered             │  435 │     442.3K │
+│ publish │ PassthroughMeasured  │    4 │      48.0K │
 ╰─────────┴──────────────────────┴──────┴────────────╯
 ```
 

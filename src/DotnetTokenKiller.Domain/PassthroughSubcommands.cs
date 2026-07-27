@@ -109,11 +109,24 @@ public static class PassthroughSubcommands
     /// <param name="dotnetArgs">
     /// The arguments passed to <c>dotnet</c>, starting at the subcommand.
     /// </param>
+    /// <remarks>
+    /// <c>RunStreamedAsync</c> (the path a measurable command takes) closes the child's stdin so a
+    /// child reading stdin sees EOF rather than hanging. That is wrong for <c>--interactive</c>,
+    /// which <c>dotnet publish</c>/<c>pack</c> use to prompt for private-feed credentials, so those
+    /// invocations are excluded here even though their subcommand is otherwise on the allowlist —
+    /// they fall back to the inherited-stdio passthrough path and record as
+    /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> instead.
+    /// </remarks>
     public static bool IsMeasurable(IReadOnlyList<string> dotnetArgs)
     {
         ArgumentNullException.ThrowIfNull(dotnetArgs);
 
-        return dotnetArgs.Count > 0 && Measurable.Contains(dotnetArgs[0]);
+        if (dotnetArgs.Count == 0 || !Measurable.Contains(dotnetArgs[0]))
+        {
+            return false;
+        }
+
+        return !dotnetArgs.Any(arg => string.Equals(arg, "--interactive", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

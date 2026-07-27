@@ -107,6 +107,39 @@ public class PassthroughSubcommandsTests
         PassthroughSubcommands.IsMeasurable(args).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData((object)new[] { "publish", "--interactive" })]
+    [InlineData((object)new[] { "pack", "--interactive" })]
+    [InlineData((object)new[] { "publish", "-c", "Release", "--interactive" })]
+    [InlineData((object)new[] { "publish", "--INTERACTIVE" })]
+    public void IsMeasurable_IsFalse_WhenInteractiveFlagIsPresent(string[] args)
+    {
+        // RunStreamedAsync closes the child's stdin. A command that may prompt for private-feed
+        // credentials over --interactive must take the inherited-stdio passthrough path instead of
+        // hanging/failing on EOF.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "publish" })]
+    [InlineData((object)new[] { "pack" })]
+    public void IsMeasurable_IsTrue_WhenInteractiveFlagIsAbsent(string[] args)
+    {
+        // Guards against a fix for --interactive accidentally disabling measurement generally.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "publish", "--interactive" })]
+    [InlineData((object)new[] { "pack", "--interactive" })]
+    public void CommandName_IsUnaffectedByTheInteractiveFlag(string[] args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        // The command still records under its real name; only measurability changes.
+        PassthroughSubcommands.CommandName(args).Should().Be(args[0]);
+    }
+
     [Fact]
     public void EveryMeasurableSubcommand_IsAlsoARecognisedVerb()
     {
