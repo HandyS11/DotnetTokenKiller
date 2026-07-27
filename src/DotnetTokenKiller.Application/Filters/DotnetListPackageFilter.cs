@@ -35,6 +35,9 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         return state.Variant switch
         {
             Variant.Plain => FormatPlain(state, exitCode),
+            Variant.Outdated => FormatAudit(
+                state, exitCode, "--outdated", ("package with updates", "packages with updates"),
+                entry => $"{entry.Resolved} → {entry.Latest}"),
             _ => string.Empty
         };
     }
@@ -86,6 +89,11 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         if (what.Contains("package references", StringComparison.OrdinalIgnoreCase))
         {
             state.Variant = Variant.Plain;
+        }
+        else if (what.Contains("no updates", StringComparison.OrdinalIgnoreCase))
+        {
+            state.Variant = Variant.Outdated;
+            state.CleanProjects++;
         }
         else if (what.Contains("updates to its packages", StringComparison.OrdinalIgnoreCase))
         {
@@ -217,6 +225,74 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
 
             sb.AppendLine(CultureInfo.InvariantCulture, $"  {project}: {string.Join(", ", own)}");
             groups++;
+        }
+
+        AppendTruncation(sb, omitted);
+        return sb.ToString().ReplaceLineEndings("\n");
+    }
+
+    /// <summary>Renders an audit variant: findings grouped by package, else a single clean line.</summary>
+    /// <param name="state">The parsed output.</param>
+    /// <param name="exitCode">The process exit code.</param>
+    /// <param name="flag">The variant's flag, e.g. <c>--outdated</c>.</param>
+    /// <param name="noun">Singular and plural forms of the finding noun.</param>
+    /// <param name="detail">Renders the variant-specific detail for one entry.</param>
+    private static string FormatAudit(
+        ParseState state,
+        int exitCode,
+        string flag,
+        (string Singular, string Plural) noun,
+        Func<Entry, string> detail)
+    {
+        var projects = state.Projects.Count;
+
+        if (state.Entries.Count == 0)
+        {
+            if (exitCode != 0)
+            {
+                return string.Empty;
+            }
+
+            var clean = string.Equals(flag, "--outdated", StringComparison.Ordinal)
+                ? $"all {projects} project{Plural(projects)} up to date"
+                : $"no {noun.Plural}, {projects} project{Plural(projects)}";
+            return $"✓ dotnet list package {flag} ({clean})\n";
+        }
+
+        // Group by package plus its rendered detail, so rows that say different things never merge.
+        var groups = state.Entries
+            .GroupBy(e => (e.Id, Detail: detail(e)))
+            .Select(g => (
+                g.Key.Id,
+                g.Key.Detail,
+                Projects: g.Select(e => e.Project).Distinct(StringComparer.Ordinal).ToList()))
+            .OrderBy(g => g.Id, StringComparer.Ordinal)
+            .ThenBy(g => g.Detail, StringComparer.Ordinal)
+            .ToList();
+
+        var affected = state.Entries.Select(e => e.Project).Distinct(StringComparer.Ordinal).Count();
+        var scope = affected == projects
+            ? $"all {projects} project{Plural(projects)}"
+            : $"{affected} of {projects} projects";
+
+        var sb = new StringBuilder();
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"dotnet list package {flag}: {groups.Count} {(groups.Count == 1 ? noun.Singular : noun.Plural)} ({scope})");
+
+        var omitted = 0;
+        for (var i = 0; i < groups.Count; i++)
+        {
+            if (i >= MaxGroups)
+            {
+                omitted = groups.Count - MaxGroups;
+                break;
+            }
+
+            var (id, det, projectNames) = groups[i];
+
+            // A count alone would be useless for a single project, so name it.
+            var where = projectNames.Count == 1 ? projectNames[0] : $"{projectNames.Count} projects";
+            sb.AppendLine(CultureInfo.InvariantCulture, $"  {id} {det} ({where})");
         }
 
         AppendTruncation(sb, omitted);

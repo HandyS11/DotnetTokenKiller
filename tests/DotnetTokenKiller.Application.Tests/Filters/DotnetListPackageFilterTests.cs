@@ -120,6 +120,72 @@ public class DotnetListPackageFilterTests
             "Gamma is one of the 3 projects and has no packages, so Shared is not present in every project");
     }
 
+    [Fact]
+    public Task Apply_OutdatedFixture_MatchesSnapshot()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_list_package_outdated_raw.txt"), exitCode: 0);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_Outdated_GroupsOnePackageAcrossProjects()
+    {
+        const string input = """
+                            Project `Alpha` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Analyzer             1.0.0       1.0.0      2.0.0
+
+                            Project `Beta` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Analyzer             1.0.0       1.0.0      2.0.0
+                            """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Contain("1 package with updates (all 2 projects)")
+            .And.Contain("Analyzer 1.0.0 → 2.0.0 (2 projects)");
+    }
+
+    [Fact]
+    public void Apply_Outdated_SplitsDistinctTransitionsForTheSamePackage()
+    {
+        const string input = """
+                            Project `Alpha` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Analyzer             1.0.0       1.0.0      2.0.0
+
+                            Project `Beta` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Analyzer             1.5.0       1.5.0      2.0.0
+                            """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Contain("Analyzer 1.0.0 → 2.0.0 (Alpha)")
+            .And.Contain("Analyzer 1.5.0 → 2.0.0 (Beta)");
+    }
+
+    [Fact]
+    public void Apply_Outdated_NoUpdates_CollapsesToOneLine()
+    {
+        const string input = """
+                              Determining projects to restore...
+                              All projects are up-to-date for restore.
+
+                            The following sources were used:
+                               https://api.nuget.org/v3/index.json
+
+                            The given project `Alpha` has no updates given the current sources.
+                            """;
+
+        _sut.Apply(input, exitCode: 0)
+            .Should().Be("✓ dotnet list package --outdated (all 1 project up to date)\n");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetListPackageFilterTests).Assembly;

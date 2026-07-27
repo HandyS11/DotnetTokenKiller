@@ -1,0 +1,46 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+Project `DotnetTokenKiller.Application` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
+Project `DotnetTokenKiller.Cli` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
+Project `DotnetTokenKiller.Domain` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
+Project `DotnetTokenKiller.Infrastructure` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
+Project `DotnetTokenKiller.Application.Tests` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
+Project `DotnetTokenKiller.Cli.IntegrationTests` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
+Project `DotnetTokenKiller.Domain.Tests` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
+Project `DotnetTokenKiller.Infrastructure.Tests` has the following updates to its packages
+   [net10.0]: 
+   Top-level Package           Requested        Resolved         Latest        
+   > SonarAnalyzer.CSharp      10.29.0.143774   10.29.0.143774   10.30.0.144632
+
