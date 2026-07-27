@@ -11,9 +11,10 @@ EXAMPLES:
     dtk gain --json
 
 OPTIONS:
-    -h, --help       Prints help information                                                
-        --days       Number of days of history to include (default: 30)                     
-        --project    Filter by current project directory                                    
-        --json       Output raw JSON instead of table                                       
-        --export     Export raw tracking records in the given format (csv)                  
-        --command    Filter results to a specific command (e.g. build, test, restore, clean)
+    -h, --help        Prints help information                                                
+        --days        Number of days of history to include (default: 30)                     
+        --project     Filter by current project directory                                    
+        --json        Output raw JSON instead of table                                       
+        --export      Export raw tracking records in the given format (csv)                  
+        --command     Filter results to a specific command (e.g. build, test, restore, clean)
+        --coverage    Report which commands run unfiltered, ranked by tokens at stake        

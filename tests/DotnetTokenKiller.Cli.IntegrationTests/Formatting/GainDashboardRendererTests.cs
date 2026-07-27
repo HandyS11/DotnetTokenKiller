@@ -192,4 +192,42 @@ public class GainDashboardRendererTests
     {
         GainDashboardRenderer.SavedColor(saved).Should().Be(expectedColor);
     }
+
+    [Fact]
+    public void RenderCoverage_ShowsUnfilteredTotalAndRanksEntriesInOrder()
+    {
+        var console = new TestConsole();
+        var coverage = new CoverageSummary(
+            [
+                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12)),
+                new CoverageDetail("pack", RunOutcome.PassthroughMeasured, 2, 6_000, TimeSpan.FromSeconds(3)),
+                new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, 9, 0, TimeSpan.FromSeconds(400))
+            ],
+            15,
+            54_000);
+
+        GainDashboardRenderer.RenderCoverage(console, coverage, "Global Scope");
+
+        var output = console.Output;
+        output.Should().Contain("publish");
+        output.Should().Contain("pack");
+        output.Should().Contain("watch");
+        output.IndexOf("publish", StringComparison.Ordinal)
+            .Should().BeLessThan(output.IndexOf("pack", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RenderCoverage_MarksUnmeasuredRowsDistinctlyFromZeroTokenMeasuredRows()
+    {
+        // "0 tokens because we did not look" must not read as "0 tokens because there were none".
+        var console = new TestConsole();
+        var coverage = new CoverageSummary(
+            [new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, 3, 0, TimeSpan.FromSeconds(30))],
+            3,
+            0);
+
+        GainDashboardRenderer.RenderCoverage(console, coverage, "Global Scope");
+
+        console.Output.Should().Contain("not measured");
+    }
 }

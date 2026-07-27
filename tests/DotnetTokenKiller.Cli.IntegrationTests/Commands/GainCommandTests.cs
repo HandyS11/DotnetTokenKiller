@@ -103,6 +103,18 @@ public class GainCommandTests
         return (new GainCommand(new GainReportUseCase(tracker), console, writer), console, writer);
     }
 
+    private static (GainCommand command, TestConsole console, StringWriter writer) CreateForCoverage(
+        CoverageSummary coverage)
+    {
+        var console = new TestConsole();
+        var writer = new StringWriter();
+        var tracker = new StubTracker
+        {
+            Coverage = coverage
+        };
+        return (new GainCommand(new GainReportUseCase(tracker), console, writer), console, writer);
+    }
+
     [Fact]
     public async Task ExecuteAsync_ExportCsv_NoRecords_WritesHeaderOnly()
     {
@@ -359,6 +371,120 @@ public class GainCommandTests
         await command.RunAsync(new GainCommandSettings(), CancellationToken.None);
 
         console.Output.Should().Contain("83.3%");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Coverage_ReportsUnfilteredCommands()
+    {
+        var coverage = new CoverageSummary(
+            [
+                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12)),
+                new CoverageDetail("build", RunOutcome.Filtered, 30, 300_000, TimeSpan.FromSeconds(90))
+            ],
+            34,
+            48_000);
+        var (command, console, _) = CreateForCoverage(coverage);
+
+        var exitCode = await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("publish");
+        console.Output.Should().Contain("PassthroughMeasured");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Coverage_NoData_WritesNoDataMessage()
+    {
+        var (command, console, _) = CreateForCoverage(new CoverageSummary([], 0, 0));
+
+        var exitCode = await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("No data yet");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CoverageJson_WritesParseableJsonWithNamedOutcomes()
+    {
+        var coverage = new CoverageSummary(
+            [new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12))],
+            4,
+            48_000);
+        var (command, _, writer) = CreateForCoverage(coverage);
+
+        var exitCode = await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true,
+            Json = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        var json = writer.ToString();
+        // The outcome must serialize as its name, not as the integer 3, or the JSON is unreadable.
+        json.Should().Contain("PassthroughMeasured");
+        var act = () => JsonDocument.Parse(json);
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Coverage_PassesFiltersToTheUseCase()
+    {
+        var tracker = new StubTracker
+        {
+            Coverage = new CoverageSummary([], 0, 0)
+        };
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), new StringWriter());
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true,
+            Project = true,
+            Command = "publish"
+        }, CancellationToken.None);
+
+        tracker.LastProjectPath.Should().Be(Environment.CurrentDirectory);
+        tracker.LastCommandFilter.Should().Be("publish");
+    }
+
+    [Fact]
+    public void CsvHeader_EndsWithOutcome()
+    {
+        // The export must carry the new dimension or the CSV silently loses it.
+        GainCommand.CsvHeader.Should().EndWith(",outcome");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ExportCsv_WritesTheOutcomeColumn()
+    {
+        var writer = new StringWriter();
+        var tracker = new StubTracker
+        {
+            History =
+            [
+                new CommandRecord(
+                    new DateTimeOffset(2025, 1, 15, 10, 0, 0, TimeSpan.Zero),
+                    "publish",
+                    "/my/project",
+                    new TokenStatistics(1000, 1000, 0, 0.0),
+                    TimeSpan.FromMilliseconds(500),
+                    success: true,
+                    outcome: RunOutcome.PassthroughMeasured)
+            ]
+        };
+        var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), writer);
+
+        await command.RunAsync(new GainCommandSettings
+        {
+            Export = "csv"
+        }, CancellationToken.None);
+
+        writer.ToString().Should().Contain("PassthroughMeasured");
     }
 
     private sealed class StubTracker : ITracker

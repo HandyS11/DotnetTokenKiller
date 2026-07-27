@@ -30,4 +30,9 @@ internal sealed class GainCommandSettings : CommandSettings
     [CommandOption("--command")]
     [Description("Filter results to a specific command (e.g. build, test, restore, clean)")]
     public string? Command { get; init; }
+
+    /// <summary>Gets a value indicating whether to report filtering coverage instead of savings.</summary>
+    [CommandOption("--coverage")]
+    [Description("Report which commands run unfiltered, ranked by tokens at stake")]
+    public bool Coverage { get; init; }
 }

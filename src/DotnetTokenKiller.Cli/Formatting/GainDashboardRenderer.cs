@@ -136,4 +136,53 @@ internal static class GainDashboardRenderer
             : 0;
         return $"[green]{new string('█', filled)}[/][grey]{new string('░', ImpactWidth - filled)}[/]";
     }
+
+    /// <summary>Writes the coverage report: which commands ran unfiltered, and what that cost.</summary>
+    /// <param name="console">The console to write to.</param>
+    /// <param name="coverage">The coverage summary to render.</param>
+    /// <param name="scope">Human-readable scope description (e.g. "Global Scope, last 7 days").</param>
+    public static void RenderCoverage(IAnsiConsole console, CoverageSummary coverage, string scope)
+    {
+        ArgumentNullException.ThrowIfNull(console);
+        ArgumentNullException.ThrowIfNull(coverage);
+
+        console.MarkupLine($"[bold cyan]DTK Filter Coverage ({scope.EscapeMarkup()})[/]");
+        console.MarkupLine($"[grey]{new string('═', RuleWidth)}[/]");
+        console.WriteLine();
+        console.MarkupLine($"Total runs:        {coverage.TotalRuns.ToString(CultureInfo.InvariantCulture)}");
+        console.MarkupLine(
+            $"[yellow]Unfiltered tokens: {TokenFormat.Tokens(coverage.TotalUnfilteredInputTokens)}[/]");
+        console.WriteLine();
+
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .AddColumn("Command")
+            .AddColumn("Outcome")
+            .AddColumn(new TableColumn("Runs").RightAligned())
+            .AddColumn(new TableColumn("Raw tokens").RightAligned());
+
+        foreach (var entry in coverage.Entries)
+        {
+            var tokens = entry.Outcome == RunOutcome.PassthroughUnmeasured
+                ? "[grey]not measured[/]"
+                : TokenFormat.Tokens(entry.TotalInputTokens);
+
+            table.AddRow(
+                entry.Command.EscapeMarkup(),
+                $"[{OutcomeColor(entry.Outcome)}]{entry.Outcome}[/]",
+                entry.RunCount.ToString(CultureInfo.InvariantCulture),
+                tokens);
+        }
+
+        console.Write(table);
+    }
+
+    /// <summary>Maps an outcome to the colour that conveys how much attention it deserves.</summary>
+    /// <param name="outcome">The outcome to colour.</param>
+    private static string OutcomeColor(RunOutcome outcome) => outcome switch
+    {
+        RunOutcome.Filtered => "green",
+        RunOutcome.RawTailFallback or RunOutcome.FilterFaulted => "yellow",
+        _ => "red"
+    };
 }
