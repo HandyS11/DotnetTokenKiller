@@ -416,6 +416,18 @@ public class DotnetRestoreFilterTests
         result.Should().Contain("MSB1009");
     }
 
+    [Fact]
+    public void Apply_AllUpToDateMarkerWithRestoredProject_ReportsProjectCount()
+    {
+        // Invariant: the "all up-to-date" verdict is only valid when no project work was counted.
+        const string input = "  All projects are up-to-date for restore.\n" +
+                             "  Restored /test/project/root/src/App.csproj (in 123 ms).";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (1 project, 0.12s)\n");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetRestoreFilterTests).Assembly;
