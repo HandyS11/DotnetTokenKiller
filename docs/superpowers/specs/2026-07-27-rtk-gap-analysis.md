@@ -38,6 +38,11 @@ Unhandled high-noise `dotnet` surface:
 Adjacent tooling **this repo itself uses** and would benefit from: `jb inspectcode` XML → compact
 findings, Stryker mutation output, coverage summaries.
 
+> **Resolved 2026-07-27.** Passthrough runs are now tracked. Allowlisted batch subcommands are
+> streamed through and measured; interactive ones are counted but not captured. `dtk gain
+> --coverage` ranks every command by unfiltered tokens at stake.
+> See [the design](2026-07-27-coverage-tracking-design.md).
+
 ## 2. No pipe mode
 
 rtk has `rtk pipe --filter <name>`. DTK can only filter what it launches itself, so CI logs,
@@ -53,6 +58,10 @@ broad.
   exceptions, and the raw-tail fallback path is not recorded either. rtk exposes exactly this via
   `gain --failures`. Adding a `fallback_reason` column plus `dtk gain --failures` is what would tell
   us which filter to fix next.
+
+  > **Resolved 2026-07-27.** Filter exceptions and raw-tail fallbacks are recorded as
+  > `FilterFaulted` and `RawTailFallback` respectively, and surface in `dtk gain --coverage`.
+  > Project-local extensible filters (the first bullet) remain open.
 
 ## 4. Output is fully buffered
 
@@ -129,9 +138,10 @@ asserts the rewrite comes back.
 1. §7 — collapse the subcommand list to one source of truth, with a test binding canonical list ↔
    Spectre registrations ↔ DI filter keys ↔ the generated hook. Pure refactor; makes every later
    subcommand safe to add.
-2. §1/§3 — track passthrough runs so the choice of the next filter is data-driven rather than a
-   guess.
-3. First new filter (`list package` is the leading candidate), then §2 pipe mode and §5 `dtk log`.
+2. ~~§1/§3 — track passthrough runs so the choice of the next filter is data-driven rather than a
+   guess.~~ **Done 2026-07-27** — see the resolution notes above.
+3. First new filter, now to be chosen from what `dtk gain --coverage` reports rather than guessed,
+   then §2 pipe mode and §5 `dtk log`.
 
 §7 is recommended first not because it is the most valuable, but because it is the prerequisite for
 the work that is, and skipping it fails silently.

@@ -77,8 +77,10 @@ public sealed class FilteredRunUseCase(
             usedRawTailFallback = true;
         }
 
-        // A faulted filter yields the raw text, which is non-empty, so the raw-tail branch above
-        // cannot also have fired. Checking faulted first documents that rather than relying on it.
+        // A faulted filter normally yields non-empty raw text, so the raw-tail branch above usually
+        // cannot also have fired. But when the captured raw output is itself empty or whitespace on
+        // a failed command, both conditions hold at once. Checking faulted first is what resolves
+        // that case in favour of FilterFaulted, and that ordering is deliberate.
         var outcome = (filterFaulted, usedRawTailFallback) switch
         {
             (true, _) => RunOutcome.FilterFaulted,

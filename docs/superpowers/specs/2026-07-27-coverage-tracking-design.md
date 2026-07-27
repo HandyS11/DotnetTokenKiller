@@ -48,9 +48,13 @@ ranking, hiding a frequently-run command that nobody has measured yet. The cover
 therefore sorts by total input tokens descending, then by run count descending, so the most-run
 unmeasured commands surface at the top of the zero-token block rather than in arbitrary order.
 
-`FilterFaulted` and `RawTailFallback` are mutually exclusive by construction, not by an ordering
-rule: when the filter throws, `filtered` becomes the raw stripped text, so the raw-tail branch
-(which requires `string.IsNullOrWhiteSpace(filtered)`) cannot also fire.
+`FilterFaulted` and `RawTailFallback` are *nearly* always mutually exclusive: when the filter
+throws, `filtered` becomes the raw stripped text, which is normally non-empty, so the raw-tail
+branch (which requires `string.IsNullOrWhiteSpace(filtered)`) does not also fire. But when the
+captured raw output is itself empty or whitespace on a failed command, both conditions hold at
+once — the filter faults *and* `filtered` is whitespace. It is the ordering in the outcome
+derivation, faulted checked first, that resolves this in favour of `FilterFaulted`, and that
+ordering is deliberate rather than incidental.
 
 ## Components
 
