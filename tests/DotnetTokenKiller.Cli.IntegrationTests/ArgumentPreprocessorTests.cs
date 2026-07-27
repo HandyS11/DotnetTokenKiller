@@ -346,4 +346,24 @@ public sealed class ArgumentPreprocessorTests
     {
         ArgumentPreprocessor.Normalize(["DOTNET", "BUILD"]).Should().Equal("dotnet", "build");
     }
+
+    [Fact]
+    public void IsPassthrough_ListPackage_IsNotPassthrough()
+    {
+        ArgumentPreprocessor.IsPassthrough(["dotnet", "list", "package"]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void InsertSeparator_ListPackage_SeparatesAfterBothTokens()
+    {
+        ArgumentPreprocessor.InsertSeparator(["dotnet", "list", "package", "--outdated"])
+            .Should().Equal("dotnet", "list", "package", "--", "--outdated");
+    }
+
+    [Fact]
+    public void Normalize_UppercaseListPackage_CanonicalizesBothTokens()
+    {
+        ArgumentPreprocessor.Normalize(["DOTNET", "LIST", "PACKAGE"])
+            .Should().Equal("dotnet", "list", "package");
+    }
 }

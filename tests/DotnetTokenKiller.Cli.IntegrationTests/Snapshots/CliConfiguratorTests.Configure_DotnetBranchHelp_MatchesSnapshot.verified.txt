@@ -15,8 +15,9 @@ OPTIONS:
     -h, --help    Prints help information
 
 COMMANDS:
-    build      Run dotnet build with filtered output  
-    test       Run dotnet test with filtered output   
-    restore    Run dotnet restore with filtered output
-    clean      Run dotnet clean with filtered output  
-    format     Run dotnet format with filtered output 
+    build      Run dotnet build with filtered output        
+    test       Run dotnet test with filtered output         
+    restore    Run dotnet restore with filtered output      
+    clean      Run dotnet clean with filtered output        
+    format     Run dotnet format with filtered output       
+    list       Run dotnet list commands with filtered output

@@ -21,4 +21,7 @@ public static class FilterKeys
 
     /// <summary>Key for the <c>dotnet format</c> output filter.</summary>
     public const string Format = DotnetSubcommands.Format;
+
+    /// <summary>Key for the <c>dotnet list package</c> output filter.</summary>
+    public const string ListPackage = DotnetSubcommands.ListPackage;
 }

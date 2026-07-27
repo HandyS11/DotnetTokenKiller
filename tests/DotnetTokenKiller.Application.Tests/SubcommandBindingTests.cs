@@ -55,7 +55,8 @@ public sealed class SubcommandBindingTests
         // not shrink or grow in lockstep with it, or this test could never fail. Adding a
         // subcommand means updating this literal by hand — that is the intended tripwire, since
         // it forces whoever adds one to also regenerate the committed hook.
-        const string expectedTuple = "_DTK_SUBCOMMANDS = (\"build\", \"clean\", \"format\", \"restore\", \"test\")";
+        const string expectedTuple =
+            "_DTK_SUBCOMMANDS = (\"build\", \"clean\", \"format\", \"list package\", \"restore\", \"test\")";
 
         foreach (var (name, hook) in new (string Name, string Hook)[]
                  {
@@ -80,7 +81,7 @@ public sealed class SubcommandBindingTests
         // above: deriving the expected alternation from DotnetSubcommands.Ordered would make the
         // test move in lockstep with the thing it is supposed to be pinning. Adding a
         // subcommand requires updating this literal, which forces regenerating the hooks too.
-        const string expected = "rewrites `dotnet build|test|restore|clean|format`";
+        const string expected = "rewrites `dotnet build|test|restore|clean|format|list package`";
 
         HookScriptTemplates.ClaudeHook.Should().Contain(
             expected,
@@ -118,10 +119,11 @@ public sealed class SubcommandBindingTests
         // Pinned literals, for the same reason as the hook assertions above: deriving these from
         // DotnetSubcommands.Ordered would make the expectation move in lockstep with the source, and
         // the test could never fail. Adding a subcommand means editing these by hand.
-        const string expectedProse = "build, test, restore, clean, and format";
-        const string expectedAlternation = "build|test|restore|clean|format";
-        const string expectedSlashAlternation = "build/test/restore/clean/format";
-        const string expectedBacktickProse = "`dotnet build`, `test`, `restore`, `clean`, and `format`";
+        const string expectedProse = "build, test, restore, clean, format, and list package";
+        const string expectedAlternation = "build|test|restore|clean|format|list package";
+        const string expectedSlashAlternation = "build/test/restore/clean/format/list package";
+        const string expectedBacktickProse =
+            "`dotnet build`, `test`, `restore`, `clean`, `format`, and `list package`";
 
         IntegrationInstructions.SubcommandProse.Should().Be(
             expectedProse,

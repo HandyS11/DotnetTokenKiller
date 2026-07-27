@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean|format` to `dtk dotnet ...`.
+"""Claude Code PreToolUse hook: rewrites `dotnet build|test|restore|clean|format|list package` to `dtk dotnet ...`.
 
 Reads the Bash tool input from stdin (JSON with a "tool_input" object whose
 "command" field holds the shell command) and, when a qualifying dotnet command
@@ -11,7 +11,7 @@ import json
 import re
 import sys
 
-_DTK_SUBCOMMANDS = ("build", "clean", "format", "restore", "test")
+_DTK_SUBCOMMANDS = ("build", "clean", "format", "list package", "restore", "test")
 
 # Multi-token subcommands are declared with spaces ("list package") but must match any run
 # of whitespace between their tokens. Longest-first ordering matters because Python's

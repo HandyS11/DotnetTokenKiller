@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Application.Helpers;
+using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
@@ -61,7 +62,7 @@ public sealed class FilteredRunUseCase(
 
         var raw = result.StdOut + result.StdErr;
         var stripped = AnsiStrip.Strip(raw);
-        var commandSlug = args.Count > 0 ? args[0] : command;
+        var commandSlug = ResolveCommandSlug(command, args);
 
         var (filtered, filterFaulted) = await ApplyFilterSafelyAsync(filter, stripped, result.ExitCode, verbosityLevel)
             .ConfigureAwait(false);
@@ -113,6 +114,27 @@ public sealed class FilteredRunUseCase(
             .ConfigureAwait(false);
 
         return result.ExitCode;
+    }
+
+    /// <summary>Resolves the name a run is recorded and tee'd under.</summary>
+    /// <param name="command">The executable that was run, used only when there are no arguments.</param>
+    /// <param name="args">Arguments passed to the executable, starting at the subcommand.</param>
+    /// <returns>
+    /// The canonical subcommand name when <paramref name="args"/> begins with one, otherwise the
+    /// first argument (an unfiltered passthrough subcommand) or <paramref name="command"/>.
+    /// </returns>
+    /// <remarks>
+    /// The canonical name, not <c>args[0]</c>: a multi-token subcommand would otherwise be recorded
+    /// under its first token ("list"), which no report or coverage row would ever match.
+    /// </remarks>
+    private static string ResolveCommandSlug(string command, IReadOnlyList<string> args)
+    {
+        if (DotnetSubcommands.TryMatch(args, out var subcommand))
+        {
+            return subcommand.Name;
+        }
+
+        return args.Count > 0 ? args[0] : command;
     }
 
     /// <summary>Applies the filter, falling back to raw output if the filter throws (never breaks the workflow).</summary>

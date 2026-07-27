@@ -36,8 +36,11 @@ public sealed class CompletionCommandTests
     [InlineData("powershell")]
     public async Task ExecuteAsync_Script_OffersEveryDotnetSubcommand(string shell)
     {
-        // Anti-drift: the completion lists are generated from DotnetSubcommands.Ordered,
-        // so every supported subcommand (including 'format') must appear in every shell script.
+        // Anti-drift: the completion lists are generated from
+        // CompletionCandidates(DotnetSubcommands.Ordered), so every candidate must appear in every
+        // shell script. A multi-token subcommand contributes only its first token (`list package`
+        // yields `list`), so iterating the canonical names themselves would assert on text the
+        // scripts deliberately never emit — completing the remaining tokens is not implemented.
         var (command, _, writer) = Create();
 
         await command.RunAsync(new CompletionCommandSettings
@@ -46,7 +49,7 @@ public sealed class CompletionCommandTests
         }, CancellationToken.None);
 
         var script = writer.ToString();
-        foreach (var subcommand in DotnetSubcommands.All)
+        foreach (var subcommand in CompletionCommand.CompletionCandidates(DotnetSubcommands.Ordered))
         {
             script.Should().Contain(subcommand, "the {0} completion must offer '{1}'", shell, subcommand);
         }

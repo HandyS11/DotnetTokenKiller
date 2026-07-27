@@ -15,7 +15,7 @@ public class DotnetSubcommandsTests
     [Fact]
     public void Ordered_IsTheDisplayOrderUsedByTheCli()
     {
-        DotnetSubcommands.Ordered.Should().Equal("build", "test", "restore", "clean", "format");
+        DotnetSubcommands.Ordered.Should().Equal("build", "test", "restore", "clean", "format", "list package");
     }
 
     [Fact]

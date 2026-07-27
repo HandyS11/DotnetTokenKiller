@@ -55,6 +55,7 @@ internal static class IntegrationInstructions
         dtk dotnet clean
         dtk dotnet format
         dtk dotnet format --verify-no-changes
+        dtk dotnet list package --outdated
         ```
 
         - All arguments and flags are forwarded to `dotnet` unchanged.

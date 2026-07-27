@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
@@ -13,6 +14,7 @@ namespace DotnetTokenKiller.Application.Tests.UseCases;
 public class FilteredRunUseCaseTests
 {
     private static readonly string[] BuildArgs = ["build"];
+    private static readonly string[] ListPackageArgs = ["list", "package"];
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
 
@@ -948,6 +950,24 @@ public class FilteredRunUseCaseTests
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_MultiTokenSubcommand_TracksTheFullCanonicalName()
+    {
+        // args[0] alone would record "list", which would never line up with the "list package" rows
+        // the coverage report already holds from the passthrough path — making the before/after
+        // savings comparison compare two different keys.
+        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("Project 'A' has the following package references", "", 0));
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns((string?)null);
+
+        await _sut.RunAsync(new DotnetListPackageFilter(), "dotnet", ListPackageArgs, 0);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r!.Command == "list package"),
             Arg.Any<CancellationToken>());
     }
 }

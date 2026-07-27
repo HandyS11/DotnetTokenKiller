@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetRestoreFilter>(FilterKeys.Restore);
         services.AddKeyedTransient<IOutputFilter, DotnetCleanFilter>(FilterKeys.Clean);
         services.AddKeyedTransient<IOutputFilter, DotnetFormatFilter>(FilterKeys.Format);
+        services.AddKeyedTransient<IOutputFilter, DotnetListPackageFilter>(FilterKeys.ListPackage);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
         services.AddTransient<RtkHookCoexistence>();

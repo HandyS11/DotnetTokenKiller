@@ -16,15 +16,24 @@ namespace DotnetTokenKiller.Domain;
 ///   <item><description>
 ///   Add the <c>Dotnet*Command</c> and its registration in <c>CliConfigurator</c>.
 ///   </description></item>
-///   <item><description>Update the two pinned literals in <c>SubcommandBindingTests</c>.</description></item>
+///   <item><description>
+///   Check <c>CompletionCommand.CompletionCandidates</c> — a multi-token subcommand contributes only
+///   its first token, and completing the remaining tokens is not implemented.
+///   </description></item>
+///   <item><description>
+///   Update the pinned literals in <c>SubcommandBindingTests</c>, <c>DotnetSubcommandsTests</c>,
+///   <c>AiderIntegratorTests</c>, and <c>GitHubCopilotIntegratorTests</c> — the last two pin fully
+///   rendered instruction text, not just the list — and accept the CLI help snapshots.
+///   </description></item>
 ///   <item><description>
 ///   Regenerate <c>.claude/hooks/dotnet-to-dtk.py</c> from <c>HookScriptTemplates.ClaudeHook</c>
 ///   (e.g. run <c>dtk integrate claude</c> against a scratch directory and copy the result over).
 ///   </description></item>
 ///   <item><description>
-///   Update the subcommand prose in <c>src/DotnetTokenKiller.Application/Integration/</c> —
-///   <c>IntegrationInstructions.cs</c> and <c>CopilotCliIntegrator.cs</c> still hardcode the list
-///   in the instruction text shipped to users, and nothing guards them.
+///   Add an example line to <c>IntegrationInstructions.UsageBody</c>. The prose lists themselves are
+///   generated from <see cref="Ordered"/> and guarded by
+///   <c>SubcommandBindingTests.IntegrationProse_ListsEveryCanonicalSubcommand</c>, so they need no
+///   hand-editing — but that test's pinned literals do.
 ///   </description></item>
 /// </list>
 /// </remarks>
@@ -45,11 +54,20 @@ public static class DotnetSubcommands
     /// <summary>The <c>dotnet format</c> subcommand.</summary>
     public const string Format = "format";
 
+    /// <summary>The <c>dotnet list package</c> subcommand.</summary>
+    /// <remarks>
+    /// Two tokens, unlike every other entry.
+    /// <see cref="TryMatch(IReadOnlyList{string}, out SubcommandMatch)"/> exists for this: matching
+    /// only <c>args[1]</c> would capture <c>dotnet list reference</c>, which dtk must forward
+    /// untouched.
+    /// </remarks>
+    public const string ListPackage = "list package";
+
     /// <summary>
     /// Canonical display order, used for CLI routing, help, and completion. Changing this order
     /// changes the order commands are listed in <c>dtk dotnet --help</c>.
     /// </summary>
-    public static readonly IReadOnlyList<string> Ordered = [Build, Test, Restore, Clean, Format];
+    public static readonly IReadOnlyList<string> Ordered = [Build, Test, Restore, Clean, Format, ListPackage];
 
     /// <summary>
     /// The canonical names as a case-insensitive set, for asserting membership and binding other
