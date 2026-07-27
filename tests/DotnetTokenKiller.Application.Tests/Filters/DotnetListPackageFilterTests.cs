@@ -186,6 +186,68 @@ public class DotnetListPackageFilterTests
             .Should().Be("✓ dotnet list package --outdated (all 1 project up to date)\n");
     }
 
+    [Fact]
+    public Task Apply_DeprecatedFixture_MatchesSnapshot()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_list_package_deprecated_raw.txt"), exitCode: 0);
+        return Verify(result);
+    }
+
+    [Fact]
+    public Task Apply_VulnerableFixture_MatchesSnapshot()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_list_package_vulnerable_raw.txt"), exitCode: 0);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_DeprecatedFixture_DropsThePerProjectCleanLines()
+    {
+        _sut.Apply(LoadFixture("dotnet_list_package_deprecated_raw.txt"), exitCode: 0)
+            .Should().NotContain("has no deprecated packages");
+    }
+
+    [Fact]
+    public void Apply_DeprecatedFixture_KeepsReasonAndAlternative()
+    {
+        _sut.Apply(LoadFixture("dotnet_list_package_deprecated_raw.txt"), exitCode: 0)
+            .Should().Contain("xunit 2.9.3 — Legacy → xunit.v3 >= 0.0.0");
+    }
+
+    [Fact]
+    public void Apply_VulnerableFixture_KeepsSeverityAndAdvisory()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_list_package_vulnerable_raw.txt"), exitCode: 0);
+
+        result.Should().Contain("2 vulnerable packages (1 of 2 projects)")
+            .And.Contain("Legacy.Crypto 2.1.0 — Critical https://github.com/advisories/GHSA-dddd-eeee-ffff");
+    }
+
+    [Fact]
+    public void Apply_NoVulnerablePackages_CollapsesToOneLine()
+    {
+        const string input = """
+                            The given project `Alpha` has no vulnerable packages given the current sources.
+                            The given project `Beta` has no vulnerable packages given the current sources.
+                            """;
+
+        _sut.Apply(input, exitCode: 0)
+            .Should().Be("✓ dotnet list package --vulnerable (no vulnerable packages, 2 projects)\n");
+    }
+
+    [Fact]
+    public void Apply_MultiWordDeprecationReason_IsNotSplit()
+    {
+        const string input = """
+                            Project `Alpha` has the following deprecated packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Reason(s)       Alternative
+                               > Risky                1.0.0       1.0.0      Critical Bugs   Safe >= 2.0.0
+                            """;
+
+        _sut.Apply(input, exitCode: 0).Should().Contain("Risky 1.0.0 — Critical Bugs → Safe >= 2.0.0");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetListPackageFilterTests).Assembly;

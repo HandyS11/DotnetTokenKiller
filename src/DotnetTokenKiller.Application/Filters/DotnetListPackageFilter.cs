@@ -38,6 +38,12 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
             Variant.Outdated => FormatAudit(
                 state, exitCode, "--outdated", ("package with updates", "packages with updates"),
                 entry => $"{entry.Resolved} → {entry.Latest}"),
+            Variant.Deprecated => FormatAudit(
+                state, exitCode, "--deprecated", ("deprecated package", "deprecated packages"),
+                entry => $"{Version(entry)} — {entry.Reason}{Arrow(entry.Alternative)}"),
+            Variant.Vulnerable => FormatAudit(
+                state, exitCode, "--vulnerable", ("vulnerable package", "vulnerable packages"),
+                entry => $"{Version(entry)} — {entry.Severity} {entry.Advisory}".TrimEnd()),
             _ => string.Empty
         };
     }
@@ -160,6 +166,11 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         !string.Equals(entry.Requested, entry.Resolved, StringComparison.OrdinalIgnoreCase)
             ? $"{entry.Requested}→{entry.Resolved}"
             : entry.Resolved;
+
+    /// <summary>Renders <c> → alternative</c>, or empty when the package suggests no replacement.</summary>
+    /// <param name="alternative">The <c>Alternative</c> cell, which is often absent.</param>
+    private static string Arrow(string alternative) =>
+        alternative.Length > 0 ? $" → {alternative}" : string.Empty;
 
     private static string FormatPlain(ParseState state, int exitCode)
     {

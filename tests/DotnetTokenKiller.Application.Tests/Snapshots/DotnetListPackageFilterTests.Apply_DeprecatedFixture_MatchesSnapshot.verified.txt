@@ -1,0 +1,3 @@
+dotnet list package --deprecated: 2 deprecated packages (4 of 8 projects)
+  Verify.Xunit 31.12.5 — Legacy → Verify.XunitV3 >= 0.0.0 (2 projects)
+  xunit 2.9.3 — Legacy → xunit.v3 >= 0.0.0 (4 projects)

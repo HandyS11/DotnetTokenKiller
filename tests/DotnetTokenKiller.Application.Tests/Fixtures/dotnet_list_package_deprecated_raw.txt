@@ -1,0 +1,32 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+The given project `DotnetTokenKiller.Application` has no deprecated packages given the current sources.
+The given project `DotnetTokenKiller.Cli` has no deprecated packages given the current sources.
+The given project `DotnetTokenKiller.Domain` has no deprecated packages given the current sources.
+The given project `DotnetTokenKiller.Infrastructure` has no deprecated packages given the current sources.
+Project `DotnetTokenKiller.Application.Tests` has the following deprecated packages
+   [net10.0]: 
+   Top-level Package      Requested   Resolved   Reason(s)   Alternative            
+   > Verify.Xunit         31.12.5     31.12.5    Legacy      Verify.XunitV3 >= 0.0.0
+   > xunit                2.9.3       2.9.3      Legacy      xunit.v3 >= 0.0.0      
+
+Project `DotnetTokenKiller.Cli.IntegrationTests` has the following deprecated packages
+   [net10.0]: 
+   Top-level Package      Requested   Resolved   Reason(s)   Alternative            
+   > Verify.Xunit         31.12.5     31.12.5    Legacy      Verify.XunitV3 >= 0.0.0
+   > xunit                2.9.3       2.9.3      Legacy      xunit.v3 >= 0.0.0      
+
+Project `DotnetTokenKiller.Domain.Tests` has the following deprecated packages
+   [net10.0]: 
+   Top-level Package      Requested   Resolved   Reason(s)   Alternative      
+   > xunit                2.9.3       2.9.3      Legacy      xunit.v3 >= 0.0.0
+
+Project `DotnetTokenKiller.Infrastructure.Tests` has the following deprecated packages
+   [net10.0]: 
+   Top-level Package      Requested   Resolved   Reason(s)   Alternative      
+   > xunit                2.9.3       2.9.3      Legacy      xunit.v3 >= 0.0.0
+

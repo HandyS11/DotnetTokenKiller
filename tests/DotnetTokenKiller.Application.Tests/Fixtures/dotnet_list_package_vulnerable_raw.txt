@@ -1,0 +1,12 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+The given project `Alpha` has no vulnerable packages given the current sources.
+Project `Beta` has the following vulnerable packages
+   [net10.0]:
+   Top-level Package        Requested   Resolved   Severity   Advisory URL
+   > Fragile.Parser         1.0.0       1.0.0      High       https://github.com/advisories/GHSA-aaaa-bbbb-cccc
+   > Legacy.Crypto          2.1.0       2.1.0      Critical   https://github.com/advisories/GHSA-dddd-eeee-ffff
