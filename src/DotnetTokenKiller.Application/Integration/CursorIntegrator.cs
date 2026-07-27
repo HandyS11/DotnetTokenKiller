@@ -14,7 +14,7 @@ public sealed class CursorIntegrator : IProviderIntegrator
     private static readonly string CursorRule =
         $"""
         ---
-        description: Use dtk instead of dotnet for build, test, restore, clean, and format commands
+        description: Use dtk instead of dotnet for {IntegrationInstructions.SubcommandProse} commands
         globs:
           - "**/*.cs"
           - "**/*.csproj"

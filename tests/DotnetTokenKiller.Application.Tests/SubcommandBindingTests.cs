@@ -120,12 +120,22 @@ public sealed class SubcommandBindingTests
         // the test could never fail. Adding a subcommand means editing these by hand.
         const string expectedProse = "build, test, restore, clean, and format";
         const string expectedAlternation = "build|test|restore|clean|format";
+        const string expectedSlashAlternation = "build/test/restore/clean/format";
+        const string expectedBacktickProse = "`dotnet build`, `test`, `restore`, `clean`, and `format`";
 
         IntegrationInstructions.SubcommandProse.Should().Be(
             expectedProse,
             "the shared instructions must name every dtk-handled subcommand, or users are told to "
             + "keep using raw dotnet for the newest one");
         IntegrationInstructions.SubcommandAlternation.Should().Be(expectedAlternation);
+        IntegrationInstructions.SubcommandSlashAlternation.Should().Be(
+            expectedSlashAlternation,
+            "the Aider conf-section comment must name every dtk-handled subcommand, or a user "
+            + "reading .aider.conf.yml would not know dtk covers the newest one");
+        IntegrationInstructions.SubcommandBacktickProse.Should().Be(
+            expectedBacktickProse,
+            "the Claude Code skill's 'Drop-in replacement for' sentence must name every dtk-handled "
+            + "subcommand, or a user reading the skill would not know dtk covers the newest one");
     }
 
     [Fact]

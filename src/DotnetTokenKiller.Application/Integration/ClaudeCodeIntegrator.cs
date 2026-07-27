@@ -42,8 +42,8 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     /// </summary>
     private const string GlobalHookCommand = """python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py""";
 
-    private const string SkillMarkdown =
-        """
+    private static readonly string SkillMarkdown =
+        $"""
         ---
         name: dotnet-token-killer
         description: 'Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage when building, testing, restoring, cleaning, or formatting .NET projects.'
@@ -61,7 +61,7 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         ## Usage
 
-        Drop-in replacement for `dotnet build`, `test`, `restore`, `clean`, and `format`. All arguments and flags are forwarded unchanged:
+        Drop-in replacement for {IntegrationInstructions.SubcommandBacktickProse}. All arguments and flags are forwarded unchanged:
 
         ```sh
         dtk dotnet build MyProject.slnx
