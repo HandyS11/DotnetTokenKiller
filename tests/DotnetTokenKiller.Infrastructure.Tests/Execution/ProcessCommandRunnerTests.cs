@@ -321,4 +321,73 @@ public sealed class ProcessCommandRunnerTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task RunStreamedAsync_EchoesStdoutToTheSink_AndReturnsTheSameText()
+    {
+        var stdOut = new StringWriter();
+        var stdErr = new StringWriter();
+        var sut = new ProcessCommandRunner();
+
+        var result = await sut.RunStreamedAsync(
+            "dotnet", ["--version"], stdOut, stdErr);
+
+        result.ExitCode.Should().Be(0);
+        result.StdOut.Should().NotBeEmpty();
+        stdOut.ToString().Should().Be(result.StdOut);
+    }
+
+    [Fact]
+    public async Task RunStreamedAsync_ReturnsNonZeroExitCode_ForAFailingCommand()
+    {
+        var stdOut = new StringWriter();
+        var stdErr = new StringWriter();
+        var sut = new ProcessCommandRunner();
+
+        var result = await sut.RunStreamedAsync(
+            "dotnet", ["--this-option-does-not-exist"], stdOut, stdErr);
+
+        result.ExitCode.Should().NotBe(0);
+    }
+
+    [Fact]
+    public async Task RunStreamedAsync_Throws_WhenTheCommandCannotBeStarted()
+    {
+        var sut = new ProcessCommandRunner();
+
+        var act = async () => await sut.RunStreamedAsync(
+            "dtk-no-such-binary-exists", [], TextWriter.Null, TextWriter.Null);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task RunStreamedAsync_EchoesEveryLineOfMultiLineOutput()
+    {
+        var stdOut = new StringWriter();
+        var sut = new ProcessCommandRunner();
+
+        var result = await sut.RunStreamedAsync(
+            "dotnet", ["--info"], stdOut, TextWriter.Null);
+
+        result.ExitCode.Should().Be(0);
+        stdOut.ToString().Should().Contain(".NET SDK");
+        stdOut.ToString().Split('\n').Length.Should().BeGreaterThan(5);
+    }
+
+    [Fact]
+    public async Task RunStreamedAsync_ReturnsTextUsingTheSinksNewLine_WhenSinkNewLineIsNonDefault()
+    {
+        // TextWriter.WriteLineAsync terminates lines with the sink's own NewLine, not
+        // Environment.NewLine. The returned string must mirror exactly what was echoed to the
+        // sink, so a distinctive non-default NewLine here makes any mismatch unambiguous.
+        var stdOut = new StringWriter { NewLine = "<EOL>" };
+        var sut = new ProcessCommandRunner();
+
+        var result = await sut.RunStreamedAsync(
+            "dotnet", ["--info"], stdOut, TextWriter.Null);
+
+        result.ExitCode.Should().Be(0);
+        result.StdOut.Should().Be(stdOut.ToString());
+    }
 }

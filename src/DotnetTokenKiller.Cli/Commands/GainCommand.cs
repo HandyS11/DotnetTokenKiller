@@ -20,7 +20,7 @@ internal sealed class GainCommand(
     TextWriter output) : AsyncCommand<GainCommandSettings>
 {
     internal const string CsvHeader =
-        "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms,success";
+        "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms,success,outcome";
 
     /// <inheritdoc/>
     protected override Task<int> ExecuteAsync(
@@ -51,10 +51,35 @@ internal sealed class GainCommand(
             foreach (var r in records)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)},{(r.Success ? 1 : 0)}");
+                    $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)},{(r.Success ? 1 : 0)},{r.Outcome}");
             }
 
             await output.WriteAsync(sb.ToString()).ConfigureAwait(false);
+            return 0;
+        }
+
+        if (settings.Coverage)
+        {
+            var coverage = await gainReport.GetCoverageAsync(settings.Days, projectPath, commandFilter,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (settings.Json)
+            {
+                var coverageJson = JsonSerializer.Serialize(coverage,
+                    GainSummaryJsonContext.Default.CoverageSummary);
+                await output.WriteLineAsync(coverageJson).ConfigureAwait(false);
+                return 0;
+            }
+
+            if (coverage.TotalRuns == 0)
+            {
+                console.MarkupLine(
+                    "[grey]No data yet. Run some [bold]dtk dotnet[/] commands to start tracking coverage.[/]");
+                return 0;
+            }
+
+            GainDashboardRenderer.RenderCoverage(console, coverage, BuildScope(settings));
             return 0;
         }
 

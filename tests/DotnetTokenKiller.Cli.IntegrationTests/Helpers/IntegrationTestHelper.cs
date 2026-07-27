@@ -20,7 +20,7 @@ internal static class IntegrationTestHelper
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
     /// <summary>Root temp directory shared by all invocations in this test run.
-    /// Each <see cref="RunProcessAsync"/> call creates a unique subdirectory so
+    /// Each <c>RunProcessAsync</c> call creates a unique subdirectory so
     /// that parallel test collections never share SQLite databases or tee logs.</summary>
     private static readonly string TestDataRoot =
         Path.Combine(Path.GetTempPath(), $"dtk-tests-{Guid.NewGuid():N}");
@@ -65,6 +65,18 @@ internal static class IntegrationTestHelper
         return RunProcessAsync("dotnet", args);
     }
 
+    /// <summary>Runs dtk and also returns the isolated tracking-database path it wrote to,
+    /// so a test can assert on what was recorded.</summary>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    internal static async Task<(string Output, int ExitCode, string DbPath)> RunDtkWithDbAsync(
+        params string[] args)
+    {
+        var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
+        var dbPath = Path.Combine(isolatedDir, "tracking.db");
+        var (output, exitCode) = await RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir);
+        return (output, exitCode, dbPath);
+    }
+
     internal static double CalculateSavings(string rawOutput, string filteredOutput)
     {
         var inputTokens = rawOutput.Length / 4;
@@ -77,13 +89,17 @@ internal static class IntegrationTestHelper
         return (inputTokens - outputTokens) * 100.0 / inputTokens;
     }
 
-    private static async Task<(string Output, int ExitCode)> RunProcessAsync(
+    private static Task<(string Output, int ExitCode)> RunProcessAsync(
         string executable, IEnumerable<string> args)
     {
         // Each invocation gets its own subdirectory so parallel test collections
         // never share SQLite databases, tee logs, or config files.
-        var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
+        return RunProcessAsync(executable, args, Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N")));
+    }
 
+    private static async Task<(string Output, int ExitCode)> RunProcessAsync(
+        string executable, IEnumerable<string> args, string isolatedDir)
+    {
         var psi = new ProcessStartInfo(executable)
         {
             RedirectStandardOutput = true,

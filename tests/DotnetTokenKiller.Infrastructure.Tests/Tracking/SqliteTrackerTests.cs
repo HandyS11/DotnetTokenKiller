@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tracking;
@@ -25,7 +26,8 @@ public class SqliteTrackerTests : IAsyncDisposable
         int savedTokens = 850,
         double savingsPct = 85.0,
         DateTimeOffset? timestamp = null,
-        bool success = true)
+        bool success = true,
+        RunOutcome outcome = RunOutcome.Filtered)
     {
         return new CommandRecord(
             timestamp ?? DateTimeOffset.UtcNow,
@@ -33,7 +35,8 @@ public class SqliteTrackerTests : IAsyncDisposable
             projectPath,
             new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
             TimeSpan.FromMilliseconds(500),
-            success);
+            success,
+            outcome);
     }
 
     [Fact]
@@ -529,5 +532,307 @@ public class SqliteTrackerTests : IAsyncDisposable
                 Directory.Delete(dir, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task RecordAsync_RoundTripsOutcome()
+    {
+        await _sut.RecordAsync(MakeRecord(outcome: RunOutcome.PassthroughMeasured));
+
+        var history = await _sut.GetHistoryAsync(1, null);
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.PassthroughMeasured);
+    }
+
+    [Fact]
+    public async Task RecordAsync_DefaultsToFiltered_WhenOutcomeNotSupplied()
+    {
+        await _sut.RecordAsync(MakeRecord());
+
+        var history = await _sut.GetHistoryAsync(1, null);
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_IsUnchanged_WhenPassthroughRowsAreAdded()
+    {
+        // The guarantee that shipping coverage tracking does not move anybody's gain numbers.
+        // If the outcome exclusion is ever dropped, this fails loudly.
+        await _sut.RecordAsync(MakeRecord("build", inputTokens: 1000, outputTokens: 100, savedTokens: 900));
+        var before = await _sut.GetSummaryAsync(1, null);
+
+        await _sut.RecordAsync(MakeRecord(
+            "publish",
+            inputTokens: 50_000,
+            outputTokens: 50_000,
+            savedTokens: 0,
+            savingsPct: 0.0,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("run", inputTokens: 0, outputTokens: 0, savedTokens: 0,
+            savingsPct: 0.0, outcome: RunOutcome.PassthroughUnmeasured));
+
+        var after = await _sut.GetSummaryAsync(1, null);
+
+        after.TotalCommands.Should().Be(before.TotalCommands);
+        after.TotalInputTokens.Should().Be(before.TotalInputTokens);
+        after.TotalOutputTokens.Should().Be(before.TotalOutputTokens);
+        after.TotalSavedTokens.Should().Be(before.TotalSavedTokens);
+        after.AverageSavingsPercentage.Should().BeApproximately(before.AverageSavingsPercentage, 0.001);
+        after.CommandDetails.Should().NotContainKey("publish");
+        after.CommandDetails.Should().NotContainKey("run");
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_UnrecognizedOutcome_FallsBackToFiltered()
+    {
+        // Bypasses RecordAsync (which only accepts the enum) via a raw INSERT, simulating a row
+        // written by a newer dtk with an outcome value this build does not know.
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "TotallyUnknownOutcome");
+
+        var history = await _sut.GetHistoryAsync(1, null, "bogus-cmd");
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_UnrecognizedOutcome_FallsBackToFiltered()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "TotallyUnknownOutcome");
+
+        var coverage = await _sut.GetCoverageAsync(1, null, "bogus-cmd");
+
+        coverage.Entries.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
+    }
+
+    [Fact]
+    public async Task GetHistoryAsync_DifferentlyCasedOutcome_ParsesInsteadOfFallingBackToFiltered()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "passthroughmeasured");
+
+        var history = await _sut.GetHistoryAsync(1, null, "bogus-cmd");
+
+        history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.PassthroughMeasured);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_DifferentlyCasedOutcome_ParsesInsteadOfFallingBackToFiltered()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", "passthroughmeasured");
+
+        var coverage = await _sut.GetCoverageAsync(1, null, "bogus-cmd");
+
+        coverage.Entries.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.PassthroughMeasured);
+    }
+
+    /// <summary>
+    /// Inserts a row directly through the tracker's own live connection (found via reflection),
+    /// bypassing <see cref="SqliteTracker.RecordAsync"/> so an outcome string outside the
+    /// <see cref="RunOutcome"/> enum can be persisted, the way a newer dtk build might.
+    /// </summary>
+    /// <param name="command">The command name to store on the row.</param>
+    /// <param name="outcome">The raw, possibly-unrecognized outcome string to store on the row.</param>
+    private async Task InsertRawOutcomeRowAsync(string command, string outcome)
+    {
+        var connectionField = typeof(SqliteTracker)
+            .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var connection = (SqliteConnection)connectionField.GetValue(_sut)!;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
+                              saved_tokens, savings_percentage, execution_time_ms, success, outcome)
+                          VALUES (@ts, @cmd, '/proj', 100, 100, 0, 0.0, 10.0, 1, @outcome)
+                          """;
+        cmd.Parameters.AddWithValue("@ts", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("@cmd", command);
+        cmd.Parameters.AddWithValue("@outcome", outcome);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    [Theory]
+    [InlineData(RunOutcome.RawTailFallback)]
+    [InlineData(RunOutcome.FilterFaulted)]
+    public async Task GetSummaryAsync_IncludesDegradedFilteredRuns(RunOutcome outcome)
+    {
+        // These ran a filter — badly — so they still represent real savings and stay in the math.
+        await _sut.RecordAsync(MakeRecord("build", outcome: outcome));
+
+        var summary = await _sut.GetSummaryAsync(1, null);
+
+        summary.TotalCommands.Should().Be(1);
+        summary.CommandDetails.Should().ContainKey("build");
+    }
+
+    [Fact]
+    public async Task Schema_AddsOutcomeColumnToLegacyDatabase_DefaultingExistingRowsToFiltered()
+    {
+        var dbPath = Path.Combine(Path.GetTempPath(), $"dtk-legacy-{Guid.NewGuid():N}.db");
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+        try
+        {
+            // Build the pre-outcome schema by hand and seed a row, as an older dtk would have.
+            await using (var legacy = new SqliteConnection(connectionString))
+            {
+                await legacy.OpenAsync();
+                await using var cmd = legacy.CreateCommand();
+                cmd.CommandText = """
+                                  CREATE TABLE commands (
+                                      id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                      timestamp TEXT NOT NULL,
+                                      command TEXT NOT NULL,
+                                      project_path TEXT NOT NULL,
+                                      input_tokens INTEGER NOT NULL,
+                                      output_tokens INTEGER NOT NULL,
+                                      saved_tokens INTEGER NOT NULL,
+                                      savings_percentage REAL NOT NULL,
+                                      execution_time_ms REAL NOT NULL,
+                                      success INTEGER NOT NULL DEFAULT 1
+                                  );
+                                  INSERT INTO commands
+                                      (timestamp, command, project_path, input_tokens, output_tokens,
+                                       saved_tokens, savings_percentage, execution_time_ms, success)
+                                  VALUES (@ts, 'build', '/legacy', 900, 90, 810, 90.0, 12.0, 1);
+                                  """;
+                cmd.Parameters.AddWithValue("@ts",
+                    DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            await using var tracker = new SqliteTracker(connectionString);
+            var history = await tracker.GetHistoryAsync(1, null);
+
+            var stored = history.Should().ContainSingle().Subject;
+            stored.Command.Should().Be("build");
+            stored.Outcome.Should().Be(RunOutcome.Filtered);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath))
+            {
+                File.Delete(dbPath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_RanksByInputTokensDescending()
+    {
+        await _sut.RecordAsync(MakeRecord("pack", inputTokens: 500, outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 9000, outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("list package", inputTokens: 3000,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Select(e => e.Command)
+            .Should().ContainInOrder("publish", "list package", "pack");
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_BreaksTokenTiesByRunCount()
+    {
+        // Every PassthroughUnmeasured row has zero tokens. Without the tiebreak the most-run
+        // unmeasured command would sort arbitrarily and stay invisible.
+        for (var i = 0; i < 5; i++)
+        {
+            await _sut.RecordAsync(MakeRecord("watch", inputTokens: 0,
+                outcome: RunOutcome.PassthroughUnmeasured));
+        }
+
+        await _sut.RecordAsync(MakeRecord("run", inputTokens: 0, outcome: RunOutcome.PassthroughUnmeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Select(e => e.Command).Should().ContainInOrder("watch", "run");
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_GroupsByCommandAndOutcome()
+    {
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 100,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 200,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 0,
+            outcome: RunOutcome.PassthroughUnmeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        var measured = coverage.Entries.Should()
+            .ContainSingle(e => e.Command == "publish" && e.Outcome == RunOutcome.PassthroughMeasured).Subject;
+        measured.RunCount.Should().Be(2);
+        measured.TotalInputTokens.Should().Be(300);
+
+        coverage.Entries.Should()
+            .ContainSingle(e => e.Command == "publish" && e.Outcome == RunOutcome.PassthroughUnmeasured);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_IncludesFilteredRuns_SoCoveredAndUncoveredCanBeCompared()
+    {
+        await _sut.RecordAsync(MakeRecord("build", inputTokens: 7000));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 100,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Should().Contain(e => e.Command == "build" && e.Outcome == RunOutcome.Filtered);
+        coverage.TotalRuns.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_TotalUnfilteredInputTokens_CountsOnlyPassthroughRows()
+    {
+        await _sut.RecordAsync(MakeRecord("build", inputTokens: 7000));
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 400,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("pack", inputTokens: 600,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.TotalUnfilteredInputTokens.Should().Be(1000);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_HonoursTheCommandFilter()
+    {
+        await _sut.RecordAsync(MakeRecord("publish", inputTokens: 400,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("pack", inputTokens: 600,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, null, "publish");
+
+        coverage.Entries.Should().ContainSingle().Which.Command.Should().Be("publish");
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_HonoursTheProjectFilter()
+    {
+        await _sut.RecordAsync(MakeRecord("publish", "/a", inputTokens: 400,
+            outcome: RunOutcome.PassthroughMeasured));
+        await _sut.RecordAsync(MakeRecord("publish", "/b", inputTokens: 600,
+            outcome: RunOutcome.PassthroughMeasured));
+
+        var coverage = await _sut.GetCoverageAsync(1, "/a");
+
+        coverage.Entries.Should().ContainSingle().Which.TotalInputTokens.Should().Be(400);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_ReturnsEmpty_WhenNothingRecorded()
+    {
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Should().BeEmpty();
+        coverage.TotalRuns.Should().Be(0);
+        coverage.TotalUnfilteredInputTokens.Should().Be(0);
     }
 }

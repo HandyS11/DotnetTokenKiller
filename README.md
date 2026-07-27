@@ -173,6 +173,7 @@ dtk gain               # last 30 days
 dtk gain --days 7
 dtk gain --project     # current project only
 dtk gain --json
+dtk gain --coverage    # report which commands run unfiltered, ranked by tokens at stake
 ```
 
 Example:
@@ -205,6 +206,30 @@ By Command
 ```
 
 To reset tracking data: `dtk reset` (or `dtk reset --force` to skip confirmation).
+
+### Filter Coverage
+
+`dtk gain --coverage` reports which commands run unfiltered (no filter exists, or the filter
+degraded to a fallback), ranked by how many raw tokens are at stake — a punch list for where the
+next filter would pay off most. It composes with `--days`, `--project`, `--command`, and `--json`,
+but not with `--export`.
+
+Example:
+
+```sh
+DTK Filter Coverage (Global Scope)
+════════════════════════════════════════════════════════════
+
+Total runs:        2049
+Unfiltered tokens: 48.0K
+
+╭─────────┬──────────────────────┬──────┬────────────╮
+│ Command │ Outcome              │ Runs │ Raw tokens │
+├─────────┼──────────────────────┼──────┼────────────┤
+│ build   │ Filtered             │  435 │     442.3K │
+│ publish │ PassthroughMeasured  │    4 │      48.0K │
+╰─────────┴──────────────────────┴──────┴────────────╯
+```
 
 ## Diagnostics
 

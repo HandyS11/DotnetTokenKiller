@@ -1,5 +1,6 @@
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests;
@@ -28,5 +29,70 @@ public class PassthroughIntegrationTests
 
         exitCode.Should().Be(0);
         output.Should().NotBeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_MeasurableSubcommand_RecordsAMeasuredRow()
+    {
+        // The deliverable of this task: an unfiltered run now leaves a trace. `dotnet list package`
+        // needs a project, so it fails here — a failed run must still be recorded and measured.
+        var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "list", "package");
+
+        var rows = ReadCommandRows(dbPath);
+
+        rows.Should().ContainSingle();
+        rows[0].Command.Should().Be("list package");
+        rows[0].Outcome.Should().Be("PassthroughMeasured");
+        rows[0].InputTokens.Should().BeGreaterThan(0);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_UnmeasurableSubcommand_RecordsAnUnmeasuredRow()
+    {
+        var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "--version");
+
+        var rows = ReadCommandRows(dbPath);
+
+        rows.Should().ContainSingle();
+        rows[0].Command.Should().Be("--version");
+        rows[0].Outcome.Should().Be("PassthroughUnmeasured");
+        rows[0].InputTokens.Should().Be(0);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_MeasurableSubcommand_StillPrintsOutput()
+    {
+        // Streaming must not swallow what the user would otherwise have seen.
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "list", "package");
+
+        exitCode.Should().NotBe(0);
+        output.Should().NotBeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_UnmeasurableSubcommand_MatchesRawDotnetExitCode()
+    {
+        var (_, dtkExit) = await IntegrationTestHelper.RunDtkAsync("dotnet", "--version");
+        var (_, dotnetExit) = await IntegrationTestHelper.RunDotnetAsync("--version");
+
+        dtkExit.Should().Be(dotnetExit);
+    }
+
+    private static List<(string Command, string Outcome, long InputTokens)> ReadCommandRows(string dbPath)
+    {
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT command, outcome, input_tokens FROM commands ORDER BY id";
+
+        var rows = new List<(string, string, long)>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2)));
+        }
+
+        return rows;
     }
 }

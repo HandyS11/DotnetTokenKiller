@@ -63,7 +63,7 @@ public sealed class FilteredRunUseCase(
         var stripped = AnsiStrip.Strip(raw);
         var commandSlug = args.Count > 0 ? args[0] : command;
 
-        var filtered = await ApplyFilterSafelyAsync(filter, stripped, result.ExitCode, verbosityLevel)
+        var (filtered, filterFaulted) = await ApplyFilterSafelyAsync(filter, stripped, result.ExitCode, verbosityLevel)
             .ConfigureAwait(false);
 
         var logHint = await GetTeeHintAsync(stripped, commandSlug, result.ExitCode, cancellationToken)
@@ -76,6 +76,19 @@ public sealed class FilteredRunUseCase(
             filtered = BuildRawTailFallback(commandLine, result.ExitCode, stripped, showLogHint ? logHint : null);
             usedRawTailFallback = true;
         }
+
+        // A faulted filter yields the raw text unchanged (see ApplyFilterSafelyAsync), so when the
+        // captured raw output is itself empty or whitespace on a failed command, filterFaulted and
+        // usedRawTailFallback are BOTH true at once — the two outcomes are not mutually exclusive.
+        // The switch below resolves that overlap by checking a faulted filter ahead of the raw-tail
+        // fallback, so FilterFaulted wins; that ordering is deliberate, not incidental, and is
+        // covered by RunAsync_PrefersFilterFaulted_WhenBothConditionsOverlap.
+        var outcome = (filterFaulted, usedRawTailFallback) switch
+        {
+            (true, _) => RunOutcome.FilterFaulted,
+            (false, true) => RunOutcome.RawTailFallback,
+            (false, false) => RunOutcome.Filtered
+        };
 
         filtered = NormalizeGlyphs(filtered, config);
 
@@ -96,7 +109,7 @@ public sealed class FilteredRunUseCase(
         stopwatch.Stop();
 
         await TrackIfEnabledAsync(config, commandSlug, stripped, filtered, stopwatch.Elapsed, result.ExitCode,
-                cancellationToken)
+                outcome, cancellationToken)
             .ConfigureAwait(false);
 
         return result.ExitCode;
@@ -107,8 +120,11 @@ public sealed class FilteredRunUseCase(
     /// <param name="stripped">The ANSI-stripped command output.</param>
     /// <param name="exitCode">The process exit code.</param>
     /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
-    /// <returns>The filtered output, or the stripped output if filtering fails.</returns>
-    private async Task<string> ApplyFilterSafelyAsync(
+    /// <returns>
+    /// The filtered output and whether the filter threw. A faulted filter yields the stripped
+    /// output unchanged.
+    /// </returns>
+    private async Task<(string Output, bool Faulted)> ApplyFilterSafelyAsync(
         IOutputFilter filter,
         string stripped,
         int exitCode,
@@ -116,7 +132,7 @@ public sealed class FilteredRunUseCase(
     {
         try
         {
-            return filter.Apply(stripped, exitCode);
+            return (filter.Apply(stripped, exitCode), false);
         }
         catch
         {
@@ -126,7 +142,7 @@ public sealed class FilteredRunUseCase(
                 await output.WriteLineAsync("[filter error — using raw output]").ConfigureAwait(false);
             }
 
-            return stripped;
+            return (stripped, true);
         }
     }
 
@@ -192,6 +208,7 @@ public sealed class FilteredRunUseCase(
         string filtered,
         TimeSpan elapsed,
         int exitCode,
+        RunOutcome outcome,
         CancellationToken cancellationToken)
     {
         if (!config.Tracking.Enabled)
@@ -212,7 +229,8 @@ public sealed class FilteredRunUseCase(
                 Environment.CurrentDirectory,
                 new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
                 elapsed,
-                exitCode == 0);
+                exitCode == 0,
+                outcome);
 
             await tracker.RecordAsync(record, cancellationToken).ConfigureAwait(false);
         }

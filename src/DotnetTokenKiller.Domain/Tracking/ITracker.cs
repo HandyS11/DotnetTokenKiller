@@ -30,6 +30,17 @@ public interface ITracker
         string? commandFilter = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Returns the filtering-coverage breakdown for the given time window.</summary>
+    /// <param name="days">Number of days of history to include.</param>
+    /// <param name="projectPath">Optional project path filter.</param>
+    /// <param name="commandFilter">Optional command name filter (e.g. "publish").</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<CoverageSummary> GetCoverageAsync(
+        int days,
+        string? projectPath,
+        string? commandFilter = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Deletes records older than the retention period.</summary>
     /// <param name="retentionDays">Number of days to retain.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

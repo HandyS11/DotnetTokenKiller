@@ -33,4 +33,18 @@ public sealed class GainReportUseCase(ITracker tracker)
     {
         return tracker.GetHistoryAsync(days, projectPath, commandFilter, cancellationToken);
     }
+
+    /// <summary>Returns the filtering-coverage breakdown for the given time window.</summary>
+    /// <param name="days">Number of days of history to include.</param>
+    /// <param name="projectPath">Optional project path filter.</param>
+    /// <param name="commandFilter">Optional command name filter (e.g. "publish").</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task<CoverageSummary> GetCoverageAsync(
+        int days,
+        string? projectPath,
+        string? commandFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        return tracker.GetCoverageAsync(days, projectPath, commandFilter, cancellationToken);
+    }
 }
