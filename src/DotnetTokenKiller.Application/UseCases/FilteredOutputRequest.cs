@@ -10,7 +10,10 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <param name="CommandSlug">The canonical name this run is tracked and tee'd under.</param>
 /// <param name="DisplayCommandLine">The command line quoted in the raw-tail fallback header.</param>
 /// <param name="Source">Where the raw output came from.</param>
-/// <param name="Options">Display flags; expected to be already <see cref="OutputOptions.Normalized"/>.</param>
+/// <param name="Options">
+/// Display flags. The pipeline calls <see cref="OutputOptions.Normalized"/> on this defensively, so
+/// callers do not need to pre-normalize.
+/// </param>
 /// <param name="StartTimestamp">
 /// A <see cref="System.Diagnostics.Stopwatch.GetTimestamp"/> value taken by the caller. The caller
 /// owns it because the run path must include the child process's time while the pipe path must not.

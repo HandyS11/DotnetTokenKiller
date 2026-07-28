@@ -130,4 +130,23 @@ public class FilteredOutputPipelineTests
 
         await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task ProcessAsync_NormalizesOptions_WhenCallerPassesUnnormalizedQuiet()
+    {
+        // A Task-5 caller could pass Quiet: true without also calling .Normalized(). The pipeline
+        // must not trust the caller's Options as-is — it normalizes defensively so quiet mode is
+        // enforced by construction, not by convention.
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, _teeService, writer, _configProvider);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        var request = new FilteredOutputRequest(
+            _filter, "raw output", 0, "build", "dotnet build", RunSource.Run,
+            new OutputOptions(VerbosityLevel: 2, ShowLogHint: true, Quiet: true),
+            Stopwatch.GetTimestamp());
+
+        await sut.ProcessAsync(request);
+
+        writer.ToString().Should().NotContain("[raw output]");
+    }
 }

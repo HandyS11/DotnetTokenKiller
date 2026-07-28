@@ -38,7 +38,7 @@ public sealed class FilteredOutputPipeline(
         ArgumentNullException.ThrowIfNull(request);
 
         var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
-        var options = request.Options;
+        var options = request.Options.Normalized();
         var stripped = AnsiStrip.Strip(request.RawOutput);
 
         var (filtered, filterFaulted) =
