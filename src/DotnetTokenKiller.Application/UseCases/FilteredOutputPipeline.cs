@@ -45,8 +45,7 @@ public sealed class FilteredOutputPipeline(
             await ApplyFilterSafelyAsync(request.Filter, stripped, request.ExitCode, options.VerbosityLevel)
                 .ConfigureAwait(false);
 
-        var logHint = await GetTeeHintAsync(stripped, request.CommandSlug, request.ExitCode, cancellationToken)
-            .ConfigureAwait(false);
+        var logHint = await GetTeeHintAsync(stripped, request, cancellationToken).ConfigureAwait(false);
 
         var usedRawTailFallback = false;
         if (request.ExitCode != 0 && string.IsNullOrWhiteSpace(filtered))
@@ -163,13 +162,20 @@ public sealed class FilteredOutputPipeline(
 
     private async Task<string?> GetTeeHintAsync(
         string stripped,
-        string commandSlug,
-        int exitCode,
+        FilteredOutputRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
-            return await teeService.TeeAndHintAsync(stripped, commandSlug, exitCode, cancellationToken)
+            var header = new TeeLogHeader(
+                request.DisplayCommandLine,
+                Environment.CurrentDirectory,
+                request.ExitCode,
+                request.Source,
+                DateTimeOffset.UtcNow);
+
+            return await teeService
+                .TeeAndHintAsync(stripped, request.CommandSlug, header, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch

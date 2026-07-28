@@ -19,7 +19,7 @@ public class PipeFilterUseCaseTests
     public PipeFilterUseCaseTests()
     {
         _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
             Arg.Any<CancellationToken>()).Returns((string?)null);
     }
 

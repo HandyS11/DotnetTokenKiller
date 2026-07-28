@@ -6,12 +6,15 @@ public interface ITeeService
     /// <summary>Writes the raw output to a tee file if configured, and returns a hint pointing to it.</summary>
     /// <param name="rawOutput">The raw command output to tee.</param>
     /// <param name="commandSlug">A short identifier for the command, used in the file name.</param>
-    /// <param name="exitCode">The process exit code; used to decide whether to tee in "failures" mode.</param>
+    /// <param name="header">
+    /// The metadata block written ahead of the body. Its exit code decides whether to tee in
+    /// "failures" mode, and its timestamp names the file.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<string?> TeeAndHintAsync(
         string rawOutput,
         string commandSlug,
-        int exitCode,
+        TeeLogHeader header,
         CancellationToken cancellationToken = default);
 
     /// <summary>Deletes all tee log files from the configured tee directory.</summary>

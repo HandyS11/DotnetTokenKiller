@@ -22,7 +22,7 @@ public class FilteredOutputPipelineTests
     public FilteredOutputPipelineTests()
     {
         _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
             Arg.Any<CancellationToken>()).Returns((string?)null);
         _sut = new FilteredOutputPipeline(_tracker, _teeService, TextWriter.Null, _configProvider);
     }
@@ -111,7 +111,7 @@ public class FilteredOutputPipelineTests
     public async Task ProcessAsync_TeeThrows_DoesNotSurfaceException()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
             Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("io error"));
 
         var act = async () => await _sut.ProcessAsync(Request());
@@ -148,5 +148,23 @@ public class FilteredOutputPipelineTests
         await sut.ProcessAsync(request);
 
         writer.ToString().Should().NotContain("[raw output]");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PassesTheRequestsCommandLineAndSourceToTheTeeService()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.ProcessAsync(Request(exitCode: 1, source: RunSource.Pipe));
+
+        await _teeService.Received(1).TeeAndHintAsync(
+            Arg.Any<string>(),
+            "build",
+            Arg.Is<TeeLogHeader>(h =>
+                h!.CommandLine == "dotnet build" &&
+                h.ExitCode == 1 &&
+                h.Source == RunSource.Pipe &&
+                h.ProjectPath == Environment.CurrentDirectory),
+            Arg.Any<CancellationToken>());
     }
 }
