@@ -251,6 +251,19 @@ public class GainDashboardRendererTests
 
         GainDashboardRenderer.RenderCoverage(console, coverage, "Global Scope");
 
-        console.Output.Should().Contain("Source").And.Contain("pipe").And.Contain("run");
+        console.Output.Should().Contain("Source");
+
+        // "Total runs:        5" also contains the substring "run", so asserting on the whole
+        // output would pass even if the RunSource.Run branch of the cell ternary were deleted.
+        // Instead, isolate the two "build" table rows and require one to carry "pipe" and the
+        // other "run", proving both branches of the cell ternary actually rendered.
+        var buildRows = console.Output
+            .Split('\n')
+            .Where(line => line.Contains("build", StringComparison.Ordinal))
+            .ToList();
+
+        buildRows.Should().HaveCount(2);
+        buildRows.Should().ContainSingle(line => line.Contains("pipe", StringComparison.Ordinal));
+        buildRows.Should().ContainSingle(line => line.Contains("run", StringComparison.Ordinal));
     }
 }
