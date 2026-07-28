@@ -4,15 +4,16 @@ namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>
 /// Shared "how to use dtk" instructions markdown, embedded verbatim by every provider integrator
-/// that documents dtk usage (Aider, Cursor, Gemini CLI, GitHub Copilot, JetBrains AI, Windsurf).
-/// Keeping this text in one place means those six copies can never drift out of sync; each
-/// integrator still supplies its own heading, section markers, or frontmatter around it.
+/// that documents dtk usage (Aider, Claude Code, Cursor, Gemini CLI, GitHub Copilot, GitHub Copilot
+/// CLI, JetBrains AI, Windsurf). Keeping this text in one place means those copies can never drift
+/// out of sync; each integrator still supplies its own heading, section markers, or frontmatter
+/// around it.
 /// </summary>
 internal static class IntegrationInstructions
 {
     /// <summary>
     /// The canonical subcommands as an Oxford-comma prose list, e.g.
-    /// <c>build, test, restore, clean, and format</c>.
+    /// <c>build, test, restore, clean, format, and list package</c>.
     /// </summary>
     internal static readonly string SubcommandProse = BuildProse(DotnetSubcommands.Ordered);
 
@@ -25,9 +26,9 @@ internal static class IntegrationInstructions
     /// <summary>
     /// The canonical subcommands as an Oxford-comma prose list of backtick-wrapped names, with the
     /// first name also carrying a <c>dotnet </c> prefix inside its backticks, e.g.
-    /// <c>`dotnet build`, `test`, `restore`, `clean`, and `format`</c>. Used where the surrounding
-    /// sentence reads as "a drop-in replacement for `dotnet &lt;subcommand&gt;`" rather than as a
-    /// list of dtk's own subcommands.
+    /// <c>`dotnet build`, `test`, `restore`, `clean`, `format`, and `list package`</c>. Used where the
+    /// surrounding sentence reads as "a drop-in replacement for `dotnet &lt;subcommand&gt;`" rather
+    /// than as a list of dtk's own subcommands.
     /// </summary>
     internal static readonly string SubcommandBacktickProse = BuildProse(AsDotnetInvocations(DotnetSubcommands.Ordered));
 

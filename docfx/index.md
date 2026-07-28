@@ -33,7 +33,7 @@ dtk dotnet list package --outdated
   `--deprecated`, and `--vulnerable` (~80.9% savings)
 - **Token analytics** — tracks per-command token savings over time with `dtk gain`
 - **Log teeing** — optionally saves raw output to disk for post-mortem inspection
-- **AI agent integration** — `dtk integrate` installs hooks for 7 providers: Claude Code, GitHub Copilot, Gemini CLI, Cursor, Windsurf, Aider, and JetBrains AI
+- **AI agent integration** — `dtk integrate` installs hooks for 8 providers: Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Cursor, Windsurf, Aider, and JetBrains AI
 - **Self-diagnostics** — `dtk doctor` validates your setup in one command
 - **Shell completion** — bash, zsh, fish, and PowerShell via `dtk completion`
 

@@ -95,6 +95,36 @@ variants group findings by package across projects instead of repeating them per
 clean audit run (no findings) collapses to a single `✓` line. Output is capped at 30 package groups,
 with an explicit truncation line if there are more.
 
+If the output arrives in a shape dtk does not recognise — `--format json`, a localised SDK, or a
+future column layout — dtk prints it unfiltered behind a
+`⚠ dotnet list package: unrecognized output, passed through unfiltered` line rather than guessing.
+`dotnet list package` always exits 0, even when it reports vulnerable packages, so this is the only
+signal available: a clean `✓` from dtk always means dtk read the tables, never that it failed to.
+
+#### Which spellings are filtered
+
+Only the two-tokens-adjacent form is filtered. These are:
+
+```sh
+dtk dotnet list package                 # filtered
+dtk dotnet list package --outdated      # filtered
+dtk dotnet list package MyApp.sln       # filtered (target after the two tokens)
+```
+
+These pass through to `dotnet` **unfiltered**, with the raw output shown as-is:
+
+```sh
+dtk dotnet list MyApp.sln package       # NOT filtered — target between the two tokens
+dtk dotnet package list                 # NOT filtered — noun-first spelling
+```
+
+`dotnet list <PROJECT|SOLUTION|FILE> package` is the SDK's primary documented synopsis, and
+`dotnet package list` exists in .NET 10, so both are legitimate spellings — dtk simply does not
+match them yet, because its subcommand matcher requires the tokens to be adjacent at the front of
+the argument list. Passthrough is safe (the output is correct, just unfiltered) and these runs are
+recorded under `list` and `package` respectively in `dtk gain --coverage`. The generated agent hooks
+do not rewrite them either.
+
 ### `dtk integrate`
 
 Install dtk integration artifacts for an AI assistant provider:

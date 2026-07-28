@@ -8,8 +8,15 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Prints a shell completion script for dtk.</summary>
 /// <remarks>
 /// The <c>__DOTNET_CMDS_*__</c> placeholders in the templates are filled at runtime from
-/// <see cref="DotnetSubcommands.Ordered"/>, so the supported dotnet subcommands
-/// (build/test/restore/clean/format) can never drift between the CLI and its completions.
+/// <see cref="DotnetSubcommands.Ordered"/>, so the set of subcommands offered can never drift
+/// between the CLI and its completions.
+/// <para>
+/// Only the <em>first</em> token of each canonical name is emitted, deliberately: a multi-token name
+/// such as <c>list package</c> would otherwise make the generated fish script malformed
+/// (<c>-a list package</c> is two arguments) and would offer bare <c>package</c> as a bash candidate.
+/// So a multi-token subcommand completes as far as <c>list</c> and no further — completing its
+/// remaining tokens is not implemented.
+/// </para>
 /// </remarks>
 /// <param name="console">The Spectre.Console output sink for human-facing errors.</param>
 /// <param name="output">The raw text writer for the completion script, bypassing console width wrapping.</param>
