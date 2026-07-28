@@ -81,7 +81,7 @@ public sealed class DoctorCommandTests : IDisposable
             await command.RunAsync(CancellationToken.None);
 
             console.Output.Should().Contain(SqliteTracker.GetDefaultDbPath());
-            console.Output.Should().Contain(FileTeeService.GetDefaultTeeDir());
+            console.Output.Should().Contain(TeeDirectoryResolver.GetDefault());
         }
         finally
         {

@@ -34,7 +34,7 @@ internal sealed class DoctorCommand(
 
         var teeDirectory = EnvironmentOverride.Read("DTK_TEE_DIR")
                            ?? config.Tee.Directory
-                           ?? FileTeeService.GetDefaultTeeDir();
+                           ?? TeeDirectoryResolver.GetDefault();
 
         var checks = await doctorUseCase.RunAsync(dbPath, teeDirectory, cancellationToken)
             .ConfigureAwait(false);

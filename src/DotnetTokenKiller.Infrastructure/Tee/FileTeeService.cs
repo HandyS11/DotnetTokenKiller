@@ -48,7 +48,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
                 return null;
             }
 
-            var teeDir = GetTeeDir(teeConfig, teeDirOverride);
+            var teeDir = TeeDirectoryResolver.Resolve(teeConfig, teeDirOverride);
             Directory.CreateDirectory(teeDir);
             RestrictToOwnerOnly(teeDir);
 
@@ -81,7 +81,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         try
         {
             var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var teeDir = GetTeeDir(config.Tee, teeDirOverride);
+            var teeDir = TeeDirectoryResolver.Resolve(config.Tee, teeDirOverride);
             if (!Directory.Exists(teeDir))
             {
                 return;
@@ -188,35 +188,6 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         {
             File.Delete(files[i]);
         }
-    }
-
-    private static string GetTeeDir(TeeConfig config, string? teeDirOverride)
-    {
-        if (teeDirOverride is not null)
-        {
-            return teeDirOverride;
-        }
-
-        var envVar = EnvironmentOverride.Read("DTK_TEE_DIR");
-        if (envVar is not null)
-        {
-            return envVar;
-        }
-
-        if (!string.IsNullOrEmpty(config.Directory))
-        {
-            return config.Directory;
-        }
-
-        return GetDefaultTeeDir();
-    }
-
-    /// <summary>Returns the default tee output directory used when no override is configured.</summary>
-    /// <returns>The platform-default tee directory.</returns>
-    public static string GetDefaultTeeDir()
-    {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "dtk", "tee");
     }
 
     private static string SanitizeSlug(string slug)
