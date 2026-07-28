@@ -457,10 +457,10 @@ public class GainCommandTests
     }
 
     [Fact]
-    public void CsvHeader_EndsWithOutcome()
+    public void CsvHeader_EndsWithOutcomeThenSource()
     {
-        // The export must carry the new dimension or the CSV silently loses it.
-        GainCommand.CsvHeader.Should().EndWith(",outcome");
+        // The export must carry both new dimensions, in order, or the CSV silently loses them.
+        GainCommand.CsvHeader.Should().EndWith(",outcome,source");
     }
 
     [Fact]

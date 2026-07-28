@@ -236,4 +236,21 @@ public class GainDashboardRendererTests
 
         console.Output.Should().Contain("not measured");
     }
+
+    [Fact]
+    public void RenderCoverage_ShowsTheRunSource()
+    {
+        var console = new TestConsole();
+        var coverage = new CoverageSummary(
+            [
+                new CoverageDetail("build", RunOutcome.Filtered, RunSource.Pipe, 3, 9000, TimeSpan.FromSeconds(1)),
+                new CoverageDetail("build", RunOutcome.Filtered, RunSource.Run, 2, 4000, TimeSpan.FromSeconds(1))
+            ],
+            5,
+            0);
+
+        GainDashboardRenderer.RenderCoverage(console, coverage, "Global Scope");
+
+        console.Output.Should().Contain("Source").And.Contain("pipe").And.Contain("run");
+    }
 }
