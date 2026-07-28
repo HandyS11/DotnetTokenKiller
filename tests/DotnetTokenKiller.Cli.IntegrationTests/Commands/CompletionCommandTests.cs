@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using DotnetTokenKiller.Domain;
 using FluentAssertions;
 using Spectre.Console.Testing;
@@ -184,6 +185,21 @@ public sealed class CompletionCommandTests
             var candidate = line.Split(" -a ")[1].Split(" -d ")[0].Trim();
             candidate.Should().NotContain(" ", "candidate '{0}' would break the generated script", candidate);
         }
+    }
+
+    [Theory]
+    [InlineData("bash", "local top_cmds=\"dotnet pipe integrate config doctor completion gain reset --version --help\"")]
+    [InlineData("zsh", "'pipe:Filter output piped in from a command dtk did not run'")]
+    [InlineData("fish", "complete -c dtk -f -n '__fish_use_subcommand' -a pipe        -d 'Filter piped output'")]
+    [InlineData("powershell", "$topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'reset')")]
+    public async Task Completion_ListsPipeAsATopLevelCommandAsync(string shell, string expectedFragment)
+    {
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("completion", shell);
+
+        exitCode.Should().Be(0);
+        // Asserts "pipe" lands in the correct shell construct (the top-level command list),
+        // not merely anywhere in ~200 lines of generated script.
+        output.Should().Contain(expectedFragment);
     }
 
     private static (CompletionCommand command, TestConsole console, StringWriter writer) Create()

@@ -78,6 +78,19 @@ internal static class IntegrationTestHelper
         return (output, exitCode, dbPath);
     }
 
+    /// <summary>Runs dtk with <paramref name="stdin"/> piped into its standard input, and returns
+    /// the isolated tracking-database path so a test can assert on what was recorded.</summary>
+    /// <param name="stdin">The text to write to the process's standard input.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    internal static async Task<(string Output, int ExitCode, string DbPath)> RunDtkWithStdinAsync(
+        string stdin, params string[] args)
+    {
+        var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
+        var dbPath = Path.Combine(isolatedDir, "tracking.db");
+        var (output, exitCode) = await RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir, stdin);
+        return (output, exitCode, dbPath);
+    }
+
     /// <summary>Reads the <c>command</c> column from the isolated tracking database written by a
     /// <see cref="RunDtkWithDbAsync"/> invocation, so a test can assert on what was recorded.</summary>
     /// <param name="dbPath">The isolated tracking-database path returned by <see cref="RunDtkWithDbAsync"/>.</param>
@@ -120,10 +133,11 @@ internal static class IntegrationTestHelper
     }
 
     private static async Task<(string Output, int ExitCode)> RunProcessAsync(
-        string executable, IEnumerable<string> args, string isolatedDir)
+        string executable, IEnumerable<string> args, string isolatedDir, string? stdin = null)
     {
         var psi = new ProcessStartInfo(executable)
         {
+            RedirectStandardInput = stdin is not null,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -143,6 +157,15 @@ internal static class IntegrationTestHelper
                 ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
             }
         };
+        if (stdin is not null)
+        {
+            // Only settable once RedirectStandardInput is true; setting it unconditionally throws
+            // for every call that doesn't pipe stdin. Explicit UTF-8 (rather than the platform
+            // default, which the OS console code page can override) is what makes the pipe tests'
+            // non-ASCII assertions actually exercise dtk's own stdin decoding.
+            psi.StandardInputEncoding = Encoding.UTF8;
+        }
+
         foreach (var arg in args)
         {
             psi.ArgumentList.Add(arg);
@@ -150,6 +173,13 @@ internal static class IntegrationTestHelper
 
         using var process = Process.Start(psi)
                             ?? throw new InvalidOperationException($"Failed to start process '{executable}'.");
+
+        if (stdin is not null)
+        {
+            await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         await Task.WhenAll(stdoutTask, stderrTask);

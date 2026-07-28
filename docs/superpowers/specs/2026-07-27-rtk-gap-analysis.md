@@ -55,6 +55,12 @@ rtk has `rtk pipe --filter <name>`. DTK can only filter what it launches itself,
 are already pure `Apply(string rawOutput, int exitCode)`, so the change is small and the payoff is
 broad.
 
+> **Resolved 2026-07-28.** `dtk pipe <subcommand>` filters output supplied on stdin. The exit code
+> is passed with `--exit-code` rather than inferred from the text, and is propagated as dtk's own
+> status. Piped runs are tracked under a `RunSource` dimension orthogonal to `RunOutcome`, so
+> `dtk gain --coverage` separates them from runs dtk executed itself.
+> See [the design](2026-07-28-pipe-mode-design.md).
+
 ## 3. Filters are neither extensible nor observable
 
 - rtk supports project-local TOML filters with `trust` / `untrust` / `verify` (including inline
@@ -149,7 +155,10 @@ asserts the rewrite comes back.
    guess.~~ **Done 2026-07-27** — see the resolution notes above.
 3. ~~First new filter, now to be chosen from what `dtk gain --coverage` reports rather than
    guessed~~ **Done 2026-07-27** — `list package` is filtered (all four variants; see
-   [the design](2026-07-27-list-package-filter-design.md)). Next: §2 pipe mode and §5 `dtk log`.
+   [the design](2026-07-27-list-package-filter-design.md)). Next: §5 `dtk log`.
+4. ~~§2 — pipe mode, so CI logs and invocations the hook missed can be filtered too.~~
+   **Done 2026-07-28** — see the resolution note above and
+   [the design](2026-07-28-pipe-mode-design.md).
 
 §7 is recommended first not because it is the most valuable, but because it is the prerequisite for
 the work that is, and skipping it fails silently.

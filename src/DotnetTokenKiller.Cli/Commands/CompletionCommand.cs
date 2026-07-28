@@ -36,7 +36,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             local dotnet_cmds="__DOTNET_CMDS_BASH__"
             local integrate_providers="claude copilot gemini cursor windsurf aider jetbrains"
             local config_subcmds="show set"
-            local top_cmds="dotnet integrate config doctor completion gain reset --version --help"
+            local top_cmds="dotnet pipe integrate config doctor completion gain reset --version --help"
 
             case "${words[1]}" in
                 dotnet)
@@ -84,6 +84,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             local -a top_cmds
             top_cmds=(
                 'dotnet:Run dotnet commands with filtered output'
+                'pipe:Filter output piped in from a command dtk did not run'
                 'integrate:Install dtk integration artifacts'
                 'config:View or modify dtk configuration'
                 'doctor:Run diagnostics'
@@ -144,6 +145,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
 
         # Top-level subcommands
         complete -c dtk -f -n '__fish_use_subcommand' -a dotnet     -d 'Run dotnet commands with filtered output'
+        complete -c dtk -f -n '__fish_use_subcommand' -a pipe        -d 'Filter piped output'
         complete -c dtk -f -n '__fish_use_subcommand' -a integrate   -d 'Install dtk integration artifacts'
         complete -c dtk -f -n '__fish_use_subcommand' -a config      -d 'View or modify dtk configuration'
         complete -c dtk -f -n '__fish_use_subcommand' -a doctor      -d 'Run diagnostics'
@@ -185,7 +187,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             $tokens = $commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.ToString() }
             $count = $tokens.Count
 
-            $topCmds = @('dotnet', 'integrate', 'config', 'doctor', 'completion', 'gain', 'reset')
+            $topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'reset')
             $dotnetCmds = @(__DOTNET_CMDS_PS__)
             $providers = @('claude', 'copilot', 'gemini', 'cursor', 'windsurf', 'aider', 'jetbrains')
             $configCmds = @('show', 'set')

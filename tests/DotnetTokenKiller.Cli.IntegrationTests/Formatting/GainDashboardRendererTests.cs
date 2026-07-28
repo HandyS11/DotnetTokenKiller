@@ -199,9 +199,12 @@ public class GainDashboardRendererTests
         var console = new TestConsole();
         var coverage = new CoverageSummary(
             [
-                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12)),
-                new CoverageDetail("pack", RunOutcome.PassthroughMeasured, 2, 6_000, TimeSpan.FromSeconds(3)),
-                new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, 9, 0, TimeSpan.FromSeconds(400))
+                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, RunSource.Run, 4, 48_000,
+                    TimeSpan.FromSeconds(12)),
+                new CoverageDetail("pack", RunOutcome.PassthroughMeasured, RunSource.Run, 2, 6_000,
+                    TimeSpan.FromSeconds(3)),
+                new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, RunSource.Run, 9, 0,
+                    TimeSpan.FromSeconds(400))
             ],
             15,
             54_000);
@@ -222,12 +225,45 @@ public class GainDashboardRendererTests
         // "0 tokens because we did not look" must not read as "0 tokens because there were none".
         var console = new TestConsole();
         var coverage = new CoverageSummary(
-            [new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, 3, 0, TimeSpan.FromSeconds(30))],
+            [
+                new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, RunSource.Run, 3, 0,
+                    TimeSpan.FromSeconds(30))
+            ],
             3,
             0);
 
         GainDashboardRenderer.RenderCoverage(console, coverage, "Global Scope");
 
         console.Output.Should().Contain("not measured");
+    }
+
+    [Fact]
+    public void RenderCoverage_ShowsTheRunSource()
+    {
+        var console = new TestConsole();
+        var coverage = new CoverageSummary(
+            [
+                new CoverageDetail("build", RunOutcome.Filtered, RunSource.Pipe, 3, 9000, TimeSpan.FromSeconds(1)),
+                new CoverageDetail("build", RunOutcome.Filtered, RunSource.Run, 2, 4000, TimeSpan.FromSeconds(1))
+            ],
+            5,
+            0);
+
+        GainDashboardRenderer.RenderCoverage(console, coverage, "Global Scope");
+
+        console.Output.Should().Contain("Source");
+
+        // "Total runs:        5" also contains the substring "run", so asserting on the whole
+        // output would pass even if the RunSource.Run branch of the cell ternary were deleted.
+        // Instead, isolate the two "build" table rows and require one to carry "pipe" and the
+        // other "run", proving both branches of the cell ternary actually rendered.
+        var buildRows = console.Output
+            .Split('\n')
+            .Where(line => line.Contains("build", StringComparison.Ordinal))
+            .ToList();
+
+        buildRows.Should().HaveCount(2);
+        buildRows.Should().ContainSingle(line => line.Contains("pipe", StringComparison.Ordinal));
+        buildRows.Should().ContainSingle(line => line.Contains("run", StringComparison.Ordinal));
     }
 }

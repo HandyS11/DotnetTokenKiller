@@ -11,6 +11,7 @@ public sealed record CommandRecord
     /// <param name="executionTime">Total wall-clock time for the command.</param>
     /// <param name="success">Whether the command exited with code 0.</param>
     /// <param name="outcome">How the run produced its output.</param>
+    /// <param name="source">Where the filtered raw output came from.</param>
     public CommandRecord(
         DateTimeOffset timestamp,
         string command,
@@ -18,7 +19,8 @@ public sealed record CommandRecord
         TokenStatistics tokens,
         TimeSpan executionTime,
         bool success = true,
-        RunOutcome outcome = RunOutcome.Filtered)
+        RunOutcome outcome = RunOutcome.Filtered,
+        RunSource source = RunSource.Run)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
         ArgumentNullException.ThrowIfNull(tokens);
@@ -33,6 +35,7 @@ public sealed record CommandRecord
         ExecutionTime = executionTime;
         Success = success;
         Outcome = outcome;
+        Source = source;
     }
 
     /// <summary>When the command ran.</summary>
@@ -64,4 +67,7 @@ public sealed record CommandRecord
 
     /// <summary>How the run produced its output.</summary>
     public RunOutcome Outcome { get; init; } = RunOutcome.Filtered;
+
+    /// <summary>Where the filtered raw output came from.</summary>
+    public RunSource Source { get; init; } = RunSource.Run;
 }

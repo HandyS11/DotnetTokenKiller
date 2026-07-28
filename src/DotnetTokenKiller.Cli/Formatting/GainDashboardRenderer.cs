@@ -158,6 +158,7 @@ internal static class GainDashboardRenderer
             .Border(TableBorder.Rounded)
             .AddColumn("Command")
             .AddColumn("Outcome")
+            .AddColumn("Source")
             .AddColumn(new TableColumn("Runs").RightAligned())
             .AddColumn(new TableColumn("Raw tokens").RightAligned());
 
@@ -170,6 +171,7 @@ internal static class GainDashboardRenderer
             table.AddRow(
                 entry.Command.EscapeMarkup(),
                 $"[{OutcomeColor(entry.Outcome)}]{entry.Outcome}[/]",
+                entry.Source == RunSource.Pipe ? "[cyan]pipe[/]" : "[grey]run[/]",
                 entry.RunCount.ToString(CultureInfo.InvariantCulture),
                 tokens);
         }

@@ -20,7 +20,7 @@ internal sealed class GainCommand(
     TextWriter output) : AsyncCommand<GainCommandSettings>
 {
     internal const string CsvHeader =
-        "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms,success,outcome";
+        "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms,success,outcome,source";
 
     /// <inheritdoc/>
     protected override Task<int> ExecuteAsync(
@@ -51,7 +51,7 @@ internal sealed class GainCommand(
             foreach (var r in records)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)},{(r.Success ? 1 : 0)},{r.Outcome}");
+                    $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)},{(r.Success ? 1 : 0)},{r.Outcome},{r.Source}");
             }
 
             await output.WriteAsync(sb.ToString()).ConfigureAwait(false);

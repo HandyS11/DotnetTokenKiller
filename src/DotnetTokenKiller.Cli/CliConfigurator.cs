@@ -18,6 +18,9 @@ internal static class CliConfigurator
     /// <summary>The <c>integrate</c> command name.</summary>
     public const string IntegrateCommand = "integrate";
 
+    /// <summary>The <c>pipe</c> command name.</summary>
+    public const string PipeCommand = "pipe";
+
     /// <summary>The <c>config</c> branch name.</summary>
     public const string ConfigBranch = "config";
 
@@ -71,6 +74,10 @@ internal static class CliConfigurator
                     .WithExample(DotnetCommand, "list", "package", "--outdated");
             });
         });
+
+        config.AddCommand<Commands.PipeCommand>(PipeCommand)
+            .WithDescription("Filter output piped in from a command dtk did not run")
+            .WithExample(PipeCommand, "build");
 
         config.AddCommand<Commands.IntegrateCommand>(IntegrateCommand)
             .WithDescription("Install dtk integration artifacts for an AI assistant provider")

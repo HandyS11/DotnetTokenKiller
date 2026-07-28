@@ -125,6 +125,26 @@ the argument list. Passthrough is safe (the output is correct, just unfiltered) 
 recorded under `list` and `package` respectively in `dtk gain --coverage`. The generated agent hooks
 do not rewrite them either.
 
+### `dtk pipe`
+
+Filter output on stdin from a command dtk did not run — CI logs, or any invocation the hook
+missed:
+
+```sh
+# Accurate verdict: the producing command's exit code is passed explicitly.
+dotnet build > build.log 2>&1; dtk pipe build --exit-code $? < build.log
+
+# Convenient form. Bash cannot give a pipeline's right-hand side its predecessor's
+# status, so without --exit-code the verdict is assumed to be success.
+dotnet build 2>&1 | dtk pipe build
+
+dotnet list package --outdated 2>&1 | dtk pipe list package
+```
+
+`dtk pipe` exits with whatever `--exit-code` it was given, so a CI step wrapping a failed build
+still fails. Piped runs are tracked separately from runs dtk executed itself under a `Source`
+column in `dtk gain --coverage`.
+
 ### `dtk integrate`
 
 Install dtk integration artifacts for an AI assistant provider:

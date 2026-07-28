@@ -26,6 +26,12 @@ public sealed class CliConfiguratorTests
     }
 
     [Fact]
+    public Task Configure_PipeHelp_MatchesSnapshot()
+    {
+        return Verify(RunHelp("pipe", "--help"));
+    }
+
+    [Fact]
     public Task Configure_IntegrateHelp_MatchesSnapshot()
     {
         return Verify(RunHelp("integrate", "--help"));

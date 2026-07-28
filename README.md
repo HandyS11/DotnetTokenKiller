@@ -121,6 +121,25 @@ dtk dotnet list package --outdated
 
 Unknown subcommands pass through to `dotnet` unchanged.
 
+### Filtering output dtk did not produce
+
+`dtk pipe` applies a filter to output on stdin — CI logs, or any invocation the hook missed.
+
+```bash
+# Accurate verdict: the producing command's exit code is passed explicitly.
+dotnet build > build.log 2>&1; dtk pipe build --exit-code $? < build.log
+
+# Convenient form. Bash cannot give a pipeline's right-hand side its predecessor's
+# status, so without --exit-code the verdict is assumed to be success.
+dotnet build 2>&1 | dtk pipe build
+
+dotnet list package --outdated 2>&1 | dtk pipe list package
+```
+
+`dtk pipe` exits with whatever `--exit-code` it was given, so a CI step wrapping a failed build
+still fails. Piped runs are tracked separately from runs dtk executed itself — see the `Source`
+column in `dtk gain --coverage`.
+
 ## AI Agent Setup
 
 Install integration artifacts with one command. **Installing globally is the recommended way to set

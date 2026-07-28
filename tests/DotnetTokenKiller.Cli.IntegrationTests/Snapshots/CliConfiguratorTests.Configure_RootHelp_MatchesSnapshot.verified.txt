@@ -2,11 +2,11 @@ USAGE:
     dtk [OPTIONS] <COMMAND>
 
 EXAMPLES:
+    dtk pipe build
     dtk integrate claude
     dtk integrate claude --dir /path/to/project --force
     dtk integrate copilot
     dtk integrate copilot-cli
-    dtk integrate copilot-cli --global
 
 OPTIONS:
     -h, --help       Prints help information   
@@ -14,6 +14,7 @@ OPTIONS:
 
 COMMANDS:
     dotnet                  Run dotnet commands with filtered output                      
+    pipe <subcommand>       Filter output piped in from a command dtk did not run         
     integrate <provider>    Install dtk integration artifacts for an AI assistant provider
     config                  View or modify dtk configuration                              
     doctor                  Run diagnostics to verify dtk is set up correctly             

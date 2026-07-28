@@ -51,8 +51,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 #pragma warning restore CA2007
             cmd.CommandText = """
                               INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms, success, outcome)
-                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success, @outcome)
+                                  saved_tokens, savings_percentage, execution_time_ms, success, outcome, source)
+                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success, @outcome, @source)
                               """;
             cmd.Parameters.AddWithValue("@ts",
                 record.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
@@ -65,6 +65,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
             cmd.Parameters.AddWithValue("@success", record.Success ? 1 : 0);
             cmd.Parameters.AddWithValue("@outcome", record.Outcome.ToString());
+            cmd.Parameters.AddWithValue("@source", record.Source.ToString());
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -109,7 +110,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     {
         const string sql = """
                            SELECT timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms, success, outcome
+                                  saved_tokens, savings_percentage, execution_time_ms, success, outcome, source
                            FROM commands
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
@@ -130,7 +131,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-                           SELECT command, outcome,
+                           SELECT command, outcome, source,
                                   COUNT(*) as run_count,
                                   SUM(input_tokens) as total_input,
                                   SUM(execution_time_ms) as total_ms
@@ -138,7 +139,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
                              AND (@cmd IS NULL OR command = @cmd)
-                           GROUP BY command, outcome
+                           GROUP BY command, outcome, source
                            ORDER BY total_input DESC, run_count DESC
                            """;
 
@@ -243,7 +244,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                                     savings_percentage REAL NOT NULL,
                                     execution_time_ms REAL NOT NULL,
                                     success INTEGER NOT NULL DEFAULT 1,
-                                    outcome TEXT NOT NULL DEFAULT 'Filtered'
+                                    outcome TEXT NOT NULL DEFAULT 'Filtered',
+                                    source TEXT NOT NULL DEFAULT 'Run'
                                 );
                                 CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
                                 CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
@@ -254,6 +256,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         // have them (see CREATE TABLE above) so these only run on legacy files.
         await EnsureColumnAsync("success", "INTEGER NOT NULL DEFAULT 1", ct).ConfigureAwait(false);
         await EnsureColumnAsync("outcome", "TEXT NOT NULL DEFAULT 'Filtered'", ct).ConfigureAwait(false);
+        await EnsureColumnAsync("source", "TEXT NOT NULL DEFAULT 'Run'", ct).ConfigureAwait(false);
     }
 
     /// <summary>Adds a column to the commands table if it is not already present.</summary>
@@ -430,6 +433,12 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 ? parsed
                 : RunOutcome.Filtered;
 
+            // A source written by a newer dtk that this build does not know reads as Run, matching
+            // how an unknown outcome degrades to Filtered rather than crashing the report.
+            var source = Enum.TryParse<RunSource>(reader.GetString(10), ignoreCase: true, out var parsedSource)
+                ? parsedSource
+                : RunSource.Run;
+
             results.Add(new CommandRecord(
                 DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture,
                     DateTimeStyles.RoundtripKind),
@@ -438,7 +447,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 new TokenStatistics(reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetDouble(6)),
                 TimeSpan.FromMilliseconds(reader.GetDouble(7)),
                 reader.GetInt32(8) != 0,
-                outcome));
+                outcome,
+                source));
         }
 
         return results;
@@ -458,15 +468,19 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             var outcome = Enum.TryParse<RunOutcome>(reader.GetString(1), ignoreCase: true, out var parsed)
                 ? parsed
                 : RunOutcome.Filtered;
-            var runCount = reader.GetInt32(2);
-            var inputTokens = reader.GetInt64(3);
+            var source = Enum.TryParse<RunSource>(reader.GetString(2), ignoreCase: true, out var parsedSource)
+                ? parsedSource
+                : RunSource.Run;
+            var runCount = reader.GetInt32(3);
+            var inputTokens = reader.GetInt64(4);
 
             entries.Add(new CoverageDetail(
                 reader.GetString(0),
                 outcome,
+                source,
                 runCount,
                 inputTokens,
-                TimeSpan.FromMilliseconds(reader.GetDouble(4))));
+                TimeSpan.FromMilliseconds(reader.GetDouble(5))));
 
             totalRuns += runCount;
             if (RunOutcomes.IsPassthrough(outcome))

@@ -1,6 +1,7 @@
 using System.Text;
 using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Cli;
+using DotnetTokenKiller.Cli.Infrastructure;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -45,6 +46,7 @@ try
             Out = new AnsiConsoleOutput(Console.Out)
         })
         : AnsiConsole.Console);
+    services.AddSingleton<IStandardInputState, ConsoleStandardInputState>();
 
     var registrar = new DtkTypeRegistrar(services);
     var app = new CommandApp(registrar);

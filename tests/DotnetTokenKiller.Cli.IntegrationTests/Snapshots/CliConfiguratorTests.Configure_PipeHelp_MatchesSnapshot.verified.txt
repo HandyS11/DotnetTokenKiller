@@ -1,0 +1,20 @@
+DESCRIPTION:
+Filter output piped in from a command dtk did not run
+
+USAGE:
+    dtk pipe <subcommand> [OPTIONS]
+
+EXAMPLES:
+    dtk pipe build
+
+ARGUMENTS:
+    <subcommand>    The dotnet subcommand whose filter to apply, e.g. build or list package
+
+OPTIONS:
+                       DEFAULT                                                                   
+    -h, --help                    Prints help information                                        
+    -v, --verbose                 Echo the resolved command line before running                  
+        --vv                      Also dump the raw dotnet output and elapsed time               
+        --show-log                Print the path to the full log file when the output was saved  
+    -q, --quiet                   Suppress all DTK meta-output; forward only the filtered content
+        --exit-code    0          Exit code of the command that produced the output (default 0)  

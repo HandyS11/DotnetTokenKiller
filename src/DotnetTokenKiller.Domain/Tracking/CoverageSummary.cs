@@ -1,14 +1,16 @@
 namespace DotnetTokenKiller.Domain.Tracking;
 
-/// <summary>One command-and-outcome group in a coverage report.</summary>
+/// <summary>One command-outcome-source group in a coverage report.</summary>
 /// <param name="Command">The recorded command name.</param>
 /// <param name="Outcome">How runs in this group produced their output.</param>
+/// <param name="Source">Where the raw output for runs in this group came from.</param>
 /// <param name="RunCount">Number of runs in this group.</param>
 /// <param name="TotalInputTokens">Total raw output tokens across these runs; zero when unmeasured.</param>
 /// <param name="TotalExecutionTime">Total wall-clock execution time across these runs.</param>
 public sealed record CoverageDetail(
     string Command,
     RunOutcome Outcome,
+    RunSource Source,
     int RunCount,
     long TotalInputTokens,
     TimeSpan TotalExecutionTime);
