@@ -105,21 +105,29 @@ the process produced. Pipe mode needs only the second. Steps 3–11 of that meth
 track — move verbatim into `FilteredOutputPipeline`, which both entry points call.
 
 ```csharp
-Task<int> ProcessAsync(
-    IOutputFilter filter,
-    string rawOutput,
-    int exitCode,
-    string commandSlug,
-    string displayCommandLine,
-    RunSource source,
-    OutputOptions options,
-    CancellationToken cancellationToken)
+Task<int> ProcessAsync(FilteredOutputRequest request, CancellationToken cancellationToken)
+
+sealed record FilteredOutputRequest(
+    IOutputFilter Filter,
+    string RawOutput,
+    int ExitCode,
+    string CommandSlug,
+    string DisplayCommandLine,
+    RunSource Source,
+    OutputOptions Options,
+    long StartTimestamp);
 ```
 
 `OutputOptions` is a record bundling the three display flags both callers already accept —
 `VerbosityLevel`, `ShowLogHint`, `Quiet` — including the existing rule that `Quiet` forces the
-other two off. Bundling them keeps the signature readable and puts that precedence rule in one
-place instead of at each call site.
+other two off. Bundling them puts that precedence rule in one place instead of at each call site.
+
+The eight values travel as a `FilteredOutputRequest` rather than as positional parameters because
+SonarAnalyzer's S107 fires above seven, and `TreatWarningsAsErrors` turns that into a build failure.
+
+`StartTimestamp` is a `Stopwatch.GetTimestamp()` value taken by the *caller*, not by the pipeline:
+the run path's tracked duration must include the child process's time, while the pipe path's must
+cover only reading stdin and filtering.
 
 | Caller | Raw text from | Slug from | Source |
 |---|---|---|---|
