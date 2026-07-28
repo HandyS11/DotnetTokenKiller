@@ -93,4 +93,25 @@ public class CommandRecordTests
 
         act.Should().Throw<ArgumentNullException>();
     }
+
+    [Fact]
+    public void Constructor_DefaultsSourceToRun()
+    {
+        var record = new CommandRecord(
+            DateTimeOffset.UtcNow, "build", "/proj",
+            new TokenStatistics(1000, 150, 850, 85.0), TimeSpan.FromSeconds(1));
+
+        record.Source.Should().Be(RunSource.Run);
+    }
+
+    [Fact]
+    public void Constructor_PreservesExplicitPipeSource()
+    {
+        var record = new CommandRecord(
+            DateTimeOffset.UtcNow, "build", "/proj",
+            new TokenStatistics(1000, 150, 850, 85.0), TimeSpan.FromSeconds(1),
+            success: true, outcome: RunOutcome.Filtered, source: RunSource.Pipe);
+
+        record.Source.Should().Be(RunSource.Pipe);
+    }
 }
