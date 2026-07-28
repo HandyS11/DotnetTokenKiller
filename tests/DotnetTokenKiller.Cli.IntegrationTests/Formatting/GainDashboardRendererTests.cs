@@ -199,9 +199,12 @@ public class GainDashboardRendererTests
         var console = new TestConsole();
         var coverage = new CoverageSummary(
             [
-                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12)),
-                new CoverageDetail("pack", RunOutcome.PassthroughMeasured, 2, 6_000, TimeSpan.FromSeconds(3)),
-                new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, 9, 0, TimeSpan.FromSeconds(400))
+                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, RunSource.Run, 4, 48_000,
+                    TimeSpan.FromSeconds(12)),
+                new CoverageDetail("pack", RunOutcome.PassthroughMeasured, RunSource.Run, 2, 6_000,
+                    TimeSpan.FromSeconds(3)),
+                new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, RunSource.Run, 9, 0,
+                    TimeSpan.FromSeconds(400))
             ],
             15,
             54_000);
@@ -222,7 +225,10 @@ public class GainDashboardRendererTests
         // "0 tokens because we did not look" must not read as "0 tokens because there were none".
         var console = new TestConsole();
         var coverage = new CoverageSummary(
-            [new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, 3, 0, TimeSpan.FromSeconds(30))],
+            [
+                new CoverageDetail("watch", RunOutcome.PassthroughUnmeasured, RunSource.Run, 3, 0,
+                    TimeSpan.FromSeconds(30))
+            ],
             3,
             0);
 

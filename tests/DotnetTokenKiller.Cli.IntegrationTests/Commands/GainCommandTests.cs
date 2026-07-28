@@ -378,8 +378,9 @@ public class GainCommandTests
     {
         var coverage = new CoverageSummary(
             [
-                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12)),
-                new CoverageDetail("build", RunOutcome.Filtered, 30, 300_000, TimeSpan.FromSeconds(90))
+                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, RunSource.Run, 4, 48_000,
+                    TimeSpan.FromSeconds(12)),
+                new CoverageDetail("build", RunOutcome.Filtered, RunSource.Run, 30, 300_000, TimeSpan.FromSeconds(90))
             ],
             34,
             48_000);
@@ -413,7 +414,10 @@ public class GainCommandTests
     public async Task ExecuteAsync_CoverageJson_WritesParseableJsonWithNamedOutcomes()
     {
         var coverage = new CoverageSummary(
-            [new CoverageDetail("publish", RunOutcome.PassthroughMeasured, 4, 48_000, TimeSpan.FromSeconds(12))],
+            [
+                new CoverageDetail("publish", RunOutcome.PassthroughMeasured, RunSource.Run, 4, 48_000,
+                    TimeSpan.FromSeconds(12))
+            ],
             4,
             48_000);
         var (command, _, writer) = CreateForCoverage(coverage);

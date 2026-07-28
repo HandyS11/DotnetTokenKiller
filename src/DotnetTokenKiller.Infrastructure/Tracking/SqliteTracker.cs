@@ -131,7 +131,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-                           SELECT command, outcome,
+                           SELECT command, outcome, source,
                                   COUNT(*) as run_count,
                                   SUM(input_tokens) as total_input,
                                   SUM(execution_time_ms) as total_ms
@@ -139,7 +139,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                            WHERE timestamp >= @since
                              AND (@path IS NULL OR project_path = @path)
                              AND (@cmd IS NULL OR command = @cmd)
-                           GROUP BY command, outcome
+                           GROUP BY command, outcome, source
                            ORDER BY total_input DESC, run_count DESC
                            """;
 
@@ -468,15 +468,19 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             var outcome = Enum.TryParse<RunOutcome>(reader.GetString(1), ignoreCase: true, out var parsed)
                 ? parsed
                 : RunOutcome.Filtered;
-            var runCount = reader.GetInt32(2);
-            var inputTokens = reader.GetInt64(3);
+            var source = Enum.TryParse<RunSource>(reader.GetString(2), ignoreCase: true, out var parsedSource)
+                ? parsedSource
+                : RunSource.Run;
+            var runCount = reader.GetInt32(3);
+            var inputTokens = reader.GetInt64(4);
 
             entries.Add(new CoverageDetail(
                 reader.GetString(0),
                 outcome,
+                source,
                 runCount,
                 inputTokens,
-                TimeSpan.FromMilliseconds(reader.GetDouble(4))));
+                TimeSpan.FromMilliseconds(reader.GetDouble(5))));
 
             totalRuns += runCount;
             if (RunOutcomes.IsPassthrough(outcome))

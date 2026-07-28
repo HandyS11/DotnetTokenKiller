@@ -884,4 +884,32 @@ public class SqliteTrackerTests : IAsyncDisposable
         coverage.TotalRuns.Should().Be(0);
         coverage.TotalUnfilteredInputTokens.Should().Be(0);
     }
+
+    [Fact]
+    public async Task GetCoverageAsync_SplitsSameCommandBySourceAsync()
+    {
+        await _sut.RecordAsync(MakeRecord(command: "build", source: RunSource.Run));
+        await _sut.RecordAsync(MakeRecord(command: "build", source: RunSource.Pipe));
+
+        var coverage = await _sut.GetCoverageAsync(1, null);
+
+        coverage.Entries.Should().HaveCount(2);
+        coverage.Entries.Select(e => e.Source)
+            .Should().BeEquivalentTo([RunSource.Run, RunSource.Pipe]);
+        coverage.Entries.Should().OnlyContain(e => e.Command == "build");
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_TotalsAreUnaffectedByTheSourceSplitAsync()
+    {
+        // The default dashboard aggregates across sources: splitting coverage rows must not
+        // change what `dtk gain` reports.
+        await _sut.RecordAsync(MakeRecord(command: "build", source: RunSource.Run));
+        await _sut.RecordAsync(MakeRecord(command: "build", source: RunSource.Pipe));
+
+        var summary = await _sut.GetSummaryAsync(1, null);
+
+        summary.TotalCommands.Should().Be(2);
+        summary.TotalSavedTokens.Should().Be(1700);
+    }
 }
