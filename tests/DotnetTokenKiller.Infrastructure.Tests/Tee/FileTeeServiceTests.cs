@@ -6,6 +6,13 @@ using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tee;
 
+/// <summary>
+/// Shares the "TeeDirectoryResolver" collection with <see cref="TeeDirectoryResolverTests"/>: both
+/// mutate the process-wide DTK_TEE_DIR environment variable, and xUnit only serialises test classes
+/// against each other when they are in the same collection — distinct collections still run in
+/// parallel by default, so this is what actually prevents the two classes racing on that variable.
+/// </summary>
+[Collection("TeeDirectoryResolver")]
 public sealed class FileTeeServiceTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-test-{Guid.NewGuid()}");
@@ -223,7 +230,8 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_DtkTeeDirEnvVar_UsesEnvVarDirectory()
     {
-        // Covers GetTeeDir returning the env-var path (lines 107-108)
+        // Covers the tee directory resolution using the DTK_TEE_DIR environment variable when
+        // teeDirOverride is null.
         var envDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-env-{Guid.NewGuid()}");
         var originalValue = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
         try
@@ -254,7 +262,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_ConfigDirectorySet_UsesConfigDirectory()
     {
-        // Covers GetTeeDir returning config.Directory (lines 112-113) when
+        // Covers the tee directory resolution using config.Directory when
         // teeDirOverride is null and DTK_TEE_DIR is not set
         var configDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-configdir-{Guid.NewGuid()}");
         var originalEnv = Environment.GetEnvironmentVariable("DTK_TEE_DIR");

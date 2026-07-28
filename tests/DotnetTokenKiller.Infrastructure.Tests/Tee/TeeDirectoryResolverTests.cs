@@ -5,7 +5,12 @@ using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tee;
 
-/// <summary>Not parallelised: every case here manipulates the process-wide DTK_TEE_DIR variable.</summary>
+/// <summary>
+/// Shares the "TeeDirectoryResolver" collection with <see cref="FileTeeServiceTests"/>: both mutate
+/// the process-wide DTK_TEE_DIR environment variable, and xUnit only serialises test classes against
+/// each other when they are in the same collection — distinct collections still run in parallel by
+/// default, so this is what actually prevents the two classes racing on that variable.
+/// </summary>
 [Collection("TeeDirectoryResolver")]
 public sealed class TeeDirectoryResolverTests
 {
