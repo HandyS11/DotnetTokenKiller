@@ -4,7 +4,14 @@ using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests;
 
-[Collection("Integration.Passthrough")]
+/// <summary>The whole class shares this collection, not just the test that touches SampleApp:
+/// xunit serializes a collection as a unit, and one attribute must cover both tests here.
+/// Grouping with the other SampleApp-touching suites (build/clean/format/restore) stops this
+/// class's <c>dotnet list package --project SampleApp</c> from racing a concurrent
+/// <c>dotnet clean</c>/<c>format</c>/<c>build</c> that mutates the same sample directory's
+/// <c>obj/</c> or sources. The unrelated ListReference test pays a small, harmless serialization
+/// cost for it.</summary>
+[Collection("Integration.SampleApp")]
 [Trait("Category", "Integration")]
 public class ListPackageIntegrationTests
 {
