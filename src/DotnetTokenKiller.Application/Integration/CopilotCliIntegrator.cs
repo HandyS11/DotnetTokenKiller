@@ -24,7 +24,14 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     private const string HookScriptName = "dotnet-to-dtk.py";
     private const string HookJsonName = "dtk-dotnet.json";
 
-    private static readonly string CopilotSection =
+    /// <summary>
+    /// The dtk-managed section written into <c>.github/copilot-instructions.md</c>, between
+    /// <see cref="SectionMarker"/> and <see cref="SectionEndMarker"/>. Internal (rather than
+    /// private) so <c>SubcommandBindingTests</c> can pin this repo's own committed copy of that
+    /// file to it, the same way <see cref="HookScriptTemplates.ClaudeHook"/> pins the committed
+    /// Claude hook.
+    /// </summary>
+    internal static readonly string CopilotSection =
         $"""
         {SectionMarker}
         ## DotnetTokenKiller (dtk)

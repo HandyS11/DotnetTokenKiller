@@ -64,6 +64,7 @@ Each supported `dotnet` subcommand has a dedicated filter implementing `IOutputF
 | `DotnetRestoreFilter` | `dotnet restore` |
 | `DotnetCleanFilter` | `dotnet clean` |
 | `DotnetFormatFilter` | `dotnet format` |
+| `DotnetListPackageFilter` | `dotnet list package` |
 
 These filters parse the raw `dotnet` output and produce compact, LLM-friendly summaries — stripping MSBuild noise, adapter banners, absolute paths, and duplicate information.
 

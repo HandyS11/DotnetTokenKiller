@@ -114,6 +114,31 @@ public sealed class SubcommandBindingTests
     }
 
     [Fact]
+    public void RepoCopilotInstructions_MatchesTheGeneratedSection()
+    {
+        var repoRoot = FindRepoRoot();
+        var instructionsPath = Path.Combine(repoRoot, ".github", "copilot-instructions.md");
+
+        File.Exists(instructionsPath).Should().BeTrue(
+            "this repo ships its own copy of the Copilot CLI instructions at {0}", instructionsPath);
+
+        var committed = File.ReadAllText(instructionsPath);
+
+        // Unlike '.claude/hooks/dotnet-to-dtk.py', this file has no test binding it to its
+        // generator, so a subcommand addition can leave it stale silently — the exact failure
+        // this test exists to prevent. The committed file predates section-merging and happens to
+        // be nothing but the dtk-managed section, so it must be byte-identical to
+        // CopilotCliIntegrator.CopilotSection; a repo that also carried hand-written content
+        // outside the '<!-- dtk -->' / '<!-- /dtk -->' markers would need a substring assertion
+        // instead.
+        committed.Should().Be(
+            CopilotCliIntegrator.CopilotSection,
+            "the committed instructions must be regenerated (via 'dtk integrate copilot-cli' into a "
+            + "scratch directory, then copied over) whenever the template changes, or this repo's own "
+            + "copilot-instructions.md silently stops advertising the newest subcommand");
+    }
+
+    [Fact]
     public void IntegrationProse_ListsEveryCanonicalSubcommand()
     {
         // Pinned literals, for the same reason as the hook assertions above: deriving these from

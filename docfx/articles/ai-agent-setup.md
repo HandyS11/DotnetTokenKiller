@@ -7,7 +7,7 @@ DTK integrates with AI coding agents to automatically reduce token usage from `d
 
 ## Claude Code
 
-A pre-built hook automatically rewrites `dotnet build|test|restore|clean` commands to use `dtk`.
+A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`.
 
 ### Installation
 
@@ -41,7 +41,7 @@ dtk integrate claude --dir /path/to/project
 
 ### How It Works
 
-With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, or `dotnet clean`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
+With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, or `dotnet list package`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
 
 ### Manual Installation
 
@@ -100,7 +100,7 @@ markers so a future `dtk integrate copilot --force` can safely replace just this
 <!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
 `dtk` filters output to actionable signal only, reducing noise by 50-97%.
 
 ```sh
@@ -109,13 +109,14 @@ dtk dotnet test
 dtk dotnet restore
 dtk dotnet clean
 dtk dotnet format
+dtk dotnet list package --outdated
 ```
 <!-- /dtk -->
 ````
 
 ## Gemini CLI
 
-A pre-built hook automatically rewrites `dotnet build|test|restore|clean` commands to use `dtk`.
+A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`.
 
 ### Installation
 
@@ -150,7 +151,7 @@ dtk integrate gemini --dir /path/to/project
 
 ### How It Works
 
-With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, `dotnet restore`, or `dotnet clean`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
+With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, or `dotnet list package`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
 
 ### Manual Installation
 
@@ -192,7 +193,7 @@ touching the rest of the file:
 <!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
 `dtk` filters output to actionable signal only, reducing noise by 50-97%.
 <!-- /dtk -->
 ```
@@ -211,7 +212,7 @@ Use `--force` to overwrite an existing file. Use `--dir` to target a specific pr
 
 ### How It Works
 
-Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format` over raw `dotnet` commands. No hook or Python dependency is needed — it's a plain text instruction file.
+Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format|list package` over raw `dotnet` commands. No hook or Python dependency is needed — it's a plain text instruction file.
 
 ### Manual Installation
 
@@ -222,7 +223,7 @@ Create `.cursor/rules/dtk.mdc`:
 alwaysApply: false
 ---
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ````
 
@@ -240,14 +241,14 @@ Use `--force` to overwrite. Use `--dir` to target a specific project directory.
 
 ### How It Works
 
-Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format` to reduce token usage. No hook or Python dependency is needed.
+Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format|list package` to reduce token usage. No hook or Python dependency is needed.
 
 ### Manual Installation
 
 Create `.windsurf/rules/dtk.md`:
 
 ```markdown
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ```
 
@@ -298,7 +299,7 @@ If your `.aider.conf.yml` already has a top-level `read:` key, add
 And create `.aider-dtk-instructions.md`:
 
 ```markdown
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ```
 
@@ -328,7 +329,7 @@ Add to your `.junie/guidelines.md`:
 <!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, and format commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 
 ```sh
@@ -337,6 +338,7 @@ dtk dotnet test
 dtk dotnet restore
 dtk dotnet clean
 dtk dotnet format
+dtk dotnet list package --outdated
 ```
 <!-- /dtk -->
 ````
@@ -346,5 +348,5 @@ dtk dotnet format
 For any AI agent that runs terminal commands, the general approach is:
 
 1. Install DTK globally: `dotnet tool install -g DotnetTokenKiller`
-2. Configure the agent to prefix `dotnet build|test|restore|clean` with `dtk`
+2. Configure the agent to prefix `dotnet build|test|restore|clean|format|list package` with `dtk`
 3. The agent receives compact, filtered output — reducing token usage by 50–98%

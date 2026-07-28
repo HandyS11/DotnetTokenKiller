@@ -1,4 +1,4 @@
-**Status:** Design approved, not yet implemented
+**Status:** Implemented — see [the plan](../plans/2026-07-27-list-package-filter.md)
 **Implements:** item 3 of the sequencing in [2026-07-27-rtk-gap-analysis.md](2026-07-27-rtk-gap-analysis.md)
 
 ## Problem

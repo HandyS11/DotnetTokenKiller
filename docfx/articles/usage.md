@@ -78,6 +78,23 @@ dtk dotnet format -q
 
 When nothing needs formatting, the raw command produces no output at all. dtk synthesises a `✓ dotnet format (nothing to format)` confirmation so AI agents receive an explicit positive signal. When `--verify-no-changes` finds violations, the file paths and violation types are shown with workspace-relative paths.
 
+### `dtk dotnet list package`
+
+Run `dotnet list package` with filtered output, covering all four of its variants:
+
+```sh
+dtk dotnet list package
+dtk dotnet list package --outdated
+dtk dotnet list package --deprecated
+dtk dotnet list package --vulnerable
+```
+
+The plain variant collapses packages shared by every project into one `all projects:` line, then
+lists only each project's remaining additions. The `--outdated`, `--deprecated`, and `--vulnerable`
+variants group findings by package across projects instead of repeating them per project, and a
+clean audit run (no findings) collapses to a single `✓` line. Output is capped at 30 package groups,
+with an explicit truncation line if there are more.
+
 ### `dtk integrate`
 
 Install dtk integration artifacts for an AI assistant provider:
@@ -208,7 +225,7 @@ In quiet mode, verbosity flags (`-v`, `--vv`) and `--show-log` are ignored — o
 
 ## Passthrough Behavior
 
-Any `dotnet` subcommand not in the supported list (build, test, restore, clean, format) is passed through to `dotnet` unchanged:
+Any `dotnet` subcommand not in the supported list (build, test, restore, clean, format, list package) is passed through to `dotnet` unchanged:
 
 ```sh
 dtk dotnet publish    # runs: dotnet publish
