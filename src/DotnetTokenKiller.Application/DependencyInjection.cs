@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddTransient<FilteredOutputPipeline>();
         services.AddTransient<FilteredRunUseCase>();
+        services.AddTransient<PipeFilterUseCase>();
         services.AddTransient<GainReportUseCase>();
         services.AddTransient<ResetTrackingUseCase>();
         services.AddTransient<FullResetUseCase>();
@@ -28,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetFormatFilter>(FilterKeys.Format);
         services.AddKeyedTransient<IOutputFilter, DotnetListPackageFilter>(FilterKeys.ListPackage);
         services.AddSingleton<TextWriter>(_ => Console.Out);
+        services.AddSingleton<TextReader>(_ => Console.In);
 
         services.AddTransient<RtkHookCoexistence>();
         services.AddSingleton<HomePaths>();
