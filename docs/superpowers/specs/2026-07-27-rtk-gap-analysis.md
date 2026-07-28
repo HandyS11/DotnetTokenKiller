@@ -91,6 +91,12 @@ There is no `dtk log` / `dtk last`. Tee files exist, but the path surfaces only 
 and only when output exceeds 500 chars (`FileTeeService`). So an agent needing full detail re-runs a
 two-minute build. Neither tool has this — cheap differentiator.
 
+> **Resolved 2026-07-28.** `dtk log` retrieves a previous run's output from the tee directory,
+> scoped to the current project and windowed to the last 100 lines by default. The tee file now
+> carries a parseable header (command line, cwd, exit code, source, timestamp), which is what makes
+> project scoping possible. Passthrough runs are still not tee'd, so they remain unreachable — see
+> §4. See [the design](2026-07-28-dtk-log-design.md).
+
 ## 6. Analytics thinner than rtk
 
 DTK `gain` has `--days` / `--project` / `--json` / `--export` / `--command`. rtk adds `--history`,
@@ -159,6 +165,9 @@ asserts the rewrite comes back.
 4. ~~§2 — pipe mode, so CI logs and invocations the hook missed can be filtered too.~~
    **Done 2026-07-28** — see the resolution note above and
    [the design](2026-07-28-pipe-mode-design.md).
+5. ~~§5 — `dtk log`, so retrieving a previous run's detail does not mean re-running it.~~
+   **Done 2026-07-28** — see the resolution note above and
+   [the design](2026-07-28-dtk-log-design.md).
 
 §7 is recommended first not because it is the most valuable, but because it is the prerequisite for
 the work that is, and skipping it fails silently.

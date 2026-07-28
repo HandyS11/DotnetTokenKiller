@@ -1,4 +1,4 @@
-**Status:** Design approved, not yet implemented
+**Status:** Implemented — see [the plan](../plans/2026-07-28-dtk-log.md)
 **Implements:** §5 of [2026-07-27-rtk-gap-analysis.md](2026-07-27-rtk-gap-analysis.md)
 
 ## Problem

@@ -36,7 +36,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             local dotnet_cmds="__DOTNET_CMDS_BASH__"
             local integrate_providers="claude copilot gemini cursor windsurf aider jetbrains"
             local config_subcmds="show set"
-            local top_cmds="dotnet pipe integrate config doctor completion gain reset --version --help"
+            local top_cmds="dotnet pipe integrate config doctor completion gain log reset --version --help"
 
             case "${words[1]}" in
                 dotnet)
@@ -90,6 +90,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                 'doctor:Run diagnostics'
                 'completion:Print shell completion script'
                 'gain:Show token savings analytics'
+                'log:Show the full output of a previous run'
                 'reset:Clear all tracking data'
             )
 
@@ -151,6 +152,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         complete -c dtk -f -n '__fish_use_subcommand' -a doctor      -d 'Run diagnostics'
         complete -c dtk -f -n '__fish_use_subcommand' -a completion  -d 'Print shell completion script'
         complete -c dtk -f -n '__fish_use_subcommand' -a gain        -d 'Show token savings analytics'
+        complete -c dtk -f -n '__fish_use_subcommand' -a log         -d 'Show a previous run''s output'
         complete -c dtk -f -n '__fish_use_subcommand' -a reset       -d 'Clear all tracking data'
 
         # dotnet subcommands
@@ -187,7 +189,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             $tokens = $commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.ToString() }
             $count = $tokens.Count
 
-            $topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'reset')
+            $topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')
             $dotnetCmds = @(__DOTNET_CMDS_PS__)
             $providers = @('claude', 'copilot', 'gemini', 'cursor', 'windsurf', 'aider', 'jetbrains')
             $configCmds = @('show', 'set')

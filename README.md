@@ -140,6 +140,27 @@ dotnet list package --outdated 2>&1 | dtk pipe list package
 still fails. Piped runs are tracked separately from runs dtk executed itself — see the `Source`
 column in `dtk gain --coverage`.
 
+### `dtk log` — get a previous run's full output back
+
+When the filtered output is not enough, retrieve what was captured instead of re-running the build.
+
+```bash
+dtk log                  # newest log for this project: last 100 lines
+dtk log build            # newest build log for this project
+dtk log --list           # what is available
+dtk log --index 3        # the 3rd newest
+dtk log --lines 300      # a wider window
+dtk log --full           # everything
+dtk log --all            # include other projects
+```
+
+Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are
+saved, and output under 500 characters is never saved. Use `dtk config set tee.mode Always` to keep
+every run. Logs written before this version have no project metadata and appear only under `--all`.
+
+Passthrough subcommands (anything dtk has no filter for, such as `publish`) are not tee'd, so
+`dtk log` will not find them.
+
 ## AI Agent Setup
 
 Install integration artifacts with one command. **Installing globally is the recommended way to set

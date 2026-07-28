@@ -188,10 +188,10 @@ public sealed class CompletionCommandTests
     }
 
     [Theory]
-    [InlineData("bash", "local top_cmds=\"dotnet pipe integrate config doctor completion gain reset --version --help\"")]
+    [InlineData("bash", "local top_cmds=\"dotnet pipe integrate config doctor completion gain log reset --version --help\"")]
     [InlineData("zsh", "'pipe:Filter output piped in from a command dtk did not run'")]
     [InlineData("fish", "complete -c dtk -f -n '__fish_use_subcommand' -a pipe        -d 'Filter piped output'")]
-    [InlineData("powershell", "$topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'reset')")]
+    [InlineData("powershell", "$topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')")]
     public async Task Completion_ListsPipeAsATopLevelCommandAsync(string shell, string expectedFragment)
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("completion", shell);
@@ -201,6 +201,25 @@ public sealed class CompletionCommandTests
         // not merely anywhere in ~200 lines of generated script.
         output.Should().Contain(expectedFragment);
     }
+
+    // S4144 (identical implementation) fires because this body mirrors
+    // Completion_ListsPipeAsATopLevelCommandAsync exactly — both assert that a top-level command
+    // lands in the correct shell construct, just for "pipe" vs. "log". Kept as separate theories
+    // (rather than merged InlineData) so each command's expected fragments read independently.
+#pragma warning disable S4144
+    [Theory]
+    [InlineData("bash", "local top_cmds=\"dotnet pipe integrate config doctor completion gain log reset --version --help\"")]
+    [InlineData("zsh", "'log:Show the full output of a previous run'")]
+    [InlineData("fish", "complete -c dtk -f -n '__fish_use_subcommand' -a log         -d 'Show a previous run''s output'")]
+    [InlineData("powershell", "$topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')")]
+    public async Task Completion_ListsLogAsATopLevelCommandAsync(string shell, string expectedFragment)
+    {
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("completion", shell);
+
+        exitCode.Should().Be(0);
+        output.Should().Contain(expectedFragment);
+    }
+#pragma warning restore S4144
 
     private static (CompletionCommand command, TestConsole console, StringWriter writer) Create()
     {
