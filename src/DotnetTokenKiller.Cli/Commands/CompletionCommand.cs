@@ -152,7 +152,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         complete -c dtk -f -n '__fish_use_subcommand' -a doctor      -d 'Run diagnostics'
         complete -c dtk -f -n '__fish_use_subcommand' -a completion  -d 'Print shell completion script'
         complete -c dtk -f -n '__fish_use_subcommand' -a gain        -d 'Show token savings analytics'
-        complete -c dtk -f -n '__fish_use_subcommand' -a log         -d 'Show a previous run''s output'
+        complete -c dtk -f -n '__fish_use_subcommand' -a log         -d 'Show output from a previous run'
         complete -c dtk -f -n '__fish_use_subcommand' -a reset       -d 'Clear all tracking data'
 
         # dotnet subcommands
