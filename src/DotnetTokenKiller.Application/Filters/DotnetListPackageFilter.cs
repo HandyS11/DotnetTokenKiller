@@ -45,7 +45,7 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
             Variant.Plain => FormatPlain(state, exitCode),
             Variant.Outdated => FormatAudit(
                 state, exitCode, "--outdated", ("package with updates", "packages with updates"),
-                entry => $"{entry.Resolved} → {entry.Latest}"),
+                entry => $"{Version(entry)} → {entry.Latest}"),
             Variant.Deprecated => FormatAudit(
                 state, exitCode, "--deprecated", ("deprecated package", "deprecated packages"),
                 entry => $"{Version(entry)} — {entry.Reason}{Arrow(entry.Alternative)}"),
@@ -152,32 +152,18 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         {
             state.Variant = Variant.Plain;
         }
-        else if (what.Contains("no updates", StringComparison.OrdinalIgnoreCase))
-        {
-            state.Variant = Variant.Outdated;
-            state.CleanProjects++;
-        }
-        else if (what.Contains("updates to its packages", StringComparison.OrdinalIgnoreCase))
+        else if (what.Contains("no updates", StringComparison.OrdinalIgnoreCase) ||
+                 what.Contains("updates to its packages", StringComparison.OrdinalIgnoreCase))
         {
             state.Variant = Variant.Outdated;
         }
         else if (what.Contains("deprecated packages", StringComparison.OrdinalIgnoreCase))
         {
             state.Variant = Variant.Deprecated;
-            TrackCleanProject(state, what);
         }
         else if (what.Contains("vulnerable packages", StringComparison.OrdinalIgnoreCase))
         {
             state.Variant = Variant.Vulnerable;
-            TrackCleanProject(state, what);
-        }
-    }
-
-    private static void TrackCleanProject(ParseState state, string what)
-    {
-        if (what.StartsWith("no ", StringComparison.OrdinalIgnoreCase))
-        {
-            state.CleanProjects++;
         }
     }
 
@@ -416,7 +402,6 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         public Variant Variant { get; set; }
         public HashSet<string> Projects { get; } = new(StringComparer.Ordinal);
         public List<Entry> Entries { get; } = [];
-        public int CleanProjects { get; set; }
 
         /// <summary>
         /// How many <c>&gt; </c> table rows were seen but could not be mapped onto a recognized

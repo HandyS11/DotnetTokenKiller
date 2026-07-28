@@ -1231,6 +1231,11 @@ Wire it into the `Apply` switch:
                 entry => $"{entry.Resolved} → {entry.Latest}"),
 ```
 
+> **Correction (post-implementation):** this sample is wrong — a plan defect, not an implementer
+> error. `entry.Resolved` drops the requested version, contradicting this plan's own global rule that
+> `Requested ≠ Resolved` renders as `Pkg 1.0.0→1.2.3` and is never collapsed. The shipped code uses
+> `Version(entry)`, as the `--deprecated` and `--vulnerable` arms already did.
+
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash

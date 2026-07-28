@@ -301,6 +301,50 @@ public class DotnetListPackageFilterTests
     }
 
     [Fact]
+    public void Apply_SharedPackagePlusMoreGroupsThanTheCap_CountsOmittedPackagesNotGroups()
+    {
+        // The two density rules meet only when both fire at once: the "all projects:" line consumes
+        // one of the 30 group slots, leaving 29 for per-project lines, and each omitted project
+        // withholds TWO packages — so the trailing count must be 22 packages (11 projects × 2), not
+        // the 11 groups that were dropped.
+        var sb = new StringBuilder();
+        for (var i = 0; i < 40; i++)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Project 'P{i:D2}' has the following package references")
+                .AppendLine("   [net10.0]:")
+                .AppendLine("   Top-level Package      Requested   Resolved")
+                .AppendLine("   > Shared               1.0.0       1.0.0")
+                .AppendLine(CultureInfo.InvariantCulture, $"   > First{i:D2}               1.0.0       1.0.0")
+                .AppendLine(CultureInfo.InvariantCulture, $"   > Second{i:D2}              1.0.0       1.0.0")
+                .AppendLine();
+        }
+
+        var result = _sut.Apply(sb.ToString(), exitCode: 0);
+
+        result.Should().Contain("all projects: Shared 1.0.0", "Shared is in all 40 projects at one version");
+        result.Should().Contain("… and 22 more packages",
+            "29 of the 40 per-project lines fit alongside the shared line, and the 11 omitted projects "
+            + "hold 2 packages each");
+        result.Should().Contain("P28:", "P00-P28 are the 29 per-project lines that fit");
+        result.Should().NotContain("P29:", "P29 is the first project past the 30-group cap");
+    }
+
+    [Fact]
+    public void Apply_Outdated_FloatingVersion_KeepsTheRequestedVersion()
+    {
+        // A floating requested version is exactly the case where "which version am I actually on?"
+        // is not obvious from the project file, so --outdated must show it like the other variants.
+        const string input = """
+                            Project `Alpha` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Floating             1.0.*       1.0.7      2.0.0
+                            """;
+
+        _sut.Apply(input, exitCode: 0).Should().Contain("Floating 1.0.*→1.0.7 → 2.0.0");
+    }
+
+    [Fact]
     public void Apply_FailedRunWithUnparseableOutput_ReturnsEmptyForRawTailFallback()
     {
         const string input = "MSBUILD : error MSB1003: Specify a project or solution file.";
