@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<FullResetUseCase>();
         services.AddTransient<ConfigSetUseCase>();
         services.AddTransient<DoctorUseCase>();
+        services.AddTransient<LogViewUseCase>();
         services.AddKeyedTransient<IOutputFilter, DotnetBuildFilter>(FilterKeys.Build);
         services.AddKeyedTransient<IOutputFilter, DotnetTestFilter>(FilterKeys.Test);
         services.AddKeyedTransient<IOutputFilter, DotnetRestoreFilter>(FilterKeys.Restore);
