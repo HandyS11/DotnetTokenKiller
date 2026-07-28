@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Microsoft.Data.Sqlite;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 
@@ -75,6 +76,27 @@ internal static class IntegrationTestHelper
         var dbPath = Path.Combine(isolatedDir, "tracking.db");
         var (output, exitCode) = await RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir);
         return (output, exitCode, dbPath);
+    }
+
+    /// <summary>Reads the <c>command</c> column from the isolated tracking database written by a
+    /// <see cref="RunDtkWithDbAsync"/> invocation, so a test can assert on what was recorded.</summary>
+    /// <param name="dbPath">The isolated tracking-database path returned by <see cref="RunDtkWithDbAsync"/>.</param>
+    internal static async Task<IReadOnlyList<string>> ReadTrackedCommandsAsync(string dbPath)
+    {
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync().ConfigureAwait(false);
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT command FROM commands ORDER BY id";
+
+        var commands = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
+        while (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            commands.Add(reader.GetString(0));
+        }
+
+        return commands;
     }
 
     internal static double CalculateSavings(string rawOutput, string filteredOutput)
