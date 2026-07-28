@@ -30,6 +30,12 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     /// private) so <c>SubcommandBindingTests</c> can pin this repo's own committed copy of that
     /// file to it, the same way <see cref="HookScriptTemplates.ClaudeHook"/> pins the committed
     /// Claude hook.
+    /// <para>
+    /// Ends with an explicit <c>\n</c>: when this section is the whole file (the create path, and how
+    /// this repo's own committed copy came to be), a section without one produces a file that violates
+    /// <c>.editorconfig</c>'s <c>insert_final_newline</c>. A raw string literal drops the newline
+    /// before its closing delimiter, so the terminator has to be concatenated rather than typed.
+    /// </para>
     /// </summary>
     internal static readonly string CopilotSection =
         $"""
@@ -42,7 +48,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
         to `dtk dotnet ...` automatically. The hook shells out to `python3`; on Windows (where the launcher is
         usually `python`, not `python3`), edit the `bash` command in that file if it doesn't fire.
         {SectionEndMarker}
-        """;
+        """ + "\n";
 
     /// <inheritdoc/>
     public string ProviderName => "copilot-cli";
