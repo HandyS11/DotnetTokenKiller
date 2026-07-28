@@ -3,10 +3,10 @@ USAGE:
 
 EXAMPLES:
     dtk pipe build
-    dtk pipe build --exit-code 1
-    dtk pipe list package
     dtk integrate claude
     dtk integrate claude --dir /path/to/project --force
+    dtk integrate copilot
+    dtk integrate copilot-cli
 
 OPTIONS:
     -h, --help       Prints help information   

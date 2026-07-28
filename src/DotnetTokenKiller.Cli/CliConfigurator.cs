@@ -77,9 +77,7 @@ internal static class CliConfigurator
 
         config.AddCommand<Commands.PipeCommand>(PipeCommand)
             .WithDescription("Filter output piped in from a command dtk did not run")
-            .WithExample(PipeCommand, "build")
-            .WithExample(PipeCommand, "build", "--exit-code", "1")
-            .WithExample(PipeCommand, "list", "package");
+            .WithExample(PipeCommand, "build");
 
         config.AddCommand<Commands.IntegrateCommand>(IntegrateCommand)
             .WithDescription("Install dtk integration artifacts for an AI assistant provider")

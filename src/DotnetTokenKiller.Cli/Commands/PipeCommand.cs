@@ -21,10 +21,17 @@ internal sealed class PipeCommand(
     IStandardInputState standardInput) : AsyncCommand<PipeCommandSettings>
 {
     /// <inheritdoc/>
-    protected override async Task<int> ExecuteAsync(
+    protected override Task<int> ExecuteAsync(
         CommandContext context,
         PipeCommandSettings settings,
         CancellationToken cancellationToken)
+        => RunAsync(settings, cancellationToken);
+
+    /// <summary>Runs the command against already-parsed settings, bypassing Spectre's
+    /// <see cref="CommandContext"/> plumbing so this is directly callable from in-process tests.</summary>
+    /// <param name="settings">The parsed command settings.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal async Task<int> RunAsync(PipeCommandSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
 

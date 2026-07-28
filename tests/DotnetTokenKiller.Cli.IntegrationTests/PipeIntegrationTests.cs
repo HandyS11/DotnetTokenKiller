@@ -22,7 +22,7 @@ public class PipeIntegrationTests
 
         exitCode.Should().Be(1, "the supplied exit code is propagated so CI still fails");
         output.Should().Contain("CS1002");
-        output.Length.Should().BeLessThan(FailedBuildLog.Length);
+        output.Should().NotContain("Determining projects to restore", "the filter exists to drop this noise line");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

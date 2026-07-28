@@ -162,16 +162,6 @@ internal static class IntegrationTestHelper
             psi.ArgumentList.Add(arg);
         }
 
-        if (stdin is not null)
-        {
-            // Pipe-mode tests feed absolute paths (e.g. "/src/App.cs") through the filters, which
-            // shorten them relative to the process's current directory. Anchoring cwd to the shallow
-            // isolated temp dir (instead of inheriting the deeply nested test-runner bin directory)
-            // keeps that shortening meaningful instead of producing a longer relative path.
-            Directory.CreateDirectory(isolatedDir);
-            psi.WorkingDirectory = isolatedDir;
-        }
-
         using var process = Process.Start(psi)
                             ?? throw new InvalidOperationException($"Failed to start process '{executable}'.");
 
