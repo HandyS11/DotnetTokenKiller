@@ -27,7 +27,8 @@ public class SqliteTrackerTests : IAsyncDisposable
         double savingsPct = 85.0,
         DateTimeOffset? timestamp = null,
         bool success = true,
-        RunOutcome outcome = RunOutcome.Filtered)
+        RunOutcome outcome = RunOutcome.Filtered,
+        RunSource source = RunSource.Run)
     {
         return new CommandRecord(
             timestamp ?? DateTimeOffset.UtcNow,
@@ -36,7 +37,8 @@ public class SqliteTrackerTests : IAsyncDisposable
             new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
             TimeSpan.FromMilliseconds(500),
             success,
-            outcome);
+            outcome,
+            source);
     }
 
     [Fact]
@@ -552,6 +554,53 @@ public class SqliteTrackerTests : IAsyncDisposable
         var history = await _sut.GetHistoryAsync(1, null);
 
         history.Should().ContainSingle().Which.Outcome.Should().Be(RunOutcome.Filtered);
+    }
+
+    [Fact]
+    public async Task RecordAsync_RoundTripsPipeSourceAsync()
+    {
+        await _sut.RecordAsync(MakeRecord(source: RunSource.Pipe));
+
+        var history = await _sut.GetHistoryAsync(1, null);
+
+        history.Should().ContainSingle().Which.Source.Should().Be(RunSource.Pipe);
+    }
+
+    [Fact]
+    public async Task RecordAsync_DefaultsToRunSourceAsync()
+    {
+        await _sut.RecordAsync(MakeRecord());
+
+        var history = await _sut.GetHistoryAsync(1, null);
+
+        history.Should().ContainSingle().Which.Source.Should().Be(RunSource.Run);
+    }
+
+    [Fact]
+    public async Task LegacyDbWithoutSourceColumn_IsMigrated_AndReadsAsRunAsync()
+    {
+        // Every row written before this column existed came from a run dtk executed itself,
+        // so 'Run' is the correct backfill, not merely a convenient default.
+        var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "legacy.db");
+        try
+        {
+            await CreateLegacySchemaByHandAsync(dbPath);
+
+            await using var tracker = new SqliteTracker($"Data Source={dbPath}");
+            await tracker.RecordAsync(MakeRecord(), default);
+
+            var history = await tracker.GetHistoryAsync(1, null);
+            history.Should().ContainSingle().Which.Source.Should().Be(RunSource.Run);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            var dir = Path.GetDirectoryName(dbPath);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
     }
 
     [Fact]
