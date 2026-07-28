@@ -194,6 +194,22 @@ public sealed class LogCommandTests
     }
 
     [Fact]
+    public async Task Run_ListsALegacyNullHeaderEntry_WithUnknownProjectAndExitPlaceholders()
+    {
+        // A log written by dtk <= 0.6.0 has no header (Header is null). That is exactly what every
+        // existing user sees on their first upgrade under --all, and the renderer must fall back to
+        // the unknown-project and unknown-exit placeholders rather than throwing or misrendering.
+        var (command, console, _) = Create(new FakeStore([], Entry(5, "build", cwd: null)));
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { List = true, All = true }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("unknown");
+        console.Output.Should().Contain("?");
+    }
+
+    [Fact]
     public async Task Run_RejectsAnUnknownSubcommand_AndListsTheKnownOnes()
     {
         var (command, console, _) = Create(new FakeStore([]));

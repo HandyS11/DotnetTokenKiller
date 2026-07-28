@@ -212,6 +212,9 @@ public sealed class FileTeeServiceTests : IDisposable
         var file = Directory.GetFiles(_tempDir).Single();
         // The byte budget applies to the body alone; the header is dtk's own addition on top of it.
         var written = await File.ReadAllTextAsync(file);
+        // StripHeader returns its input unchanged when parsing fails, so without this assertion the
+        // test below would still pass on an unstripped fragment if truncation ate the header itself.
+        TeeLogHeader.TryParse(written, out _).Should().BeTrue();
         var body = TeeLogHeader.StripHeader(written);
         ((long)Encoding.UTF8.GetByteCount(body)).Should().BeLessThanOrEqualTo(maxBytes);
         // ASCII input: the byte cap equals the char count exactly.

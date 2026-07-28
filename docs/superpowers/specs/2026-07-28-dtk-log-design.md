@@ -67,9 +67,10 @@ full anyway, so its line count is free and appears in the view header.
 Spelled out because each combination is reachable from the command line and a plausible reading
 exists for both sides:
 
-- `--list` **overrides** `--index`, `--lines`, and `--full`. Asking for the index and for a body at
-  once is a contradiction; the index wins rather than erroring, because the index is the cheaper
-  and more recoverable of the two answers.
+- `--list` **overrides** `--index`'s selection (and `--lines`/`--full`, which have nothing to apply
+  to once there is no body). An out-of-range `--index` is still rejected as a usage error, because
+  validation runs before the list/view branch — `dtk log --list --index 0` errors rather than
+  listing.
 - `--full` **overrides** `--lines`. The explicit "all of it" beats a bounded count.
 - `--index` numbers the **same set `--list` would show** under the flags in effect. So
   `dtk log build --index 2` is the 2nd newest `build` log for this project, not the 2nd newest log
@@ -130,8 +131,8 @@ Two alternatives were rejected:
   pointing at nothing.
 
 A header in the file keeps one source of truth, survives the file being copied elsewhere, and
-extends without a schema migration. Reading the first 512 bytes of at most 20 files to build an
-index is not a cost worth optimising away.
+extends without a schema migration. Reading the first 4096 bytes (`FileTeeLogStore.HeadBytes`) of
+at most 20 files to build an index is not a cost worth optimising away.
 
 `MaxFileSizeBytes` continues to apply to the **body alone**; the header is written in addition to
 that budget. Charging a configured cap for bytes the user did not ask to store would silently shrink
@@ -153,7 +154,8 @@ The condition is self-healing: the next filtered run in the project writes a v1 
 
 ### Empty state
 
-`dtk log` with nothing to show exits **1** with the reason on stderr. This is where the
+`dtk log` with nothing to show exits **1** with the reason on the Spectre console, which is bound
+to stdout — consistent with `PipeCommand` and the rest of dtk. This is where the
 discoverability gap actually gets closed: with the default `TeeMode.Failures` and the 500-character
 floor, a successful or small run leaves **no log at all**, and a bare "not found" would read as a
 broken feature. The message states the applicable reason — no tee file was written for a passing

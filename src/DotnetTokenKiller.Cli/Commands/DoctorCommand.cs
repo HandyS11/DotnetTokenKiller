@@ -32,9 +32,7 @@ internal sealed class DoctorCommand(
                      ?? config.Tracking.DbPath
                      ?? SqliteTracker.GetDefaultDbPath();
 
-        var teeDirectory = EnvironmentOverride.Read("DTK_TEE_DIR")
-                           ?? config.Tee.Directory
-                           ?? TeeDirectoryResolver.GetDefault();
+        var teeDirectory = TeeDirectoryResolver.Resolve(config.Tee, null);
 
         var checks = await doctorUseCase.RunAsync(dbPath, teeDirectory, cancellationToken)
             .ConfigureAwait(false);

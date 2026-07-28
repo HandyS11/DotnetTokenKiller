@@ -90,6 +90,33 @@ public sealed class DoctorCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteAsync_EmptyConfigTeeDirectory_ReportsThePlatformDefault()
+    {
+        // TeeDirectoryResolver.Resolve treats an EMPTY config directory as unset and falls back to
+        // the platform default; doctor must resolve through the same shared chain rather than a
+        // hand-rolled `??`, which would treat "" as a real (and wrong) value.
+        var savedEnv = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
+        Environment.SetEnvironmentVariable("DTK_TEE_DIR", null);
+        try
+        {
+            var console = new TestConsole();
+            console.Profile.Width = 400;
+            var configProvider = new EmptyTeeDirectoryConfigProvider();
+            var runner = new StubCommandRunner(0);
+            var useCase = new DoctorUseCase(runner, configProvider);
+            var command = new DoctorCommand(useCase, configProvider, console);
+
+            await command.RunAsync(CancellationToken.None);
+
+            console.Output.Should().Contain(TeeDirectoryResolver.GetDefault());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTK_TEE_DIR", savedEnv);
+        }
+    }
+
+    [Fact]
     public async Task ExecuteAsync_DtkTeeDirEnvVar_ReportsTheOverrideTheTeeServiceUses()
     {
         // The tee service honors DTK_TEE_DIR over config/default, so doctor must report that same
@@ -266,6 +293,34 @@ public sealed class DoctorCommandTests : IDisposable
             TextWriter stdOutSink, TextWriter stdErrSink, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new CommandResult(string.Empty, string.Empty, exitCode));
+        }
+    }
+
+    /// <summary>Config provider returning an empty (not null) Tee.Directory, which the resolver
+    /// treats as unset, unlike a hand-rolled `??` chain.</summary>
+    private sealed class EmptyTeeDirectoryConfigProvider : IConfigProvider
+    {
+        public DtkConfig Load()
+        {
+            return DtkConfig.Default with
+            {
+                Tee = DtkConfig.Default.Tee with { Directory = string.Empty }
+            };
+        }
+
+        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(Load());
+        }
+
+        public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
         }
     }
 

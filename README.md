@@ -156,7 +156,7 @@ dtk log --all            # include other projects
 
 Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are
 saved, and output under 500 characters is never saved. Use `dtk config set tee.mode Always` to keep
-every run. Logs written before this version have no project metadata and appear only under `--all`.
+every run. Logs written by dtk 0.6.0 or earlier have no project metadata and appear only under `--all`.
 
 Passthrough subcommands (anything dtk has no filter for, such as `publish`) are not tee'd, so
 `dtk log` will not find them.

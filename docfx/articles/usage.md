@@ -305,6 +305,8 @@ dtk dotnet run        # runs: dotnet run
 
 DTK can save the raw, unfiltered command output to disk. This is controlled by the `tee.mode` configuration setting (see [Configuration](configuration.md)). By default, only failed runs are saved.
 
+Each log file also records the full command line and working directory that produced it, alongside the output. Log files are kept owner-only (mode `0600`) for that reason.
+
 To print the log path after a command:
 
 ```sh
