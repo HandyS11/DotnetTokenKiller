@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using DotnetTokenKiller.Domain;
 using FluentAssertions;
 using Spectre.Console.Testing;
@@ -184,6 +185,19 @@ public sealed class CompletionCommandTests
             var candidate = line.Split(" -a ")[1].Split(" -d ")[0].Trim();
             candidate.Should().NotContain(" ", "candidate '{0}' would break the generated script", candidate);
         }
+    }
+
+    [Theory]
+    [InlineData("bash")]
+    [InlineData("zsh")]
+    [InlineData("fish")]
+    [InlineData("powershell")]
+    public async Task Completion_ListsPipeAsATopLevelCommandAsync(string shell)
+    {
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("completion", shell);
+
+        exitCode.Should().Be(0);
+        output.Should().Contain("pipe");
     }
 
     private static (CompletionCommand command, TestConsole console, StringWriter writer) Create()
