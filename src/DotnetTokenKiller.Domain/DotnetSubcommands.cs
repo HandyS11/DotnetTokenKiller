@@ -21,6 +21,12 @@ namespace DotnetTokenKiller.Domain;
 ///   its first token, and completing the remaining tokens is not implemented.
 ///   </description></item>
 ///   <item><description>
+///   Check <c>ClaudeCodeIntegrator.SkillMarkdown</c>. Its frontmatter <c>description:</c> is Claude
+///   Code's <em>skill-trigger</em> text — a subcommand missing from it means the installed skill
+///   never surfaces for that intent, which nothing inside dtk can observe. It and the skill's
+///   example block are both derived, and pinned by <c>SubcommandBindingTests</c>.
+///   </description></item>
+///   <item><description>
 ///   Update the pinned literals in <c>SubcommandBindingTests</c>, <c>DotnetSubcommandsTests</c>,
 ///   <c>AiderIntegratorTests</c>, and <c>GitHubCopilotIntegratorTests</c> — the last two pin fully
 ///   rendered instruction text, not just the list — and accept the CLI help snapshots.

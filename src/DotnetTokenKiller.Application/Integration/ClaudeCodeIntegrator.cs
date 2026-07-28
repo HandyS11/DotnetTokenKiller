@@ -42,11 +42,28 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     /// </summary>
     private const string GlobalHookCommand = """python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py""";
 
-    private static readonly string SkillMarkdown =
+    /// <summary>
+    /// The skill's frontmatter <c>description:</c> line. This is Claude Code's <em>skill-trigger</em>
+    /// text — the one string that decides whether the skill surfaces for a given user intent — so it
+    /// is derived from <see cref="IntegrationInstructions.SubcommandProse"/> rather than hand-written.
+    /// A hardcoded list here meant a user who ran <c>dtk integrate claude</c> got a skill that never
+    /// fired for package-listing intent, which is invisible from inside dtk.
+    /// </summary>
+    private static readonly string SkillDescription =
+        "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage when "
+        + $"running `dotnet` {IntegrationInstructions.SubcommandProse} commands.";
+
+    /// <summary>
+    /// The skill written to <c>.claude/skills/dotnet-token-killer/SKILL.md</c>. Internal (rather than
+    /// private) so <c>SubcommandBindingTests</c> can pin <see cref="SkillDescription"/> the same way
+    /// it pins <see cref="CopilotCliIntegrator.CopilotSection"/> — this file is a derived artifact
+    /// with no compile-time link to the canonical subcommand list.
+    /// </summary>
+    internal static readonly string SkillMarkdown =
         $"""
         ---
         name: dotnet-token-killer
-        description: 'Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage when building, testing, restoring, cleaning, or formatting .NET projects.'
+        description: '{SkillDescription}'
         ---
 
         # DotnetTokenKiller (dtk)
@@ -61,18 +78,9 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         ## Usage
 
-        Drop-in replacement for {IntegrationInstructions.SubcommandBacktickProse}. All arguments and flags are forwarded unchanged:
+        Drop-in replacement for {IntegrationInstructions.SubcommandBacktickProse}:
 
-        ```sh
-        dtk dotnet build MyProject.slnx
-        dtk dotnet test --filter "Category=Unit"
-        dtk dotnet restore
-        dtk dotnet clean
-        dtk dotnet format
-        dtk dotnet format --verify-no-changes
-        ```
-
-        Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
+        {IntegrationInstructions.UsageBody}
 
         ## Flags
 
@@ -86,7 +94,6 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         - Paths are workspace-relative (`src/Foo.cs`, not absolute)
         - Build errors grouped by file; warnings grouped by diagnostic code with frequency counts
-        - Exit codes preserved — CI pipelines work correctly
         - Works with xUnit, NUnit, MSTest, and Reqnroll
         - Run `dtk dotnet clean` first for a full warning report (incremental builds skip unchanged files)
         - The PreToolUse hook shells out to `python3`; on Windows (where the launcher is usually `python`, not `python3`), edit the `command` in `.claude/settings.json` if the hook doesn't fire

@@ -166,6 +166,38 @@ public sealed class SubcommandBindingTests
     }
 
     [Fact]
+    public void ClaudeSkillDescription_NamesEveryCanonicalSubcommand()
+    {
+        // Pinned to the literal, known-good bytes for the same reason as the assertions above:
+        // deriving it from DotnetSubcommands.Ordered would make the expectation move in lockstep
+        // with the source and the test could never fail. Adding a subcommand means editing this by
+        // hand. This one is worth pinning separately from the prose forms because it is Claude
+        // Code's *skill-trigger* text: if it omits a subcommand, the skill silently never surfaces
+        // for that intent, and nothing inside dtk can observe that.
+        const string expectedDescription =
+            "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage "
+            + "when running `dotnet` build, test, restore, clean, format, and list package commands.";
+
+        ClaudeCodeIntegrator.SkillMarkdown.Should().Contain(
+            $"description: '{expectedDescription}'",
+            "the skill's frontmatter description is what Claude Code matches user intent against, so "
+            + "a subcommand missing from it means the skill never fires for that subcommand");
+    }
+
+    [Fact]
+    public void ClaudeSkill_EmbedsTheSharedUsageBody()
+    {
+        // The skill used to carry its own hardcoded 'sh' example block, which omitted
+        // 'dtk dotnet list package --outdated' — so the skill named 'list package' in one sentence
+        // and then contradicted itself in its own examples. Embedding the shared body is what makes
+        // that impossible; this test is what keeps it embedded.
+        ClaudeCodeIntegrator.SkillMarkdown.Should().Contain(
+            IntegrationInstructions.UsageBody,
+            "the skill must embed the shared usage body verbatim rather than restate it, or its "
+            + "examples drift from every other provider's");
+    }
+
+    [Fact]
     public void SharedInstructions_MentionEverySubcommandInTheIntro()
     {
         foreach (var subcommand in DotnetSubcommands.Ordered)
