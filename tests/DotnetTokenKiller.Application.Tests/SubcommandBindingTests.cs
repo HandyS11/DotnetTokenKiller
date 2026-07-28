@@ -165,6 +165,22 @@ public sealed class SubcommandBindingTests
             + "subcommand, or a user reading the skill would not know dtk covers the newest one");
     }
 
+    [Theory]
+    [InlineData(0, "")]
+    [InlineData(1, "one")]
+    [InlineData(2, "one and two")]
+    [InlineData(3, "one, two, and three")]
+    [InlineData(4, "one, two, three, and four")]
+    public void BuildProse_UsesTheSerialCommaOnlyForThreeOrMoreNames(int count, string expected)
+    {
+        // The two-name case is unreachable while Ordered holds more than two, but the prose it
+        // produces is user-facing, so the join is verified across every arm rather than only the
+        // arm today's canonical list happens to take.
+        string[] names = ["one", "two", "three", "four"];
+
+        IntegrationInstructions.BuildProse(names[..count]).Should().Be(expected);
+    }
+
     [Fact]
     public void ClaudeSkillDescription_NamesEveryCanonicalSubcommand()
     {

@@ -76,11 +76,21 @@ internal static class IntegrationInstructions
         {UsageBody}
         """;
 
-    private static string BuildProse(IReadOnlyList<string> names) =>
+    /// <summary>Joins names into an Oxford-comma prose list, e.g. <c>build, test, and format</c>.</summary>
+    /// <param name="names">The names to join, in the order they should read.</param>
+    /// <returns>The joined list, or <see cref="string.Empty"/> when <paramref name="names"/> is empty.</returns>
+    /// <remarks>
+    /// Two names join as <c>a and b</c> with no comma: a serial comma separates three or more items,
+    /// so emitting one for a pair reads as a mistake. Unreachable while
+    /// <see cref="DotnetSubcommands.Ordered"/> holds more than two, but this is a general join and
+    /// the shape it produces is user-facing.
+    /// </remarks>
+    internal static string BuildProse(IReadOnlyList<string> names) =>
         names.Count switch
         {
             0 => string.Empty,
             1 => names[0],
+            2 => $"{names[0]} and {names[1]}",
             _ => $"{string.Join(", ", names.Take(names.Count - 1))}, and {names[^1]}"
         };
 
