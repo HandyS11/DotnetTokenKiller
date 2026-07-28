@@ -13,7 +13,7 @@ public sealed class AiderIntegratorTests : IDisposable
     private const string DtkSectionWithOwnReadKey =
         """
         # dtk
-        # DotnetTokenKiller: use dtk instead of dotnet for build/test/restore/clean/format.
+        # DotnetTokenKiller: use dtk instead of dotnet for build/test/restore/clean/format/list package.
         read:
           - .aider-dtk-instructions.md
         # /dtk
@@ -23,7 +23,7 @@ public sealed class AiderIntegratorTests : IDisposable
     private const string DtkSectionMergedIntoExistingKey =
         """
         # dtk
-        # DotnetTokenKiller: use dtk instead of dotnet for build/test/restore/clean/format.
+        # DotnetTokenKiller: use dtk instead of dotnet for build/test/restore/clean/format/list package.
         # (merged into the existing top-level "read:" key above instead of declaring a new one)
         # /dtk
         """;

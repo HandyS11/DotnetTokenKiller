@@ -1,0 +1,15 @@
+DESCRIPTION:
+Run dotnet list commands with filtered output
+
+USAGE:
+    dtk dotnet list [OPTIONS] <COMMAND>
+
+EXAMPLES:
+    dtk dotnet list package
+    dtk dotnet list package --outdated
+
+OPTIONS:
+    -h, --help    Prints help information
+
+COMMANDS:
+    package    Run dotnet list package with filtered output

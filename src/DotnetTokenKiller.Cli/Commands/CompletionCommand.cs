@@ -8,8 +8,15 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <summary>Prints a shell completion script for dtk.</summary>
 /// <remarks>
 /// The <c>__DOTNET_CMDS_*__</c> placeholders in the templates are filled at runtime from
-/// <see cref="DotnetSubcommands.Ordered"/>, so the supported dotnet subcommands
-/// (build/test/restore/clean/format) can never drift between the CLI and its completions.
+/// <see cref="DotnetSubcommands.Ordered"/>, so the set of subcommands offered can never drift
+/// between the CLI and its completions.
+/// <para>
+/// Only the <em>first</em> token of each canonical name is emitted, deliberately: a multi-token name
+/// such as <c>list package</c> would otherwise make the generated fish script malformed
+/// (<c>-a list package</c> is two arguments) and would offer bare <c>package</c> as a bash candidate.
+/// So a multi-token subcommand completes as far as <c>list</c> and no further — completing its
+/// remaining tokens is not implemented.
+/// </para>
 /// </remarks>
 /// <param name="console">The Spectre.Console output sink for human-facing errors.</param>
 /// <param name="output">The raw text writer for the completion script, bypassing console width wrapping.</param>
@@ -200,23 +207,42 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         }
         """;
 
+    /// <summary>
+    /// Completion candidates at the <c>dtk dotnet &lt;TAB&gt;</c> position: the first token of every
+    /// canonical subcommand, de-duplicated.
+    /// </summary>
+    /// <param name="names">Canonical subcommand names, space-separated for multi-token ones.</param>
+    /// <remarks>
+    /// Multi-token subcommands contribute only their first token. Emitting the full
+    /// <c>"list package"</c> would break the generated scripts — fish reads the second token as
+    /// another argument to <c>complete</c>, and bash's <c>-W</c> word list would offer
+    /// <c>package</c> as a standalone candidate. Completing the second token is not implemented;
+    /// the rewrite hook, not completion, is the primary path for these.
+    /// </remarks>
+    internal static IReadOnlyList<string> CompletionCandidates(IReadOnlyList<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+        return [.. names.Select(name => name.Split(' ')[0]).Distinct(StringComparer.Ordinal)];
+    }
+
+    private static IReadOnlyList<string> DotnetCandidates { get; } =
+        CompletionCandidates(DotnetSubcommands.Ordered);
+
     /// <summary>Space-separated dotnet subcommand list for the bash script.</summary>
-    private static readonly string BashDotnetCommands =
-        string.Join(' ', DotnetSubcommands.Ordered);
+    private static readonly string BashDotnetCommands = string.Join(' ', DotnetCandidates);
 
     private static readonly string PowerShellDotnetCommands =
-        string.Join(", ", DotnetSubcommands.Ordered.Select(sub => $"'{sub}'"));
+        string.Join(", ", DotnetCandidates.Select(sub => $"'{sub}'"));
 
     private static readonly string ZshDotnetCommands =
         string.Join(
             "\n        ",
-            DotnetSubcommands.Ordered.Select(
-                sub => $"'{sub}:Run dotnet {sub} with filtered output'"));
+            DotnetCandidates.Select(sub => $"'{sub}:Run dotnet {sub} with filtered output'"));
 
     private static readonly string FishDotnetCommands =
         string.Join(
             '\n',
-            DotnetSubcommands.Ordered.Select(
+            DotnetCandidates.Select(
                 sub => $"complete -c dtk -f -n '__fish_seen_subcommand_from dotnet' -a {sub} -d 'Run dotnet {sub} with filtered output'"));
 
     /// <inheritdoc/>

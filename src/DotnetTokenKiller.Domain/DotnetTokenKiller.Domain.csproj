@@ -2,4 +2,7 @@
   <PropertyGroup>
     <RootNamespace>DotnetTokenKiller.Domain</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotnetTokenKiller.Domain.Tests"/>
+  </ItemGroup>
 </Project>

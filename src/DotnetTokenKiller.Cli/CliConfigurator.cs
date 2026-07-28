@@ -62,6 +62,14 @@ internal static class CliConfigurator
                 .WithDescription("Run dotnet format with filtered output")
                 .WithExample(DotnetCommand, "format")
                 .WithExample(DotnetCommand, "format", "--verify-no-changes");
+            dotnet.AddBranch("list", list =>
+            {
+                list.SetDescription("Run dotnet list commands with filtered output");
+                list.AddCommand<DotnetListPackageCommand>("package")
+                    .WithDescription("Run dotnet list package with filtered output")
+                    .WithExample(DotnetCommand, "list", "package")
+                    .WithExample(DotnetCommand, "list", "package", "--outdated");
+            });
         });
 
         config.AddCommand<Commands.IntegrateCommand>(IntegrateCommand)

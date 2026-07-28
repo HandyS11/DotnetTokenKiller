@@ -44,4 +44,34 @@ public sealed class HookScriptTemplatesTests
         script.Should().Contain("def _is_simple_command");
         script.Should().Contain("\"allow\" if _is_simple_command(command) else \"ask\"");
     }
+
+    [Fact]
+    public void SharedCore_MatchesAnyWhitespaceBetweenSubcommandTokens()
+    {
+        // A tuple entry containing a literal space would match exactly one space, so
+        // `dotnet list   package` would silently not be rewritten.
+        HookScriptTemplates.ClaudeHook.Should().Contain("""s.replace(" ", r"\s+")""");
+    }
+
+    [Fact]
+    public void SharedCore_OrdersTheAlternationLongestFirst()
+    {
+        // Python's alternation is first-match-wins, so a subcommand that prefixes a longer one
+        // would shadow it.
+        HookScriptTemplates.ClaudeHook.Should().Contain("key=len, reverse=True");
+    }
+
+    [Fact]
+    public void AllThreeHooks_ShareTheIdenticalPatternConstruction()
+    {
+        foreach (var hook in new[]
+                 {
+                     HookScriptTemplates.ClaudeHook,
+                     HookScriptTemplates.GeminiHook,
+                     HookScriptTemplates.CopilotCliHook
+                 })
+        {
+            hook.Should().Contain("""s.replace(" ", r"\s+")""");
+        }
+    }
 }

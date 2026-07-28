@@ -46,9 +46,21 @@ public static class PassthroughSubcommands
 
     /// <summary>
     /// The second token, per subcommand, that meaningfully changes what the command does. Without
-    /// this, <c>list package</c> (worth filtering) and <c>list reference</c> (not) collapse into
-    /// one row.
+    /// this, invocations that differ only in that token — <c>list reference</c> and <c>list package</c>
+    /// — collapse into one indistinguishable coverage row.
     /// </summary>
+    /// <remarks>
+    /// <c>"package"</c> under <c>list</c> is retained on purpose even though <c>dotnet list package</c>
+    /// is now a filtered subcommand that no longer reaches this code. Coverage rows recorded before it
+    /// was filtered are keyed <c>"list package"</c>, and dropping the token here would leave that key
+    /// as something the allowlist no longer admits — so those rows would stop being interpretable as
+    /// a name this type can produce. The entry is therefore correct but currently unreachable:
+    /// <c>PassthroughRunUseCase</c> is the only caller, and an invocation whose first two tokens are
+    /// <c>list package</c> is routed to the filtered command by
+    /// <c>DotnetSubcommands.TryMatch</c> before it can get here. Uncovered spellings such as
+    /// <c>dotnet list &lt;SOLUTION&gt; package</c> do reach this code, but record as plain
+    /// <c>"list"</c>, because only <c>dotnetArgs[1]</c> is consulted.
+    /// </remarks>
     private static readonly Dictionary<string, IReadOnlySet<string>> QualifyingVerbs =
         new(StringComparer.OrdinalIgnoreCase)
         {

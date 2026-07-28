@@ -1,0 +1,2 @@
+dotnet list package --outdated: 1 package with updates (all 8 projects)
+  SonarAnalyzer.CSharp 10.29.0.143774 → 10.30.0.144632 (8 projects)

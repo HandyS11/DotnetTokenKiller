@@ -1,9 +1,9 @@
 # DotnetTokenKiller
 
 A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
-down to only what matters. Prefix `build`, `test`, `restore`, `clean`, and `format` with `dtk` for
-60–90% fewer tokens — per-command filters, token analytics, and one-command setup for 8 AI coding
-agents.
+down to only what matters. Prefix `build`, `test`, `restore`, `clean`, `format`, and `list package`
+with `dtk` for 60–90% fewer tokens — per-command filters, token analytics, and one-command setup for
+8 AI coding agents.
 
 ## Why
 
@@ -38,6 +38,7 @@ dtk dotnet test --filter "Category=Unit"
 dtk dotnet restore
 dtk dotnet clean
 dtk dotnet format
+dtk dotnet list package --outdated
 ```
 
 Unknown subcommands pass through to `dotnet` unchanged.
@@ -48,6 +49,8 @@ Unknown subcommands pass through to `dotnet` unchanged.
 - Test filtering — removes adapter banners, license warnings, and reflection stack frames (~84% savings)
 - Restore/Clean filtering — condenses output to essentials (~47–98% savings)
 - Format filtering — shows only violations with workspace-relative paths
+- `list package` filtering — collapses per-TFM duplication across plain, `--outdated`,
+  `--deprecated`, and `--vulnerable` (~80.9% savings)
 - 8 AI agent integrations — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Cursor, Windsurf, Aider, JetBrains AI
 - Token analytics — tracks per-command savings over time with `dtk gain`
 - Self-diagnostics — `dtk doctor` validates your setup in one command

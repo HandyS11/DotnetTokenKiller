@@ -42,23 +42,28 @@ internal static class ArgumentPreprocessor
     {
         if (args.Length < 2 ||
             !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) ||
-            !DotnetSubcommands.All.Contains(args[1]))
+            !DotnetSubcommands.TryMatch(args[1..], out var match))
         {
             return args;
         }
 
-        var canonicalSub = DotnetSubcommands.Ordered.First(
-            s => string.Equals(s, args[1], StringComparison.OrdinalIgnoreCase));
+        var canonicalTokens = match.Name.Split(' ');
+        var alreadyCanonical =
+            string.Equals(args[0], DotnetCommand, StringComparison.Ordinal) &&
+            !canonicalTokens.Where((token, i) => !string.Equals(args[1 + i], token, StringComparison.Ordinal)).Any();
 
-        if (string.Equals(args[0], DotnetCommand, StringComparison.Ordinal) &&
-            string.Equals(args[1], canonicalSub, StringComparison.Ordinal))
+        if (alreadyCanonical)
         {
             return args;
         }
 
         var normalized = (string[])args.Clone();
         normalized[0] = DotnetCommand;
-        normalized[1] = canonicalSub;
+        for (var i = 0; i < canonicalTokens.Length; i++)
+        {
+            normalized[1 + i] = canonicalTokens[i];
+        }
+
         return normalized;
     }
 
@@ -71,7 +76,7 @@ internal static class ArgumentPreprocessor
     {
         return args.Length >= 2 &&
                string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
-               !DotnetSubcommands.All.Contains(args[1]);
+               !DotnetSubcommands.TryMatch(args[1..], out _);
     }
 
     /// <summary>
@@ -88,7 +93,13 @@ internal static class ArgumentPreprocessor
     {
         if (args.Length <= 2 ||
             !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) ||
-            !DotnetSubcommands.All.Contains(args[1]))
+            !DotnetSubcommands.TryMatch(args[1..], out var match))
+        {
+            return args;
+        }
+
+        var firstArgIndex = 1 + match.TokenCount;
+        if (args.Length <= firstArgIndex)
         {
             return args;
         }
@@ -96,7 +107,7 @@ internal static class ArgumentPreprocessor
         var dtkFlags = new List<string>();
         var dotnetArgs = new List<string>();
         var sawUserSeparator = false;
-        for (var i = 2; i < args.Length; i++)
+        for (var i = firstArgIndex; i < args.Length; i++)
         {
             // Once the user's own "--" is seen, it and everything after it is forwarded
             // verbatim — never reinterpreted as a dtk flag.
@@ -120,11 +131,8 @@ internal static class ArgumentPreprocessor
             return args;
         }
 
-        var updated = new List<string>(args.Length + 1)
-        {
-            args[0],
-            args[1]
-        };
+        var updated = new List<string>(args.Length + 1);
+        updated.AddRange(args[..firstArgIndex]);
         updated.AddRange(dtkFlags);
         updated.Add("--");
         updated.AddRange(dotnetArgs);

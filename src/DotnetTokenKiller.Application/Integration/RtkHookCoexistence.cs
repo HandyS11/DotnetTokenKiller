@@ -8,7 +8,9 @@ namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>
 /// Detects an rtk PreToolUse hook and reconciles rtk's config so that dtk — not rtk — owns
-/// <c>dotnet build/test/restore/clean/format</c> once dtk is integrated with Claude Code.
+/// <c>dotnet</c> commands once dtk is integrated with Claude Code. Deliberately not a list of
+/// subcommands: the reconciliation excludes <c>dotnet</c> wholesale in rtk's config, so it covers
+/// whatever <c>DotnetTokenKiller.Domain.DotnetSubcommands</c> holds without needing to restate it.
 /// </summary>
 internal sealed partial class RtkHookCoexistence
 {

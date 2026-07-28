@@ -34,14 +34,15 @@ public class PassthroughIntegrationTests
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Passthrough_MeasurableSubcommand_RecordsAMeasuredRow()
     {
-        // The deliverable of this task: an unfiltered run now leaves a trace. `dotnet list package`
-        // needs a project, so it fails here — a failed run must still be recorded and measured.
-        var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "list", "package");
+        // An unfiltered run still leaves a trace. `dotnet list reference` is the exemplar: it is the
+        // sibling of the filtered `list package`, so it must stay on the passthrough path, and it
+        // needs a project — so it fails here, and a failed run must still be recorded and measured.
+        var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "list", "reference");
 
         var rows = ReadCommandRows(dbPath);
 
         rows.Should().ContainSingle();
-        rows[0].Command.Should().Be("list package");
+        rows[0].Command.Should().Be("list reference");
         rows[0].Outcome.Should().Be("PassthroughMeasured");
         rows[0].InputTokens.Should().BeGreaterThan(0);
     }
@@ -62,8 +63,9 @@ public class PassthroughIntegrationTests
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Passthrough_MeasurableSubcommand_StillPrintsOutput()
     {
-        // Streaming must not swallow what the user would otherwise have seen.
-        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "list", "package");
+        // Streaming must not swallow what the user would otherwise have seen. `list reference` rather
+        // than `list package`, which dtk now filters and so no longer reaches the streaming path.
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "list", "reference");
 
         exitCode.Should().NotBe(0);
         output.Should().NotBeEmpty();

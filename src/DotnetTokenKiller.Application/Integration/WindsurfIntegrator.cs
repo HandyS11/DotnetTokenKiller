@@ -11,7 +11,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </remarks>
 public sealed class WindsurfIntegrator : IProviderIntegrator
 {
-    private const string WindsurfRule =
+    private static readonly string WindsurfRule =
         $"""
         # DotnetTokenKiller (dtk)
 

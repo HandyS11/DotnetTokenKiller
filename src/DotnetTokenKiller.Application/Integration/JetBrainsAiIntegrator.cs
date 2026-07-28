@@ -14,7 +14,7 @@ public sealed class JetBrainsAiIntegrator : IProviderIntegrator
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
 
-    private const string GuidelinesSection =
+    private static readonly string GuidelinesSection =
         $"""
         {SectionMarker}
         ## DotnetTokenKiller (dtk)

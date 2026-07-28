@@ -1,0 +1,109 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+Project 'DotnetTokenKiller.Application' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.Extensions.DependencyInjection        10.0.10          10.0.10       
+   > Microsoft.ML.Tokenizers                         2.0.0            2.0.0         
+   > Microsoft.ML.Tokenizers.Data.Cl100kBase         2.0.0            2.0.0         
+   > Microsoft.ML.Tokenizers.Data.O200kBase          2.0.0            2.0.0         
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+   > Tomlyn                                          2.10.1           2.10.1        
+
+Project 'DotnetTokenKiller.Cli' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+   > Spectre.Console                                 0.57.2           0.57.2        
+   > Spectre.Console.Cli                             0.55.0           0.55.0        
+
+Project 'DotnetTokenKiller.Domain' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+
+Project 'DotnetTokenKiller.Infrastructure' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.Data.Sqlite                           10.0.10          10.0.10       
+   > Microsoft.Extensions.DependencyInjection        10.0.10          10.0.10       
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+
+Project 'DotnetTokenKiller.Application.Tests' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > coverlet.collector                              10.0.1           10.0.1        
+   > FluentAssertions                                8.10.0           8.10.0        
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.NET.Test.Sdk                          18.8.1           18.8.1        
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > NSubstitute                                     6.0.0            6.0.0         
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+   > Spectre.Console.Testing                         0.57.2           0.57.2        
+   > Verify.Xunit                                    31.12.5          31.12.5       
+   > xunit                                           2.9.3            2.9.3         
+   > xunit.runner.visualstudio                       3.1.5            3.1.5         
+
+Project 'DotnetTokenKiller.Cli.IntegrationTests' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > coverlet.collector                              10.0.1           10.0.1        
+   > FluentAssertions                                8.10.0           8.10.0        
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.Data.Sqlite                           10.0.10          10.0.10       
+   > Microsoft.NET.Test.Sdk                          18.8.1           18.8.1        
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+   > Spectre.Console.Testing                         0.57.2           0.57.2        
+   > Verify.Xunit                                    31.12.5          31.12.5       
+   > xunit                                           2.9.3            2.9.3         
+   > xunit.runner.visualstudio                       3.1.5            3.1.5         
+
+Project 'DotnetTokenKiller.Domain.Tests' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > coverlet.collector                              10.0.1           10.0.1        
+   > FluentAssertions                                8.10.0           8.10.0        
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.NET.Test.Sdk                          18.8.1           18.8.1        
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+   > xunit                                           2.9.3            2.9.3         
+   > xunit.runner.visualstudio                       3.1.5            3.1.5         
+
+Project 'DotnetTokenKiller.Infrastructure.Tests' has the following package references
+   [net10.0]: 
+   Top-level Package                                 Requested        Resolved      
+   > coverlet.collector                              10.0.1           10.0.1        
+   > FluentAssertions                                8.10.0           8.10.0        
+   > Microsoft.CodeAnalysis.NetAnalyzers             10.0.302         10.0.302      
+   > Microsoft.NET.Test.Sdk                          18.8.1           18.8.1        
+   > Microsoft.VisualStudio.Threading.Analyzers      18.7.23          18.7.23       
+   > Roslynator.Analyzers                            4.15.0           4.15.0        
+   > Roslynator.Formatting.Analyzers                 4.15.0           4.15.0        
+   > SonarAnalyzer.CSharp                            10.29.0.143774   10.29.0.143774
+   > xunit                                           2.9.3            2.9.3         
+   > xunit.runner.visualstudio                       3.1.5            3.1.5         
+

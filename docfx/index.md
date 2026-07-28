@@ -20,6 +20,7 @@ dtk dotnet test
 dtk dotnet restore
 dtk dotnet clean
 dtk dotnet format
+dtk dotnet list package --outdated
 ```
 
 ## Key Features
@@ -28,9 +29,11 @@ dtk dotnet format
 - **Test filtering** — removes xUnit/NUnit/MSTest adapter banners, license warnings, and reflection stack frames; shows only failures with clean relative paths (~84% savings)
 - **Restore/Clean filtering** — condenses restore and clean output to essentials (~47–98% savings)
 - **Format filtering** — shows only violations with workspace-relative paths
+- **`list package` filtering** — collapses per-TFM duplication across plain, `--outdated`,
+  `--deprecated`, and `--vulnerable` (~80.9% savings)
 - **Token analytics** — tracks per-command token savings over time with `dtk gain`
 - **Log teeing** — optionally saves raw output to disk for post-mortem inspection
-- **AI agent integration** — `dtk integrate` installs hooks for 7 providers: Claude Code, GitHub Copilot, Gemini CLI, Cursor, Windsurf, Aider, and JetBrains AI
+- **AI agent integration** — `dtk integrate` installs hooks for 8 providers: Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Cursor, Windsurf, Aider, and JetBrains AI
 - **Self-diagnostics** — `dtk doctor` validates your setup in one command
 - **Shell completion** — bash, zsh, fish, and PowerShell via `dtk completion`
 
@@ -45,6 +48,7 @@ DTK intercepts `dotnet` subcommands, runs them, and applies per-command output f
 | clean   | ~98%           |
 | restore | ~47%           |
 | format  | varies         |
+| list package | ~80.9%    |
 
 ## Documentation
 

@@ -35,6 +35,11 @@ Unhandled high-noise `dotnet` surface:
 | Medium | `tool list/restore`, `workload list`, `sln list`, `msbuild` | Fixed-noise, cheap filters |
 | Later | `run`, `watch` | Blocked on streaming (see §4) |
 
+> **Resolved 2026-07-27.** `list package` is now filtered (plain, `--outdated`, `--deprecated`, and
+> `--vulnerable`). The remaining rows in this table are no longer guesses either — coverage
+> tracking (below) measures raw tokens at stake per command, so the next choice is data-driven.
+> See [the design](2026-07-27-list-package-filter-design.md).
+
 Adjacent tooling **this repo itself uses** and would benefit from: `jb inspectcode` XML → compact
 findings, Stryker mutation output, coverage summaries.
 
@@ -128,7 +133,9 @@ asserts the rewrite comes back.
 - **No density knob.** rtk has `--ultra-compact`. `DotnetBuildFilter` caps message length
   (`MessageMaxLen = 120`) but not the *number* of warning groups, and keeps full
   `learn.microsoft.com` URLs — the warnings sample still emits 54 lines. Capping groups and dropping
-  the URLs would cut the worst case materially.
+  the URLs would cut the worst case materially. (`DotnetListPackageFilter` does not share this gap —
+  it caps groups at 30 with an explicit truncation line — so this complaint now applies to
+  `DotnetBuildFilter` only.)
 - **Startup:** 117 ms (dtk) vs 2 ms (rtk). Real but minor. NativeAOT / ReadyToRun binaries on GitHub
   Releases alongside the NuGet tool would also serve machines without the SDK (rtk ships a
   curl-installable binary).
@@ -140,8 +147,9 @@ asserts the rewrite comes back.
    subcommand safe to add.
 2. ~~§1/§3 — track passthrough runs so the choice of the next filter is data-driven rather than a
    guess.~~ **Done 2026-07-27** — see the resolution notes above.
-3. First new filter, now to be chosen from what `dtk gain --coverage` reports rather than guessed,
-   then §2 pipe mode and §5 `dtk log`.
+3. ~~First new filter, now to be chosen from what `dtk gain --coverage` reports rather than
+   guessed~~ **Done 2026-07-27** — `list package` is filtered (all four variants; see
+   [the design](2026-07-27-list-package-filter-design.md)). Next: §2 pipe mode and §5 `dtk log`.
 
 §7 is recommended first not because it is the most valuable, but because it is the prerequisite for
 the work that is, and skipping it fails silently.

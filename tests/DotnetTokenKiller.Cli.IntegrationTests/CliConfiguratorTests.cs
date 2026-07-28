@@ -100,6 +100,20 @@ public sealed class CliConfiguratorTests
     }
 
     [Fact]
+    public Task Configure_DotnetListBranchHelp_MatchesSnapshot()
+    {
+        return Verify(RunHelp("dotnet", "list", "--help"));
+    }
+
+    [Fact]
+    public Task Configure_DotnetListPackageHelp_MatchesSnapshot()
+    {
+        // `list package` sits one level deeper than every other subcommand, so neither its examples
+        // nor the `list` branch's own description ever render on the dotnet branch page.
+        return Verify(RunHelp("dotnet", "list", "package", "--help"));
+    }
+
+    [Fact]
     public Task Configure_ConfigShowHelp_MatchesSnapshot()
     {
         return Verify(RunHelp("config", "show", "--help"));

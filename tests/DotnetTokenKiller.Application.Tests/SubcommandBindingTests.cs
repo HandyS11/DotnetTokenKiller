@@ -55,7 +55,8 @@ public sealed class SubcommandBindingTests
         // not shrink or grow in lockstep with it, or this test could never fail. Adding a
         // subcommand means updating this literal by hand — that is the intended tripwire, since
         // it forces whoever adds one to also regenerate the committed hook.
-        const string expectedTuple = "_DTK_SUBCOMMANDS = (\"build\", \"clean\", \"format\", \"restore\", \"test\")";
+        const string expectedTuple =
+            "_DTK_SUBCOMMANDS = (\"build\", \"clean\", \"format\", \"list package\", \"restore\", \"test\")";
 
         foreach (var (name, hook) in new (string Name, string Hook)[]
                  {
@@ -80,7 +81,7 @@ public sealed class SubcommandBindingTests
         // above: deriving the expected alternation from DotnetSubcommands.Ordered would make the
         // test move in lockstep with the thing it is supposed to be pinning. Adding a
         // subcommand requires updating this literal, which forces regenerating the hooks too.
-        const string expected = "rewrites `dotnet build|test|restore|clean|format`";
+        const string expected = "rewrites `dotnet build|test|restore|clean|format|list package`";
 
         HookScriptTemplates.ClaudeHook.Should().Contain(
             expected,
@@ -110,6 +111,118 @@ public sealed class SubcommandBindingTests
             HookScriptTemplates.ClaudeHook,
             "the committed hook must be regenerated whenever the template changes, or this repo's own "
             + "agent sessions silently stop rewriting the newest subcommand");
+    }
+
+    [Fact]
+    public void RepoCopilotInstructions_MatchesTheGeneratedSection()
+    {
+        var repoRoot = FindRepoRoot();
+        var instructionsPath = Path.Combine(repoRoot, ".github", "copilot-instructions.md");
+
+        File.Exists(instructionsPath).Should().BeTrue(
+            "this repo ships its own copy of the Copilot CLI instructions at {0}", instructionsPath);
+
+        var committed = File.ReadAllText(instructionsPath);
+
+        // Unlike '.claude/hooks/dotnet-to-dtk.py', this file has no test binding it to its
+        // generator, so a subcommand addition can leave it stale silently — the exact failure
+        // this test exists to prevent. The committed file predates section-merging and happens to
+        // be nothing but the dtk-managed section, so it must be byte-identical to
+        // CopilotCliIntegrator.CopilotSection; a repo that also carried hand-written content
+        // outside the '<!-- dtk -->' / '<!-- /dtk -->' markers would need a substring assertion
+        // instead.
+        committed.Should().Be(
+            CopilotCliIntegrator.CopilotSection,
+            "the committed instructions must be regenerated (via 'dtk integrate copilot-cli' into a "
+            + "scratch directory, then copied over) whenever the template changes, or this repo's own "
+            + "copilot-instructions.md silently stops advertising the newest subcommand");
+    }
+
+    [Fact]
+    public void IntegrationProse_ListsEveryCanonicalSubcommand()
+    {
+        // Pinned literals, for the same reason as the hook assertions above: deriving these from
+        // DotnetSubcommands.Ordered would make the expectation move in lockstep with the source, and
+        // the test could never fail. Adding a subcommand means editing these by hand.
+        const string expectedProse = "build, test, restore, clean, format, and list package";
+        const string expectedAlternation = "build|test|restore|clean|format|list package";
+        const string expectedSlashAlternation = "build/test/restore/clean/format/list package";
+        const string expectedBacktickProse =
+            "`dotnet build`, `test`, `restore`, `clean`, `format`, and `list package`";
+
+        IntegrationInstructions.SubcommandProse.Should().Be(
+            expectedProse,
+            "the shared instructions must name every dtk-handled subcommand, or users are told to "
+            + "keep using raw dotnet for the newest one");
+        IntegrationInstructions.SubcommandAlternation.Should().Be(expectedAlternation);
+        IntegrationInstructions.SubcommandSlashAlternation.Should().Be(
+            expectedSlashAlternation,
+            "the Aider conf-section comment must name every dtk-handled subcommand, or a user "
+            + "reading .aider.conf.yml would not know dtk covers the newest one");
+        IntegrationInstructions.SubcommandBacktickProse.Should().Be(
+            expectedBacktickProse,
+            "the Claude Code skill's 'Drop-in replacement for' sentence must name every dtk-handled "
+            + "subcommand, or a user reading the skill would not know dtk covers the newest one");
+    }
+
+    [Theory]
+    [InlineData(0, "")]
+    [InlineData(1, "one")]
+    [InlineData(2, "one and two")]
+    [InlineData(3, "one, two, and three")]
+    [InlineData(4, "one, two, three, and four")]
+    public void BuildProse_UsesTheSerialCommaOnlyForThreeOrMoreNames(int count, string expected)
+    {
+        // The two-name case is unreachable while Ordered holds more than two, but the prose it
+        // produces is user-facing, so the join is verified across every arm rather than only the
+        // arm today's canonical list happens to take.
+        string[] names = ["one", "two", "three", "four"];
+
+        IntegrationInstructions.BuildProse(names[..count]).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ClaudeSkillDescription_NamesEveryCanonicalSubcommand()
+    {
+        // Pinned to the literal, known-good bytes for the same reason as the assertions above:
+        // deriving it from DotnetSubcommands.Ordered would make the expectation move in lockstep
+        // with the source and the test could never fail. Adding a subcommand means editing this by
+        // hand. This one is worth pinning separately from the prose forms because it is Claude
+        // Code's *skill-trigger* text: if it omits a subcommand, the skill silently never surfaces
+        // for that intent, and nothing inside dtk can observe that.
+        const string expectedDescription =
+            "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage "
+            + "when running `dotnet` build, test, restore, clean, format, and list package commands.";
+
+        ClaudeCodeIntegrator.SkillMarkdown.Should().Contain(
+            $"description: '{expectedDescription}'",
+            "the skill's frontmatter description is what Claude Code matches user intent against, so "
+            + "a subcommand missing from it means the skill never fires for that subcommand");
+    }
+
+    [Fact]
+    public void ClaudeSkill_EmbedsTheSharedUsageBody()
+    {
+        // The skill used to carry its own hardcoded 'sh' example block, which omitted
+        // 'dtk dotnet list package --outdated' — so the skill named 'list package' in one sentence
+        // and then contradicted itself in its own examples. Embedding the shared body is what makes
+        // that impossible; this test is what keeps it embedded.
+        ClaudeCodeIntegrator.SkillMarkdown.Should().Contain(
+            IntegrationInstructions.UsageBody,
+            "the skill must embed the shared usage body verbatim rather than restate it, or its "
+            + "examples drift from every other provider's");
+    }
+
+    [Fact]
+    public void SharedInstructions_MentionEverySubcommandInTheIntro()
+    {
+        foreach (var subcommand in DotnetSubcommands.Ordered)
+        {
+            IntegrationInstructions.Intro.Should().Contain(
+                subcommand,
+                "'{0}' is canonical, so the instructions embedded by every provider must mention it",
+                subcommand);
+        }
     }
 
     /// <summary>

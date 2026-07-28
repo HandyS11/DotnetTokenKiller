@@ -37,7 +37,7 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
     /// </summary>
     private const string GlobalHookCommand = """python3 "$HOME"/.gemini/hooks/dotnet-to-dtk.py""";
 
-    private const string GeminiSection =
+    private static readonly string GeminiSection =
         $"""
         {SectionMarker}
         ## DotnetTokenKiller (dtk)

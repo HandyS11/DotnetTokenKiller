@@ -35,7 +35,7 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
     private static string BuildConfSection(string readTarget) =>
         $"""
         # dtk
-        # DotnetTokenKiller: use dtk instead of dotnet for build/test/restore/clean/format.
+        # DotnetTokenKiller: use dtk instead of dotnet for {IntegrationInstructions.SubcommandSlashAlternation}.
         read:
           - {readTarget}
         # /dtk
@@ -48,15 +48,15 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
     /// second top-level <c>read:</c> key that shadows the user's entries under YAML's
     /// last-key-wins semantics.
     /// </summary>
-    private const string AiderConfSectionWithoutReadKey =
-        """
+    private static readonly string AiderConfSectionWithoutReadKey =
+        $"""
         # dtk
-        # DotnetTokenKiller: use dtk instead of dotnet for build/test/restore/clean/format.
+        # DotnetTokenKiller: use dtk instead of dotnet for {IntegrationInstructions.SubcommandSlashAlternation}.
         # (merged into the existing top-level "read:" key above instead of declaring a new one)
         # /dtk
         """;
 
-    private const string InstructionsMarkdown =
+    private static readonly string InstructionsMarkdown =
         $"""
         # DotnetTokenKiller (dtk)
 
