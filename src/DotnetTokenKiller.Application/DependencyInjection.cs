@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
     /// <param name="services">The service collection to add registrations to.</param>
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        services.AddTransient<FilteredOutputPipeline>();
         services.AddTransient<FilteredRunUseCase>();
         services.AddTransient<GainReportUseCase>();
         services.AddTransient<ResetTrackingUseCase>();
