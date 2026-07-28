@@ -225,16 +225,22 @@ public sealed class LogCommandTests
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
-    public void Validate_RejectsANonPositiveLineCount(int lines)
+    public async Task Run_RejectsANonPositiveLineCount(int lines)
     {
-        var result = new LogCommandSettings { Lines = lines }.Validate();
+        var (command, _, _) = Create(new FakeStore([]));
 
-        result.Successful.Should().BeFalse();
+        var exitCode = await command.RunAsync(new LogCommandSettings { Lines = lines }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
     }
 
     [Fact]
-    public void Validate_RejectsANonPositiveIndex()
+    public async Task Run_RejectsANonPositiveIndex()
     {
-        new LogCommandSettings { Index = 0 }.Validate().Successful.Should().BeFalse();
+        var (command, _, _) = Create(new FakeStore([]));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings { Index = 0 }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
     }
 }

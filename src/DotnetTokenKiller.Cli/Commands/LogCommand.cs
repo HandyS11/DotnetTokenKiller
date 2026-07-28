@@ -44,6 +44,21 @@ internal sealed class LogCommand(
     {
         ArgumentNullException.ThrowIfNull(settings);
 
+        // Not enforced via CommandSettings.Validate: a failed Validate throws internally and
+        // Spectre exits with -1 (255 on Linux) without ever reaching Program.cs's catch block,
+        // which would make this usage error exit differently from the unknown-subcommand one below.
+        if (settings.Lines < 1)
+        {
+            console.MarkupLine("[red]--lines must be 1 or greater.[/]");
+            return 1;
+        }
+
+        if (settings.Index < 1)
+        {
+            console.MarkupLine("[red]--index must be 1 or greater.[/]");
+            return 1;
+        }
+
         string? subcommand = null;
         if (settings.Subcommand.Length > 0)
         {

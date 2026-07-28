@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands.Settings;
@@ -8,6 +7,12 @@ namespace DotnetTokenKiller.Cli.Commands.Settings;
 /// <remarks>
 /// Deliberately not derived from <see cref="OutputDisplaySettings"/>: those flags describe how a
 /// filtered run presents itself, and none of them apply to retrieving output from disk.
+/// Deliberately has no <see cref="CommandSettings.Validate"/> override, either: Spectre catches the
+/// <c>CommandRuntimeException</c> a failed <c>Validate</c> throws internally and exits with -1 (255
+/// on Linux), bypassing <c>Program.cs</c>'s catch block entirely — which would make a
+/// <c>--lines</c>/<c>--index</c> usage error exit with a different code than the unknown-subcommand
+/// usage error <c>LogCommand.RunAsync</c> already reports as 1. Both range checks are validated
+/// there instead, alongside that check, so every usage error in this command exits the same way.
 /// </remarks>
 internal sealed class LogCommandSettings : CommandSettings
 {
@@ -42,17 +47,4 @@ internal sealed class LogCommandSettings : CommandSettings
     [CommandOption("--all")]
     [Description("Include logs from every project, not just this directory")]
     public bool All { get; init; }
-
-    /// <inheritdoc/>
-    public override ValidationResult Validate()
-    {
-        if (Lines < 1)
-        {
-            return ValidationResult.Error("--lines must be 1 or greater.");
-        }
-
-        return Index < 1
-            ? ValidationResult.Error("--index must be 1 or greater.")
-            : ValidationResult.Success();
-    }
 }
