@@ -154,10 +154,20 @@ three things: the tee log would hold JSON rather than the output the user would 
 input arrives in console format; and `dtk dotnet list package` would stop being byte-honest about
 being the same command.
 
-The fragility this trades for is now observable rather than silent. Coverage tracking records
-`FilterFaulted` and `RawTailFallback`, so a table shape that defeats the parser surfaces as data in
-`dtk gain --coverage` instead of a confidently wrong summary. That is what makes console parsing an
+The fragility this trades for has to be made observable rather than silent. Coverage tracking records
+`FilterFaulted` and `RawTailFallback`, but both of those only reach the user on a *failed* run, and
+this command always exits 0 (see the correction under "Known risk" below). So the filter's own
+unrecognized-output guard — not coverage tracking — is what keeps a table shape that defeats the
+parser from becoming a confidently wrong summary. With that guard in place, console parsing is an
 acceptable risk here where it previously would not have been.
+
+**The user may pass `--format json` themselves.** dtk not injecting the flag says nothing about the
+user not typing it: `--format <console|json>` is documented and first-class, and `dtk dotnet list
+package --format json` forwards it unchanged. That output has no `has the following` lines and no
+`> ` rows, so no variant is detected — which is an explicitly handled degradation, not an
+unconsidered one. The guard passes it through verbatim behind a `⚠` marker rather than swallowing it.
+The original analysis of this section considered only dtk injecting the flag, never the user
+supplying it.
 
 ## Components
 
@@ -187,7 +197,11 @@ two tokens so Spectre forwards the rest as `Remaining.Raw`. Spectre routes to
 
 **Failure with nothing parsed returns empty**, matching `DotnetRestoreFilter`, so
 `FilteredRunUseCase`'s raw-tail fallback surfaces the real error and the run records as
-`RawTailFallback`.
+`RawTailFallback`. This holds only because the exit code is non-zero — a restore failure, say.
+
+**Success with nothing parsed returns the raw output behind a `⚠` marker.** Returning empty would
+show the user nothing, since the raw-tail fallback is gated on a non-zero exit code and this command
+always exits 0. See the correction under "Known risk" below for the full reasoning.
 
 NuGet error parsing is deliberately **not** implemented. Failures of this command are predominantly
 restore errors, for which the raw tail is already faithful and complete. Duplicating
@@ -225,9 +239,35 @@ Binding and routing tests:
 
 This repository has no vulnerable packages, so the `--vulnerable` fixture must be hand-written from
 the documented column shape (`Severity`, `Advisory URL`). It is the one variant whose parser ships
-unverified against real SDK output. It fails safe — an unparsed table yields empty, which triggers
-the raw-tail fallback and records `RawTailFallback` — but the fixture should be replaced with a real
-capture at the first opportunity.
+unverified against real SDK output. The fixture should be replaced with a real capture at the first
+opportunity.
+
+**Correction (post-implementation).** An earlier version of this section claimed the risk "fails
+safe — an unparsed table yields empty, which triggers the raw-tail fallback and records
+`RawTailFallback`". That was **wrong**, and it was the load-bearing claim under this whole section.
+`dotnet list package` **always exits 0** — verified against SDK 10.0.302, including runs that report
+deprecated and vulnerable packages. `FilteredRunUseCase` only invokes the raw-tail fallback when
+`ExitCode != 0`, so for this command **the fallback can never fire**. An unparsed table was not
+failing safe: the project header lines still parsed, so the variant was still detected, `Entries` was
+empty, and the zero-findings path emitted an affirmative
+`✓ dotnet list package --vulnerable (no vulnerable packages, 8 projects)` for a repository that has
+vulnerable packages.
+
+The filter therefore carries **its own guard**, and does not borrow the raw-tail fallback:
+
+- `ParseState.DroppedRows` counts `> ` rows that were seen but could not be mapped onto a recognized
+  header row. That is what distinguishes "understood, nothing to report" from "did not understand
+  this" — a distinction the original design had no way to express.
+- `Apply` returns `DotnetListPackageFilter.Unrecognized` when `DroppedRows > 0` **or** the variant is
+  `Unknown` and the input was not empty/whitespace. On exit 0 that yields the raw output behind a
+  one-line `⚠ dotnet list package: unrecognized output, passed through unfiltered` marker, preserving
+  the "never worse than raw" guarantee and mirroring `ApplyFilterSafelyAsync`'s behaviour for a filter
+  that throws. On a non-zero exit it still yields empty, because there the raw-tail fallback *does*
+  fire and adds an explicit failure verdict plus the `RawTailFallback` coverage signal.
+
+The general lesson, for the `publish` / `pack` / `tool list` filters queued behind this one: **a
+filter for a command that always exits 0 cannot rely on the exit-code-gated raw-tail fallback and
+needs its own guard.**
 
 ### Success criterion
 

@@ -13,6 +13,10 @@ namespace DotnetTokenKiller.Application.Filters;
 /// column names of the header row above them, which is what makes multi-word cell values
 /// (<c>Critical Bugs</c>) and the <c>Transitive Package</c> sub-table's missing <c>Requested</c>
 /// column parse correctly.
+/// <para>
+/// Unlike every other dtk filter, this one carries its own unrecognized-output guard rather than
+/// leaning on <c>FilteredRunUseCase</c>'s raw-tail fallback: see <see cref="Unrecognized"/>.
+/// </para>
 /// </remarks>
 public sealed partial class DotnetListPackageFilter : IOutputFilter
 {
@@ -23,15 +27,19 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
     public string Apply(string rawOutput, int exitCode)
     {
-        if (string.IsNullOrEmpty(rawOutput))
+        if (string.IsNullOrWhiteSpace(rawOutput))
         {
             return string.Empty;
         }
 
-        var state = Parse(AnsiStrip.Strip(rawOutput).Split(["\r\n", "\n"], StringSplitOptions.None));
+        var stripped = AnsiStrip.Strip(rawOutput);
+        var state = Parse(stripped.Split(["\r\n", "\n"], StringSplitOptions.None));
 
-        // Nothing recognizable was parsed. Returning empty lets FilteredRunUseCase's raw-tail
-        // fallback surface the real output on a failure, and is honest on success too.
+        if (state.Variant == Variant.Unknown || state.DroppedRows > 0)
+        {
+            return Unrecognized(stripped, exitCode);
+        }
+
         return state.Variant switch
         {
             Variant.Plain => FormatPlain(state, exitCode),
@@ -44,8 +52,42 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
             Variant.Vulnerable => FormatAudit(
                 state, exitCode, "--vulnerable", ("vulnerable package", "vulnerable packages"),
                 entry => $"{Version(entry)} — {entry.Severity} {entry.Advisory}".TrimEnd()),
-            _ => string.Empty
+            _ => Unrecognized(stripped, exitCode)
         };
+    }
+
+    /// <summary>
+    /// Surfaces output this filter did not understand, rather than a verdict about it.
+    /// </summary>
+    /// <param name="stripped">The ANSI-stripped raw output.</param>
+    /// <param name="exitCode">The process exit code.</param>
+    /// <returns>
+    /// On a failed run, <see cref="string.Empty"/> — the exit code is non-zero, so
+    /// <c>FilteredRunUseCase</c>'s raw-tail fallback fires, prefixes an explicit failure verdict, and
+    /// records the run as <c>RawTailFallback</c>. On a successful run, the raw output behind a
+    /// <c>⚠</c> marker, because that fallback is gated on a non-zero exit code and this command never
+    /// produces one.
+    /// </returns>
+    /// <remarks>
+    /// <c>dotnet list package</c> exits 0 even when it reports deprecated or vulnerable packages
+    /// (verified against SDK 10.0.302), so this filter cannot borrow the exit-code-gated raw-tail
+    /// fallback the way its siblings do — it has to carry its own guard. Without one, an unrecognized
+    /// table shape drops every <c>&gt; </c> row while the project headers still parse, and the
+    /// zero-findings path then emits an affirmative <c>✓ … (no vulnerable packages, N projects)</c>
+    /// for a repository that has them. Output in a shape this parser does not know
+    /// (<c>--format json</c>, a localized SDK, a future column layout) would likewise vanish entirely.
+    /// Passing the raw text through keeps the "never worse than raw" guarantee and mirrors what
+    /// <c>FilteredRunUseCase.ApplyFilterSafelyAsync</c> already does for a filter that throws.
+    /// </remarks>
+    private static string Unrecognized(string stripped, int exitCode)
+    {
+        if (exitCode != 0)
+        {
+            return string.Empty;
+        }
+
+        var text = stripped.ReplaceLineEndings("\n").TrimEnd('\n');
+        return $"⚠ dotnet list package: unrecognized output, passed through unfiltered\n{text}\n";
     }
 
     private static ParseState Parse(string[] lines)
@@ -81,9 +123,23 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
                 continue;
             }
 
-            if (trimmed.StartsWith("> ", StringComparison.Ordinal) && columns.Length > 0)
+            if (!trimmed.StartsWith("> ", StringComparison.Ordinal))
             {
-                AddEntry(state, project, columns, SplitCells(trimmed[2..]));
+                continue;
+            }
+
+            // A row is either turned into an entry or counted as dropped — never silently skipped.
+            // Apply's guard reads DroppedRows to tell "understood, nothing to report" apart from
+            // "did not understand this", which is the whole difference between a trustworthy clean
+            // verdict and a false one.
+            var cells = columns.Length > 0 ? SplitCells(trimmed[2..]) : [];
+            if (cells.Length > 0)
+            {
+                AddEntry(state, project, columns, cells);
+            }
+            else
+            {
+                state.DroppedRows++;
             }
         }
 
@@ -125,13 +181,13 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         }
     }
 
+    /// <summary>Records one parsed table row. Callers must not pass an empty <paramref name="cells"/>.</summary>
+    /// <param name="state">The parse state being accumulated.</param>
+    /// <param name="project">The project whose table this row belongs to.</param>
+    /// <param name="columns">Header cells for that table.</param>
+    /// <param name="cells">The row's cells, index-aligned with <paramref name="columns"/>.</param>
     private static void AddEntry(ParseState state, string project, string[] columns, string[] cells)
     {
-        if (cells.Length == 0)
-        {
-            return;
-        }
-
         state.Entries.Add(new Entry(
             project,
             cells[0],
@@ -361,5 +417,12 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         public HashSet<string> Projects { get; } = new(StringComparer.Ordinal);
         public List<Entry> Entries { get; } = [];
         public int CleanProjects { get; set; }
+
+        /// <summary>
+        /// How many <c>&gt; </c> table rows were seen but could not be mapped onto a recognized
+        /// header row. Non-zero means the output was not understood, which is a different thing
+        /// from there being nothing to report.
+        /// </summary>
+        public int DroppedRows { get; set; }
     }
 }

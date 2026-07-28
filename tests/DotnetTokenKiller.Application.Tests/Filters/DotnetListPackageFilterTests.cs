@@ -310,6 +310,80 @@ public class DotnetListPackageFilterTests
     }
 
     [Fact]
+    public void Apply_SucceededRunWithUnparseableOutput_PassesTheRawOutputThrough()
+    {
+        // 'dotnet list package --format json' is a documented, first-class option, and it always
+        // exits 0. FilteredRunUseCase's raw-tail fallback is gated on a NON-ZERO exit code, so it
+        // can never fire here: returning empty would show the user nothing at all while recording
+        // the run as successfully filtered with ~100% savings.
+        const string input = """
+                            {
+                              "version": 1,
+                              "parameters": "--outdated",
+                              "projects": [
+                                {
+                                  "path": "/repo/src/Alpha/Alpha.csproj",
+                                  "frameworks": [
+                                    {
+                                      "framework": "net10.0",
+                                      "topLevelPackages": [
+                                        {
+                                          "id": "Analyzer",
+                                          "requestedVersion": "1.0.0",
+                                          "resolvedVersion": "1.0.0",
+                                          "latestVersion": "2.0.0"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                            """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().NotBeEmpty("an exit-0 run cannot reach the raw-tail fallback");
+        result.Should().Contain("\"latestVersion\": \"2.0.0\"", "the raw content must survive verbatim");
+        result.Should().StartWith("⚠ ", "the degradation is stated, not hidden");
+        result.Should().NotContain("✓", "nothing here was understood, so nothing can be pronounced clean");
+    }
+
+    [Fact]
+    public void Apply_UnrecognizedVulnerableTableHeader_DoesNotClaimTheProjectsAreClean()
+    {
+        // The project headers parse (so the variant IS detected) but the table header does not
+        // contain "Package", so every '> ' row is dropped. Before the guard this rendered as
+        // "✓ dotnet list package --vulnerable (no vulnerable packages, 2 projects)" — an
+        // affirmative false negative on a security check, for a repo that has vulnerabilities.
+        const string input = """
+                            Project `Alpha` has the following vulnerable packages
+                               [net10.0]:
+                               Paquet de premier niveau   Demandé   Résolu   Gravité    URL de l'avis
+                               > Legacy.Crypto            2.1.0     2.1.0    Critical   https://github.com/advisories/GHSA-dddd-eeee-ffff
+
+                            Project `Beta` has the following vulnerable packages
+                               [net10.0]:
+                               Paquet de premier niveau   Demandé   Résolu   Gravité    URL de l'avis
+                               > Legacy.Crypto            2.1.0     2.1.0    Critical   https://github.com/advisories/GHSA-dddd-eeee-ffff
+                            """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().NotContain("no vulnerable packages", "the rows were not read, so nothing is known");
+        result.Should().NotContain("✓", "a clean verdict on unread rows is the exact failure being prevented");
+        result.Should().Contain("Legacy.Crypto", "the dropped rows must still reach the user");
+        result.Should().Contain("GHSA-dddd-eeee-ffff");
+    }
+
+    [Fact]
+    public void Apply_WhitespaceOnlyOutput_ReturnsEmpty()
+    {
+        _sut.Apply("   \n\n  \n", exitCode: 0).Should().BeEmpty(
+            "there is no output to pass through and nothing was misread");
+    }
+
+    [Fact]
     public void Apply_FailedRunWithParseableOutput_OmitsTheSuccessGlyph()
     {
         const string input = """

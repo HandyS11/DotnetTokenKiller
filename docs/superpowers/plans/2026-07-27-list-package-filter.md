@@ -23,8 +23,22 @@ by mapping row fields onto the preceding header row's column names.
 - File-scoped namespaces; `var` throughout; private fields `_camelCase`; async methods end `Async`.
 - LF line endings, no trailing whitespace, no BOM, 4-space indent for `.cs`.
 - Filter output is normalized to `\n` (`StringBuilder.AppendLine` emits `\r\n` on Windows).
-- A filter returns `string.Empty` for a failed run it could not parse, so `FilteredRunUseCase`'s
-  raw-tail fallback surfaces the real output.
+- A filter returns `string.Empty` for a **failed** run it could not parse, so `FilteredRunUseCase`'s
+  raw-tail fallback surfaces the real output. **Correction (post-implementation):** that fallback is
+  gated on `ExitCode != 0`, and `dotnet list package` **always exits 0** — verified against SDK
+  10.0.302, including runs that report deprecated or vulnerable packages. For this command the
+  fallback therefore never fires, and returning empty on an exit-0 run it could not parse showed the
+  user *nothing at all* while recording ~100% savings. `DotnetListPackageFilter` consequently carries
+  its own guard: it counts `> ` rows it could not map onto a recognized header
+  (`ParseState.DroppedRows`), and on exit 0 returns the raw output behind a
+  `⚠ dotnet list package: unrecognized output, passed through unfiltered` line whenever rows were
+  dropped or no variant was detected. See the "Known risk" correction in the design doc.
+  **General lesson, for the `publish` / `pack` / `tool list` filters queued behind this one: a filter
+  for a command that always exits 0 cannot rely on the exit-code-gated raw-tail fallback and needs its
+  own guard.**
+- A filter must be able to distinguish "understood, nothing to report" from "did not understand this".
+  A parser that only counts what it recognized cannot, and will emit an affirmative clean verdict for
+  output it never read — which on `--vulnerable` is a false negative on a security check.
 - Density cap: **30** package groups, then an explicit `… and N more` line.
 - "Shared" means present in **every** project at the **same version** — strict, not majority.
 - `✓` is emitted only when `exitCode == 0` **and** there are no findings.
