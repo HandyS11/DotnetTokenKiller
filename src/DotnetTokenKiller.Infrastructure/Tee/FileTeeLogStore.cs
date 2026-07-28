@@ -33,8 +33,21 @@ public sealed class FileTeeLogStore(IConfigProvider configProvider, string? teeD
             return [];
         }
 
+        string[] files;
+        try
+        {
+            files = Directory.GetFiles(teeDir, "*" + TeeLogFileName.Extension);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            // The directory exists but cannot be enumerated — e.g. permission denied on the 0700
+            // tee directory. A diagnostic command should report "no logs found" here, the same as
+            // for an absent directory, rather than surface a stack trace.
+            return [];
+        }
+
         var entries = new List<TeeLogEntry>();
-        foreach (var path in Directory.GetFiles(teeDir, "*" + TeeLogFileName.Extension))
+        foreach (var path in files)
         {
             var entry = await TryReadEntryAsync(path, cancellationToken).ConfigureAwait(false);
             if (entry is not null)

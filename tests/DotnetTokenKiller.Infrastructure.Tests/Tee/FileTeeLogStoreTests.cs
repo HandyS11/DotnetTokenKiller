@@ -49,6 +49,51 @@ public sealed class FileTeeLogStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ListAsync_ReturnsEmpty_WhenTheDirectoryIsUnreadable()
+    {
+        // Covers Directory.GetFiles throwing UnauthorizedAccessException on a directory that
+        // exists but cannot be enumerated (e.g. the 0700 tee directory owned by another user).
+        // POSIX permission bits are a no-op on Windows, so this is guarded there.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        WriteLog(At(1), "build", "/proj", 0, "body");
+        var originalMode = File.GetUnixFileMode(_tempDir);
+        try
+        {
+            File.SetUnixFileMode(_tempDir, UnixFileMode.None);
+
+            // Confirm the mode change actually blocks access on this filesystem/user before
+            // asserting on it — running as root (common in CI containers) ignores 000 entirely,
+            // which would make the assertion below meaningless rather than merely skipped.
+            var reallyBlocked = false;
+            try
+            {
+                Directory.GetFiles(_tempDir);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                reallyBlocked = true;
+            }
+
+            if (!reallyBlocked)
+            {
+                return;
+            }
+
+            var entries = await CreateSut().ListAsync();
+
+            entries.Should().BeEmpty();
+        }
+        finally
+        {
+            File.SetUnixFileMode(_tempDir, originalMode);
+        }
+    }
+
+    [Fact]
     public async Task ListAsync_OrdersNewestFirst()
     {
         WriteLog(At(1), "build", "/proj", 1, "old");
