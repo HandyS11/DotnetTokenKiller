@@ -41,6 +41,12 @@ namespace DotnetTokenKiller.Domain;
 ///   <c>SubcommandBindingTests.IntegrationProse_ListsEveryCanonicalSubcommand</c>, so they need no
 ///   hand-editing — but that test's pinned literals do.
 ///   </description></item>
+///   <item><description>
+///   Check <c>PipeCommand</c>'s "No filter for: …" error line. It renders <see cref="Ordered"/> joined
+///   with ", " on one line; a seventh entry can push that line past Spectre's 80-column
+///   non-interactive wrap width and break the line-count assertion in
+///   <c>PipeIntegrationTests.Pipe_UnknownSubcommand_FailsWithKnownListAsync</c>.
+///   </description></item>
 /// </list>
 /// </remarks>
 public static class DotnetSubcommands

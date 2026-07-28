@@ -157,6 +157,15 @@ internal static class IntegrationTestHelper
                 ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
             }
         };
+        if (stdin is not null)
+        {
+            // Only settable once RedirectStandardInput is true; setting it unconditionally throws
+            // for every call that doesn't pipe stdin. Explicit UTF-8 (rather than the platform
+            // default, which the OS console code page can override) is what makes the pipe tests'
+            // non-ASCII assertions actually exercise dtk's own stdin decoding.
+            psi.StandardInputEncoding = Encoding.UTF8;
+        }
+
         foreach (var arg in args)
         {
             psi.ArgumentList.Add(arg);

@@ -14,6 +14,16 @@ public class PipeIntegrationTests
                                               1 Error(s)
                                           """;
 
+    /// <summary>Non-ASCII diagnostic text (accented letters and a curly apostrophe), the way a build log
+    /// localized to French would read. Piped stdin must be decoded as UTF-8 regardless of the
+    /// host console's code page, or these characters garble before the filter ever sees them.</summary>
+    private const string NonAsciiBuildLog = """
+                                            Determining projects to restore...
+                                            /src/App.cs(12,20): error CS1002: Répertoire n’existe pas ; jeton attendu [/src/App.csproj]
+                                            Build FAILED.
+                                                1 Error(s)
+                                            """;
+
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Pipe_Build_CondensesStdinAsync()
     {
@@ -23,6 +33,17 @@ public class PipeIntegrationTests
         exitCode.Should().Be(1, "the supplied exit code is propagated so CI still fails");
         output.Should().Contain("CS1002");
         output.Should().NotContain("Determining projects to restore", "the filter exists to drop this noise line");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Pipe_Build_PreservesNonAsciiCharactersAsync()
+    {
+        var (output, _, _) =
+            await IntegrationTestHelper.RunDtkWithStdinAsync(NonAsciiBuildLog, "pipe", "build", "--exit-code", "1");
+
+        output.Should().Contain("Répertoire").And.Contain(
+            "n’existe pas",
+            "stdin must be decoded as UTF-8, not whatever code page the host console defaults to");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

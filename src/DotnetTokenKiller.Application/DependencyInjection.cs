@@ -1,3 +1,4 @@
+using System.Text;
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
@@ -29,7 +30,12 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetFormatFilter>(FilterKeys.Format);
         services.AddKeyedTransient<IOutputFilter, DotnetListPackageFilter>(FilterKeys.ListPackage);
         services.AddSingleton<TextWriter>(_ => Console.Out);
-        services.AddSingleton<TextReader>(_ => Console.In);
+
+        // Decode piped stdin as UTF-8 explicitly rather than inheriting the OS console code page
+        // (Console.In does, via Console.InputEncoding). Without this, non-ASCII bytes garble on
+        // platforms whose console code page isn't UTF-8 by default (e.g. windows-latest in CI).
+        services.AddSingleton<TextReader>(_ => new StreamReader(
+            Console.OpenStandardInput(), new UTF8Encoding(false), detectEncodingFromByteOrderMarks: true));
 
         services.AddTransient<RtkHookCoexistence>();
         services.AddSingleton<HomePaths>();
