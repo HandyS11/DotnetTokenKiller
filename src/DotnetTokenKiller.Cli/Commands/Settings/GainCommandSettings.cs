@@ -26,9 +26,9 @@ internal sealed class GainCommandSettings : CommandSettings
     [Description("Export raw tracking records in the given format (csv)")]
     public string? Export { get; init; }
 
-    /// <summary>Gets the command name to filter results by (e.g. "build", "test").</summary>
+    /// <summary>Gets the command name to filter results by (e.g. "build", "test", "list package").</summary>
     [CommandOption("--command")]
-    [Description("Filter results to a specific command (e.g. build, test, restore, clean)")]
+    [Description("Filter results to a specific command (e.g. build, test, format, list package)")]
     public string? Command { get; init; }
 
     /// <summary>Gets a value indicating whether to report filtering coverage instead of savings.</summary>
