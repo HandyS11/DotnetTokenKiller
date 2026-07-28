@@ -407,31 +407,6 @@ public sealed class FileTeeServiceTests : IDisposable
         await act.Should().NotThrowAsync();
     }
 
-    /// <summary>Nested fake — avoids NSubstitute dependency (not referenced in this test csproj).</summary>
-    /// <param name="initialConfig">The configuration to return from <see cref="LoadAsync"/>.</param>
-    private sealed class FakeConfigProvider(DtkConfig initialConfig) : IConfigProvider
-    {
-        public DtkConfig Load()
-        {
-            return initialConfig;
-        }
-
-        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(initialConfig);
-        }
-
-        public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task DeleteAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
-    }
-
     private sealed class ThrowingConfigProvider : IConfigProvider
     {
         public DtkConfig Load()

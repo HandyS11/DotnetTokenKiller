@@ -1,0 +1,172 @@
+using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Domain.Tee;
+using DotnetTokenKiller.Domain.Tracking;
+using DotnetTokenKiller.Infrastructure.Tee;
+using FluentAssertions;
+using Xunit;
+
+namespace DotnetTokenKiller.Infrastructure.Tests.Tee;
+
+public sealed class FileTeeLogStoreTests : IDisposable
+{
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-logstore-test-{Guid.NewGuid()}");
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, true);
+        }
+    }
+
+    private FileTeeLogStore CreateSut() =>
+        new(new FakeConfigProvider(DtkConfig.Default with { Tee = new TeeConfig(TeeMode.Always) }), _tempDir);
+
+    private void WriteLog(DateTimeOffset timestamp, string slug, string cwd, int exitCode, string body)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var header = new TeeLogHeader($"dotnet {slug}", cwd, exitCode, RunSource.Run, timestamp);
+        var path = Path.Combine(_tempDir, TeeLogFileName.Build(timestamp, Guid.NewGuid().ToString("N"), slug));
+        File.WriteAllText(path, header.Render() + body);
+    }
+
+    private void WriteLegacyLog(DateTimeOffset timestamp, string slug, string body)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var path = Path.Combine(_tempDir, TeeLogFileName.Build(timestamp, Guid.NewGuid().ToString("N"), slug));
+        File.WriteAllText(path, body);
+    }
+
+    private static DateTimeOffset At(int minute) =>
+        new(2026, 7, 28, 9, minute, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task ListAsync_ReturnsEmpty_WhenTheDirectoryDoesNotExist()
+    {
+        var entries = await CreateSut().ListAsync();
+
+        entries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ListAsync_OrdersNewestFirst()
+    {
+        WriteLog(At(1), "build", "/proj", 1, "old");
+        WriteLog(At(5), "test", "/proj", 0, "new");
+
+        var entries = await CreateSut().ListAsync();
+
+        entries.Select(e => e.Slug).Should().ContainInOrder("test", "build");
+    }
+
+    [Fact]
+    public async Task ListAsync_ParsesTheHeader()
+    {
+        WriteLog(At(1), "build", "/home/user/proj", 2, "body");
+
+        var entry = (await CreateSut().ListAsync()).Single();
+
+        entry.Header.Should().NotBeNull();
+        entry.Header!.ProjectPath.Should().Be("/home/user/proj");
+        entry.Header.ExitCode.Should().Be(2);
+        entry.Slug.Should().Be("build");
+        entry.SizeBytes.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task ListAsync_ReturnsANullHeader_ForALegacyFile()
+    {
+        WriteLegacyLog(At(1), "build", "raw output with no header\n");
+
+        var entry = (await CreateSut().ListAsync()).Single();
+
+        entry.Header.Should().BeNull();
+        entry.Slug.Should().Be("build");
+        entry.TimestampUtc.Should().Be(At(1));
+    }
+
+    [Fact]
+    public async Task ListAsync_IgnoresFilesThatAreNotLogs()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "notes.txt"), "not a log");
+        WriteLog(At(1), "build", "/proj", 0, "body");
+
+        var entries = await CreateSut().ListAsync();
+
+        entries.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task ListAsync_HandlesALogFileWhoseNameItDidNotProduce()
+    {
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "handwritten.log"), "raw");
+
+        var entry = (await CreateSut().ListAsync()).Single();
+
+        // Falls back to the file's write time rather than dropping it from the listing.
+        entry.Slug.Should().BeEmpty();
+        entry.Header.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReadBodyAsync_ReturnsTheBodyWithoutTheHeader()
+    {
+        WriteLog(At(1), "build", "/proj", 1, "line one\nline two\n");
+        var sut = CreateSut();
+        var entry = (await sut.ListAsync()).Single();
+
+        var body = await sut.ReadBodyAsync(entry);
+
+        body.Should().Be("line one\nline two\n");
+    }
+
+    [Fact]
+    public async Task ReadBodyAsync_ReturnsTheWholeFile_ForALegacyLog()
+    {
+        WriteLegacyLog(At(1), "build", "raw output\n");
+        var sut = CreateSut();
+        var entry = (await sut.ListAsync()).Single();
+
+        var body = await sut.ReadBodyAsync(entry);
+
+        body.Should().Be("raw output\n");
+    }
+
+    [Fact]
+    public async Task ListAsync_ParsesTheHeader_ForAFileShorterThanTheHeadReadLimit()
+    {
+        // A short body means the whole file is well under the 4096-byte head-read window. A single
+        // ReadAsync call on the underlying stream is not guaranteed to fill the buffer even when the
+        // requested bytes are all available, so this guards against treating that short read as a
+        // parse failure instead of retrying until end-of-stream.
+        WriteLog(At(1), "build", "/proj", 0, "ok");
+
+        var entry = (await CreateSut().ListAsync()).Single();
+
+        entry.Header.Should().NotBeNull();
+        entry.Header!.ExitCode.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task WrittenByFileTeeService_IsReadableByTheStore()
+    {
+        var config = new FakeConfigProvider(
+            DtkConfig.Default with { Tee = new TeeConfig(TeeMode.Always) });
+        var writer = new FileTeeService(config, _tempDir);
+        var header = new TeeLogHeader(
+            "dotnet build MyApp.slnx", "/home/user/proj", 1, RunSource.Run, At(3));
+        var body = new string('x', 600);
+
+        await writer.TeeAndHintAsync(body, "list package", header);
+
+        var store = new FileTeeLogStore(config, _tempDir);
+        var entry = (await store.ListAsync()).Single();
+        entry.Header.Should().NotBeNull();
+        entry.Header!.ProjectPath.Should().Be("/home/user/proj");
+        entry.Header.ExitCode.Should().Be(1);
+        entry.Slug.Should().Be("list-package");
+        (await store.ReadBodyAsync(entry)).Should().Be(body);
+    }
+}

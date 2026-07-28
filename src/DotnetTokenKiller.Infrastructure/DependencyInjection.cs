@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddSingleton<ITeeService, FileTeeService>();
+        services.AddSingleton<ITeeLogStore, FileTeeLogStore>();
         return services;
     }
 }
