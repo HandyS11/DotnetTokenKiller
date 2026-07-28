@@ -112,6 +112,27 @@ internal static class IntegrationTestHelper
         return commands;
     }
 
+    /// <summary>Allocates an isolated data directory that several dtk invocations can share, so a
+    /// test can write a tee log with one command and read it back with another.</summary>
+    /// <returns>The directory path; it is created lazily by the first invocation that uses it.</returns>
+    internal static string NewIsolatedDir() =>
+        Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
+
+    /// <summary>Runs dtk against an explicit isolated directory.</summary>
+    /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    internal static Task<(string Output, int ExitCode)> RunDtkInDirAsync(
+        string isolatedDir, params string[] args) =>
+        RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir);
+
+    /// <summary>Runs dtk against an explicit isolated directory with stdin piped in.</summary>
+    /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>.</param>
+    /// <param name="stdin">The text to write to the process's standard input.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    internal static Task<(string Output, int ExitCode)> RunDtkWithStdinInDirAsync(
+        string isolatedDir, string stdin, params string[] args) =>
+        RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir, stdin);
+
     internal static double CalculateSavings(string rawOutput, string filteredOutput)
     {
         var inputTokens = rawOutput.Length / 4;
