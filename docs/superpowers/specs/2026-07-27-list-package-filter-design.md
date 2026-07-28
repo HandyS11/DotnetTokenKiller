@@ -253,7 +253,8 @@ empty, and the zero-findings path emitted an affirmative
 `✓ dotnet list package --vulnerable (no vulnerable packages, 8 projects)` for a repository that has
 vulnerable packages.
 
-The filter therefore carries **its own guard**, and does not borrow the raw-tail fallback:
+The filter therefore carries **its own guard** for the exit-0 case, and borrows the raw-tail fallback
+only where that fallback can actually fire:
 
 - `ParseState.DroppedRows` counts `> ` rows that were seen but could not be mapped onto a recognized
   header row. That is what distinguishes "understood, nothing to report" from "did not understand
