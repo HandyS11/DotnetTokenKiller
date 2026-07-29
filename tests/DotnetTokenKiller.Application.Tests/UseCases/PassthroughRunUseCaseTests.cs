@@ -266,5 +266,106 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
 
         await _teeService.DidNotReceive().BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
             Arg.Any<CancellationToken>());
+        await _runner.Received(1).RunPassthroughAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_StreamsAndTees_WhenTrackingIsOffAndTeeIsAtItsDefault()
+    {
+        // Failures is the shipped default for Tee.Mode. This is what a user actually gets by simply
+        // turning tracking off, unlike the Always/Never configs the other tee-and-tracking tests use.
+        var config = DtkConfig.Default with
+        {
+            Tracking = DtkConfig.Default.Tracking with { Enabled = false }
+        };
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(config, "dotnet", ["publish"]);
+
+        await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_CompletesAndTees_WhenTrackerIsNull()
+    {
+        // PassthroughEntryPoint constructs the use case exactly this way when tracking is off — the
+        // shape production actually uses. No other test in this fixture passes a null tracker, so the
+        // `tracker is null` half of TrackAsync's gate was previously only exercised by production, and
+        // if the guard were ever removed this would fail with a NullReferenceException instead of
+        // completing.
+        var sut = new PassthroughRunUseCase(_runner, tracker: null, _teeService, _stdOut, _stdErr);
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        var exitCode = await sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+
+        exitCode.Should().Be(0);
+        await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_FansStdOutToTerminalAndSession()
+    {
+        // Proves the streamed sinks are actually FanOutTextWriters over session.Writer, not stdOut
+        // passed straight through: an implementation that wired RunStreamedAsync directly to stdOut
+        // would still make every other test in this file pass, since they all use TextWriter.Null for
+        // the session and Arg.Any<TextWriter>() for the runner's sink arguments.
+        var sessionWriter = new StringWriter { NewLine = "\n" };
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(sessionWriter);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var outWriter = callInfo.ArgAt<TextWriter>(2);
+                outWriter.WriteLineAsync("stdout line".AsMemory(), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                return new CommandResult("stdout line", "", 0);
+            });
+
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+
+        _stdOut.ToString().Should().Contain("stdout line");
+        sessionWriter.ToString().Should().Contain("stdout line");
+    }
+
+    [Fact]
+    public async Task RunAsync_FansStdErrToTerminalAndSession()
+    {
+        // Same proof as RunAsync_FansStdOutToTerminalAndSession, for the stderr sink.
+        var sessionWriter = new StringWriter { NewLine = "\n" };
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(sessionWriter);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var errWriter = callInfo.ArgAt<TextWriter>(3);
+                errWriter.WriteLineAsync("stderr line".AsMemory(), CancellationToken.None)
+                    .GetAwaiter().GetResult();
+                return new CommandResult("", "stderr line", 0);
+            });
+
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+
+        _stdErr.ToString().Should().Contain("stderr line");
+        sessionWriter.ToString().Should().Contain("stderr line");
     }
 }

@@ -12,8 +12,10 @@ namespace DotnetTokenKiller.Cli;
 /// </summary>
 /// <remarks>
 /// This path deliberately skips Spectre and the service container, which together account for
-/// most of dtk's startup cost. It pays only for one config file read and, when tracking or tee is
-/// on, one SQLite connection or log file opened after the child has already exited.
+/// most of dtk's startup cost. When tee is enabled the config file is read twice — once here and
+/// again inside <see cref="FileTeeService.BeginAsync"/>, which does not cache — and the log file is opened
+/// before the child starts, so a killed dtk still leaves a log behind. Tracking, when enabled, opens
+/// one SQLite connection after the child has already exited.
 /// </remarks>
 internal static class PassthroughEntryPoint
 {
