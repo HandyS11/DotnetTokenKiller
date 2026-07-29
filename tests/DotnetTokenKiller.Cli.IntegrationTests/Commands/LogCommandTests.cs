@@ -320,4 +320,40 @@ public sealed class LogCommandTests
 
         console.Output.Should().Contain("incomplete");
     }
+
+    [Fact]
+    public async Task Run_OmitsTheKilledNote_ForACompletedRun()
+    {
+        // Entry() defaults to a non-null ExitCode, i.e. a run that finished normally. The killed-run
+        // note is only true for a run that never reached finalization, so it must not appear here.
+        var entry = Entry(5, "build");
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "done\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        writer.ToString().Should().NotContain("run did not finish");
+    }
+
+    [Fact]
+    public async Task Run_OmitsTheKilledNote_ForALegacyLogWithNoHeader()
+    {
+        // A legacy log (Header is null, cwd: null) predates the header that would let us tell whether
+        // dtk was killed. "We don't know" is a different claim from "dtk was killed", so the killed-run
+        // note must not appear alongside the existing "exit unknown" placeholder for this case.
+        var entry = Entry(5, "build", cwd: null);
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "line one\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        // Legacy (headerless) entries are excluded from the default project-scoped view, so --all
+        // is needed to select this one at all.
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { All = true }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        var output = writer.ToString();
+        output.Should().Contain("exit unknown");
+        output.Should().NotContain("run did not finish");
+    }
 }
