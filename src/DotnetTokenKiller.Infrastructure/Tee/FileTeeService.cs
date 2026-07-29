@@ -23,6 +23,14 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(provisional);
+
+        // Defensive: a caller-supplied ExitCode here is never correct (the run has not finished),
+        // and one slipping through as non-null renders the header as already Complete. That leaves
+        // FinalizeAsync's read-back guard below unable to find the running region it expects to
+        // overwrite -- IndexOf returns -1, and AsSpan(0, -1) throws into the outer catch, silently
+        // downgrading this run to a NullTeeSession. Normalizing here makes the API hard to misuse
+        // instead of relying on every caller to remember the contract.
+        provisional = provisional with { ExitCode = null };
         try
         {
             var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);

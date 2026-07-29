@@ -10,8 +10,9 @@ public interface ITeeService
     /// <summary>Opens a log for a run that is about to start.</summary>
     /// <param name="commandSlug">A short identifier for the command, used in the file name.</param>
     /// <param name="provisional">
-    /// The header to write immediately. Its exit code must be <see langword="null"/>; the real one
-    /// is supplied to <see cref="ITeeSession.FinalizeAsync"/> when the run ends.
+    /// The header to write immediately. Its exit code is ignored and normalized to
+    /// <see langword="null"/> before writing, since the run has not finished yet; the real one is
+    /// supplied to <see cref="ITeeSession.FinalizeAsync"/> when the run ends.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>

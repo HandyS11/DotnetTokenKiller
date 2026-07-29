@@ -7,7 +7,7 @@ namespace DotnetTokenKiller.Domain.Tee;
 /// header means the project the log came from is unknown, not that the log is unreadable.
 /// </param>
 /// <param name="SizeBytes">The file's size on disk, header included.</param>
-/// <param name="TimestampUtc">When the run completed, taken from the filename.</param>
+/// <param name="TimestampUtc">When the run started, taken from the filename.</param>
 /// <param name="Slug">The sanitised subcommand name, or an empty string when the name is unrecognised.</param>
 public sealed record TeeLogEntry(
     string FilePath,

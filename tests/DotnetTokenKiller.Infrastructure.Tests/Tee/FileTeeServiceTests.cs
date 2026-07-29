@@ -107,9 +107,38 @@ public sealed class FileTeeServiceTests : IDisposable
 
         await using var session = await sut.BeginAsync("build", RunningHeader());
 
-        var text = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
         TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
         header.Status.Should().Be(TeeLogStatus.Running);
+    }
+
+    [Fact]
+    public async Task BeginAsync_NormalizesANonNullProvisionalExitCode_ToRunning()
+    {
+        // A caller that (incorrectly) passes a header with a non-null ExitCode must not get a log
+        // stuck reporting Complete before the run has even started: FinalizeAsync's read-back guard
+        // expects to find the Running region at the offset it was given, and a header rendered as
+        // already Complete means that region is not there, silently disabling tee for the run. This
+        // pins BeginAsync's normalization as the fix, rather than trusting every caller to pass null.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        var header = RunningHeader() with { ExitCode = 7 };
+
+        var session = await sut.BeginAsync("build", header);
+        var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(text, out var parsed).Should().BeTrue();
+        parsed.Status.Should().Be(TeeLogStatus.Running);
+        parsed.ExitCode.Should().BeNull();
+
+        // Kept above the 500-byte minBodyBytes guard so that guard, not this test, decides whether
+        // the log survives -- the point under test is the header normalization, not retention.
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(3);
+
+        hint.Should().NotBeNull();
+        var finalText = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(finalText, out var finalHeader).Should().BeTrue();
+        finalHeader.Status.Should().Be(TeeLogStatus.Complete);
+        finalHeader.ExitCode.Should().Be(3);
     }
 
     [Fact]
@@ -333,7 +362,7 @@ public sealed class FileTeeServiceTests : IDisposable
 
         await session.FinalizeAsync(0);
 
-        var written = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        var written = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
         var body = TeeLogHeader.StripHeader(written);
         ((long)Encoding.UTF8.GetByteCount(body)).Should().BeLessThanOrEqualTo(maxBytes);
     }
@@ -355,7 +384,7 @@ public sealed class FileTeeServiceTests : IDisposable
         var hint = await session.FinalizeAsync(2);
 
         hint.Should().NotBeNull();
-        var text = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
         TeeLogHeader.TryParse(text, out var parsed).Should().BeTrue();
         parsed.Status.Should().Be(TeeLogStatus.Complete);
         parsed.ExitCode.Should().Be(2);

@@ -28,7 +28,7 @@ public static partial class TeeLogFileName
     }
 
     /// <summary>Builds a tee log filename.</summary>
-    /// <param name="timestampUtc">When the run completed.</param>
+    /// <param name="timestampUtc">When the run started.</param>
     /// <param name="uniqueSuffix">A collision-avoiding suffix, typically a compact GUID.</param>
     /// <param name="slug">The subcommand name; sanitised by this method.</param>
     /// <returns>The filename, without a directory.</returns>

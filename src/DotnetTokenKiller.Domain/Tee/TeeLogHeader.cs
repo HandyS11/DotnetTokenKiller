@@ -21,7 +21,7 @@ namespace DotnetTokenKiller.Domain.Tee;
 /// so the two can never disagree.
 /// </param>
 /// <param name="Source">Whether dtk ran the command or received its output on stdin.</param>
-/// <param name="TimestampUtc">When the run completed.</param>
+/// <param name="TimestampUtc">When the run started, i.e. when the tee session was opened.</param>
 public sealed record TeeLogHeader(
     string CommandLine,
     string ProjectPath,

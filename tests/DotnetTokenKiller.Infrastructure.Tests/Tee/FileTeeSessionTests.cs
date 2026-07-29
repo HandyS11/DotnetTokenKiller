@@ -15,9 +15,20 @@ public sealed class FileTeeSessionTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_tempDir))
+        try
         {
-            Directory.Delete(_tempDir, true);
+            if (Directory.Exists(_tempDir))
+            {
+                Directory.Delete(_tempDir, true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // FinalizeAsync_DoesNotThrow_WhenDisposalFailsAfterAWriteFailure deliberately makes
+            // disposal fail, which leaks the OS file handle (ThrowingFileStream.DisposeAsync throws
+            // instead of ever calling base.DisposeAsync()). On Windows, a directory containing a file
+            // with an open handle cannot be unlinked, so cleanup here is best-effort: leaving the
+            // temp directory behind is preferable to a spurious IOException failing the test run.
         }
     }
 
@@ -73,7 +84,7 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.Writer.FlushAsync(CancellationToken.None);
 
         // Deliberately no FinalizeAsync and no DisposeAsync.
-        var text = await File.ReadAllTextAsync(path);
+        var text = await TeeLogFileReader.ReadAllTextAsync(path);
         TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
         header.Status.Should().Be(TeeLogStatus.Running);
         header.ExitCode.Should().BeNull();
@@ -92,7 +103,7 @@ public sealed class FileTeeSessionTests : IDisposable
 
         new FileInfo(path).Length.Should().Be(lengthBeforeFinalize);
         hint.Should().Contain(path);
-        var text = await File.ReadAllTextAsync(path);
+        var text = await TeeLogFileReader.ReadAllTextAsync(path);
         TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
         header.Status.Should().Be(TeeLogStatus.Complete);
         header.ExitCode.Should().Be(3);
@@ -211,7 +222,7 @@ public sealed class FileTeeSessionTests : IDisposable
         }
 
         await session.FinalizeAsync(0);
-        var body = TeeLogHeader.StripHeader(await File.ReadAllTextAsync(path));
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
         Encoding.UTF8.GetByteCount(body).Should().BeLessThanOrEqualTo(32);
     }
 
@@ -223,7 +234,7 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.Writer.WriteLineAsync("[31mred[0m".AsMemory(), CancellationToken.None);
         await session.FinalizeAsync(0);
 
-        TeeLogHeader.StripHeader(await File.ReadAllTextAsync(path)).Should().Be("red\n");
+        TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path)).Should().Be("red\n");
     }
 
     [Fact]
@@ -236,7 +247,7 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.Writer.WriteLineAsync("b".AsMemory(), CancellationToken.None);
         await session.FinalizeAsync(0);
 
-        TeeLogHeader.StripHeader(await File.ReadAllTextAsync(path)).Should().Be("a\nb\n");
+        TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path)).Should().Be("a\nb\n");
     }
 
     [Fact]
@@ -272,7 +283,7 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.Writer.WriteLineAsync("second".AsMemory(), CancellationToken.None);
         await session.FinalizeAsync(0);
 
-        TeeLogHeader.StripHeader(await File.ReadAllTextAsync(path)).Should().BeEmpty();
+        TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path)).Should().BeEmpty();
     }
 
     [Fact]
@@ -302,6 +313,14 @@ public sealed class FileTeeSessionTests : IDisposable
         var act = async () => await session.FinalizeAsync(0);
 
         (await act.Should().NotThrowAsync()).Which.Should().BeNull();
+
+        // The assertion above already proved FinalizeAsync's own DisposeAsync() swallows the
+        // simulated dispose failure -- which also means the stream's real OS handle was never
+        // released, since ThrowingFileStream.DisposeAsync throws before ever reaching
+        // base.DisposeAsync(). Release it now, strictly after that behaviour has been asserted, so
+        // the fixture's Dispose() can unlink _tempDir even on Windows instead of leaking the handle.
+        stream.ThrowOnDispose = false;
+        await stream.DisposeAsync();
     }
 
     [Fact]
@@ -330,7 +349,7 @@ public sealed class FileTeeSessionTests : IDisposable
         var hint = await session.FinalizeAsync(2);
 
         hint.Should().NotBeNull();
-        var text = await File.ReadAllTextAsync(path);
+        var text = await TeeLogFileReader.ReadAllTextAsync(path);
         TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
         header.Status.Should().Be(TeeLogStatus.Complete);
         header.ExitCode.Should().Be(2);
@@ -359,7 +378,7 @@ public sealed class FileTeeSessionTests : IDisposable
         var hint = await session.FinalizeAsync(0);
 
         hint.Should().BeNull();
-        var text = await File.ReadAllTextAsync(path);
+        var text = await TeeLogFileReader.ReadAllTextAsync(path);
         TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
         header.Status.Should().Be(TeeLogStatus.Running);
         TeeLogHeader.StripHeader(text).Should().Contain("body");
@@ -407,7 +426,7 @@ public sealed class FileTeeSessionTests : IDisposable
         await Task.WhenAll(WriteLoopAsync(lineA), WriteLoopAsync(lineB));
         await session.FinalizeAsync(0);
 
-        var body = TeeLogHeader.StripHeader(await File.ReadAllTextAsync(path));
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
         var lines = body.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         lines.Should().OnlyContain(line => line == lineA || line == lineB);
         lines.Should().HaveCount(linesAtCap);
@@ -425,7 +444,7 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.Writer.WriteLineAsync(new string('é', 40).AsMemory(), CancellationToken.None);
         await session.FinalizeAsync(0);
 
-        var body = TeeLogHeader.StripHeader(await File.ReadAllTextAsync(path));
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
         Encoding.UTF8.GetByteCount(body).Should().BeLessThanOrEqualTo(33);
         body.Should().NotContain("�");
     }
