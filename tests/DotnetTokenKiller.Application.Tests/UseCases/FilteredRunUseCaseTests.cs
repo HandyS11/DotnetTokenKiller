@@ -36,7 +36,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 42));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -50,7 +51,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -68,7 +70,8 @@ public class FilteredRunUseCaseTests
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db error"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -82,7 +85,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("io error"));
 
         var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -98,7 +102,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult(stdout, stderr, 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("ok");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -113,7 +118,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234567890123456", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -133,7 +139,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -149,7 +156,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", [], 0);
@@ -166,7 +174,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234567890123456");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -191,7 +200,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -214,7 +224,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -235,7 +246,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -254,7 +266,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
@@ -273,7 +286,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
@@ -292,7 +306,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
@@ -314,7 +329,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
@@ -352,7 +368,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         // verbosityLevel=2 would normally print command line and raw output, but quiet overrides
@@ -370,7 +387,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -391,7 +409,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("Hello world", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("Hello");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -417,7 +436,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -437,7 +457,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw stuff", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
@@ -460,7 +481,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -481,7 +503,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
@@ -496,7 +519,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -517,7 +541,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         // verbosityLevel=2 would normally print meta lines, but quiet overrides it
@@ -540,7 +565,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns("[full output: 123_test.log]");
 
         // showLogHint=true but quiet overrides it
@@ -560,7 +586,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered result\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, quiet: true);
@@ -582,7 +609,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -604,7 +632,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -624,7 +653,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("\x1b[32mraw fallback\x1b[0m", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -639,7 +669,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 7));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -647,7 +678,7 @@ public class FilteredRunUseCaseTests
         await _teeService.Received(1).TeeAndHintAsync(
             Arg.Any<string>(),
             "build",
-            7,
+            Arg.Is<TeeLogHeader>(h => h!.ExitCode == 7),
             Arg.Any<CancellationToken>());
     }
 
@@ -658,7 +689,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -675,7 +707,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -692,7 +725,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -739,7 +773,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult(rawOutput, "", exitCode));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -765,7 +800,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("MSBUILD : error MSB1009: Project file does not exist.", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -791,7 +827,7 @@ public class FilteredRunUseCaseTests
             _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
                 .Returns(new CommandResult("output", "", 0));
             _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
-            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
                     Arg.Any<CancellationToken>())
                 .Returns((string?)null);
 
@@ -822,7 +858,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ dotnet test: 0 tests found\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -848,7 +885,7 @@ public class FilteredRunUseCaseTests
             _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
                 .Returns(new CommandResult("output", "", 0));
             _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ nothing matched\n");
-            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(),
+            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
                     Arg.Any<CancellationToken>())
                 .Returns((string?)null);
 
@@ -870,7 +907,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -886,7 +924,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -902,7 +941,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("line one\nline two\n", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("   ");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -922,7 +962,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("some raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -944,7 +985,8 @@ public class FilteredRunUseCaseTests
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -962,7 +1004,8 @@ public class FilteredRunUseCaseTests
         // savings comparison compare two different keys.
         _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("Project 'A' has the following package references", "", 0));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+                    Arg.Any<CancellationToken>())
             .Returns((string?)null);
 
         await _sut.RunAsync(new DotnetListPackageFilter(), "dotnet", ListPackageArgs, 0);

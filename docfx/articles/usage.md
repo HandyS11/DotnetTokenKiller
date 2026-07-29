@@ -176,6 +176,24 @@ dtk gain --json                # machine-readable JSON output
 dtk gain --export csv          # export raw records as CSV
 ```
 
+### `dtk log`
+
+Retrieve a previous run's full output instead of re-running it:
+
+```sh
+dtk log                  # newest log for this project: last 100 lines
+dtk log build            # newest build log for this project
+dtk log --list           # what is available
+dtk log --index 3        # the 3rd newest
+dtk log --lines 300      # a wider window
+dtk log --full           # everything
+dtk log --all            # include other projects
+```
+
+Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are saved, and output under 500 characters is never saved. Use `dtk config set tee.mode Always` to keep every run. Logs written by dtk 0.6.0 or earlier carry no project metadata and appear only under `--all`.
+
+Passthrough subcommands — anything dtk has no filter for, such as `publish` or `ef migrations` — are not tee'd at all, so `dtk log` will never find them.
+
 ### `dtk reset`
 
 Clear tracking data (and optionally all dtk state):
@@ -287,8 +305,12 @@ dtk dotnet run        # runs: dotnet run
 
 DTK can save the raw, unfiltered command output to disk. This is controlled by the `tee.mode` configuration setting (see [Configuration](configuration.md)). By default, only failed runs are saved.
 
+Each log file also records the full command line and working directory that produced it, alongside the output. Log files are kept owner-only (mode `0600`) for that reason.
+
 To print the log path after a command:
 
 ```sh
 dtk dotnet test --show-log
 ```
+
+Or retrieve a previous run's log without re-running anything: see [`dtk log`](#dtk-log) above.

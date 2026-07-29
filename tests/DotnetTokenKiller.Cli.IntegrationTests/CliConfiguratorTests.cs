@@ -62,6 +62,12 @@ public sealed class CliConfiguratorTests
     }
 
     [Fact]
+    public Task Configure_LogHelp_MatchesSnapshot()
+    {
+        return Verify(RunHelp("log", "--help"));
+    }
+
+    [Fact]
     public Task Configure_DoctorHelp_MatchesSnapshot()
     {
         return Verify(RunHelp("doctor", "--help"));

@@ -20,4 +20,5 @@ COMMANDS:
     doctor                  Run diagnostics to verify dtk is set up correctly             
     completion <shell>      Print shell completion script                                 
     gain                    Show token savings analytics                                  
+    log                     Show the full output of a previous run                        
     reset                   Clear all tracking data                                       

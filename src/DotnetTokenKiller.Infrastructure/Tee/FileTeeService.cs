@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.RegularExpressions;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Tee;
 
@@ -8,7 +7,7 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// <summary>Persists command output to a file and optionally returns a hint message.</summary>
 /// <param name="configProvider">The configuration provider.</param>
 /// <param name="teeDirOverride">Optional directory override; uses platform default when null.</param>
-public sealed partial class FileTeeService(IConfigProvider configProvider, string? teeDirOverride) : ITeeService
+public sealed class FileTeeService(IConfigProvider configProvider, string? teeDirOverride) : ITeeService
 {
     /// <summary>Initializes a new instance using the default tee directory.</summary>
     /// <param name="configProvider">The configuration provider.</param>
@@ -21,10 +20,11 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
     public async Task<string?> TeeAndHintAsync(
         string rawOutput,
         string commandSlug,
-        int exitCode,
+        TeeLogHeader header,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(rawOutput);
+        ArgumentNullException.ThrowIfNull(header);
         try
         {
             var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -33,7 +33,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             var shouldWrite = teeConfig.Mode switch
             {
                 TeeMode.Always => true,
-                TeeMode.Failures => exitCode != 0,
+                TeeMode.Failures => header.ExitCode != 0,
                 _ => false
             };
 
@@ -48,21 +48,20 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
                 return null;
             }
 
-            var teeDir = GetTeeDir(teeConfig, teeDirOverride);
+            var teeDir = TeeDirectoryResolver.Resolve(teeConfig, teeDirOverride);
             Directory.CreateDirectory(teeDir);
             RestrictToOwnerOnly(teeDir);
 
             // Rotate: delete oldest files if at/over limit
             RotateFiles(teeDir, teeConfig.MaxFiles);
 
-            // Truncate to the configured byte budget without splitting a multi-byte UTF-8 sequence.
-            var content = TruncateToUtf8Bytes(rawOutput, teeConfig.MaxFileSizeBytes);
+            // The budget applies to the body alone — the header is dtk's own addition, and charging
+            // the user's configured cap for it would silently shrink every existing setting.
+            var body = TruncateToUtf8Bytes(rawOutput, teeConfig.MaxFileSizeBytes);
+            var content = header.Render() + body;
 
-            // Write file
-            var slug = SanitizeSlug(commandSlug);
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var uniqueSuffix = Guid.NewGuid().ToString("N");
-            var fileName = $"{timestamp}_{uniqueSuffix}_{slug}.log";
+            var fileName = TeeLogFileName.Build(
+                header.TimestampUtc, Guid.NewGuid().ToString("N"), commandSlug);
             var filePath = Path.Combine(teeDir, fileName);
             await WriteOwnerOnlyAsync(filePath, content, cancellationToken).ConfigureAwait(false);
 
@@ -81,7 +80,7 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
         try
         {
             var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
-            var teeDir = GetTeeDir(config.Tee, teeDirOverride);
+            var teeDir = TeeDirectoryResolver.Resolve(config.Tee, teeDirOverride);
             if (!Directory.Exists(teeDir))
             {
                 return;
@@ -189,46 +188,4 @@ public sealed partial class FileTeeService(IConfigProvider configProvider, strin
             File.Delete(files[i]);
         }
     }
-
-    private static string GetTeeDir(TeeConfig config, string? teeDirOverride)
-    {
-        if (teeDirOverride is not null)
-        {
-            return teeDirOverride;
-        }
-
-        var envVar = EnvironmentOverride.Read("DTK_TEE_DIR");
-        if (envVar is not null)
-        {
-            return envVar;
-        }
-
-        if (!string.IsNullOrEmpty(config.Directory))
-        {
-            return config.Directory;
-        }
-
-        return GetDefaultTeeDir();
-    }
-
-    /// <summary>Returns the default tee output directory used when no override is configured.</summary>
-    /// <returns>The platform-default tee directory.</returns>
-    public static string GetDefaultTeeDir()
-    {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localAppData, "dtk", "tee");
-    }
-
-    private static string SanitizeSlug(string slug)
-    {
-        var safe = NonSafeCharRegex().Replace(slug, "-");
-        safe = CollapseHyphensRegex().Replace(safe, "-");
-        return safe.Trim('-');
-    }
-
-    [GeneratedRegex(@"[^a-zA-Z0-9\-]")]
-    private static partial Regex NonSafeCharRegex();
-
-    [GeneratedRegex("-{2,}")]
-    private static partial Regex CollapseHyphensRegex();
 }

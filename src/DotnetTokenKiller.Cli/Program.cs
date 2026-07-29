@@ -47,6 +47,7 @@ try
         })
         : AnsiConsole.Console);
     services.AddSingleton<IStandardInputState, ConsoleStandardInputState>();
+    services.AddSingleton<IWorkingDirectory, ProcessWorkingDirectory>();
 
     var registrar = new DtkTypeRegistrar(services);
     var app = new CommandApp(registrar);

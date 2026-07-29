@@ -21,6 +21,9 @@ internal static class CliConfigurator
     /// <summary>The <c>pipe</c> command name.</summary>
     public const string PipeCommand = "pipe";
 
+    /// <summary>The <c>log</c> command name.</summary>
+    public const string LogCommand = "log";
+
     /// <summary>The <c>config</c> branch name.</summary>
     public const string ConfigBranch = "config";
 
@@ -122,6 +125,14 @@ internal static class CliConfigurator
             .WithExample("gain", "--days", "7")
             .WithExample("gain", "--project")
             .WithExample("gain", "--json");
+
+        config.AddCommand<Commands.LogCommand>(LogCommand)
+            .WithDescription("Show the full output of a previous run")
+            .WithExample("log")
+            .WithExample("log", "build")
+            .WithExample("log", "--list")
+            .WithExample("log", "--full");
+
         config.AddCommand<ResetCommand>("reset")
             .WithDescription("Clear all tracking data")
             .WithExample("reset");

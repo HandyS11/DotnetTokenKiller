@@ -1,0 +1,23 @@
+DESCRIPTION:
+Show the full output of a previous run
+
+USAGE:
+    dtk log [subcommand] [OPTIONS]
+
+EXAMPLES:
+    dtk log
+    dtk log build
+    dtk log --list
+    dtk log --full
+
+ARGUMENTS:
+    [subcommand]    Only show logs for this dotnet subcommand, e.g. build or list package
+
+OPTIONS:
+                   DEFAULT                                                                
+    -h, --help                Prints help information                                     
+        --list                List the available logs instead of printing one             
+        --index    1          Which of the matching logs to show, newest first (default 1)
+        --lines    100        How many trailing lines to print (default 100)              
+        --full                Print the whole log instead of a trailing window            
+        --all                 Include logs from every project, not just this directory    

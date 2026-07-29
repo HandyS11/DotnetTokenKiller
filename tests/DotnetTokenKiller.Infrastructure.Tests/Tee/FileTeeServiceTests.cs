@@ -1,11 +1,21 @@
 using System.Reflection;
+using System.Text;
 using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Domain.Tee;
+using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tee;
 using FluentAssertions;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tee;
 
+/// <summary>
+/// Shares the "TeeDirectoryResolver" collection with <see cref="TeeDirectoryResolverTests"/>: both
+/// mutate the process-wide DTK_TEE_DIR environment variable, and xUnit only serialises test classes
+/// against each other when they are in the same collection — distinct collections still run in
+/// parallel by default, so this is what actually prevents the two classes racing on that variable.
+/// </summary>
+[Collection("TeeDirectoryResolver")]
 public sealed class FileTeeServiceTests : IDisposable
 {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-test-{Guid.NewGuid()}");
@@ -32,12 +42,71 @@ public sealed class FileTeeServiceTests : IDisposable
         return new string('x', length);
     }
 
+    private static TeeLogHeader Header(int exitCode = 1, string? cwd = null) => new(
+        "dotnet build MyApp.slnx",
+        cwd ?? "/home/user/projects/MyApp",
+        exitCode,
+        RunSource.Run,
+        new DateTimeOffset(2026, 7, 28, 9, 14, 2, TimeSpan.Zero));
+
+    [Fact]
+    public async Task TeeAndHintAsync_WritesAParseableHeaderAheadOfTheBody()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await sut.TeeAndHintAsync("body text " + LargeOutput(), "build", Header());
+
+        var written = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(written, out var header).Should().BeTrue();
+        header.CommandLine.Should().Be("dotnet build MyApp.slnx");
+        header.ProjectPath.Should().Be("/home/user/projects/MyApp");
+        header.ExitCode.Should().Be(1);
+        TeeLogHeader.StripHeader(written).Should().StartWith("body text ");
+    }
+
+    [Fact]
+    public async Task TeeAndHintAsync_NamesTheFileFromTheHeaderTimestamp()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await sut.TeeAndHintAsync(LargeOutput(), "list package", Header());
+
+        var fileName = Path.GetFileName(Directory.GetFiles(_tempDir).Single());
+        TeeLogFileName.TryParse(fileName, out var timestamp, out var slug).Should().BeTrue();
+        timestamp.Should().Be(new DateTimeOffset(2026, 7, 28, 9, 14, 2, TimeSpan.Zero));
+        slug.Should().Be("list-package");
+    }
+
+    [Fact]
+    public async Task TeeAndHintAsync_AppliesTheSizeBudgetToTheBodyOnly()
+    {
+        // The header is written in addition to MaxFileSizeBytes. Charging the configured cap for
+        // bytes the user did not ask to store would silently shrink every existing setting.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, null, 20, MaxFileSizeBytes: 600));
+
+        await sut.TeeAndHintAsync(LargeOutput(5000), "build", Header());
+
+        var written = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.StripHeader(written).Length.Should().Be(600);
+    }
+
+    [Fact]
+    public async Task TeeAndHintAsync_UsesTheHeaderExitCode_ForFailuresMode()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures));
+
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
+
+        hint.Should().BeNull();
+        Directory.Exists(_tempDir).Should().BeFalse();
+    }
+
     [Fact]
     public async Task TeeAndHintAsync_WritesFileAndReturnsHint_WhenFailuresMode_NonZeroExit()
     {
         var sut = CreateSut(new TeeConfig());
 
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 1);
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 1));
 
         hint.Should().StartWith("[full output: ").And.EndWith(".log]");
         Directory.GetFiles(_tempDir).Should().HaveCount(1);
@@ -48,7 +117,7 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         var sut = CreateSut(new TeeConfig(TeeMode.Always));
 
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         hint.Should().NotBeNull();
         var path = ExtractPathFromHint(hint!);
@@ -67,7 +136,7 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         var sut = CreateSut(new TeeConfig());
 
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         hint.Should().BeNull();
         Directory.Exists(_tempDir).Should().BeFalse();
@@ -78,7 +147,7 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         var sut = CreateSut(new TeeConfig(TeeMode.Never));
 
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 1);
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 1));
 
         hint.Should().BeNull();
     }
@@ -88,7 +157,7 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         var sut = CreateSut(new TeeConfig(TeeMode.Always));
 
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         hint.Should().NotBeNull();
         Directory.GetFiles(_tempDir).Should().HaveCount(1);
@@ -99,7 +168,7 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         var sut = CreateSut(new TeeConfig());
 
-        var hint = await sut.TeeAndHintAsync(new string('x', 499), "build", 1);
+        var hint = await sut.TeeAndHintAsync(new string('x', 499), "build", Header(exitCode: 1));
 
         hint.Should().BeNull();
     }
@@ -116,7 +185,7 @@ public sealed class FileTeeServiceTests : IDisposable
 
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 3));
 
-        await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         Directory.GetFiles(_tempDir).Should().HaveCount(3); // stays at maxFiles
     }
@@ -126,7 +195,7 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         var sut = CreateSut(new TeeConfig(TeeMode.Always));
 
-        await sut.TeeAndHintAsync(LargeOutput(), "dotnet::run --project", 0);
+        await sut.TeeAndHintAsync(LargeOutput(), "dotnet::run --project", Header(exitCode: 0));
 
         var file = Directory.GetFiles(_tempDir).Single();
         Path.GetFileName(file).Should().Contain("_dotnet-run-project.log");
@@ -138,13 +207,18 @@ public sealed class FileTeeServiceTests : IDisposable
         const long maxBytes = 100L;
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
 
-        await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         var file = Directory.GetFiles(_tempDir).Single();
-        new FileInfo(file).Length.Should().BeLessThanOrEqualTo(maxBytes);
+        // The byte budget applies to the body alone; the header is dtk's own addition on top of it.
+        var written = await File.ReadAllTextAsync(file);
+        // StripHeader returns its input unchanged when parsing fails, so without this assertion the
+        // test below would still pass on an unstripped fragment if truncation ate the header itself.
+        TeeLogHeader.TryParse(written, out _).Should().BeTrue();
+        var body = TeeLogHeader.StripHeader(written);
+        ((long)Encoding.UTF8.GetByteCount(body)).Should().BeLessThanOrEqualTo(maxBytes);
         // ASCII input: the byte cap equals the char count exactly.
-        var content = await File.ReadAllTextAsync(file);
-        content.Length.Should().Be(100);
+        body.Length.Should().Be(100);
     }
 
     [Fact]
@@ -156,13 +230,15 @@ public sealed class FileTeeServiceTests : IDisposable
         var rockets = string.Concat(Enumerable.Repeat("🚀", 600));
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
 
-        await sut.TeeAndHintAsync(rockets, "build", 0);
+        await sut.TeeAndHintAsync(rockets, "build", Header(exitCode: 0));
 
         var file = Directory.GetFiles(_tempDir).Single();
-        new FileInfo(file).Length.Should().BeLessThanOrEqualTo(maxBytes);
-        var content = await File.ReadAllTextAsync(file);
-        content.Should().NotContain("�"); // no split-rune replacement character
-        content.Should().Be(string.Concat(Enumerable.Repeat("🚀", 25)));
+        // The byte budget applies to the body alone; the header is dtk's own addition on top of it.
+        var written = await File.ReadAllTextAsync(file);
+        var body = TeeLogHeader.StripHeader(written);
+        ((long)Encoding.UTF8.GetByteCount(body)).Should().BeLessThanOrEqualTo(maxBytes);
+        body.Should().NotContain("�"); // no split-rune replacement character
+        body.Should().Be(string.Concat(Enumerable.Repeat("🚀", 25)));
     }
 
     [Fact]
@@ -175,7 +251,7 @@ public sealed class FileTeeServiceTests : IDisposable
 
         var sut = CreateSut(new TeeConfig(TeeMode.Always));
 
-        await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         var file = Directory.GetFiles(_tempDir).Single();
         File.GetUnixFileMode(file).Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -191,7 +267,7 @@ public sealed class FileTeeServiceTests : IDisposable
 
         var sut = CreateSut(new TeeConfig(TeeMode.Always));
 
-        await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         File.GetUnixFileMode(_tempDir)
             .Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -203,7 +279,7 @@ public sealed class FileTeeServiceTests : IDisposable
         // Covers catch-all block (lines 70-73): exceptions inside the try never surface
         var sut = new FileTeeService(new ThrowingConfigProvider(), _tempDir);
 
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 1);
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 1));
 
         hint.Should().BeNull();
     }
@@ -214,7 +290,7 @@ public sealed class FileTeeServiceTests : IDisposable
         // Covers RotateFiles early return when maxFiles <= 0 (lines 80-81)
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 0));
 
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
         hint.Should().NotBeNull();
         Directory.GetFiles(_tempDir).Should().HaveCount(1);
@@ -223,7 +299,8 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_DtkTeeDirEnvVar_UsesEnvVarDirectory()
     {
-        // Covers GetTeeDir returning the env-var path (lines 107-108)
+        // Covers the tee directory resolution using the DTK_TEE_DIR environment variable when
+        // teeDirOverride is null.
         var envDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-env-{Guid.NewGuid()}");
         var originalValue = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
         try
@@ -236,7 +313,7 @@ public sealed class FileTeeServiceTests : IDisposable
             // Use the single-param constructor so teeDirOverride is null → falls through to env var
             var sut = new FileTeeService(new FakeConfigProvider(config));
 
-            var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+            var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
             hint.Should().NotBeNull();
             Directory.Exists(envDir).Should().BeTrue();
@@ -254,7 +331,7 @@ public sealed class FileTeeServiceTests : IDisposable
     [Fact]
     public async Task TeeAndHintAsync_ConfigDirectorySet_UsesConfigDirectory()
     {
-        // Covers GetTeeDir returning config.Directory (lines 112-113) when
+        // Covers the tee directory resolution using config.Directory when
         // teeDirOverride is null and DTK_TEE_DIR is not set
         var configDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-configdir-{Guid.NewGuid()}");
         var originalEnv = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
@@ -267,7 +344,7 @@ public sealed class FileTeeServiceTests : IDisposable
             };
             var sut = new FileTeeService(new FakeConfigProvider(config));
 
-            var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", 0);
+            var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
 
             hint.Should().NotBeNull();
             Directory.Exists(configDir).Should().BeTrue();
@@ -331,31 +408,6 @@ public sealed class FileTeeServiceTests : IDisposable
         var act = () => sut.DeleteLogsAsync();
 
         await act.Should().NotThrowAsync();
-    }
-
-    /// <summary>Nested fake — avoids NSubstitute dependency (not referenced in this test csproj).</summary>
-    /// <param name="initialConfig">The configuration to return from <see cref="LoadAsync"/>.</param>
-    private sealed class FakeConfigProvider(DtkConfig initialConfig) : IConfigProvider
-    {
-        public DtkConfig Load()
-        {
-            return initialConfig;
-        }
-
-        public Task<DtkConfig> LoadAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult(initialConfig);
-        }
-
-        public Task SaveAsync(DtkConfig config, CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
-
-        public Task DeleteAsync(CancellationToken cancellationToken = default)
-        {
-            return Task.CompletedTask;
-        }
     }
 
     private sealed class ThrowingConfigProvider : IConfigProvider
