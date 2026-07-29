@@ -19,24 +19,28 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// the glyph rules, and the tracking shape cannot drift between the two entry points.
 /// </remarks>
 /// <param name="tracker">The tracking store.</param>
-/// <param name="teeService">The tee output service.</param>
 /// <param name="output">The text writer for user-facing output.</param>
 /// <param name="configProvider">The configuration provider.</param>
 public sealed class FilteredOutputPipeline(
     ITracker tracker,
-    ITeeService teeService,
     TextWriter output,
     IConfigProvider configProvider)
 {
     /// <summary>Filters the request's output, writes it, and records the run.</summary>
     /// <param name="request">The output and metadata to process.</param>
+    /// <param name="session">
+    /// The log opened for this run, finalized here. Callers with nothing to log pass
+    /// <see cref="NullTeeSession.Instance"/>.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The request's exit code, unchanged.</returns>
     public async Task<int> ProcessAsync(
         FilteredOutputRequest request,
+        ITeeSession session,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(session);
 
         var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
         var options = request.Options.Normalized();
@@ -46,7 +50,8 @@ public sealed class FilteredOutputPipeline(
             await ApplyFilterSafelyAsync(request.Filter, stripped, request.ExitCode, options.VerbosityLevel)
                 .ConfigureAwait(false);
 
-        var logHint = await GetTeeHintAsync(stripped, request, cancellationToken).ConfigureAwait(false);
+        // Finalized before the raw-tail fallback is built, because the fallback embeds this hint.
+        var logHint = await FinalizeTeeAsync(session, request.ExitCode, cancellationToken).ConfigureAwait(false);
 
         var usedRawTailFallback = false;
         if (request.ExitCode != 0 && string.IsNullOrWhiteSpace(filtered))
@@ -161,23 +166,14 @@ public sealed class FilteredOutputPipeline(
         return sb.ToString();
     }
 
-    private async Task<string?> GetTeeHintAsync(
-        string stripped,
-        FilteredOutputRequest request,
+    private static async Task<string?> FinalizeTeeAsync(
+        ITeeSession session,
+        int exitCode,
         CancellationToken cancellationToken)
     {
         try
         {
-            var header = new TeeLogHeader(
-                request.DisplayCommandLine,
-                Environment.CurrentDirectory,
-                request.ExitCode,
-                request.Source,
-                DateTimeOffset.UtcNow);
-
-            return await teeService
-                .TeeAndHintAsync(stripped, request.CommandSlug, header, cancellationToken)
-                .ConfigureAwait(false);
+            return await session.FinalizeAsync(exitCode, cancellationToken).ConfigureAwait(false);
         }
         catch
         {

@@ -193,12 +193,6 @@ public class ResetCommandTests
     {
         public bool LogsWereDeleted { get; private set; }
 
-        public Task<string?> TeeAndHintAsync(string rawOutput, string commandSlug, TeeLogHeader header,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult<string?>(null);
-        }
-
         public Task DeleteLogsAsync(CancellationToken cancellationToken = default)
         {
             LogsWereDeleted = true;

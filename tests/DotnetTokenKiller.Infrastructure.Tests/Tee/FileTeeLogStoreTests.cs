@@ -202,10 +202,12 @@ public sealed class FileTeeLogStoreTests : IDisposable
             DtkConfig.Default with { Tee = new TeeConfig(TeeMode.Always) });
         var writer = new FileTeeService(config, _tempDir);
         var header = new TeeLogHeader(
-            "dotnet build MyApp.slnx", "/home/user/proj", 1, RunSource.Run, At(3));
+            "dotnet build MyApp.slnx", "/home/user/proj", null, RunSource.Run, At(3));
         var body = new string('x', 600);
 
-        await writer.TeeAndHintAsync(body, "list package", header);
+        var session = await writer.BeginAsync("list package", header);
+        await session.Writer.WriteLineAsync(body.AsMemory(), CancellationToken.None);
+        await session.FinalizeAsync(1);
 
         var store = new FileTeeLogStore(config, _tempDir);
         var entry = (await store.ListAsync()).Single();
@@ -213,7 +215,9 @@ public sealed class FileTeeLogStoreTests : IDisposable
         entry.Header!.ProjectPath.Should().Be("/home/user/proj");
         entry.Header.ExitCode.Should().Be(1);
         entry.Slug.Should().Be("list-package");
-        (await store.ReadBodyAsync(entry)).Should().Be(body);
+        // WriteLineAsync appends the session's forced "\n", so the round-tripped body carries one
+        // trailing newline the original string did not.
+        (await store.ReadBodyAsync(entry)).Should().Be(body + "\n");
     }
 
     [Fact]

@@ -32,8 +32,8 @@ public class PipeCommandTests
     private static PipeCommand CreateCommand(TestConsole console, bool isRedirected)
     {
         var pipeline = new FilteredOutputPipeline(
-            new StubTracker(), new StubTeeService(), new StringWriter(), new StubConfigProvider());
-        var pipeFilter = new PipeFilterUseCase(pipeline, new StringReader(string.Empty));
+            new StubTracker(), new StringWriter(), new StubConfigProvider());
+        var pipeFilter = new PipeFilterUseCase(pipeline, new StubTeeService(), new StringReader(string.Empty));
         var services = new ServiceCollection().BuildServiceProvider();
         return new PipeCommand(pipeFilter, services, console, new StubStandardInputState(isRedirected));
     }
@@ -105,12 +105,6 @@ public class PipeCommandTests
 
     private sealed class StubTeeService : ITeeService
     {
-        public Task<string?> TeeAndHintAsync(string rawOutput, string commandSlug, TeeLogHeader header,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult<string?>(null);
-        }
-
         public Task DeleteLogsAsync(CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;

@@ -16,15 +16,12 @@ public class FilteredOutputPipelineTests
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
     private readonly FilteredOutputPipeline _sut;
-    private readonly ITeeService _teeService = Substitute.For<ITeeService>();
     private readonly ITracker _tracker = Substitute.For<ITracker>();
 
     public FilteredOutputPipelineTests()
     {
         _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-            Arg.Any<CancellationToken>()).Returns((string?)null);
-        _sut = new FilteredOutputPipeline(_tracker, _teeService, TextWriter.Null, _configProvider);
+        _sut = new FilteredOutputPipeline(_tracker, TextWriter.Null, _configProvider);
     }
 
     private FilteredOutputRequest Request(
@@ -39,7 +36,7 @@ public class FilteredOutputPipelineTests
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        var exitCode = await _sut.ProcessAsync(Request(exitCode: 42));
+        var exitCode = await _sut.ProcessAsync(Request(exitCode: 42), NullTeeSession.Instance);
 
         exitCode.Should().Be(42);
     }
@@ -49,7 +46,7 @@ public class FilteredOutputPipelineTests
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.ProcessAsync(Request(source: RunSource.Pipe));
+        await _sut.ProcessAsync(Request(source: RunSource.Pipe), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r!.Source == RunSource.Pipe && r.Command == "build"),
@@ -61,7 +58,7 @@ public class FilteredOutputPipelineTests
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await _sut.ProcessAsync(Request());
+        await _sut.ProcessAsync(Request(), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
@@ -73,7 +70,7 @@ public class FilteredOutputPipelineTests
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
 
-        await _sut.ProcessAsync(Request(exitCode: 1));
+        await _sut.ProcessAsync(Request(exitCode: 1), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.RawTailFallback),
@@ -88,7 +85,7 @@ public class FilteredOutputPipelineTests
         // is deliberate and is the one rule in the pipeline that is not incidental.
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await _sut.ProcessAsync(Request(raw: "   ", exitCode: 1));
+        await _sut.ProcessAsync(Request(raw: "   ", exitCode: 1), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
@@ -102,7 +99,7 @@ public class FilteredOutputPipelineTests
         _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db error"));
 
-        var act = async () => await _sut.ProcessAsync(Request());
+        var act = async () => await _sut.ProcessAsync(Request(), NullTeeSession.Instance);
 
         await act.Should().NotThrowAsync();
     }
@@ -111,10 +108,12 @@ public class FilteredOutputPipelineTests
     public async Task ProcessAsync_TeeThrows_DoesNotSurfaceException()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-            Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("io error"));
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("io error"));
 
-        var act = async () => await _sut.ProcessAsync(Request());
+        var act = async () => await _sut.ProcessAsync(Request(), session);
 
         await act.Should().NotThrowAsync();
     }
@@ -126,7 +125,7 @@ public class FilteredOutputPipelineTests
             .Returns(DtkConfig.Default with { Tracking = DtkConfig.Default.Tracking with { Enabled = false } });
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.ProcessAsync(Request());
+        await _sut.ProcessAsync(Request(), NullTeeSession.Instance);
 
         await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
     }
@@ -138,33 +137,30 @@ public class FilteredOutputPipelineTests
         // must not trust the caller's Options as-is — it normalizes defensively so quiet mode is
         // enforced by construction, not by convention.
         await using var writer = new StringWriter();
-        var sut = new FilteredOutputPipeline(_tracker, _teeService, writer, _configProvider);
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         var request = new FilteredOutputRequest(
             _filter, "raw output", 0, "build", "dotnet build", RunSource.Run,
             new OutputOptions(VerbosityLevel: 2, ShowLogHint: true, Quiet: true),
             Stopwatch.GetTimestamp());
 
-        await sut.ProcessAsync(request);
+        await sut.ProcessAsync(request, NullTeeSession.Instance);
 
         writer.ToString().Should().NotContain("[raw output]");
     }
 
     [Fact]
-    public async Task ProcessAsync_PassesTheRequestsCommandLineAndSourceToTheTeeService()
+    public async Task ProcessAsync_FinalizesTheSessionWithTheRequestsExitCode()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("[full output: /tee/x.log]");
 
-        await _sut.ProcessAsync(Request(exitCode: 1, source: RunSource.Pipe));
+        var request = Request(exitCode: 1, source: RunSource.Pipe);
+        await _sut.ProcessAsync(request, session);
 
-        await _teeService.Received(1).TeeAndHintAsync(
-            Arg.Any<string>(),
-            "build",
-            Arg.Is<TeeLogHeader>(h =>
-                h!.CommandLine == "dotnet build" &&
-                h.ExitCode == 1 &&
-                h.Source == RunSource.Pipe &&
-                h.ProjectPath == Environment.CurrentDirectory),
-            Arg.Any<CancellationToken>());
+        await session.Received(1).FinalizeAsync(request.ExitCode, Arg.Any<CancellationToken>());
     }
 }
