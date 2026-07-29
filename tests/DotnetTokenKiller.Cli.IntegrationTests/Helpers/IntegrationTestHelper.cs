@@ -145,6 +145,42 @@ internal static class IntegrationTestHelper
         return (inputTokens - outputTokens) * 100.0 / inputTokens;
     }
 
+    /// <summary>
+    /// Starts dtk without waiting for it, so a test can kill it mid-run.
+    /// </summary>
+    /// <param name="args">Arguments to pass to dtk.</param>
+    /// <param name="isolatedDir">The per-test directory holding config, database, and tee logs.</param>
+    /// <returns>The running process and the tee directory it was pointed at.</returns>
+    /// <exception cref="InvalidOperationException">The process could not be started.</exception>
+    internal static (Process Process, string TeeDir) StartDetached(string[] args, string isolatedDir)
+    {
+        var teeDir = Path.Combine(isolatedDir, "tee");
+        Directory.CreateDirectory(isolatedDir);
+
+        var psi = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        psi.ArgumentList.Add(DllPath);
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        // Same isolation set RunProcessAsync uses, so this never touches the developer's real state.
+        psi.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        psi.Environment["DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER"] = "1";
+        psi.Environment["DTK_DB_PATH"] = Path.Combine(isolatedDir, "tracking.db");
+        psi.Environment["DTK_TEE_DIR"] = teeDir;
+        psi.Environment["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json");
+
+        var process = Process.Start(psi)
+                      ?? throw new InvalidOperationException("Failed to start dtk");
+        return (process, teeDir);
+    }
+
     private static Task<(string Output, int ExitCode)> RunProcessAsync(
         string executable, IEnumerable<string> args)
     {

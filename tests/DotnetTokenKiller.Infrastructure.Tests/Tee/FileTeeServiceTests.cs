@@ -42,323 +42,6 @@ public sealed class FileTeeServiceTests : IDisposable
         return new string('x', length);
     }
 
-    private static TeeLogHeader Header(int exitCode = 1, string? cwd = null) => new(
-        "dotnet build MyApp.slnx",
-        cwd ?? "/home/user/projects/MyApp",
-        exitCode,
-        RunSource.Run,
-        new DateTimeOffset(2026, 7, 28, 9, 14, 2, TimeSpan.Zero));
-
-    [Fact]
-    public async Task TeeAndHintAsync_WritesAParseableHeaderAheadOfTheBody()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-
-        await sut.TeeAndHintAsync("body text " + LargeOutput(), "build", Header());
-
-        var written = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
-        TeeLogHeader.TryParse(written, out var header).Should().BeTrue();
-        header.CommandLine.Should().Be("dotnet build MyApp.slnx");
-        header.ProjectPath.Should().Be("/home/user/projects/MyApp");
-        header.ExitCode.Should().Be(1);
-        TeeLogHeader.StripHeader(written).Should().StartWith("body text ");
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_NamesTheFileFromTheHeaderTimestamp()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-
-        await sut.TeeAndHintAsync(LargeOutput(), "list package", Header());
-
-        var fileName = Path.GetFileName(Directory.GetFiles(_tempDir).Single());
-        TeeLogFileName.TryParse(fileName, out var timestamp, out var slug).Should().BeTrue();
-        timestamp.Should().Be(new DateTimeOffset(2026, 7, 28, 9, 14, 2, TimeSpan.Zero));
-        slug.Should().Be("list-package");
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_AppliesTheSizeBudgetToTheBodyOnly()
-    {
-        // The header is written in addition to MaxFileSizeBytes. Charging the configured cap for
-        // bytes the user did not ask to store would silently shrink every existing setting.
-        var sut = CreateSut(new TeeConfig(TeeMode.Always, null, 20, MaxFileSizeBytes: 600));
-
-        await sut.TeeAndHintAsync(LargeOutput(5000), "build", Header());
-
-        var written = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
-        TeeLogHeader.StripHeader(written).Length.Should().Be(600);
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_UsesTheHeaderExitCode_ForFailuresMode()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Failures));
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        hint.Should().BeNull();
-        Directory.Exists(_tempDir).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_WritesFileAndReturnsHint_WhenFailuresMode_NonZeroExit()
-    {
-        var sut = CreateSut(new TeeConfig());
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 1));
-
-        hint.Should().StartWith("[full output: ").And.EndWith(".log]");
-        Directory.GetFiles(_tempDir).Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_HintContainsOpenableFullPath()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        hint.Should().NotBeNull();
-        var path = ExtractPathFromHint(hint!);
-        Path.IsPathRooted(path).Should().BeTrue(); // old hint: bare filename, not rooted
-        File.Exists(path).Should().BeTrue();        // old hint: File.Exists false from any other cwd
-    }
-
-    private static string ExtractPathFromHint(string hint)
-    {
-        const string prefix = "[full output: ";
-        return hint[prefix.Length..^1]; // strip prefix and the trailing ']'
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_ReturnsNull_WhenFailuresMode_ZeroExit()
-    {
-        var sut = CreateSut(new TeeConfig());
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        hint.Should().BeNull();
-        Directory.Exists(_tempDir).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_ReturnsNull_WhenNeverMode()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Never));
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 1));
-
-        hint.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_WritesFile_WhenAlwaysMode_ZeroExit()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        hint.Should().NotBeNull();
-        Directory.GetFiles(_tempDir).Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_ReturnsNull_WhenOutputTooSmall()
-    {
-        var sut = CreateSut(new TeeConfig());
-
-        var hint = await sut.TeeAndHintAsync(new string('x', 499), "build", Header(exitCode: 1));
-
-        hint.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_DeletesOldestFiles_WhenMaxFilesExceeded()
-    {
-        // Pre-populate tee dir with maxFiles existing files
-        Directory.CreateDirectory(_tempDir);
-        for (var i = 0; i < 3; i++)
-        {
-            await File.WriteAllTextAsync(Path.Combine(_tempDir, $"{i:D10}_old.log"), "old");
-        }
-
-        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 3));
-
-        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        Directory.GetFiles(_tempDir).Should().HaveCount(3); // stays at maxFiles
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_SanitizesSlug_InFileName()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-
-        await sut.TeeAndHintAsync(LargeOutput(), "dotnet::run --project", Header(exitCode: 0));
-
-        var file = Directory.GetFiles(_tempDir).Single();
-        Path.GetFileName(file).Should().Contain("_dotnet-run-project.log");
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_TruncatesContent_WhenOutputExceedsMaxSize()
-    {
-        const long maxBytes = 100L;
-        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
-
-        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        var file = Directory.GetFiles(_tempDir).Single();
-        // The byte budget applies to the body alone; the header is dtk's own addition on top of it.
-        var written = await File.ReadAllTextAsync(file);
-        // StripHeader returns its input unchanged when parsing fails, so without this assertion the
-        // test below would still pass on an unstripped fragment if truncation ate the header itself.
-        TeeLogHeader.TryParse(written, out _).Should().BeTrue();
-        var body = TeeLogHeader.StripHeader(written);
-        ((long)Encoding.UTF8.GetByteCount(body)).Should().BeLessThanOrEqualTo(maxBytes);
-        // ASCII input: the byte cap equals the char count exactly.
-        body.Length.Should().Be(100);
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_TruncationDoesNotSplitMultiByteChar_AndRespectsByteCap()
-    {
-        // '🚀' (U+1F680) is 4 UTF-8 bytes; a byte cap that lands mid-rune must drop the whole rune,
-        // never emit a replacement char, and never exceed the cap.
-        const long maxBytes = 102L; // 25 rockets = 100 bytes, so the cap falls inside the 26th
-        var rockets = string.Concat(Enumerable.Repeat("🚀", 600));
-        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
-
-        await sut.TeeAndHintAsync(rockets, "build", Header(exitCode: 0));
-
-        var file = Directory.GetFiles(_tempDir).Single();
-        // The byte budget applies to the body alone; the header is dtk's own addition on top of it.
-        var written = await File.ReadAllTextAsync(file);
-        var body = TeeLogHeader.StripHeader(written);
-        ((long)Encoding.UTF8.GetByteCount(body)).Should().BeLessThanOrEqualTo(maxBytes);
-        body.Should().NotContain("�"); // no split-rune replacement character
-        body.Should().Be(string.Concat(Enumerable.Repeat("🚀", 25)));
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_WritesLogFileOwnerOnly()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return; // POSIX permission bits are not meaningful on Windows
-        }
-
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-
-        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        var file = Directory.GetFiles(_tempDir).Single();
-        File.GetUnixFileMode(file).Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite);
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_CreatesTeeDirectoryOwnerOnly()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return; // POSIX permission bits are not meaningful on Windows
-        }
-
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-
-        await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        File.GetUnixFileMode(_tempDir)
-            .Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_ConfigProviderThrows_ReturnsNull()
-    {
-        // Covers catch-all block (lines 70-73): exceptions inside the try never surface
-        var sut = new FileTeeService(new ThrowingConfigProvider(), _tempDir);
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 1));
-
-        hint.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_MaxFilesZero_DoesNotRotate()
-    {
-        // Covers RotateFiles early return when maxFiles <= 0 (lines 80-81)
-        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 0));
-
-        var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-        hint.Should().NotBeNull();
-        Directory.GetFiles(_tempDir).Should().HaveCount(1);
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_DtkTeeDirEnvVar_UsesEnvVarDirectory()
-    {
-        // Covers the tee directory resolution using the DTK_TEE_DIR environment variable when
-        // teeDirOverride is null.
-        var envDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-env-{Guid.NewGuid()}");
-        var originalValue = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
-        try
-        {
-            Environment.SetEnvironmentVariable("DTK_TEE_DIR", envDir);
-            var config = DtkConfig.Default with
-            {
-                Tee = new TeeConfig(TeeMode.Always)
-            };
-            // Use the single-param constructor so teeDirOverride is null → falls through to env var
-            var sut = new FileTeeService(new FakeConfigProvider(config));
-
-            var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-            hint.Should().NotBeNull();
-            Directory.Exists(envDir).Should().BeTrue();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("DTK_TEE_DIR", originalValue);
-            if (Directory.Exists(envDir))
-            {
-                Directory.Delete(envDir, true);
-            }
-        }
-    }
-
-    [Fact]
-    public async Task TeeAndHintAsync_ConfigDirectorySet_UsesConfigDirectory()
-    {
-        // Covers the tee directory resolution using config.Directory when
-        // teeDirOverride is null and DTK_TEE_DIR is not set
-        var configDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-configdir-{Guid.NewGuid()}");
-        var originalEnv = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
-        Environment.SetEnvironmentVariable("DTK_TEE_DIR", null);
-        try
-        {
-            var config = DtkConfig.Default with
-            {
-                Tee = new TeeConfig(TeeMode.Always, configDir)
-            };
-            var sut = new FileTeeService(new FakeConfigProvider(config));
-
-            var hint = await sut.TeeAndHintAsync(LargeOutput(), "build", Header(exitCode: 0));
-
-            hint.Should().NotBeNull();
-            Directory.Exists(configDir).Should().BeTrue();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("DTK_TEE_DIR", originalEnv);
-            if (Directory.Exists(configDir))
-            {
-                Directory.Delete(configDir, true);
-            }
-        }
-    }
-
     [Fact]
     public void RotateFiles_NonExistentDirectory_ReturnsEarlyWithoutThrowing()
     {
@@ -408,6 +91,305 @@ public sealed class FileTeeServiceTests : IDisposable
         var act = () => sut.DeleteLogsAsync();
 
         await act.Should().NotThrowAsync();
+    }
+
+    private static TeeLogHeader RunningHeader() => new(
+        "dotnet build MyApp.slnx",
+        "/home/user/projects/MyApp",
+        null,
+        RunSource.Run,
+        new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+
+    [Fact]
+    public async Task BeginAsync_WritesTheHeaderBeforeAnyOutputArrives()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
+        header.Status.Should().Be(TeeLogStatus.Running);
+    }
+
+    [Fact]
+    public async Task BeginAsync_NormalizesANonNullProvisionalExitCode_ToRunning()
+    {
+        // A caller that (incorrectly) passes a header with a non-null ExitCode must not get a log
+        // stuck reporting Complete before the run has even started: FinalizeAsync's read-back guard
+        // expects to find the Running region at the offset it was given, and a header rendered as
+        // already Complete means that region is not there, silently disabling tee for the run. This
+        // pins BeginAsync's normalization as the fix, rather than trusting every caller to pass null.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        var header = RunningHeader() with { ExitCode = 7 };
+
+        var session = await sut.BeginAsync("build", header);
+        var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(text, out var parsed).Should().BeTrue();
+        parsed.Status.Should().Be(TeeLogStatus.Running);
+        parsed.ExitCode.Should().BeNull();
+
+        // Kept above the 500-byte minBodyBytes guard so that guard, not this test, decides whether
+        // the log survives -- the point under test is the header normalization, not retention.
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(3);
+
+        hint.Should().NotBeNull();
+        var finalText = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(finalText, out var finalHeader).Should().BeTrue();
+        finalHeader.Status.Should().Be(TeeLogStatus.Complete);
+        finalHeader.ExitCode.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task BeginAsync_OpensASession_EvenInFailuresMode()
+    {
+        // The exit code is unknown at this point, so the mode cannot be applied yet. Deciding
+        // early would mean never writing a log for a run that turns out to fail.
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        Directory.GetFiles(_tempDir).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BeginAsync_ReturnsANullSession_WhenTeeIsOff()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Never));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        session.Should().BeOfType<NullTeeSession>();
+        (await session.FinalizeAsync(1)).Should().BeNull();
+    }
+
+    /// <summary>Builds an old log's filename with a timestamp that reliably sorts before <see cref="RunningHeader"/>.</summary>
+    /// <param name="year">The old log's year, distinguishing multiple fixture files from each other.</param>
+    /// <param name="suffix">A unique suffix so same-second fixtures do not collide.</param>
+    private static string OldLogFileName(int year, string suffix) =>
+        TeeLogFileName.Build(new DateTimeOffset(year, 1, 1, 0, 0, 0, TimeSpan.Zero), suffix, "build");
+
+    [Fact]
+    public async Task BeginAsync_DoesNotRotate_BeforeTheRetentionDecisionIsKnown()
+    {
+        // CRITICAL regression guard: rotating at open (before it is known whether the run's own
+        // log will be kept) let a successful run in the default Failures mode evict stored failure
+        // logs it was never going to replace. Opening a session must never touch existing files —
+        // note BeginAsync still creates its own provisional log (the decision to keep or discard
+        // happens later, at FinalizeAsync), so three files are expected here, not two.
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures, MaxFiles: 2));
+        Directory.CreateDirectory(_tempDir);
+        var older = OldLogFileName(2020, "a");
+        var newer = OldLogFileName(2021, "b");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, older), "old");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, newer), "old");
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        var files = Directory.GetFiles(_tempDir, "*.log").Select(Path.GetFileName).ToList();
+        files.Should().HaveCount(3);
+        files.Should().Contain([older, newer]);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_LeavesPreExistingLogsIntact_WhenARunSucceedsInFailuresMode()
+    {
+        // Reproduces the CRITICAL scenario exactly: MaxFiles 2, two pre-existing logs, a successful
+        // run under the default TeeMode.Failures. The run's own log is discarded by retention, so
+        // rotation (now deferred to the keep path) must not run at all — both pre-existing logs
+        // must survive.
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures, MaxFiles: 2));
+        Directory.CreateDirectory(_tempDir);
+        var older = OldLogFileName(2020, "a");
+        var newer = OldLogFileName(2021, "b");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, older), "old");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, newer), "old");
+
+        var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().BeNull();
+        Directory.GetFiles(_tempDir, "*.log").Select(Path.GetFileName)
+            .Should().BeEquivalentTo(older, newer);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_RotatesToExactlyMaxFiles_AndKeepsTheNewestLog_WhenTheLogIsKept()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 2));
+        Directory.CreateDirectory(_tempDir);
+        var oldest = OldLogFileName(2020, "a");
+        var older = OldLogFileName(2021, "b");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, oldest), "old");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, older), "old");
+
+        var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().NotBeNull();
+        const string prefix = "[full output: ";
+        var newFileName = Path.GetFileName(hint![prefix.Length..^1]);
+        var remaining = Directory.GetFiles(_tempDir, "*.log").Select(Path.GetFileName).ToList();
+        remaining.Should().HaveCount(2);
+        remaining.Should().Contain(newFileName);
+        remaining.Should().Contain(older);
+        remaining.Should().NotContain(oldest);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_DoesNotRotate_WhenMaxFilesIsZero()
+    {
+        // Covers RotateFiles' maxFiles <= 0 guard on the keep path: without it, rotation would
+        // delete every file, including the one that was just kept.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 0));
+        Directory.CreateDirectory(_tempDir);
+        var older = OldLogFileName(2020, "a");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, older), "old");
+
+        var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().NotBeNull();
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task BeginAsync_WritesLogFileOwnerOnly()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // POSIX permission bits are not meaningful on Windows
+        }
+
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        var file = Directory.GetFiles(_tempDir).Single();
+        File.GetUnixFileMode(file).Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+
+    [Fact]
+    public async Task BeginAsync_CreatesTeeDirectoryOwnerOnly()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // POSIX permission bits are not meaningful on Windows
+        }
+
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        File.GetUnixFileMode(_tempDir)
+            .Should().Be(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
+    [Fact]
+    public async Task BeginAsync_ConfigProviderThrows_ReturnsNullSession()
+    {
+        // Covers the catch-all block: exceptions raised while opening the log must never surface.
+        var sut = new FileTeeService(new ThrowingConfigProvider(), _tempDir);
+
+        var session = await sut.BeginAsync("build", RunningHeader());
+
+        session.Should().BeSameAs(NullTeeSession.Instance);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_DiscardsTheLog_WhenTheBodyIsJustUnderTheConfiguredMinBodyBytesGuard()
+    {
+        // Pins the 500-byte minBodyBytes constant BeginAsync passes to the session: a caller that
+        // replaced it with a different hardcoded value would still pass this test's sibling below
+        // but fail here, or vice versa.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        var session = await sut.BeginAsync("build", RunningHeader());
+        // WriteLineAsync appends a forced "\n", so 498 chars + 1 byte = 499 bytes: one under 500.
+        await session.Writer.WriteLineAsync(new string('x', 498).AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().BeNull();
+        Directory.GetFiles(_tempDir, "*.log").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_KeepsTheLog_WhenTheBodyMeetsTheConfiguredMinBodyBytesGuard()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        var session = await sut.BeginAsync("build", RunningHeader());
+        // WriteLineAsync appends a forced "\n", so 499 chars + 1 byte = 500 bytes: exactly the guard.
+        await session.Writer.WriteLineAsync(new string('x', 499).AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().NotBeNull();
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_KeepsALog_WhenMaxFileSizeBytesIsBelowTheDefaultMinBodyBytesGuard()
+    {
+        // Regression guard: minBodyBytes used to be hardcoded to 500 regardless of a smaller
+        // MaxFileSizeBytes. BodyBytesWritten can never exceed MaxFileSizeBytes, so a cap below 500
+        // meant the guard could never be met and every log was silently discarded at finalize.
+        const long maxBytes = 400L;
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
+        var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput(5000).AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().NotBeNull();
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task BeginAsync_PassesTheConfiguredMaxFileSizeBytesToTheSession()
+    {
+        // Pins that teeConfig.MaxFileSizeBytes (not a hardcoded constant) reaches the session: a
+        // caller that dropped the argument would keep the default 1 MiB budget and never truncate
+        // at this tiny configured size. Kept above the 500-byte minBodyBytes guard (also under
+        // test elsewhere) so truncation, not that guard, is what this test isolates.
+        const long maxBytes = 600L;
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
+        var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput(5000).AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        var written = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        var body = TeeLogHeader.StripHeader(written);
+        ((long)Encoding.UTF8.GetByteCount(body)).Should().BeLessThanOrEqualTo(maxBytes);
+    }
+
+    [Fact]
+    public async Task BeginAsync_RoundTripsTheStatusRegion_WhenTheHeaderContainsNonAsciiText()
+    {
+        // The command line and cwd carry multi-byte UTF-8 text, so the char index into the
+        // rendered header and its UTF-8 byte offset diverge. BeginAsync must measure the status
+        // region's offset in UTF-8 bytes, not UTF-16 chars, or FinalizeAsync's read-back guard
+        // rejects the overwrite and the log is stuck reporting "running" forever.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        var header = new TeeLogHeader(
+            "dotnet build café.slnx", "/home/user/projets/café", null, RunSource.Run,
+            new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+
+        var session = await sut.BeginAsync("build", header);
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(2);
+
+        hint.Should().NotBeNull();
+        var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(text, out var parsed).Should().BeTrue();
+        parsed.Status.Should().Be(TeeLogStatus.Complete);
+        parsed.ExitCode.Should().Be(2);
+        parsed.CommandLine.Should().Be("dotnet build café.slnx");
+        parsed.ProjectPath.Should().Be("/home/user/projets/café");
     }
 
     private sealed class ThrowingConfigProvider : IConfigProvider

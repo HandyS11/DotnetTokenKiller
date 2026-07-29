@@ -2,16 +2,19 @@ using System.Diagnostics;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
+using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
 
 namespace DotnetTokenKiller.Application.UseCases;
 
 /// <summary>Runs a dotnet command and hands its output to the shared filtering pipeline.</summary>
 /// <param name="commandRunner">The command runner.</param>
+/// <param name="teeService">Opens the log the run streams into.</param>
 /// <param name="pipeline">The shared output-filtering pipeline.</param>
 /// <param name="output">The text writer for user-facing output.</param>
 public sealed class FilteredRunUseCase(
     ICommandRunner commandRunner,
+    ITeeService teeService,
     FilteredOutputPipeline pipeline,
     TextWriter output)
 {
@@ -37,25 +40,46 @@ public sealed class FilteredRunUseCase(
 
         var options = new OutputOptions(verbosityLevel, showLogHint, quiet).Normalized();
         var startTimestamp = Stopwatch.GetTimestamp();
+        var commandSlug = ResolveCommandSlug(command, args);
+        var displayCommandLine = args.Count > 0 ? $"{command} {string.Join(' ', args)}" : command;
 
         if (options.VerbosityLevel >= 1)
         {
             await output.WriteLineAsync($"$ {command} {string.Join(' ', args)}").ConfigureAwait(false);
         }
 
-        var result = await commandRunner.RunCapturedAsync(command, args, cancellationToken).ConfigureAwait(false);
+        // Opened before the child starts, so the log is already on disk if dtk is killed mid-run.
+        // The timestamp is therefore the run's start, not its end; the filename derives from it, so
+        // ordering is unaffected.
+        var provisional = new TeeLogHeader(
+            displayCommandLine,
+            Environment.CurrentDirectory,
+            null,
+            RunSource.Run,
+            DateTimeOffset.UtcNow);
+
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var session = await teeService
+            .BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false);
+#pragma warning restore CA2007
+
+        // Both sinks are the same writer: it serialises the two concurrent pumps internally, and
+        // interleaving stdout and stderr by arrival is a truer record than concatenating them.
+        var result = await commandRunner
+            .RunStreamedAsync(command, args, session.Writer, session.Writer, cancellationToken)
+            .ConfigureAwait(false);
 
         var request = new FilteredOutputRequest(
             filter,
             result.StdOut + result.StdErr,
             result.ExitCode,
-            ResolveCommandSlug(command, args),
-            args.Count > 0 ? $"{command} {string.Join(' ', args)}" : command,
+            commandSlug,
+            displayCommandLine,
             RunSource.Run,
             options,
             startTimestamp);
 
-        return await pipeline.ProcessAsync(request, cancellationToken).ConfigureAwait(false);
+        return await pipeline.ProcessAsync(request, session, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Resolves the name a run is recorded and tee'd under.</summary>

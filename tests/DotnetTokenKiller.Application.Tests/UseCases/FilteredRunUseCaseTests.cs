@@ -26,19 +26,112 @@ public class FilteredRunUseCaseTests
     public FilteredRunUseCaseTests()
     {
         _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var pipeline = new FilteredOutputPipeline(_tracker, _teeService, TextWriter.Null, _configProvider);
-        _sut = new FilteredRunUseCase(_runner, pipeline, TextWriter.Null);
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        var pipeline = new FilteredOutputPipeline(_tracker, TextWriter.Null, _configProvider);
+        _sut = new FilteredRunUseCase(_runner, _teeService, pipeline, TextWriter.Null);
+    }
+
+    private static ITeeSession CreateSession(string? finalizeHint = null)
+    {
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(finalizeHint);
+        return session;
+    }
+
+    [Fact]
+    public async Task RunAsync_OpensTheTeeBeforeRunningTheCommand()
+    {
+        // Begin must precede the run: a log opened after the child starts is not on disk when a
+        // tool-call timeout kills dtk, which is the whole point of the session.
+        var callOrder = new List<string>();
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { callOrder.Add("begin"); return session; });
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { callOrder.Add("run"); return new CommandResult("out", "", 0); });
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        callOrder.Should().Equal("begin", "run");
+    }
+
+    [Fact]
+    public async Task RunAsync_OpensTheTeeWithARunningHeader()
+    {
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.RunAsync(_filter, "dotnet", ListPackageArgs, 0);
+
+        // Status is derived from ExitCode (see TeeLogHeader.Status), so asserting both would be
+        // redundant; CommandLine and ProjectPath are asserted here because they are exactly what
+        // `dtk log` filters on, and a wrong value there would make it silently return nothing with
+        // no test noticing.
+        await _teeService.Received(1).BeginAsync(
+            "list package",
+            Arg.Is<TeeLogHeader>(h =>
+                h!.ExitCode == null &&
+                h.CommandLine == "dotnet list package" &&
+                h.ProjectPath == Environment.CurrentDirectory),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_FinalizesTheSessionWithTheCommandExitCode()
+    {
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 7));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await session.Received(1).FinalizeAsync(7, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_DoesNotThrow_WhenFinalizingTheSessionFails()
+    {
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("disk full"));
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await act.Should().NotThrowAsync();
     }
 
     [Fact]
     public async Task RunAsync_ReturnsExitCodeFromCommand()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 42));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -48,12 +141,10 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_FilterThrows_FallsBackToRawOutput_StillReturnsExitCode()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -65,14 +156,12 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_TrackingThrows_DoesNotSurfaceException()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db error"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -82,12 +171,15 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_TeeThrows_DoesNotSurfaceException()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
+        var session = CreateSession();
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("io error"));
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
 
         var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -99,12 +191,10 @@ public class FilteredRunUseCaseTests
     {
         const string stdout = "\x1b[32mHello\x1b[0m\n";
         const string stderr = "\x1b[31mError\x1b[0m\n";
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult(stdout, stderr, 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("ok");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -115,12 +205,10 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_RecordsCorrectTokenCounts_AfterSuccessfulExecution()
     {
         // tiktoken cl100k_base: "1234567890123456" = 6 tokens; "1234" = 2 tokens; saved = 4
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234567890123456", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -136,12 +224,10 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsCorrectCommand_WhenArgsProvided()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -153,12 +239,10 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsCorrectCommand_WhenNoArgs_UsesCommandName()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", [], 0);
 
@@ -171,12 +255,10 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_RecordsNegativeSavedTokens_WhenFilterExpandsOutput()
     {
         // tiktoken cl100k_base: "1234" = 2 tokens; filter returns "1234567890123456" = 6 tokens; saved = -4
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("1234", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234567890123456");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -195,14 +277,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -219,14 +300,13 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -241,14 +321,16 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var session = CreateSession("[full output: 123_test.log]");
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns("[full output: 123_test.log]");
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -261,14 +343,16 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var session = CreateSession("[full output: 123_test.log]");
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns("[full output: 123_test.log]");
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
 
@@ -281,14 +365,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
 
@@ -301,14 +384,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
 
@@ -324,14 +406,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
 
@@ -363,14 +444,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         // verbosityLevel=2 would normally print command line and raw output, but quiet overrides
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 2, quiet: true);
@@ -384,12 +464,10 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_ZeroTokens_RecordsZeroPercentSavings()
     {
         // Kills boolean mutation on inputTokens > 0 check (line 146) and arithmetic mutations
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -406,12 +484,10 @@ public class FilteredRunUseCaseTests
     {
         // Kills arithmetic mutations: savedTokens / inputTokens * 100.0 (line 146)
         // "Hello world" = 2 tokens; "Hello" = 1 token; saved = 1; pct = 50%
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("Hello world", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("Hello");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -431,14 +507,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -452,14 +527,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw stuff", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
 
@@ -476,14 +550,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -498,14 +571,18 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        // NSubstitute defaults an unconfigured string-returning member to "", not null, so the
+        // session's FinalizeAsync must be stubbed explicitly to exercise the null-hint branch.
+        var session = CreateSession(finalizeHint: null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
 
@@ -516,12 +593,10 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_EmptyRawOutput_RecordsZeroSavingsPct()
     {
         // Covers inputTokens == 0 → savingsPct = 0.0 branch (line 126)
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -536,14 +611,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         // verbosityLevel=2 would normally print meta lines, but quiet overrides it
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 2, quiet: true);
@@ -560,14 +634,16 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var session = CreateSession("[full output: 123_test.log]");
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns("[full output: 123_test.log]");
 
         // showLogHint=true but quiet overrides it
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true, true);
@@ -581,14 +657,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered result\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, quiet: true);
 
@@ -604,14 +679,13 @@ public class FilteredRunUseCaseTests
             Tracking = new TrackingConfig(false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, TextWriter.Null, configProvider), TextWriter.Null);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, TextWriter.Null, configProvider), TextWriter.Null);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -627,14 +701,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -648,14 +721,13 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("\x1b[32mraw fallback\x1b[0m", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -666,32 +738,31 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_TeeCalledWithCorrectSlugAndExitCode()
     {
         // Kills statement mutations on tee invocation (line 97-98)
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        var session = CreateSession();
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 7));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
-        await _teeService.Received(1).TeeAndHintAsync(
-            Arg.Any<string>(),
+        await _teeService.Received(1).BeginAsync(
             "build",
-            Arg.Is<TeeLogHeader>(h => h!.ExitCode == 7),
+            Arg.Any<TeeLogHeader>(),
             Arg.Any<CancellationToken>());
+        await session.Received(1).FinalizeAsync(7, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task RunAsync_TrackingEnabled_RecordAsyncCalled()
     {
         // Kills boolean mutation on config.Tracking.Enabled (line 138)
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -704,12 +775,10 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_ZeroExitCode_RecordsSuccessTrue()
     {
         // Kills equality mutation: exitCode == 0 → exitCode != 0
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -722,12 +791,10 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_NonZeroExitCode_RecordsSuccessFalse()
     {
         // Kills equality mutation: exitCode == 0 → exitCode != 0
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -768,14 +835,13 @@ public class FilteredRunUseCaseTests
     private async Task<string> RunUseCaseAsync(int exitCode, string rawOutput)
     {
         await using var writer = new StringWriter();
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, _configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, _configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult(rawOutput, "", exitCode));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -795,14 +861,13 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("MSBUILD : error MSB1009: Project file does not exist.", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -822,14 +887,13 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+            var sut = new FilteredRunUseCase(_runner, _teeService,
+                new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-            _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                    Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
                 .Returns(new CommandResult("output", "", 0));
             _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
-            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-                .Returns((string?)null);
 
             await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -853,14 +917,13 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+        var sut = new FilteredRunUseCase(_runner, _teeService,
+            new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ dotnet test: 0 tests found\n");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -880,14 +943,13 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, new FilteredOutputPipeline(_tracker, _teeService, writer, configProvider), writer);
+            var sut = new FilteredRunUseCase(_runner, _teeService,
+                new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
-            _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                    Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
                 .Returns(new CommandResult("output", "", 0));
             _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ nothing matched\n");
-            _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-                .Returns((string?)null);
 
             await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -904,12 +966,10 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsFiltered_WhenTheFilterSucceeds()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -921,12 +981,10 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsFilterFaulted_WhenTheFilterThrows()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -938,12 +996,10 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsRawTailFallback_WhenAFailedCommandFiltersToNothing()
     {
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("line one\nline two\n", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("   ");
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -959,12 +1015,10 @@ public class FilteredRunUseCaseTests
         // raw-tail branch does not also fire — this test alone would still pass even if the switch
         // arms below were reordered. RunAsync_PrefersFilterFaulted_WhenBothConditionsOverlap is the
         // one that requires the ordering.
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("some raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -982,12 +1036,10 @@ public class FilteredRunUseCaseTests
         // also satisfied). This is the only case that exercises the switch's ordering: reordering
         // the arms so (false, true) is matched before (true, _) would flip this outcome to
         // RawTailFallback while leaving every other test in this file green.
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
@@ -1002,11 +1054,9 @@ public class FilteredRunUseCaseTests
         // args[0] alone would record "list", which would never line up with the "list package" rows
         // the coverage report already holds from the passthrough path — making the before/after
         // savings comparison compare two different keys.
-        _runner.RunCapturedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("Project 'A' has the following package references", "", 0));
-        _teeService.TeeAndHintAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
-                    Arg.Any<CancellationToken>())
-            .Returns((string?)null);
 
         await _sut.RunAsync(new DotnetListPackageFilter(), "dotnet", ListPackageArgs, 0);
 

@@ -85,6 +85,14 @@ process exits. Two consequences:
 
 Streaming the tee incrementally fixes both and is the prerequisite for supporting `run` / `watch`.
 
+> **Resolved 2026-07-29.** The tee is written during the run rather than after it, so a dtk process
+> killed by Ctrl-C or a tool-call timeout leaves a readable log. Measurable passthrough runs are
+> tee'd too, which closes the gap §5 left open. Two findings reshaped the work: `RunStreamedAsync`
+> already existed, and dtk's cancellation token never fires in production — so durability had to
+> come from the file already being on disk, not from a cancellation handler. A live progress signal
+> remains out of scope; on the filtered path it is in direct opposition to filtering.
+> See [the design](2026-07-29-streaming-tee-durability-design.md).
+
 ## 5. No way to retrieve the previous run's detail
 
 There is no `dtk log` / `dtk last`. Tee files exist, but the path surfaces only with `--show-log`,
@@ -168,6 +176,9 @@ asserts the rewrite comes back.
 5. ~~§5 — `dtk log`, so retrieving a previous run's detail does not mean re-running it.~~
    **Done 2026-07-28** — see the resolution note above and
    [the design](2026-07-28-dtk-log-design.md).
+6. ~~§4 — stream the tee so a killed run keeps its log.~~
+   **Done 2026-07-29** — see the resolution note above and
+   [the design](2026-07-29-streaming-tee-durability-design.md).
 
 §7 is recommended first not because it is the most valuable, but because it is the prerequisite for
 the work that is, and skipping it fails silently.

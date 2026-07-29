@@ -224,10 +224,58 @@ public sealed class LogCommandTests
         var (command, console, _) = Create(new FakeStore([]));
 
         var exitCode = await command.RunAsync(
-            new LogCommandSettings { Subcommand = ["publish"] }, CancellationToken.None);
+            new LogCommandSettings { Subcommand = ["banana"] }, CancellationToken.None);
 
         exitCode.Should().Be(1);
-        console.Output.Should().Contain("publish").And.Contain("build");
+        console.Output.Should().Contain("banana").And.Contain("build");
+    }
+
+    [Fact]
+    public async Task Run_RejectsAnInteractivePassthroughSubcommand()
+    {
+        // "run" is a real dotnet verb, but it is not in PassthroughSubcommands.Measurable — its
+        // stdio stays attached to the terminal and it is never tee'd, so dtk log must still reject
+        // it rather than widening to every known dotnet verb.
+        var (command, console, _) = Create(new FakeStore([]));
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { Subcommand = ["run"] }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("run").And.Contain("publish");
+    }
+
+    [Fact]
+    public async Task Run_AcceptsAMeasurablePassthroughSubcommand()
+    {
+        // Slugged exactly as PassthroughSubcommands.CommandName(["publish"]) writes it.
+        var entry = Entry(5, "publish");
+        var (command, console, _) = Create(new FakeStore(
+            new Dictionary<string, string> { [entry.FilePath] = "publishing...\n" }, entry, Entry(9, "build")));
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { Subcommand = ["publish"], List = true },
+            CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("publish");
+    }
+
+    [Fact]
+    public async Task Run_AcceptsAMultiTokenMeasurablePassthroughSubcommand()
+    {
+        // PassthroughSubcommands.CommandName(["ef", "migrations"]) is "ef migrations", sanitised to
+        // "ef-migrations" by TeeLogFileName.Sanitize — the same slug the log was actually written under.
+        var entry = Entry(5, "ef-migrations");
+        var (command, console, _) = Create(new FakeStore(
+            new Dictionary<string, string> { [entry.FilePath] = "migrating...\n" }, entry, Entry(9, "build")));
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { Subcommand = ["ef", "migrations"], List = true },
+            CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("ef-migrations");
     }
 
     [Fact]
@@ -279,5 +327,81 @@ public sealed class LogCommandTests
         var exitCode = await command.RunAsync(new LogCommandSettings { Index = 0 }, CancellationToken.None);
 
         exitCode.Should().Be(1);
+    }
+
+    /// <summary>Builds an entry shaped exactly as an abandoned session leaves one on disk.</summary>
+    /// <param name="minute">The minute component used for the timestamp.</param>
+    /// <param name="slug">The log's slug.</param>
+    /// <param name="commandLine">The command line recorded in the header.</param>
+    private static TeeLogEntry IncompleteEntry(int minute, string slug, string commandLine) =>
+        new($"/tee/{minute}_{slug}_incomplete.log",
+            new TeeLogHeader(commandLine, Cwd, null, RunSource.Run, At(minute)),
+            2048,
+            At(minute),
+            slug);
+
+    [Fact]
+    public async Task Run_MarksAnUnfinishedRunAsIncomplete()
+    {
+        var entry = IncompleteEntry(5, "build", "dotnet build MyApp.slnx");
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "compiling...\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        var output = writer.ToString();
+        output.Should().Contain("incomplete");
+        output.Should().Contain("run did not finish");
+        output.Should().Contain("compiling...");
+    }
+
+    [Fact]
+    public async Task Run_List_ShowsIncompleteInsteadOfAnExitCode()
+    {
+        var (command, console, _) = Create(new FakeStore(
+            [],
+            Entry(5, "build"),
+            IncompleteEntry(9, "build", "dotnet build B.slnx")));
+
+        await command.RunAsync(new LogCommandSettings { List = true }, CancellationToken.None);
+
+        console.Output.Should().Contain("incomplete");
+    }
+
+    [Fact]
+    public async Task Run_OmitsTheKilledNote_ForACompletedRun()
+    {
+        // Entry() defaults to a non-null ExitCode, i.e. a run that finished normally. The killed-run
+        // note is only true for a run that never reached finalization, so it must not appear here.
+        var entry = Entry(5, "build");
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "done\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        writer.ToString().Should().NotContain("run did not finish");
+    }
+
+    [Fact]
+    public async Task Run_OmitsTheKilledNote_ForALegacyLogWithNoHeader()
+    {
+        // A legacy log (Header is null, cwd: null) predates the header that would let us tell whether
+        // dtk was killed. "We don't know" is a different claim from "dtk was killed", so the killed-run
+        // note must not appear alongside the existing "exit unknown" placeholder for this case.
+        var entry = Entry(5, "build", cwd: null);
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "line one\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        // Legacy (headerless) entries are excluded from the default project-scoped view, so --all
+        // is needed to select this one at all.
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { All = true }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        var output = writer.ToString();
+        output.Should().Contain("exit unknown");
+        output.Should().NotContain("run did not finish");
     }
 }

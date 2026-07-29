@@ -15,27 +15,64 @@ namespace DotnetTokenKiller.Domain.Tee;
 /// </remarks>
 /// <param name="CommandLine">The command line that produced the output, for display.</param>
 /// <param name="ProjectPath">The working directory the command ran in.</param>
-/// <param name="ExitCode">The producing command's exit code.</param>
+/// <param name="ExitCode">
+/// The producing command's exit code, or <see langword="null"/> when the run has not finished.
+/// This is the sole in-memory representation of completion: <see cref="Status"/> derives from it,
+/// so the two can never disagree.
+/// </param>
 /// <param name="Source">Whether dtk ran the command or received its output on stdin.</param>
-/// <param name="TimestampUtc">When the run completed.</param>
+/// <param name="TimestampUtc">When the run started, i.e. when the tee session was opened.</param>
 public sealed record TeeLogHeader(
     string CommandLine,
     string ProjectPath,
-    int ExitCode,
+    int? ExitCode,
     RunSource Source,
     DateTimeOffset TimestampUtc)
 {
-    /// <summary>The first line of a v1 header.</summary>
-    public const string VersionLine = "# dtk-log v1";
+    /// <summary>The first line of a v2 header.</summary>
+    public const string VersionLine = "# dtk-log v2";
+
+    /// <summary>The first line of a v1 header, still accepted when reading.</summary>
+    public const string LegacyVersionLine = "# dtk-log v1";
 
     /// <summary>The line separating the header from the raw body.</summary>
     public const string Delimiter = "---";
+
+    /// <summary>Width of the status value, sized to the longest word it can hold.</summary>
+    private const int StatusFieldWidth = 8;
+
+    /// <summary>Width of the exit value, sized to <c>-2147483648</c>.</summary>
+    private const int ExitFieldWidth = 11;
+
+    private const string RunningText = "running";
+    private const string CompleteText = "complete";
 
     private const string CommandKey = "command";
     private const string CwdKey = "cwd";
     private const string ExitKey = "exit";
     private const string SourceKey = "source";
+    private const string StatusKey = "status";
     private const string UtcKey = "utc";
+
+    /// <summary>Whether the run this log came from finished.</summary>
+    public TeeLogStatus Status => ExitCode is null ? TeeLogStatus.Running : TeeLogStatus.Complete;
+
+    /// <summary>
+    /// Renders the status and exit lines, which sit last and adjacent so finalizing a log is one
+    /// contiguous overwrite at a known byte offset.
+    /// </summary>
+    /// <param name="exitCode">The exit code, or <see langword="null"/> for a run still in flight.</param>
+    /// <returns>
+    /// Both lines including their trailing line feeds. The length is identical for every input —
+    /// the in-place overwrite depends on it, and <c>RenderStatusAndExit_ProducesTheSameLength…</c>
+    /// guards it.
+    /// </returns>
+    public static string RenderStatusAndExit(int? exitCode)
+    {
+        var status = (exitCode is null ? RunningText : CompleteText).PadRight(StatusFieldWidth);
+        var exit = (exitCode?.ToString(CultureInfo.InvariantCulture) ?? "-").PadRight(ExitFieldWidth);
+        return $"# {StatusKey}: {status}\n# {ExitKey}:   {exit}\n";
+    }
 
     /// <summary>Renders the header, including the trailing delimiter line.</summary>
     /// <returns>The header text; the body is appended directly after it.</returns>
@@ -45,22 +82,21 @@ public sealed record TeeLogHeader(
         sb.Append(VersionLine).Append('\n')
             .Append("# ").Append(CommandKey).Append(": ").Append(Flatten(CommandLine)).Append('\n')
             .Append("# ").Append(CwdKey).Append(": ").Append(Flatten(ProjectPath)).Append('\n')
-            .Append("# ").Append(ExitKey).Append(": ")
-            .Append(ExitCode.ToString(CultureInfo.InvariantCulture)).Append('\n')
             .Append("# ").Append(SourceKey).Append(": ").Append(Source.ToString()).Append('\n')
             .Append("# ").Append(UtcKey).Append(": ")
             .Append(TimestampUtc.ToString("O", CultureInfo.InvariantCulture)).Append('\n')
+            .Append(RenderStatusAndExit(ExitCode))
             .Append(Delimiter).Append('\n');
         return sb.ToString();
     }
 
-    /// <summary>Parses a v1 header from the start of <paramref name="text"/>.</summary>
+    /// <summary>Parses a v1 or v2 header from the start of <paramref name="text"/>.</summary>
     /// <param name="text">
     /// The file's leading text. It need not be the whole file, but it must contain the delimiter —
     /// a read that stopped short of it is rejected rather than yielding a partial header.
     /// </param>
     /// <param name="header">The parsed header, or <see langword="null"/> when parsing failed.</param>
-    /// <returns><see langword="true"/> when a complete v1 header was present.</returns>
+    /// <returns><see langword="true"/> when a complete header was present.</returns>
     public static bool TryParse(string text, out TeeLogHeader header)
     {
         header = null!;
@@ -70,7 +106,8 @@ public sealed record TeeLogHeader(
         }
 
         var lines = text.Split('\n');
-        if (lines[0].TrimEnd('\r') != VersionLine)
+        var version = lines[0].TrimEnd('\r');
+        if (version != VersionLine && version != LegacyVersionLine)
         {
             return false;
         }
@@ -79,6 +116,7 @@ public sealed record TeeLogHeader(
         string? cwd = null;
         string? exit = null;
         string? source = null;
+        string? status = null;
         string? utc = null;
         var sawDelimiter = false;
 
@@ -114,10 +152,16 @@ public sealed record TeeLogHeader(
                     cwd = value;
                     break;
                 case ExitKey:
-                    exit = value;
+                    // Trimmed at both ends: this field is padded to a fixed width so it can be
+                    // overwritten in place. The others are not trimmed at the end, because Flatten
+                    // can legitimately leave a trailing space in a command line.
+                    exit = value.TrimEnd(' ');
                     break;
                 case SourceKey:
                     source = value;
+                    break;
+                case StatusKey:
+                    status = value.TrimEnd(' ');
                     break;
                 case UtcKey:
                     utc = value;
@@ -132,8 +176,12 @@ public sealed record TeeLogHeader(
             return false;
         }
 
-        if (!int.TryParse(exit, NumberStyles.Integer, CultureInfo.InvariantCulture, out var exitCode) ||
-            !Enum.TryParse<RunSource>(source, ignoreCase: false, out var runSource) ||
+        if (!TryParseExit(exit, status, out var exitCode))
+        {
+            return false;
+        }
+
+        if (!Enum.TryParse<RunSource>(source, ignoreCase: false, out var runSource) ||
             !DateTimeOffset.TryParse(utc, CultureInfo.InvariantCulture,
                 DateTimeStyles.RoundtripKind, out var timestamp))
         {
@@ -148,7 +196,7 @@ public sealed record TeeLogHeader(
     /// <param name="fileText">The complete file text.</param>
     /// <returns>
     /// The text after the delimiter line, or <paramref name="fileText"/> unchanged when it carries
-    /// no v1 header (a log written before headers existed).
+    /// no header (a log written before headers existed).
     /// </returns>
     public static string StripHeader(string fileText)
     {
@@ -172,6 +220,46 @@ public sealed record TeeLogHeader(
         }
 
         return fileText[(index + marker.Length)..];
+    }
+
+    /// <summary>Resolves the exit field against the status field, rejecting any disagreement.</summary>
+    /// <param name="exit">The raw exit value: a decimal integer, or <c>-</c> for a run in flight.</param>
+    /// <param name="status">The raw status value, or <see langword="null"/> in a v1 header.</param>
+    /// <param name="exitCode">The parsed exit code, or <see langword="null"/> when still running.</param>
+    /// <returns><see langword="true"/> when the two fields agree and parse.</returns>
+    private static bool TryParseExit(string exit, string? status, out int? exitCode)
+    {
+        exitCode = null;
+
+        // v1 had no status line and could only be written after the process exited.
+        if (status is null)
+        {
+            if (!int.TryParse(exit, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v1Exit))
+            {
+                return false;
+            }
+
+            exitCode = v1Exit;
+            return true;
+        }
+
+        if (status == RunningText)
+        {
+            return exit == "-";
+        }
+
+        if (status != CompleteText)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(exit, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedExit))
+        {
+            return false;
+        }
+
+        exitCode = parsedExit;
+        return true;
     }
 
     /// <summary>Flattens line breaks so a value can never split its own header line.</summary>

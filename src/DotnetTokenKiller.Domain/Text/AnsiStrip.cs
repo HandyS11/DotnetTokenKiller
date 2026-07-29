@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace DotnetTokenKiller.Application.Helpers;
+namespace DotnetTokenKiller.Domain.Text;
 
 /// <summary>Strips ANSI/VT100 escape sequences from text.</summary>
 public static partial class AnsiStrip
