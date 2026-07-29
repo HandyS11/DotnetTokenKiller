@@ -5,9 +5,20 @@ namespace DotnetTokenKiller.Application.Helpers;
 
 /// <summary>Forwards each line to two writers.</summary>
 /// <remarks>
+/// <para>
 /// Used on the passthrough path, where output must reach the terminal the user is watching and the
 /// tee log at the same time. The secondary is treated as expendable: a tee that fails must not cost
 /// the user the output they were waiting for.
+/// </para>
+/// <para>
+/// Only <see cref="WriteLineAsync(ReadOnlyMemory{char}, CancellationToken)"/> and
+/// <see cref="FlushAsync(CancellationToken)"/> fan out to both writers. Every other inherited
+/// <see cref="TextWriter"/> member (including <see cref="TextWriter.WriteLine(string)"/>,
+/// <see cref="TextWriter.WriteAsync(string)"/>, the non-cancellation
+/// <see cref="TextWriter.WriteLineAsync(string)"/>, and <see cref="TextWriter.Write(char[])"/>) ultimately
+/// calls <see cref="Write(char)"/>, which reaches <c>primary</c> only. A caller that needs the secondary
+/// to see everything it writes must use the fan-out members above.
+/// </para>
 /// </remarks>
 /// <param name="primary">The writer whose failures propagate — the terminal.</param>
 /// <param name="secondary">The writer whose failures are swallowed — the tee.</param>
@@ -22,7 +33,7 @@ internal sealed class FanOutTextWriter(TextWriter primary, TextWriter secondary)
         get => primary.NewLine;
 #pragma warning disable CS8765 // matches TextWriter.NewLine's [AllowNull] contract; Roslyn still flags the override.
         [param: AllowNull]
-        set => primary.NewLine = value!;
+        set => primary.NewLine = value;
 #pragma warning restore CS8765
     }
 
