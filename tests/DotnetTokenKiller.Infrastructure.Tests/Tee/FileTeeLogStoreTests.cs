@@ -223,6 +223,11 @@ public sealed class FileTeeLogStoreTests : IDisposable
         // opened if that first handle's share mode permits it. If either side regresses from
         // FileShare.ReadWrite back to FileShare.Read, `dtk log` on a command that is still running
         // fails to open the file at all — this is the feature's whole point on that platform.
+        //
+        // This is a Windows-only regression guard: .NET only enforces FileShare modes on Unix for
+        // FileShare.None, so on Linux/macOS this test passes regardless of which FileShare value
+        // the production code uses. It cannot catch a regression on this platform; it exists so
+        // Windows CI (or a Windows dev machine) can.
         Directory.CreateDirectory(_tempDir);
         var timestamp = At(1);
         var path = Path.Combine(_tempDir, TeeLogFileName.Build(timestamp, Guid.NewGuid().ToString("N"), "build"));

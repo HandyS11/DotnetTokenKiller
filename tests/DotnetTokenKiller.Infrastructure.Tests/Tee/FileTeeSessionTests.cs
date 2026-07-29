@@ -189,7 +189,7 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Write(headerBytes, 0, headerBytes.Length);
         stream.Flush();
 #pragma warning restore CA1849, VSTHRD103, S6966
-        var session = new FileTeeSession(
+        await using var session = new FileTeeSession(
             stream, path, offset, Encoding.UTF8.GetByteCount(region), 1_048_576L, 0, false);
 
         var act = async () => await session.Writer.WriteLineAsync("first".AsMemory(), CancellationToken.None);
@@ -270,16 +270,37 @@ public sealed class FileTeeSessionTests : IDisposable
     {
         // SessionWriter's own doc comment claims it serialises the two output pumps; a single
         // writer thread cannot exercise that claim at all, so this drives two concurrently.
-        var (session, path) = CreateSut(minBodyBytes: 0);
-        const string lineA = "AAAAAAAAAA";
-        const string lineB = "BBBBBBBBBB";
-        const int iterations = 500;
+        //
+        // On this runtime, FileStream already serialises its own async I/O per instance (verified
+        // separately: two "concurrent" large WriteAsync calls to one FileStream take exactly as
+        // long, wall-clock, as two sequential ones), so two pumps racing purely on
+        // stream.WriteAsync cannot produce byte-level interleaving here regardless of line size or
+        // scheduling. What the runtime does NOT protect is SessionWriter's own check-then-act over
+        // BodyBytesWritten -- "read remaining, truncate to fit, write, then increment" is four
+        // unsynchronized statements. Without the gate, both pumps can read the same stale
+        // BodyBytesWritten near the cap, each conclude it still has room for a full line, and both
+        // append one -- so the body ends up LARGER than maxBodyBytes even though every individual
+        // write is byte-for-byte intact. Reproduced 5/5 trials in isolation with these parameters.
+        //
+        // The cap is set to an exact multiple of one line's byte size so a correctly-gated run
+        // lands on precisely that many bytes with only whole, untruncated lines; a missing gate
+        // surfaces as the total overshooting the cap. Lines are still sized past FileStream's
+        // internal write buffer and each iteration still yields, so the two loops genuinely
+        // overlap instead of one running to completion before the other gets a turn.
+        const int lineLength = 8_000;
+        const int iterations = 400;
+        const int linesAtCap = 100;
+        const int maxBodyBytes = linesAtCap * (lineLength + 1);
+        var (session, path) = CreateSut(maxBodyBytes: maxBodyBytes, minBodyBytes: 0);
+        var lineA = new string('A', lineLength);
+        var lineB = new string('B', lineLength);
 
         async Task WriteLoopAsync(string line)
         {
             for (var i = 0; i < iterations; i++)
             {
                 await session.Writer.WriteLineAsync(line.AsMemory(), CancellationToken.None);
+                await Task.Yield();
             }
         }
 
@@ -288,9 +309,9 @@ public sealed class FileTeeSessionTests : IDisposable
 
         var body = TeeLogHeader.StripHeader(await File.ReadAllTextAsync(path));
         var lines = body.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        lines.Should().HaveCount(iterations * 2);
         lines.Should().OnlyContain(line => line == lineA || line == lineB);
-        Encoding.UTF8.GetByteCount(body).Should().Be((lineA.Length + 1 + lineB.Length + 1) * iterations);
+        lines.Should().HaveCount(linesAtCap);
+        Encoding.UTF8.GetByteCount(body).Should().Be(maxBodyBytes);
     }
 
     [Fact]
