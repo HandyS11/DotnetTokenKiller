@@ -390,4 +390,57 @@ public sealed class ProcessCommandRunnerTests
         result.ExitCode.Should().Be(0);
         result.StdOut.Should().Be(stdOut.ToString());
     }
+
+    [Fact]
+    public async Task RunStreamedAsync_FlushesTheSinkAfterEveryLine()
+    {
+        // Body durability rests entirely on this: a dtk process that is SIGKILLed leaves on disk
+        // whatever the sink has flushed, nothing more. A sink that only accumulates writes and
+        // flushes once at the end would still make every other test in this file pass -- none of
+        // them observe call order -- so this records the write/flush sequence directly and asserts
+        // every write is immediately followed by its own flush, with no unflushed write pending
+        // before the next one starts.
+        var sink = new RecordingTextWriter();
+        var sut = new ProcessCommandRunner();
+
+        var result = await sut.RunStreamedAsync("dotnet", ["--info"], sink, TextWriter.Null);
+
+        result.ExitCode.Should().Be(0);
+        sink.Calls.Should().NotBeEmpty();
+        sink.Calls.Count(call => call == "write").Should().BeGreaterThan(1);
+        sink.Calls.Count.Should().Be(sink.Calls.Count(call => call == "write") * 2);
+        for (var i = 0; i < sink.Calls.Count; i += 2)
+        {
+            sink.Calls[i].Should().Be("write");
+            sink.Calls[i + 1].Should().Be("flush");
+        }
+    }
+
+    /// <summary>A sink that records the order writes and flushes arrive in, without doing either.</summary>
+    private sealed class RecordingTextWriter : TextWriter
+    {
+        public List<string> Calls { get; } = [];
+
+        public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;
+
+        public override Task WriteLineAsync(
+            ReadOnlyMemory<char> buffer, CancellationToken cancellationToken = default)
+        {
+            Calls.Add("write");
+            return Task.CompletedTask;
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            Calls.Add("flush");
+            return Task.CompletedTask;
+        }
+
+        public override Task FlushAsync() => FlushAsync(CancellationToken.None);
+
+        public override void Write(char value)
+        {
+            // Never called: PumpAsync only calls WriteLineAsync.
+        }
+    }
 }

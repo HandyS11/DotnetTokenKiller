@@ -317,6 +317,28 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_TeeFinalizeThrows_DoesNotSurfaceExceptionAndKeepsTheExitCode()
+    {
+        // Mirrors FilteredOutputPipeline's guard: a broken tee stream's FinalizeAsync must never
+        // cost the caller the child's real exit code, and PassthroughEntryPoint calls this use case
+        // outside Program.cs's own try/catch, so an unguarded throw here would surface as a raw
+        // stack trace instead of the child's exit code.
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("disk full"));
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 5));
+
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+
+        exitCode.Should().Be(5);
+    }
+
+    [Fact]
     public async Task RunAsync_FansStdOutToTerminalAndSession()
     {
         // Proves the streamed sinks are actually FanOutTextWriters over session.Writer, not stdOut

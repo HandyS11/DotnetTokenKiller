@@ -224,10 +224,58 @@ public sealed class LogCommandTests
         var (command, console, _) = Create(new FakeStore([]));
 
         var exitCode = await command.RunAsync(
-            new LogCommandSettings { Subcommand = ["publish"] }, CancellationToken.None);
+            new LogCommandSettings { Subcommand = ["banana"] }, CancellationToken.None);
 
         exitCode.Should().Be(1);
-        console.Output.Should().Contain("publish").And.Contain("build");
+        console.Output.Should().Contain("banana").And.Contain("build");
+    }
+
+    [Fact]
+    public async Task Run_RejectsAnInteractivePassthroughSubcommand()
+    {
+        // "run" is a real dotnet verb, but it is not in PassthroughSubcommands.Measurable — its
+        // stdio stays attached to the terminal and it is never tee'd, so dtk log must still reject
+        // it rather than widening to every known dotnet verb.
+        var (command, console, _) = Create(new FakeStore([]));
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { Subcommand = ["run"] }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("run").And.Contain("publish");
+    }
+
+    [Fact]
+    public async Task Run_AcceptsAMeasurablePassthroughSubcommand()
+    {
+        // Slugged exactly as PassthroughSubcommands.CommandName(["publish"]) writes it.
+        var entry = Entry(5, "publish");
+        var (command, console, _) = Create(new FakeStore(
+            new Dictionary<string, string> { [entry.FilePath] = "publishing...\n" }, entry, Entry(9, "build")));
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { Subcommand = ["publish"], List = true },
+            CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("publish");
+    }
+
+    [Fact]
+    public async Task Run_AcceptsAMultiTokenMeasurablePassthroughSubcommand()
+    {
+        // PassthroughSubcommands.CommandName(["ef", "migrations"]) is "ef migrations", sanitised to
+        // "ef-migrations" by TeeLogFileName.Sanitize — the same slug the log was actually written under.
+        var entry = Entry(5, "ef-migrations");
+        var (command, console, _) = Create(new FakeStore(
+            new Dictionary<string, string> { [entry.FilePath] = "migrating...\n" }, entry, Entry(9, "build")));
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { Subcommand = ["ef", "migrations"], List = true },
+            CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("ef-migrations");
     }
 
     [Fact]

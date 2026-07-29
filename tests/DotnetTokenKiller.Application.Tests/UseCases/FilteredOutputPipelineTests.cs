@@ -105,7 +105,7 @@ public class FilteredOutputPipelineTests
     }
 
     [Fact]
-    public async Task ProcessAsync_TeeThrows_DoesNotSurfaceException()
+    public async Task ProcessAsync_TeeThrows_DoesNotSurfaceExceptionAndKeepsTheExitCode()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
         var session = Substitute.For<ITeeSession>();
@@ -113,9 +113,9 @@ public class FilteredOutputPipelineTests
         session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("io error"));
 
-        var act = async () => await _sut.ProcessAsync(Request(), session);
+        var exitCode = await _sut.ProcessAsync(Request(exitCode: 5), session);
 
-        await act.Should().NotThrowAsync();
+        exitCode.Should().Be(5);
     }
 
     [Fact]

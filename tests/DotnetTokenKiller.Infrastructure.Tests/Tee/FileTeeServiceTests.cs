@@ -303,6 +303,23 @@ public sealed class FileTeeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task FinalizeAsync_KeepsALog_WhenMaxFileSizeBytesIsBelowTheDefaultMinBodyBytesGuard()
+    {
+        // Regression guard: minBodyBytes used to be hardcoded to 500 regardless of a smaller
+        // MaxFileSizeBytes. BodyBytesWritten can never exceed MaxFileSizeBytes, so a cap below 500
+        // meant the guard could never be met and every log was silently discarded at finalize.
+        const long maxBytes = 400L;
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: maxBytes));
+        var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput(5000).AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().NotBeNull();
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(1);
+    }
+
+    [Fact]
     public async Task BeginAsync_PassesTheConfiguredMaxFileSizeBytesToTheSession()
     {
         // Pins that teeConfig.MaxFileSizeBytes (not a hardcoded constant) reaches the session: a

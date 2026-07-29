@@ -29,6 +29,13 @@ internal sealed class LogCommand(
     TextWriter output,
     IWorkingDirectory workingDirectory) : AsyncCommand<LogCommandSettings>
 {
+    /// <summary>
+    /// The subcommand names <c>dtk log</c> accepts: the filtered subcommands plus the measurable
+    /// passthrough verbs, alphabetised so the error message is deterministic.
+    /// </summary>
+    private static readonly string AvailableSubcommands = string.Join(", ",
+        DotnetSubcommands.Ordered.Concat(PassthroughSubcommands.Measurable.Order(StringComparer.Ordinal)));
+
     /// <inheritdoc/>
     protected override Task<int> ExecuteAsync(
         CommandContext context,
@@ -62,15 +69,24 @@ internal sealed class LogCommand(
         string? subcommand = null;
         if (settings.Subcommand.Length > 0)
         {
-            if (!DotnetSubcommands.TryMatch(settings.Subcommand, out var match))
+            if (DotnetSubcommands.TryMatch(settings.Subcommand, out var match))
+            {
+                subcommand = match.Name;
+            }
+            else if (PassthroughSubcommands.IsMeasurable(settings.Subcommand))
+            {
+                // Measurable passthrough runs (publish, ef migrations, ...) are tee'd exactly like a
+                // filtered run, under the slug PassthroughSubcommands.CommandName produces — the same
+                // computation production uses to name the file in the first place.
+                subcommand = PassthroughSubcommands.CommandName(settings.Subcommand);
+            }
+            else
             {
                 console.MarkupLine(
                     $"[red]No logs are kept for:[/] {string.Join(' ', settings.Subcommand).EscapeMarkup()}.");
-                console.MarkupLine($"Available: {string.Join(", ", DotnetSubcommands.Ordered).EscapeMarkup()}");
+                console.MarkupLine($"Available: {AvailableSubcommands.EscapeMarkup()}");
                 return 1;
             }
-
-            subcommand = match.Name;
         }
 
         var query = new LogQuery(

@@ -151,8 +151,19 @@ public sealed class FileTeeSession(
 
         _disposed = true;
         _writer.MarkBroken();
-        await _writer.DisposeAsync().ConfigureAwait(false);
-        await stream.DisposeAsync().ConfigureAwait(false);
+        try
+        {
+            await _writer.DisposeAsync().ConfigureAwait(false);
+            await stream.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Intentional: disposal is best-effort cleanup, not part of the run's outcome. Closing
+            // the FileStream re-flushes whatever is still buffered, so the very IO failure that sent
+            // FinalizeAsync's catch clause here (disk full, IO error, removed volume) can throw
+            // again on close; left uncaught, that second throw would escape FinalizeAsync entirely
+            // and, on the passthrough path, cost the caller the child's real exit code.
+        }
     }
 
     /// <summary>

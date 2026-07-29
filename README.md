@@ -155,7 +155,7 @@ dtk log --all            # include other projects
 ```
 
 Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are
-saved, and output under 500 characters is never saved. Use `dtk config set tee.mode Always` to keep
+saved, and output under 500 bytes is never saved. Use `dtk config set tee.mode Always` to keep
 every run. Logs written by dtk 0.6.0 or earlier have no project metadata and appear only under `--all`.
 
 A run that dtk did not finish — because you pressed Ctrl-C, or an agent's tool call timed out —

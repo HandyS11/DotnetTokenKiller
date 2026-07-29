@@ -82,9 +82,12 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
                 await stream.WriteAsync(Encoding.UTF8.GetBytes(rendered), cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
+                // BodyBytesWritten can never exceed MaxFileSizeBytes, so a hardcoded 500-byte guard
+                // would silently discard every log once the configured cap drops below it — clamp
+                // the guard to whichever is smaller instead.
                 return new FileTeeSession(stream, filePath, regionOffset, regionLength,
-                    teeConfig.MaxFileSizeBytes, minBodyBytes: 500, teeConfig.Mode == TeeMode.Failures,
-                    teeDir, teeConfig.MaxFiles);
+                    teeConfig.MaxFileSizeBytes, minBodyBytes: Math.Min(500L, teeConfig.MaxFileSizeBytes),
+                    teeConfig.Mode == TeeMode.Failures, teeDir, teeConfig.MaxFiles);
             }
             catch
             {

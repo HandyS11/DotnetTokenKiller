@@ -122,9 +122,10 @@ at a known byte offset:
 Values are `TrimEnd`'d on parse. v1 files parse as `Complete`, so logs written before this change
 keep working.
 
-`TeeLogHeader.ExitCode` becomes `int?`, with the invariant **`Status == Running ⟺ ExitCode is
-null`** enforced in the record's constructor. Without it, `status` and `exit` are two
-representations of one fact and can disagree on disk.
+`TeeLogHeader.ExitCode` becomes `int?`. The invariant **`Status == Running ⟺ ExitCode is null`**
+holds structurally rather than being checked anywhere: `Status` is an expression-bodied property
+derived from `ExitCode`, not a separately stored field, so there is no second representation that
+could disagree with it on disk.
 
 The timestamp's meaning shifts from "when the run completed" to "when the run started". The
 filename is built from it, so ordering is unaffected.
@@ -158,7 +159,7 @@ needs a branch.
 
 | Layer | Change |
 |---|---|
-| Domain | `TeeLogStatus { Running, Complete }`; `TeeLogHeader` → v2, `ExitCode` → `int?`, invariant enforced; `TryParse` accepts v1 as `Complete`; `ITeeSession` (new); `ITeeService` reshaped |
+| Domain | `TeeLogStatus { Running, Complete }`; `TeeLogHeader` → v2, `ExitCode` → `int?`, invariant structural (`Status` derives from `ExitCode`); `TryParse` accepts v1 as `Complete`; `ITeeSession` (new); `ITeeService` reshaped |
 | Infrastructure | `FileTeeSession` (new) owns the `FileStream`, field offsets, body-byte counter, and retention decision; `FileTeeService` becomes a factory |
 | Application | `FilteredRunUseCase` swaps `RunCapturedAsync` for `RunStreamedAsync`; `FilteredOutputPipeline` finalizes the session instead of calling tee; `PassthroughRunUseCase` gains a session; `FanOutTextWriter` (new); `PipeFilterUseCase` moves to the session API |
 | Cli | `TeeLogRenderer` / `LogCommand` render `incomplete` and the truncation note |

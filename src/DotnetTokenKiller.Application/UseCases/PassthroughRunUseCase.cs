@@ -93,7 +93,7 @@ public sealed class PassthroughRunUseCase(
 
         // The hint is discarded rather than printed: passthrough emits no dtk meta-output today,
         // and the log is reachable through `dtk log`.
-        await session.FinalizeAsync(result.ExitCode, cancellationToken).ConfigureAwait(false);
+        await FinalizeTeeAsync(session, result.ExitCode, cancellationToken).ConfigureAwait(false);
 
         // The child's exit code above is already captured before any of this runs, so a throw from
         // here on — including from stripping/tokenizing a very large captured output — cannot alter
@@ -104,6 +104,33 @@ public sealed class PassthroughRunUseCase(
             .ConfigureAwait(false);
 
         return result.ExitCode;
+    }
+
+    /// <summary>
+    /// Finalizes the tee session, swallowing any failure the same way
+    /// <c>FilteredOutputPipeline.FinalizeTeeAsync</c> does for the filtered path.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ITeeSession.FinalizeAsync"/> already swallows most of its own failures, but its
+    /// outer catch's own cleanup call can itself throw (disposing the stream re-flushes whatever IO
+    /// failure sent it there in the first place). Left unguarded here, that throw would propagate
+    /// past <c>PassthroughEntryPoint</c> uncaught — it runs outside <c>Program.cs</c>'s try/catch —
+    /// losing the child's real exit code to a raw stack trace.
+    /// </remarks>
+    /// <param name="session">The session to finalize.</param>
+    /// <param name="exitCode">The producing command's exit code.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task FinalizeTeeAsync(
+        ITeeSession session, int exitCode, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await session.FinalizeAsync(exitCode, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Intentional: tee errors must not surface to the user
+        }
     }
 
     /// <summary>

@@ -276,6 +276,35 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task FinalizeAsync_DoesNotThrow_WhenDisposalFailsAfterAWriteFailure()
+    {
+        // Reproduces the outer catch's own cleanup throwing: FlushAsync fails first (e.g. disk
+        // full), landing in FinalizeAsync's catch clause, whose own DisposeAsync() call re-flushes
+        // the same broken stream on close and would throw again -- unless DisposeAsync swallows it,
+        // that second throw escapes FinalizeAsync entirely, costing the caller the child's exit code.
+        var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.log");
+        var stream = new ThrowingFileStream(path);
+        var rendered = RunningHeader().Render();
+        var region = TeeLogHeader.RenderStatusAndExit(null);
+        var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
+        var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
+        var headerBytes = Encoding.UTF8.GetBytes(rendered);
+#pragma warning disable CA1849, VSTHRD103, S6966
+        stream.Write(headerBytes, 0, headerBytes.Length);
+        stream.Flush();
+#pragma warning restore CA1849, VSTHRD103, S6966
+        await using var session = new FileTeeSession(
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), 1_048_576L, 0, false);
+        await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
+
+        stream.ThrowOnFlush = true;
+        stream.ThrowOnDispose = true;
+        var act = async () => await session.FinalizeAsync(0);
+
+        (await act.Should().NotThrowAsync()).Which.Should().BeNull();
+    }
+
+    [Fact]
     public async Task FinalizeAsync_ReturnsNull_WhenTheSessionIsAlreadyDisposed()
     {
         var (session, _) = CreateSut(minBodyBytes: 0);
@@ -401,7 +430,7 @@ public sealed class FileTeeSessionTests : IDisposable
         body.Should().NotContain("�");
     }
 
-    /// <summary>A <see cref="FileStream"/> whose async writes can be made to fail on demand.</summary>
+    /// <summary>A <see cref="FileStream"/> whose async writes, flushes, and disposal can be made to fail on demand.</summary>
     /// <param name="path">The file to open for reading and writing.</param>
     private sealed class ThrowingFileStream(string path)
         : FileStream(path, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite)
@@ -409,8 +438,22 @@ public sealed class FileTeeSessionTests : IDisposable
         /// <summary>Whether the next <see cref="WriteAsync(ReadOnlyMemory{byte}, CancellationToken)"/> call throws.</summary>
         public bool ThrowOnWrite { get; set; }
 
+        /// <summary>Whether the next <see cref="FlushAsync(CancellationToken)"/> call throws.</summary>
+        public bool ThrowOnFlush { get; set; }
+
+        /// <summary>Whether <see cref="DisposeAsync"/> throws instead of disposing the base stream.</summary>
+        public bool ThrowOnDispose { get; set; }
+
         /// <inheritdoc/>
         public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
             ThrowOnWrite ? throw new IOException("Simulated write failure") : base.WriteAsync(buffer, cancellationToken);
+
+        /// <inheritdoc/>
+        public override Task FlushAsync(CancellationToken cancellationToken) =>
+            ThrowOnFlush ? throw new IOException("Simulated flush failure") : base.FlushAsync(cancellationToken);
+
+        /// <inheritdoc/>
+        public override ValueTask DisposeAsync() =>
+            ThrowOnDispose ? throw new IOException("Simulated dispose failure") : base.DisposeAsync();
     }
 }
