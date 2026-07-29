@@ -20,6 +20,13 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// <param name="maxBodyBytes">The body's byte budget; appends stop once it is reached.</param>
 /// <param name="minBodyBytes">Bodies smaller than this are discarded when the run completes.</param>
 /// <param name="keepOnlyOnFailure">Whether a successful run's log is discarded.</param>
+/// <param name="teeDir">
+/// The tee directory, rotated once this log is confirmed kept. Unused (and safe to leave default)
+/// when <paramref name="maxFiles"/> disables rotation.
+/// </param>
+/// <param name="maxFiles">
+/// Maximum number of tee files to retain after this one is kept; non-positive disables rotation.
+/// </param>
 public sealed class FileTeeSession(
     FileStream stream,
     string filePath,
@@ -27,7 +34,9 @@ public sealed class FileTeeSession(
     int statusRegionLength,
     long maxBodyBytes,
     long minBodyBytes,
-    bool keepOnlyOnFailure) : ITeeSession
+    bool keepOnlyOnFailure,
+    string teeDir = "",
+    int maxFiles = 0) : ITeeSession
 {
     private readonly SessionWriter _writer = new(stream, maxBodyBytes);
     private bool _disposed;
@@ -90,6 +99,14 @@ public sealed class FileTeeSession(
             await stream.WriteAsync(region, ct).ConfigureAwait(false);
             await stream.FlushAsync(ct).ConfigureAwait(false);
             await DisposeAsync().ConfigureAwait(false);
+
+            // Rotation runs here, on the keep path, rather than when the session was opened: at
+            // open time it is not yet known whether this run's log will be kept at all, and
+            // rotating before that decision would let a run destined for deletion (a success in
+            // Failures mode, or a body under the guard) evict an older log it was never going to
+            // replace. The stream is closed first so a file this call decides to delete cannot
+            // still be open on platforms that refuse to delete an in-use handle.
+            FileTeeService.RotateFiles(teeDir, maxFiles);
             return $"[full output: {filePath}]";
         }
     }

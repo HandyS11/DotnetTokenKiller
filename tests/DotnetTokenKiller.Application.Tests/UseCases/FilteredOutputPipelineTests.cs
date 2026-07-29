@@ -150,6 +150,32 @@ public class FilteredOutputPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_FinalizesBeforeBuildingTheFallback_SoTheHintAppearsInsideIt()
+    {
+        // Finalize must run before the raw-tail fallback is built, because the fallback embeds the
+        // hint finalize returns. The other hint tests in this file take the normal (non-fallback)
+        // branch — empty filter output on a non-zero exit code is what forces the fallback branch
+        // instead — so only this test can pin the ordering: reordering the finalize call to run
+        // after the fallback is built makes this test fail (verified manually) while leaving every
+        // other test in the file green, since none of them observe a hint inside a fallback.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns("[full output: /tee/x.log]");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = new FilteredOutputRequest(
+            _filter, "", 1, "build", "dotnet build", RunSource.Run,
+            new OutputOptions(VerbosityLevel: 0, ShowLogHint: true, Quiet: false),
+            Stopwatch.GetTimestamp());
+
+        await sut.ProcessAsync(request, session);
+
+        writer.ToString().Should().Contain("[full output: /tee/x.log]");
+    }
+
+    [Fact]
     public async Task ProcessAsync_FinalizesTheSessionWithTheRequestsExitCode()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");

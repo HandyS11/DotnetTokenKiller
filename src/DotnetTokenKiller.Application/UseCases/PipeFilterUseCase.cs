@@ -38,8 +38,9 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
         // Piped input is read to completion before anything can be written, so this path gains no
         // durability. It uses the session API so the header format and the retention rules have a
         // single implementation rather than two that can drift.
+        var displayCommandLine = $"dotnet {commandSlug}";
         var provisional = new TeeLogHeader(
-            $"dotnet {commandSlug}",
+            displayCommandLine,
             Environment.CurrentDirectory,
             null,
             RunSource.Pipe,
@@ -56,7 +57,7 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             raw,
             exitCode,
             commandSlug,
-            $"dotnet {commandSlug}",
+            displayCommandLine,
             RunSource.Pipe,
             options.Normalized(),
             startTimestamp);

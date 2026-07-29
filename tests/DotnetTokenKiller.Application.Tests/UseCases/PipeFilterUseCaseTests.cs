@@ -93,9 +93,16 @@ public class PipeFilterUseCaseTests
 
         await Create("raw").RunAsync(_filter, "list package", 0, new OutputOptions());
 
+        // CommandLine and ProjectPath are asserted here because they are exactly what `dtk log`
+        // filters on, and a wrong value there would make it silently return nothing with no test
+        // noticing.
         await _teeService.Received(1).BeginAsync(
             "list package",
-            Arg.Is<TeeLogHeader>(h => h!.ExitCode == null && h.Source == RunSource.Pipe),
+            Arg.Is<TeeLogHeader>(h =>
+                h!.ExitCode == null &&
+                h.Source == RunSource.Pipe &&
+                h.CommandLine == "dotnet list package" &&
+                h.ProjectPath == Environment.CurrentDirectory),
             Arg.Any<CancellationToken>());
     }
 }

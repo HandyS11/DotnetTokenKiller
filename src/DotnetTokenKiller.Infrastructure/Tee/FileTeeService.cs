@@ -38,8 +38,11 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
             var teeDir = TeeDirectoryResolver.Resolve(teeConfig, teeDirOverride);
             Directory.CreateDirectory(teeDir);
             RestrictToOwnerOnly(teeDir);
-            RotateFiles(teeDir, teeConfig.MaxFiles);
 
+            // Rotation does NOT run here: at this point it is unknown whether this run's own log
+            // will be kept (Failures mode defers that decision to the exit code, and the 500-byte
+            // guard defers it to the body size). FileTeeSession runs it instead, in FinalizeAsync,
+            // once the log is confirmed kept.
             var fileName = TeeLogFileName.Build(
                 provisional.TimestampUtc, Guid.NewGuid().ToString("N"), commandSlug);
             var filePath = Path.Combine(teeDir, fileName);
@@ -80,7 +83,8 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
                 return new FileTeeSession(stream, filePath, regionOffset, regionLength,
-                    teeConfig.MaxFileSizeBytes, minBodyBytes: 500, teeConfig.Mode == TeeMode.Failures);
+                    teeConfig.MaxFileSizeBytes, minBodyBytes: 500, teeConfig.Mode == TeeMode.Failures,
+                    teeDir, teeConfig.MaxFiles);
             }
             catch
             {
@@ -135,7 +139,18 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
-    private static void RotateFiles(string teeDir, int maxFiles)
+    /// <summary>Deletes the oldest tee logs in excess of <paramref name="maxFiles"/>.</summary>
+    /// <param name="teeDir">The tee directory to rotate.</param>
+    /// <param name="maxFiles">
+    /// Maximum number of tee files to retain; non-positive disables rotation entirely (deleting
+    /// every file would not be a sane interpretation of "no limit").
+    /// </param>
+    /// <remarks>
+    /// Called from <see cref="FileTeeSession.FinalizeAsync"/> after a log is confirmed kept — never
+    /// from <see cref="BeginAsync"/> — so the log being rotated in is already on disk and counted
+    /// among <paramref name="teeDir"/>'s files; no slot needs to be reserved for it.
+    /// </remarks>
+    internal static void RotateFiles(string teeDir, int maxFiles)
     {
         if (maxFiles <= 0)
         {
@@ -149,7 +164,7 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
 
         // Only rotate expected tee artifacts (log files) to avoid deleting unrelated files.
         var files = Directory.GetFiles(teeDir, "*.log").Order().ToList();
-        var excess = files.Count - maxFiles + 1; // +1 to make room for new file
+        var excess = files.Count - maxFiles;
         for (var i = 0; i < excess; i++)
         {
             File.Delete(files[i]);
