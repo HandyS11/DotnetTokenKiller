@@ -1,4 +1,4 @@
-**Status:** Design
+**Status:** Implemented — see [the plan](../plans/2026-07-29-streaming-tee-durability.md)
 **Implements:** §4 of [2026-07-27-rtk-gap-analysis.md](2026-07-27-rtk-gap-analysis.md)
 
 ## Problem
@@ -48,9 +48,10 @@ public interface ITeeService
 }
 ```
 
-`BeginAsync` rotates, creates the file 0600, and writes the header before the child starts. Lines
-append as they arrive. `FinalizeAsync` overwrites the status and exit fields in place, or deletes
-the file when the retention rules say it should not be kept.
+`BeginAsync` creates the file 0600 and writes the header before the child starts; it does not
+rotate; see below. Lines append as they arrive. `FinalizeAsync` overwrites the status and exit
+fields in place, or deletes the file when the retention rules say it should not be kept, and
+rotates in either case.
 
 Whatever has been flushed when dtk dies is what survives. That is the whole guarantee, and it holds
 under `SIGKILL`, which nothing else here would.
@@ -197,8 +198,12 @@ failure, and `FinalizeAsync` swallows and returns `null`.
 today. The in-memory accumulation the filter needs is untouched, so capping the file cannot degrade
 filtering.
 
-Partial files count toward `MaxFiles` and rotate out through the existing path, so no orphan sweeper
-is needed.
+Rotation does not run when the session opens. It runs inside `FinalizeAsync`, after the keep/discard
+decision, on both branches: opening a file for every run and rotating immediately would let a
+successful run evict an older *kept* log before this run's own fate was known — under the default
+`TeeMode.Failures` with `MaxFiles = 20`, twenty successful builds in a row would silently wipe every
+stored failure log. A run killed before `FinalizeAsync` runs leaves its file unrotated, uncounted
+against `MaxFiles` until some later run finalizes and sweeps it up alongside its own decision.
 
 A killed run leaves a log but no tracking row, so `dtk gain --coverage` undercounts killed runs.
 Closing that requires the signal handler deferred above.

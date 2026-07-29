@@ -158,8 +158,13 @@ Logs are written by the tee feature, which defaults to `tee.mode = Failures` —
 saved, and output under 500 characters is never saved. Use `dtk config set tee.mode Always` to keep
 every run. Logs written by dtk 0.6.0 or earlier have no project metadata and appear only under `--all`.
 
-Passthrough subcommands (anything dtk has no filter for, such as `publish`) are not tee'd, so
-`dtk log` will not find them.
+A run that dtk did not finish — because you pressed Ctrl-C, or an agent's tool call timed out —
+still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying
+the output ends where dtk was killed.
+
+Passthrough subcommands dtk measures but does not filter (`publish`, `ef migrations`, and similar)
+are tee'd like any other run. Interactive passthrough (`run`, `watch`) stays attached to the
+terminal and is not tee'd, so `dtk log` will not find it.
 
 ## AI Agent Setup
 
