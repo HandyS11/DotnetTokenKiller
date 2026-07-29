@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
 using FluentAssertions;
 using NSubstitute;
@@ -17,11 +18,17 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
 
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly PassthroughRunUseCase _sut;
+    private readonly ITeeService _teeService = Substitute.For<ITeeService>();
     private readonly ITracker _tracker = Substitute.For<ITracker>();
 
     public PassthroughRunUseCaseTests()
     {
-        _sut = new PassthroughRunUseCase(_runner, _tracker, _stdOut, _stdErr);
+        var defaultSession = Substitute.For<ITeeSession>();
+        defaultSession.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(defaultSession);
+
+        _sut = new PassthroughRunUseCase(_runner, _tracker, _teeService, _stdOut, _stdErr);
     }
 
     public void Dispose()
@@ -85,10 +92,14 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_TrackingDisabled_NeverCapturesAndNeverRecords()
+    public async Task RunAsync_TrackingAndTeeDisabled_NeverCapturesAndNeverRecords()
     {
-        // tracking.enabled = false is the escape hatch back to today's inherited-stdio behaviour.
-        var config = DtkConfig.Default with { Tracking = new TrackingConfig(Enabled: false) };
+        // Both tracking and tee off is the escape hatch back to today's inherited-stdio behaviour.
+        var config = DtkConfig.Default with
+        {
+            Tracking = new TrackingConfig(Enabled: false),
+            Tee = new TeeConfig(TeeMode.Never)
+        };
         _runner.RunPassthroughAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(0);
 
@@ -182,6 +193,78 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r!.InputTokens > 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_TeesAMeasurableRun()
+    {
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+
+        await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_StreamsAndTees_WhenTrackingIsOffButTeeIsOn()
+    {
+        // Keying the streamed path on tracking alone would silently produce no passthrough log for a
+        // user who turned tracking off and left tee on.
+        var config = DtkConfig.Default with
+        {
+            Tracking = DtkConfig.Default.Tracking with { Enabled = false },
+            Tee = new TeeConfig(TeeMode.Always)
+        };
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(config, "dotnet", ["publish"]);
+
+        await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_TakesTheCheapPath_WhenBothTrackingAndTeeAreOff()
+    {
+        var config = DtkConfig.Default with
+        {
+            Tracking = DtkConfig.Default.Tracking with { Enabled = false },
+            Tee = new TeeConfig(TeeMode.Never)
+        };
+        _runner.RunPassthroughAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<CancellationToken>()).Returns(0);
+
+        await _sut.RunAsync(config, "dotnet", ["publish"]);
+
+        await _runner.Received(1).RunPassthroughAsync(Arg.Any<string>(),
+            Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
+        await _teeService.DidNotReceive().BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_DoesNotTeeAnInteractiveRun()
+    {
+        // run/watch keep their stdio attached to the terminal, so there is nothing to capture.
+        _runner.RunPassthroughAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<CancellationToken>()).Returns(0);
+
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["run"]);
+
+        await _teeService.DidNotReceive().BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(),
             Arg.Any<CancellationToken>());
     }
 }

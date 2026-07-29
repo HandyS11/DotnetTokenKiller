@@ -3,6 +3,7 @@ using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Text;
 using DotnetTokenKiller.Domain.Tracking;
 
@@ -13,12 +14,14 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// next filter can be chosen from data rather than guessed.
 /// </summary>
 /// <param name="commandRunner">The command runner.</param>
-/// <param name="tracker">The tracking store.</param>
+/// <param name="tracker">The tracking store, or <see langword="null"/> when tracking is off.</param>
+/// <param name="teeService">Opens the log a measured run streams into.</param>
 /// <param name="stdOut">Receives the child's standard output when the run is measured.</param>
 /// <param name="stdErr">Receives the child's standard error when the run is measured.</param>
 public sealed class PassthroughRunUseCase(
     ICommandRunner commandRunner,
-    ITracker tracker,
+    ITracker? tracker,
+    ITeeService teeService,
     TextWriter stdOut,
     TextWriter stdErr)
 {
@@ -40,10 +43,12 @@ public sealed class PassthroughRunUseCase(
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(dotnetArgs);
 
-        // With tracking off there is nothing to measure, so take the cheapest path and leave the
-        // child's stdio attached to the terminal exactly as it is today — colour included.
-        if (!config.Tracking.Enabled)
+        // Tee and tracking are configured independently, so either one is reason enough to capture.
+        var teeEnabled = config.Tee.Mode != TeeMode.Never;
+        if (!config.Tracking.Enabled && !teeEnabled)
         {
+            // Nothing to measure and nothing to log, so leave the child's stdio attached to the
+            // terminal exactly as it is today — colour included.
             return await commandRunner.RunPassthroughAsync(command, dotnetArgs, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -53,26 +58,49 @@ public sealed class PassthroughRunUseCase(
 
         if (!PassthroughSubcommands.IsMeasurable(dotnetArgs))
         {
+            // Interactive: stdio stays attached, so there is no output to capture or tee.
             var passthroughExit = await commandRunner.RunPassthroughAsync(command, dotnetArgs, cancellationToken)
                 .ConfigureAwait(false);
             stopwatch.Stop();
-            await TrackAsync(commandName, null, config.Tracking.Tokenizer, stopwatch.Elapsed, passthroughExit,
+            await TrackAsync(commandName, null, config.Tracking, stopwatch.Elapsed, passthroughExit,
                     RunOutcome.PassthroughUnmeasured, cancellationToken)
                 .ConfigureAwait(false);
             return passthroughExit;
         }
 
+        var provisional = new TeeLogHeader(
+            $"{command} {string.Join(' ', dotnetArgs)}",
+            Environment.CurrentDirectory,
+            null,
+            RunSource.Run,
+            DateTimeOffset.UtcNow);
+
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var session = await teeService
+            .BeginAsync(commandName, provisional, cancellationToken).ConfigureAwait(false);
+#pragma warning restore CA2007
+
+        // The terminal takes the raw line so colour survives; the session strips ANSI itself.
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var outSink = new FanOutTextWriter(stdOut, session.Writer);
+        await using var errSink = new FanOutTextWriter(stdErr, session.Writer);
+#pragma warning restore CA2007
+
         var result = await commandRunner
-            .RunStreamedAsync(command, dotnetArgs, stdOut, stdErr, cancellationToken)
+            .RunStreamedAsync(command, dotnetArgs, outSink, errSink, cancellationToken)
             .ConfigureAwait(false);
         stopwatch.Stop();
+
+        // The hint is discarded rather than printed: passthrough emits no dtk meta-output today,
+        // and the log is reachable through `dtk log`.
+        await session.FinalizeAsync(result.ExitCode, cancellationToken).ConfigureAwait(false);
 
         // The child's exit code above is already captured before any of this runs, so a throw from
         // here on — including from stripping/tokenizing a very large captured output — cannot alter
         // what dtk returns; TrackAsync's try/catch covers stripping and estimation as well as the
         // store write.
-        await TrackAsync(commandName, result.StdOut + result.StdErr, config.Tracking.Tokenizer, stopwatch.Elapsed,
-                result.ExitCode, RunOutcome.PassthroughMeasured, cancellationToken)
+        await TrackAsync(commandName, result.StdOut + result.StdErr, config.Tracking,
+                stopwatch.Elapsed, result.ExitCode, RunOutcome.PassthroughMeasured, cancellationToken)
             .ConfigureAwait(false);
 
         return result.ExitCode;
@@ -88,7 +116,10 @@ public sealed class PassthroughRunUseCase(
     /// The combined, un-stripped child stdout/stderr to measure, or <see langword="null"/> when the
     /// run was not measured, in which case zero tokens are recorded without stripping or estimating.
     /// </param>
-    /// <param name="tokenizerModel">The tokenizer model to use when estimating.</param>
+    /// <param name="trackingConfig">
+    /// The tracking configuration, consulted for both whether recording should happen and which
+    /// tokenizer to estimate with.
+    /// </param>
     /// <param name="elapsed">Wall-clock time for the run.</param>
     /// <param name="exitCode">The child process exit code.</param>
     /// <param name="outcome">Which passthrough outcome this run had.</param>
@@ -96,17 +127,24 @@ public sealed class PassthroughRunUseCase(
     private async Task TrackAsync(
         string commandName,
         string? rawOutput,
-        TokenizerModel tokenizerModel,
+        TrackingConfig trackingConfig,
         TimeSpan elapsed,
         int exitCode,
         RunOutcome outcome,
         CancellationToken cancellationToken)
     {
+        // A null tracker and a disabled config both mean the same thing — nothing to record — and
+        // this is the single place either one is checked.
+        if (tracker is null || !trackingConfig.Enabled)
+        {
+            return;
+        }
+
         try
         {
             var tokens = rawOutput is null
                 ? 0
-                : TokenEstimator.Estimate(AnsiStrip.Strip(rawOutput), tokenizerModel);
+                : TokenEstimator.Estimate(AnsiStrip.Strip(rawOutput), trackingConfig.Tokenizer);
 
             // No filter ran, so every input token also reached the caller: output equals input and
             // savings are zero. Recording a negative or synthesized saving here would corrupt the
