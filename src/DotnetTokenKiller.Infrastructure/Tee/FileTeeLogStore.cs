@@ -63,7 +63,20 @@ public sealed class FileTeeLogStore(IConfigProvider configProvider, string? teeD
     public async Task<string> ReadBodyAsync(TeeLogEntry entry, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        var text = await File.ReadAllTextAsync(entry.FilePath, cancellationToken).ConfigureAwait(false);
+
+        // File.ReadAllTextAsync cannot set a share mode; a session's writer stream is still open
+        // for the file's whole lifetime, and on Windows a second handle can only be opened if it
+        // permits the write access the first handle already holds, hence FileShare.ReadWrite here.
+        string text;
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using (var stream = new FileStream(
+            entry.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+#pragma warning restore CA2007
+        using (var reader = new StreamReader(stream, Encoding.UTF8))
+        {
+            text = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         return TeeLogHeader.StripHeader(text);
     }
 
@@ -101,8 +114,10 @@ public sealed class FileTeeLogStore(IConfigProvider configProvider, string? teeD
     private static async Task<string> ReadHeadAsync(string path, CancellationToken cancellationToken)
     {
         var buffer = new byte[HeadBytes];
+        // FileShare.ReadWrite: a session's writer stream may still be open for this file (see the
+        // comment in ReadBodyAsync).
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 #pragma warning restore CA2007
         // A single ReadAsync call is not guaranteed to fill the buffer even when enough data is
         // available, and a file shorter than HeadBytes must not be treated as a short-read error —

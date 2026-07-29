@@ -1,3 +1,4 @@
+using System.Text;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
@@ -213,5 +214,38 @@ public sealed class FileTeeLogStoreTests : IDisposable
         entry.Header.ExitCode.Should().Be(1);
         entry.Slug.Should().Be("list-package");
         (await store.ReadBodyAsync(entry)).Should().Be(body);
+    }
+
+    [Fact]
+    public async Task ReadBodyAsync_ReadsALiveLog_WhileItsWriterStreamIsStillOpen()
+    {
+        // FileTeeSession opens its FileStream for writing; on Windows, a second handle can only be
+        // opened if that first handle's share mode permits it. If either side regresses from
+        // FileShare.ReadWrite back to FileShare.Read, `dtk log` on a command that is still running
+        // fails to open the file at all — this is the feature's whole point on that platform.
+        Directory.CreateDirectory(_tempDir);
+        var timestamp = At(1);
+        var path = Path.Combine(_tempDir, TeeLogFileName.Build(timestamp, Guid.NewGuid().ToString("N"), "build"));
+        var header = new TeeLogHeader("dotnet build MyApp.slnx", "/home/user/proj", null, RunSource.Run, timestamp);
+        var rendered = header.Render();
+        var region = TeeLogHeader.RenderStatusAndExit(null);
+        var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
+        var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
+        var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
+        var headerBytes = Encoding.UTF8.GetBytes(rendered);
+        await stream.WriteAsync(headerBytes);
+        await stream.FlushAsync();
+        await using var session = new FileTeeSession(
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), 1_048_576L, 0, false);
+        await session.Writer.WriteLineAsync("in flight".AsMemory(), CancellationToken.None);
+        await session.Writer.FlushAsync(CancellationToken.None);
+
+        var sut = CreateSut();
+        var entry = (await sut.ListAsync()).Single();
+        var body = await sut.ReadBodyAsync(entry);
+
+        entry.Header.Should().NotBeNull();
+        entry.Header!.Status.Should().Be(TeeLogStatus.Running);
+        body.Should().Contain("in flight");
     }
 }

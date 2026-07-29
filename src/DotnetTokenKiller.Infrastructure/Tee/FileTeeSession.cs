@@ -10,7 +10,10 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// Public rather than internal because <c>DotnetTokenKiller.Infrastructure</c> grants no
 /// <c>InternalsVisibleTo</c> and this type carries the durability guarantee its tests exist to prove.
 /// </remarks>
-/// <param name="stream">The open log file, positioned at the end of the header.</param>
+/// <param name="stream">
+/// The open log file, positioned at the end of the header. Opened for both read and write so
+/// <see cref="FinalizeAsync"/> can read back the status region before overwriting it.
+/// </param>
 /// <param name="filePath">The log's path, used for the hint and for deletion.</param>
 /// <param name="statusRegionOffset">Byte offset of the status/exit region within the file.</param>
 /// <param name="statusRegionLength">Byte length of that region.</param>
@@ -42,7 +45,23 @@ public sealed class FileTeeSession(
 
         try
         {
-            await _writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+            // Latch first: any WriteLineAsync/FlushAsync call that has not yet reached the gate
+            // below observes this and returns immediately, instead of racing to append once the
+            // header rewrite has repositioned the stream. Calls already inside the gate are waited
+            // out by RunExclusivelyAsync rather than raced with.
+            _writer.MarkBroken();
+            return await _writer.RunExclusivelyAsync(FinalizeCoreAsync, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Intentional: tee errors must never surface to the user (but cancellation must propagate)
+            await DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+
+        async Task<string?> FinalizeCoreAsync(CancellationToken ct)
+        {
+            await stream.FlushAsync(ct).ConfigureAwait(false);
 
             if ((keepOnlyOnFailure && exitCode == 0) || _writer.BodyBytesWritten < minBodyBytes)
             {
@@ -51,27 +70,27 @@ public sealed class FileTeeSession(
                 return null;
             }
 
-            var region = Encoding.UTF8.GetBytes(TeeLogHeader.RenderStatusAndExit(exitCode));
-            if (region.Length != statusRegionLength)
+            // Read back the region rather than trusting statusRegionOffset: both renderings are
+            // fixed-width ASCII, so a length check can never fail, but the offset itself is a
+            // UTF-8 byte count into a header that can contain non-ASCII text (a command line or
+            // cwd). A caller that measured it in UTF-16 chars instead would otherwise overwrite the
+            // header and the delimiter with no warning.
+            var expected = Encoding.UTF8.GetBytes(TeeLogHeader.RenderStatusAndExit(null));
+            var actual = new byte[statusRegionLength];
+            stream.Seek(statusRegionOffset, SeekOrigin.Begin);
+            await stream.ReadExactlyAsync(actual, ct).ConfigureAwait(false);
+            if (!actual.AsSpan().SequenceEqual(expected))
             {
-                // Unreachable while RenderStatusAndExit pads to fixed widths; writing a
-                // differently-sized region here would overwrite the delimiter and make every
-                // completed log unparseable, so refuse rather than corrupt.
                 await DisposeAsync().ConfigureAwait(false);
                 return null;
             }
 
+            var region = Encoding.UTF8.GetBytes(TeeLogHeader.RenderStatusAndExit(exitCode));
             stream.Seek(statusRegionOffset, SeekOrigin.Begin);
-            await stream.WriteAsync(region, cancellationToken).ConfigureAwait(false);
-            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync(region, ct).ConfigureAwait(false);
+            await stream.FlushAsync(ct).ConfigureAwait(false);
             await DisposeAsync().ConfigureAwait(false);
             return $"[full output: {filePath}]";
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Intentional: tee errors must never surface to the user (but cancellation must propagate)
-            await DisposeAsync().ConfigureAwait(false);
-            return null;
         }
     }
 
@@ -97,8 +116,19 @@ public sealed class FileTeeSession(
     /// <param name="maxBodyBytes">The body's byte budget; writes stop once it is reached.</param>
     private sealed class SessionWriter(FileStream stream, long maxBodyBytes) : TextWriter
     {
+        // Never disposed: a SemaphoreSlim whose AvailableWaitHandle is never touched needs no
+        // disposal, and disposing it was the cause of an ObjectDisposedException that could
+        // otherwise escape WriteLineAsync from a pump parked in _gate.WaitAsync.
+#pragma warning disable CA2213 // Disposable fields should be disposed — intentional, see above.
         private readonly SemaphoreSlim _gate = new(1, 1);
-        private bool _broken;
+#pragma warning restore CA2213
+
+        /// <summary>
+        /// Written from both pump threads and from <c>FinalizeAsync</c>; volatile so a check on one
+        /// thread cannot be reordered ahead of a <see cref="MarkBroken"/> call that happened-before
+        /// it on another.
+        /// </summary>
+        private volatile bool _broken;
 
         public long BodyBytesWritten { get; private set; }
 
@@ -116,6 +146,30 @@ public sealed class FileTeeSession(
         }
 
         public void MarkBroken() => _broken = true;
+
+        /// <summary>
+        /// Runs <paramref name="action"/> while holding the gate that serialises
+        /// <see cref="WriteLineAsync"/> and <see cref="FlushAsync(CancellationToken)"/>, so
+        /// finalizing can flush, read back, and overwrite the status region without racing a pump
+        /// write that is already past the gate.
+        /// </summary>
+        /// <typeparam name="T">The action's result type.</typeparam>
+        /// <param name="action">The work to run exclusively of the two pumps.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>The action's result.</returns>
+        public async Task<T> RunExclusivelyAsync<T>(
+            Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken)
+        {
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await action(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
 
         public override async Task WriteLineAsync(
             ReadOnlyMemory<char> buffer, CancellationToken cancellationToken = default)
@@ -159,6 +213,10 @@ public sealed class FileTeeSession(
                 return;
             }
 
+            // Gated for the same reason as WriteLineAsync: production flushes per line from both
+            // pumps, and FileStream.WriteAsync/FlushAsync on one instance are not thread-safe
+            // against each other.
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -168,6 +226,10 @@ public sealed class FileTeeSession(
                 // Intentional: see WriteLineAsync.
                 _broken = true;
             }
+            finally
+            {
+                _gate.Release();
+            }
         }
 
         public override Task FlushAsync() => FlushAsync(CancellationToken.None);
@@ -176,16 +238,6 @@ public sealed class FileTeeSession(
         {
             // The pump only ever calls WriteLineAsync. Implemented because TextWriter requires it;
             // routing it through the async path would deadlock.
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _gate.Dispose();
-            }
-
-            base.Dispose(disposing);
         }
     }
 }
