@@ -3,6 +3,7 @@ using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Text;
 using DotnetTokenKiller.Domain.Tracking;
 
 namespace DotnetTokenKiller.Application.UseCases;

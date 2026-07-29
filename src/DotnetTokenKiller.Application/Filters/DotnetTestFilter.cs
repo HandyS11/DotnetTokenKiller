@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
+using DotnetTokenKiller.Domain.Text;
 
 namespace DotnetTokenKiller.Application.Filters;
 

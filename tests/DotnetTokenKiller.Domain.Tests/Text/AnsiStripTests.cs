@@ -1,7 +1,8 @@
-using DotnetTokenKiller.Application.Helpers;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
+using Xunit;
 
-namespace DotnetTokenKiller.Application.Tests.Helpers;
+namespace DotnetTokenKiller.Domain.Tests.Text;
 
 public class AnsiStripTests
 {

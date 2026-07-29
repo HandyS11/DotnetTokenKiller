@@ -5,6 +5,7 @@ using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
+using DotnetTokenKiller.Domain.Text;
 using DotnetTokenKiller.Domain.Tracking;
 
 namespace DotnetTokenKiller.Application.UseCases;

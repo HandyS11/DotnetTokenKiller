@@ -57,7 +57,7 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
 
             // The budget applies to the body alone — the header is dtk's own addition, and charging
             // the user's configured cap for it would silently shrink every existing setting.
-            var body = TruncateToUtf8Bytes(rawOutput, teeConfig.MaxFileSizeBytes);
+            var body = Utf8Text.TruncateToUtf8Bytes(rawOutput, teeConfig.MaxFileSizeBytes);
             var content = header.Render() + body;
 
             var fileName = TeeLogFileName.Build(
@@ -132,40 +132,6 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
         await using var stream = new FileStream(filePath, options);
 #pragma warning restore CA2007
         await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static string TruncateToUtf8Bytes(string text, long maxBytes)
-    {
-        // MaxFileSizeBytes is a byte budget; slicing the string by char count could overshoot the cap
-        // (multi-byte runes) or split a rune and emit U+FFFD. Cut on a UTF-8 code-point boundary instead.
-        if (maxBytes <= 0)
-        {
-            return string.Empty;
-        }
-
-        if (Encoding.UTF8.GetByteCount(text) <= maxBytes)
-        {
-            return text;
-        }
-
-        // Walk runes and stop before the budget is exceeded rather than materializing the whole
-        // string as a byte[] — captured output can be very large, and that allocation is the OOM
-        // risk TeeAndHintAsync swallows (silently dropping the log). Slicing on a rune boundary also
-        // guarantees we never split a multi-byte sequence.
-        var chars = 0;
-        var runeBytes = 0;
-        foreach (var rune in text.EnumerateRunes())
-        {
-            if (runeBytes + rune.Utf8SequenceLength > maxBytes)
-            {
-                break;
-            }
-
-            runeBytes += rune.Utf8SequenceLength;
-            chars += rune.Utf16SequenceLength;
-        }
-
-        return text[..chars];
     }
 
     private static void RotateFiles(string teeDir, int maxFiles)
