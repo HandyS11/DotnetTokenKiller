@@ -280,4 +280,44 @@ public sealed class LogCommandTests
 
         exitCode.Should().Be(1);
     }
+
+    /// <summary>Builds an entry shaped exactly as an abandoned session leaves one on disk.</summary>
+    /// <param name="minute">The minute component used for the timestamp.</param>
+    /// <param name="slug">The log's slug.</param>
+    /// <param name="commandLine">The command line recorded in the header.</param>
+    private static TeeLogEntry IncompleteEntry(int minute, string slug, string commandLine) =>
+        new($"/tee/{minute}_{slug}_incomplete.log",
+            new TeeLogHeader(commandLine, Cwd, null, RunSource.Run, At(minute)),
+            2048,
+            At(minute),
+            slug);
+
+    [Fact]
+    public async Task Run_MarksAnUnfinishedRunAsIncomplete()
+    {
+        var entry = IncompleteEntry(5, "build", "dotnet build MyApp.slnx");
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "compiling...\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        var output = writer.ToString();
+        output.Should().Contain("incomplete");
+        output.Should().Contain("run did not finish");
+        output.Should().Contain("compiling...");
+    }
+
+    [Fact]
+    public async Task Run_List_ShowsIncompleteInsteadOfAnExitCode()
+    {
+        var (command, console, _) = Create(new FakeStore(
+            [],
+            Entry(5, "build"),
+            IncompleteEntry(9, "build", "dotnet build B.slnx")));
+
+        await command.RunAsync(new LogCommandSettings { List = true }, CancellationToken.None);
+
+        console.Output.Should().Contain("incomplete");
+    }
 }

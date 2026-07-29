@@ -79,6 +79,13 @@ internal static class TeeLogRenderer
                     .AsMemory(), cancellationToken)
             .ConfigureAwait(false);
 
+        if (entry.Header?.Status == TeeLogStatus.Running)
+        {
+            await output.WriteLineAsync(
+                    "run did not finish — output ends where dtk was killed".AsMemory(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var summary = view.ShownLines >= view.TotalLines
             ? $"showing all {view.TotalLines.ToString(CultureInfo.InvariantCulture)} lines"
             : $"showing last {view.ShownLines.ToString(CultureInfo.InvariantCulture)} of "
