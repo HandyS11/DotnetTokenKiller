@@ -34,7 +34,7 @@ public sealed class TeeLogHeaderTests
     {
         var rendered = Sample().Render();
 
-        rendered.Should().StartWith("# dtk-log v1\n");
+        rendered.Should().StartWith("# dtk-log v2\n");
         // The delimiter must be the last line so the body starts immediately after it.
         rendered.Should().EndWith("---\n");
     }
@@ -143,5 +143,105 @@ public sealed class TeeLogHeaderTests
     public void StripHeader_ReturnsEmpty_WhenHeaderIsAllThereIs()
     {
         TeeLogHeader.StripHeader(Sample().Render()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RenderStatusAndExit_ProducesTheSameLength_ForRunningAndAnyExitCode()
+    {
+        // The finalize path overwrites this region in place at a fixed byte offset. If the
+        // running and complete forms differ in length, that overwrite corrupts the delimiter
+        // and every log from a finished run becomes unparseable.
+        var running = TeeLogHeader.RenderStatusAndExit(null);
+        var zero = TeeLogHeader.RenderStatusAndExit(0);
+        var widest = TeeLogHeader.RenderStatusAndExit(int.MinValue);
+
+        zero.Length.Should().Be(running.Length);
+        widest.Length.Should().Be(running.Length);
+    }
+
+    [Fact]
+    public void Render_ThenTryParse_RoundTripsACompletedRun()
+    {
+        var original = new TeeLogHeader(
+            "dotnet build MyApp.slnx",
+            "/home/user/projects/MyApp",
+            1,
+            RunSource.Run,
+            new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+
+        TeeLogHeader.TryParse(original.Render(), out var parsed).Should().BeTrue();
+
+        parsed.Should().Be(original);
+        parsed.Status.Should().Be(TeeLogStatus.Complete);
+    }
+
+    [Fact]
+    public void Render_ThenTryParse_RoundTripsARunningRun()
+    {
+        var original = new TeeLogHeader(
+            "dotnet build MyApp.slnx",
+            "/home/user/projects/MyApp",
+            null,
+            RunSource.Run,
+            new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+
+        TeeLogHeader.TryParse(original.Render(), out var parsed).Should().BeTrue();
+
+        parsed.ExitCode.Should().BeNull();
+        parsed.Status.Should().Be(TeeLogStatus.Running);
+    }
+
+    [Fact]
+    public void TryParse_ReadsAV1Header_AsComplete()
+    {
+        // Logs written before this change must keep listing; they are complete by definition,
+        // because v1 could only be written after the process exited.
+        const string v1 =
+            "# dtk-log v1\n"
+            + "# command: dotnet build MyApp.slnx\n"
+            + "# cwd: /home/user/projects/MyApp\n"
+            + "# exit: 1\n"
+            + "# source: Run\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "---\n"
+            + "body\n";
+
+        TeeLogHeader.TryParse(v1, out var parsed).Should().BeTrue();
+
+        parsed.ExitCode.Should().Be(1);
+        parsed.Status.Should().Be(TeeLogStatus.Complete);
+        parsed.CommandLine.Should().Be("dotnet build MyApp.slnx");
+    }
+
+    [Fact]
+    public void TryParse_RejectsAHeaderWhoseStatusAndExitDisagree()
+    {
+        // status and exit are two spellings of one fact. A file where they disagree is corrupt,
+        // not merely unfinished, and must not be read as either.
+        const string contradictory =
+            "# dtk-log v2\n"
+            + "# command: dotnet build MyApp.slnx\n"
+            + "# cwd: /home/user/projects/MyApp\n"
+            + "# source: Run\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "# status: running \n"
+            + "# exit:   0          \n"
+            + "---\n";
+
+        TeeLogHeader.TryParse(contradictory, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StripHeader_RemovesAV2Header()
+    {
+        var header = new TeeLogHeader(
+            "dotnet build MyApp.slnx",
+            "/home/user/projects/MyApp",
+            0,
+            RunSource.Run,
+            new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+
+        TeeLogHeader.StripHeader(header.Render() + "line one\nline two\n")
+            .Should().Be("line one\nline two\n");
     }
 }

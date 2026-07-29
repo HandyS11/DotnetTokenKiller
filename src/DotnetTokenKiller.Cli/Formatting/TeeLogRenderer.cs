@@ -33,7 +33,9 @@ internal static class TeeLogRenderer
                 (i + 1).ToString(CultureInfo.InvariantCulture),
                 entry.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                 (entry.Header?.CommandLine ?? $"dotnet {entry.Slug}").EscapeMarkup(),
-                entry.Header is null ? "?" : entry.Header.ExitCode.ToString(CultureInfo.InvariantCulture),
+                entry.Header is null
+                    ? "?"
+                    : entry.Header.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "incomplete",
                 FormatSize(entry.SizeBytes)
             };
 
@@ -62,9 +64,12 @@ internal static class TeeLogRenderer
     {
         var entry = view.Entry;
         var command = entry.Header?.CommandLine ?? $"dotnet {entry.Slug}";
-        var exit = entry.Header is null
-            ? "exit unknown"
-            : $"exit {entry.Header.ExitCode.ToString(CultureInfo.InvariantCulture)}";
+        var exit = entry.Header switch
+        {
+            null => "exit unknown",
+            { ExitCode: { } code } => $"exit {code.ToString(CultureInfo.InvariantCulture)}",
+            _ => "incomplete"
+        };
         var when = entry.TimestampUtc.ToString("O", CultureInfo.InvariantCulture);
 
         await output.WriteLineAsync($"{command} — {exit} — {when}".AsMemory(), cancellationToken)

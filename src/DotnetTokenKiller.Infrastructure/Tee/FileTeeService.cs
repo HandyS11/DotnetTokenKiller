@@ -33,7 +33,7 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
             var shouldWrite = teeConfig.Mode switch
             {
                 TeeMode.Always => true,
-                TeeMode.Failures => header.ExitCode != 0,
+                TeeMode.Failures => header.ExitCode is not 0,
                 _ => false
             };
 
