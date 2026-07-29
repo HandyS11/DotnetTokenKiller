@@ -204,5 +204,11 @@ public class ResetCommandTests
             LogsWereDeleted = true;
             return Task.CompletedTask;
         }
+
+        public Task<ITeeSession> BeginAsync(
+            string commandSlug, TeeLogHeader provisional, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<ITeeSession>(NullTeeSession.Instance);
+        }
     }
 }

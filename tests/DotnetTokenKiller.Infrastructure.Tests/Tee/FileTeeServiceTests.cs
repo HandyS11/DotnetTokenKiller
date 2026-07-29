@@ -410,6 +410,86 @@ public sealed class FileTeeServiceTests : IDisposable
         await act.Should().NotThrowAsync();
     }
 
+    private static TeeLogHeader RunningHeader() => new(
+        "dotnet build MyApp.slnx",
+        "/home/user/projects/MyApp",
+        null,
+        RunSource.Run,
+        new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+
+    [Fact]
+    public async Task BeginAsync_WritesTheHeaderBeforeAnyOutputArrives()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        var text = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
+        header.Status.Should().Be(TeeLogStatus.Running);
+    }
+
+    [Fact]
+    public async Task BeginAsync_OpensASession_EvenInFailuresMode()
+    {
+        // The exit code is unknown at this point, so the mode cannot be applied yet. Deciding
+        // early would mean never writing a log for a run that turns out to fail.
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        Directory.GetFiles(_tempDir).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task BeginAsync_ReturnsANullSession_WhenTeeIsOff()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Never));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        session.Should().BeOfType<NullTeeSession>();
+        (await session.FinalizeAsync(1)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task BeginAsync_RotatesOldLogs()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFiles: 2));
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "1000_a_build.log"), "old");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "2000_b_build.log"), "old");
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task BeginAsync_RoundTripsTheStatusRegion_WhenTheHeaderContainsNonAsciiText()
+    {
+        // The command line and cwd carry multi-byte UTF-8 text, so the char index into the
+        // rendered header and its UTF-8 byte offset diverge. BeginAsync must measure the status
+        // region's offset in UTF-8 bytes, not UTF-16 chars, or FinalizeAsync's read-back guard
+        // rejects the overwrite and the log is stuck reporting "running" forever.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        var header = new TeeLogHeader(
+            "dotnet build café.slnx", "/home/user/projets/café", null, RunSource.Run,
+            new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+
+        var session = await sut.BeginAsync("build", header);
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(2);
+
+        hint.Should().NotBeNull();
+        var text = await File.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(text, out var parsed).Should().BeTrue();
+        parsed.Status.Should().Be(TeeLogStatus.Complete);
+        parsed.ExitCode.Should().Be(2);
+        parsed.CommandLine.Should().Be("dotnet build café.slnx");
+        parsed.ProjectPath.Should().Be("/home/user/projets/café");
+    }
+
     private sealed class ThrowingConfigProvider : IConfigProvider
     {
         public DtkConfig Load()
