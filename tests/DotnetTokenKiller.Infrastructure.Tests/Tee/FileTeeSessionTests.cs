@@ -33,11 +33,16 @@ public sealed class FileTeeSessionTests : IDisposable
     /// <param name="minBodyBytes">Bodies smaller than this are discarded when the run completes.</param>
     /// <param name="keepOnlyOnFailure">Whether a successful run's log is discarded.</param>
     /// <param name="header">The header to render, or <see langword="null"/> to use <see cref="RunningHeader"/>.</param>
+    /// <param name="maxFiles">
+    /// Maximum number of tee files to retain once this one is kept or discarded; non-positive
+    /// disables rotation. Rotation always targets <see cref="_tempDir"/>.
+    /// </param>
     private (FileTeeSession Session, string Path) CreateSut(
         long maxBodyBytes = 1_048_576L,
         long minBodyBytes = 500,
         bool keepOnlyOnFailure = false,
-        TeeLogHeader? header = null)
+        TeeLogHeader? header = null,
+        int maxFiles = 0)
     {
         var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.log");
         // ReadWrite on both axes: FinalizeAsync reads the status region back before overwriting
@@ -53,7 +58,7 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Flush();
 
         var session = new FileTeeSession(stream, path, offset, Encoding.UTF8.GetByteCount(region),
-            maxBodyBytes, minBodyBytes, keepOnlyOnFailure);
+            maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles);
         return (session, path);
     }
 
@@ -127,6 +132,72 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.FinalizeAsync(1);
 
         File.Exists(path).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_RotatesLeftoverLogs_ToTheCap_WhenThisRunsLogIsDiscarded()
+    {
+        // Regression guard: round 1 moved rotation onto the keep path only. On the default
+        // TeeMode.Failures, a user whose builds all succeed never keeps a log, so RotateFiles
+        // never runs at all -- meanwhile abandoned "Running" logs (killed mid-flight) and
+        // read-back-guard failures still accumulate on disk with no bound. Rotation must also run
+        // on the discard path, after this run's own file is deleted, sweeping those leftovers back
+        // down to the cap. This run's own log is already gone by the time rotation runs, so it
+        // cannot claim a phantom slot -- only leftovers are being trimmed.
+        const int maxFiles = 2;
+        for (var i = 0; i < 5; i++)
+        {
+            await File.WriteAllTextAsync(Path.Combine(_tempDir, $"leftover-{i}.log"), "old");
+        }
+
+        var (session, path) = CreateSut(minBodyBytes: 0, keepOnlyOnFailure: true, maxFiles: maxFiles);
+        await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().BeNull();
+        File.Exists(path).Should().BeFalse();
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(maxFiles);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_StillReturnsTheHint_WhenRotationFailsToDeleteALeftoverLog()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // POSIX permission bits (used below to force RotateFiles' File.Delete to fail) are not
+            // meaningful on Windows. The scenario this guards against there is a concurrently
+            // running dtk process's own open log, which FileTeeService opens without
+            // FileShare.Delete, causing File.Delete to throw IOException instead.
+            return;
+        }
+
+        // Regression guard: RotateFiles used to run inside FinalizeCoreAsync with no try/catch of
+        // its own, so any exception it threw (e.g. File.Delete failing) propagated out to
+        // FinalizeAsync's outer catch, which returns null. The log itself was written and kept
+        // correctly, but the caller -- and so the user -- silently lost the "[full output: ...]"
+        // hint pointing at it. Reproduced here by revoking write permission on the tee directory
+        // after seeding a leftover log, so RotateFiles' File.Delete throws UnauthorizedAccessException.
+        var leftover = Path.Combine(_tempDir, "leftover.log");
+        await File.WriteAllTextAsync(leftover, "old");
+        var (session, path) = CreateSut(minBodyBytes: 0, maxFiles: 1);
+        await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
+
+        File.SetUnixFileMode(_tempDir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var hint = await session.FinalizeAsync(0);
+
+            hint.Should().NotBeNull();
+            hint.Should().Contain(path);
+            File.Exists(path).Should().BeTrue();
+        }
+        finally
+        {
+            // Restore write access so Dispose() can clean up _tempDir afterward.
+            File.SetUnixFileMode(
+                _tempDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
     }
 
     [Fact]

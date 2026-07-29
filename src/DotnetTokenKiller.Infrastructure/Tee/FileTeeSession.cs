@@ -21,11 +21,12 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// <param name="minBodyBytes">Bodies smaller than this are discarded when the run completes.</param>
 /// <param name="keepOnlyOnFailure">Whether a successful run's log is discarded.</param>
 /// <param name="teeDir">
-/// The tee directory, rotated once this log is confirmed kept. Unused (and safe to leave default)
-/// when <paramref name="maxFiles"/> disables rotation.
+/// The tee directory, rotated once this log's fate (kept or discarded) is decided. Unused (and safe
+/// to leave default) when <paramref name="maxFiles"/> disables rotation.
 /// </param>
 /// <param name="maxFiles">
-/// Maximum number of tee files to retain after this one is kept; non-positive disables rotation.
+/// Maximum number of tee files to retain once this one is kept or discarded; non-positive disables
+/// rotation.
 /// </param>
 public sealed class FileTeeSession(
     FileStream stream,
@@ -76,6 +77,12 @@ public sealed class FileTeeSession(
             {
                 await DisposeAsync().ConfigureAwait(false);
                 File.Delete(filePath);
+
+                // This run's own log is already gone, so it cannot claim a phantom slot here — this
+                // only trims leftovers (abandoned "Running" logs from runs killed mid-flight, or
+                // logs from a previous read-back-guard failure below) that would otherwise never be
+                // rotated on a config where every run in Failures mode happens to succeed.
+                TryRotateFiles();
                 return null;
             }
 
@@ -100,14 +107,37 @@ public sealed class FileTeeSession(
             await stream.FlushAsync(ct).ConfigureAwait(false);
             await DisposeAsync().ConfigureAwait(false);
 
+            // The hint is computed before rotation runs, and TryRotateFiles can never throw, so a
+            // rotation failure can never cost this kept log its hint (see TryRotateFiles).
+            var hint = $"[full output: {filePath}]";
+
             // Rotation runs here, on the keep path, rather than when the session was opened: at
             // open time it is not yet known whether this run's log will be kept at all, and
             // rotating before that decision would let a run destined for deletion (a success in
             // Failures mode, or a body under the guard) evict an older log it was never going to
             // replace. The stream is closed first so a file this call decides to delete cannot
             // still be open on platforms that refuse to delete an in-use handle.
-            FileTeeService.RotateFiles(teeDir, maxFiles);
-            return $"[full output: {filePath}]";
+            TryRotateFiles();
+            return hint;
+        }
+
+        void TryRotateFiles()
+        {
+            try
+            {
+                FileTeeService.RotateFiles(teeDir, maxFiles);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Intentional: rotation is best-effort housekeeping, not part of this run's outcome.
+                // File.Delete inside RotateFiles can throw IOException — reachable on Windows, where
+                // FileTeeService opens log files without FileShare.Delete, so a concurrently running
+                // dtk process's own open log cannot be unlinked here. Left uncaught, this would
+                // propagate to FinalizeAsync's outer catch, which returns null — silently costing
+                // the user the "[full output: …]" hint (or, on the discard path, no hint to lose,
+                // but still an unrelated failure) even though the log itself was written and, on the
+                // keep path, already correctly kept.
+            }
         }
     }
 
