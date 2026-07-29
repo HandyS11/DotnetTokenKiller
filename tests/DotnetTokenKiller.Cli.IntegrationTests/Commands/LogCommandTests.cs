@@ -34,6 +34,15 @@ public sealed class LogCommandTests
             Task.FromResult(bodies.TryGetValue(entry.FilePath, out var b) ? b : string.Empty);
     }
 
+    private sealed class ThrowingBodyStore(params TeeLogEntry[] entries) : ITeeLogStore
+    {
+        public Task<IReadOnlyList<TeeLogEntry>> ListAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<TeeLogEntry>>([.. entries.OrderByDescending(e => e.TimestampUtc)]);
+
+        public Task<string> ReadBodyAsync(TeeLogEntry entry, CancellationToken cancellationToken = default) =>
+            throw new IOException("log file deleted by rotation");
+    }
+
     private sealed class FakeWorkingDirectory(string path) : IWorkingDirectory
     {
         public string Current => path;
@@ -236,6 +245,18 @@ public sealed class LogCommandTests
         // The Entry helper builds its command line from the slug, so this is "dotnet list-package".
         console.Output.Should().Contain("list-package");
         console.Output.Should().NotContain("dotnet build");
+    }
+
+    [Fact]
+    public async Task Run_ReportsUnavailable_WhenTheLogFileWasRotatedAwayBeforeReading()
+    {
+        var (command, console, _) = Create(new ThrowingBodyStore(Entry(5, "build")));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("no longer available");
+        console.Output.Should().Contain("--list");
     }
 
     [Theory]

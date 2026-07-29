@@ -59,6 +59,28 @@ public sealed class TeeDirectoryResolverTests
     }
 
     [Fact]
+    public void Resolve_FallsBackToTheDefault_WhenConfigDirectoryIsWhitespaceOnly()
+    {
+        WithEnvironment(null, () =>
+        {
+            var config = new TeeConfig(TeeMode.Always, "   ");
+
+            TeeDirectoryResolver.Resolve(config, null).Should().Be(TeeDirectoryResolver.GetDefault());
+        });
+    }
+
+    [Fact]
+    public void Resolve_TrimsTheConfigDirectory_WhenItHasSurroundingWhitespace()
+    {
+        WithEnvironment(null, () =>
+        {
+            var config = new TeeConfig(TeeMode.Always, "  /from/config  ");
+
+            TeeDirectoryResolver.Resolve(config, null).Should().Be("/from/config");
+        });
+    }
+
+    [Fact]
     public void GetDefault_IsRootedAndUnderADtkDirectory()
     {
         var path = TeeDirectoryResolver.GetDefault();

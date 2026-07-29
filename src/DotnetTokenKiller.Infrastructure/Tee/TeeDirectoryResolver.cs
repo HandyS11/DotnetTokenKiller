@@ -29,7 +29,8 @@ public static class TeeDirectoryResolver
         }
 
         var fromEnvironment = EnvironmentOverride.Read(EnvironmentVariable);
-        return fromEnvironment ?? (string.IsNullOrEmpty(config.Directory) ? GetDefault() : config.Directory);
+        return fromEnvironment
+            ?? (string.IsNullOrWhiteSpace(config.Directory) ? GetDefault() : config.Directory.Trim());
     }
 
     /// <summary>Returns the platform-default tee directory.</summary>

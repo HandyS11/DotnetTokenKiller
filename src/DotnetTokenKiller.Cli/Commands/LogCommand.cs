@@ -92,7 +92,19 @@ internal sealed class LogCommand(
             return 0;
         }
 
-        var result = await logView.ViewAsync(query, cancellationToken).ConfigureAwait(false);
+        LogViewResult result;
+        try
+        {
+            result = await logView.ViewAsync(query, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            console.MarkupLine(
+                "[red]That log file is no longer available[/] — most likely rotated away since it "
+                + "was listed. Use [bold]--list[/] to see what is currently there.");
+            return 1;
+        }
+
         if (result.View is null)
         {
             if (result.Selection.Matches.Count > 0)
