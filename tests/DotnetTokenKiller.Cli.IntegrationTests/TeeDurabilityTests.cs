@@ -36,7 +36,7 @@ public sealed class TeeDurabilityTests
             process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync();
 
-            var text = await File.ReadAllTextAsync(logPath!);
+            var text = await File.ReadAllTextAsync(logPath);
             TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
             header.Status.Should().Be(TeeLogStatus.Running);
             header.CommandLine.Should().Contain("build");

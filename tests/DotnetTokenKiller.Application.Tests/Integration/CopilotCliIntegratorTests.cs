@@ -56,7 +56,7 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         var root = JsonNode.Parse(await File.ReadAllTextAsync(HookJsonPath)) as JsonObject;
 
         root.Should().NotBeNull();
-        root!["version"]!.GetValue<int>().Should().Be(1);
+        root["version"]!.GetValue<int>().Should().Be(1);
         var entry = root["hooks"]!["preToolUse"]!.AsArray()[0]!;
         entry["type"]!.GetValue<string>().Should().Be("command");
         entry["matcher"]!.GetValue<string>().Should().Be("bash");

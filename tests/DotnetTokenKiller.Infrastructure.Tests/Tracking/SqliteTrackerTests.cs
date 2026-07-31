@@ -258,11 +258,11 @@ public class SqliteTrackerTests : IAsyncDisposable
         var buildDetail = summary.CommandDetails["build"];
         buildDetail.RunCount.Should().Be(3);
         buildDetail.SuccessDetail.Should().NotBeNull();
-        buildDetail.SuccessDetail!.RunCount.Should().Be(2);
+        buildDetail.SuccessDetail.RunCount.Should().Be(2);
         buildDetail.SuccessDetail.TotalSavedTokens.Should().Be(1700);
         buildDetail.SuccessDetail.AverageSavingsPercentage.Should().BeApproximately(80.0, 0.001);
         buildDetail.FailureDetail.Should().NotBeNull();
-        buildDetail.FailureDetail!.RunCount.Should().Be(1);
+        buildDetail.FailureDetail.RunCount.Should().Be(1);
         buildDetail.FailureDetail.TotalSavedTokens.Should().Be(500);
         buildDetail.FailureDetail.AverageSavingsPercentage.Should().BeApproximately(50.0, 0.001);
         // Combined: run-count-weighted average of per-status SQL AVG values
