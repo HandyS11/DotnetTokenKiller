@@ -113,7 +113,7 @@ public sealed class FileTeeLogStoreTests : IDisposable
         var entry = (await CreateSut().ListAsync()).Single();
 
         entry.Header.Should().NotBeNull();
-        entry.Header!.ProjectPath.Should().Be("/home/user/proj");
+        entry.Header.ProjectPath.Should().Be("/home/user/proj");
         entry.Header.ExitCode.Should().Be(2);
         entry.Slug.Should().Be("build");
         entry.SizeBytes.Should().BeGreaterThan(0);
@@ -192,7 +192,7 @@ public sealed class FileTeeLogStoreTests : IDisposable
         var entry = (await CreateSut().ListAsync()).Single();
 
         entry.Header.Should().NotBeNull();
-        entry.Header!.ExitCode.Should().Be(0);
+        entry.Header.ExitCode.Should().Be(0);
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class FileTeeLogStoreTests : IDisposable
         var store = new FileTeeLogStore(config, _tempDir);
         var entry = (await store.ListAsync()).Single();
         entry.Header.Should().NotBeNull();
-        entry.Header!.ProjectPath.Should().Be("/home/user/proj");
+        entry.Header.ProjectPath.Should().Be("/home/user/proj");
         entry.Header.ExitCode.Should().Be(1);
         entry.Slug.Should().Be("list-package");
         // WriteLineAsync appends the session's forced "\n", so the round-tripped body carries one
@@ -254,7 +254,7 @@ public sealed class FileTeeLogStoreTests : IDisposable
         var body = await sut.ReadBodyAsync(entry);
 
         entry.Header.Should().NotBeNull();
-        entry.Header!.Status.Should().Be(TeeLogStatus.Running);
+        entry.Header.Status.Should().Be(TeeLogStatus.Running);
         body.Should().Contain("in flight");
     }
 }

@@ -231,7 +231,7 @@ public sealed class FileTeeServiceTests : IDisposable
 
         hint.Should().NotBeNull();
         const string prefix = "[full output: ";
-        var newFileName = Path.GetFileName(hint![prefix.Length..^1]);
+        var newFileName = Path.GetFileName(hint[prefix.Length..^1]);
         var remaining = Directory.GetFiles(_tempDir, "*.log").Select(Path.GetFileName).ToList();
         remaining.Should().HaveCount(2);
         remaining.Should().Contain(newFileName);

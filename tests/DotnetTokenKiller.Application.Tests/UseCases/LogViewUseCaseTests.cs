@@ -134,7 +134,7 @@ public sealed class LogViewUseCaseTests
         var result = await sut.ViewAsync(new LogQuery(ProjectPath: "/proj", Lines: 3));
 
         result.View.Should().NotBeNull();
-        result.View!.TotalLines.Should().Be(10);
+        result.View.TotalLines.Should().Be(10);
         result.View.ShownLines.Should().Be(3);
         result.View.Body.Should().Be("line 8\nline 9\nline 10");
     }
