@@ -95,11 +95,11 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
                 // the guard to whichever is smaller instead.
                 return new FileTeeSession(stream, filePath, regionOffset, regionLength,
                     new TeeSessionPolicy(
-                        teeConfig.MaxFileSizeBytes,
+                        MaxBodyBytes: teeConfig.MaxFileSizeBytes,
                         MinBodyBytes: Math.Min(500L, teeConfig.MaxFileSizeBytes),
-                        teeConfig.Mode == TeeMode.Failures,
-                        teeDir,
-                        teeConfig.MaxFiles));
+                        KeepOnlyOnFailure: teeConfig.Mode == TeeMode.Failures,
+                        TeeDir: teeDir,
+                        MaxFiles: teeConfig.MaxFiles));
             }
             catch
             {

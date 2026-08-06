@@ -36,9 +36,10 @@ internal sealed class GainCommand(
         var projectPath = settings.Project ? Environment.CurrentDirectory : null;
         var commandFilter = settings.Command;
 
-        if (settings.Export is not null)
+        if (settings.Export is { } format)
         {
-            return await ExportAsync(settings, projectPath, commandFilter, cancellationToken).ConfigureAwait(false);
+            return await ExportAsync(format, settings, projectPath, commandFilter, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         if (settings.Coverage)
@@ -69,20 +70,24 @@ internal sealed class GainCommand(
     }
 
     /// <summary>Writes the history as CSV to the raw writer.</summary>
-    /// <param name="settings">The parsed settings; <c>Export</c> is known to be non-null.</param>
+    /// <param name="format">The requested export format, taken as a parameter rather than read back
+    /// off <paramref name="settings"/> so the "already known to be set" contract is the signature's
+    /// rather than a comment's.</param>
+    /// <param name="settings">The parsed settings, for the window and scope of the export.</param>
     /// <param name="projectPath">The project to scope to, or <see langword="null"/> for every project.</param>
     /// <param name="commandFilter">The subcommand to scope to, or <see langword="null"/> for all.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>0 on success, 1 when the requested format is not one dtk exports.</returns>
     private async Task<int> ExportAsync(
+        string format,
         GainCommandSettings settings,
         string? projectPath,
         string? commandFilter,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(settings.Export, "csv", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
         {
-            console.MarkupLine($"[red]Unknown export format:[/] {settings.Export!.EscapeMarkup()}. Supported: csv");
+            console.MarkupLine($"[red]Unknown export format:[/] {format.EscapeMarkup()}. Supported: csv");
             return 1;
         }
 
