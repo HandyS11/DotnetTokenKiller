@@ -245,7 +245,7 @@ public sealed class FileTeeLogStoreTests : IDisposable
         await stream.WriteAsync(headerBytes);
         await stream.FlushAsync();
         await using var session = new FileTeeSession(
-            stream, path, offset, Encoding.UTF8.GetByteCount(region), 1_048_576L, 0, false);
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
         await session.Writer.WriteLineAsync("in flight".AsMemory(), CancellationToken.None);
         await session.Writer.FlushAsync(CancellationToken.None);
 

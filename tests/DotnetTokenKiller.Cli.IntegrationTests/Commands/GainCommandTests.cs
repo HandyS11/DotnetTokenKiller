@@ -476,9 +476,11 @@ public class GainCommandTests
                     "publish",
                     "/my/project",
                     new TokenStatistics(1000, 1000, 0, 0.0),
-                    TimeSpan.FromMilliseconds(500),
-                    success: true,
-                    outcome: RunOutcome.PassthroughMeasured)
+                    TimeSpan.FromMilliseconds(500))
+                {
+                    Success = true,
+                    Outcome = RunOutcome.PassthroughMeasured
+                }
             ]
         };
         var command = new GainCommand(new GainReportUseCase(tracker), new TestConsole(), writer);

@@ -17,29 +17,15 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// <param name="filePath">The log's path, used for the hint and for deletion.</param>
 /// <param name="statusRegionOffset">Byte offset of the status/exit region within the file.</param>
 /// <param name="statusRegionLength">Byte length of that region.</param>
-/// <param name="maxBodyBytes">The body's byte budget; appends stop once it is reached.</param>
-/// <param name="minBodyBytes">Bodies smaller than this are discarded when the run completes.</param>
-/// <param name="keepOnlyOnFailure">Whether a successful run's log is discarded.</param>
-/// <param name="teeDir">
-/// The tee directory, rotated once this log's fate (kept or discarded) is decided. Unused (and safe
-/// to leave default) when <paramref name="maxFiles"/> disables rotation.
-/// </param>
-/// <param name="maxFiles">
-/// Maximum number of tee files to retain once this one is kept or discarded; non-positive disables
-/// rotation.
-/// </param>
+/// <param name="policy">The size and retention rules to apply when the run completes.</param>
 public sealed class FileTeeSession(
     FileStream stream,
     string filePath,
     long statusRegionOffset,
     int statusRegionLength,
-    long maxBodyBytes,
-    long minBodyBytes,
-    bool keepOnlyOnFailure,
-    string teeDir = "",
-    int maxFiles = 0) : ITeeSession
+    TeeSessionPolicy policy) : ITeeSession
 {
-    private readonly SessionWriter _writer = new(stream, maxBodyBytes);
+    private readonly SessionWriter _writer = new(stream, policy.MaxBodyBytes);
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -73,7 +59,7 @@ public sealed class FileTeeSession(
         {
             await stream.FlushAsync(ct).ConfigureAwait(false);
 
-            if ((keepOnlyOnFailure && exitCode == 0) || _writer.BodyBytesWritten < minBodyBytes)
+            if ((policy.KeepOnlyOnFailure && exitCode == 0) || _writer.BodyBytesWritten < policy.MinBodyBytes)
             {
                 await DisposeAsync().ConfigureAwait(false);
                 File.Delete(filePath);
@@ -125,7 +111,7 @@ public sealed class FileTeeSession(
         {
             try
             {
-                FileTeeService.RotateFiles(teeDir, maxFiles);
+                FileTeeService.RotateFiles(policy.TeeDir, policy.MaxFiles);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

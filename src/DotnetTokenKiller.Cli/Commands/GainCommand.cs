@@ -38,49 +38,13 @@ internal sealed class GainCommand(
 
         if (settings.Export is not null)
         {
-            if (!string.Equals(settings.Export, "csv", StringComparison.OrdinalIgnoreCase))
-            {
-                console.MarkupLine($"[red]Unknown export format:[/] {settings.Export.EscapeMarkup()}. Supported: csv");
-                return 1;
-            }
-
-            var records = await gainReport.GetHistoryAsync(settings.Days, projectPath, commandFilter, cancellationToken)
-                .ConfigureAwait(false);
-            var sb = new StringBuilder();
-            sb.AppendLine(CsvHeader);
-            foreach (var r in records)
-            {
-                sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)},{(r.Success ? 1 : 0)},{r.Outcome},{r.Source}");
-            }
-
-            await output.WriteAsync(sb.ToString()).ConfigureAwait(false);
-            return 0;
+            return await ExportAsync(settings, projectPath, commandFilter, cancellationToken).ConfigureAwait(false);
         }
 
         if (settings.Coverage)
         {
-            var coverage = await gainReport.GetCoverageAsync(settings.Days, projectPath, commandFilter,
-                    cancellationToken)
+            return await RenderCoverageAsync(settings, projectPath, commandFilter, cancellationToken)
                 .ConfigureAwait(false);
-
-            if (settings.Json)
-            {
-                var coverageJson = JsonSerializer.Serialize(coverage,
-                    GainSummaryJsonContext.Default.CoverageSummary);
-                await output.WriteLineAsync(coverageJson).ConfigureAwait(false);
-                return 0;
-            }
-
-            if (coverage.TotalRuns == 0)
-            {
-                console.MarkupLine(
-                    "[grey]No data yet. Run some [bold]dtk dotnet[/] commands to start tracking coverage.[/]");
-                return 0;
-            }
-
-            GainDashboardRenderer.RenderCoverage(console, coverage, BuildScope(settings));
-            return 0;
         }
 
         var summary = await gainReport.GetSummaryAsync(settings.Days, projectPath, commandFilter, cancellationToken)
@@ -101,6 +65,71 @@ internal sealed class GainCommand(
         }
 
         GainDashboardRenderer.Render(console, summary, BuildScope(settings));
+        return 0;
+    }
+
+    /// <summary>Writes the history as CSV to the raw writer.</summary>
+    /// <param name="settings">The parsed settings; <c>Export</c> is known to be non-null.</param>
+    /// <param name="projectPath">The project to scope to, or <see langword="null"/> for every project.</param>
+    /// <param name="commandFilter">The subcommand to scope to, or <see langword="null"/> for all.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>0 on success, 1 when the requested format is not one dtk exports.</returns>
+    private async Task<int> ExportAsync(
+        GainCommandSettings settings,
+        string? projectPath,
+        string? commandFilter,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(settings.Export, "csv", StringComparison.OrdinalIgnoreCase))
+        {
+            console.MarkupLine($"[red]Unknown export format:[/] {settings.Export!.EscapeMarkup()}. Supported: csv");
+            return 1;
+        }
+
+        var records = await gainReport.GetHistoryAsync(settings.Days, projectPath, commandFilter, cancellationToken)
+            .ConfigureAwait(false);
+        var sb = new StringBuilder();
+        sb.AppendLine(CsvHeader);
+        foreach (var r in records)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                $"{r.Timestamp:O},{EscapeCsv(r.Command)},{EscapeCsv(r.ProjectPath)},{r.InputTokens},{r.OutputTokens},{r.SavedTokens},{r.SavingsPercentage.ToString("F4", CultureInfo.InvariantCulture)},{r.ExecutionTime.TotalMilliseconds.ToString("F2", CultureInfo.InvariantCulture)},{(r.Success ? 1 : 0)},{r.Outcome},{r.Source}");
+        }
+
+        await output.WriteAsync(sb.ToString()).ConfigureAwait(false);
+        return 0;
+    }
+
+    /// <summary>Writes the coverage report, as JSON or as the human-readable dashboard.</summary>
+    /// <param name="settings">The parsed settings.</param>
+    /// <param name="projectPath">The project to scope to, or <see langword="null"/> for every project.</param>
+    /// <param name="commandFilter">The subcommand to scope to, or <see langword="null"/> for all.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Always 0: an empty report is a legitimate answer, not a failure.</returns>
+    private async Task<int> RenderCoverageAsync(
+        GainCommandSettings settings,
+        string? projectPath,
+        string? commandFilter,
+        CancellationToken cancellationToken)
+    {
+        var coverage = await gainReport.GetCoverageAsync(settings.Days, projectPath, commandFilter, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (settings.Json)
+        {
+            var coverageJson = JsonSerializer.Serialize(coverage, GainSummaryJsonContext.Default.CoverageSummary);
+            await output.WriteLineAsync(coverageJson).ConfigureAwait(false);
+            return 0;
+        }
+
+        if (coverage.TotalRuns == 0)
+        {
+            console.MarkupLine(
+                "[grey]No data yet. Run some [bold]dtk dotnet[/] commands to start tracking coverage.[/]");
+            return 0;
+        }
+
+        GainDashboardRenderer.RenderCoverage(console, coverage, BuildScope(settings));
         return 0;
     }
 

@@ -208,10 +208,12 @@ public sealed class FilteredOutputPipeline(
                 request.CommandSlug,
                 Environment.CurrentDirectory,
                 new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
-                elapsed,
-                request.ExitCode == 0,
-                outcome,
-                request.Source);
+                elapsed)
+            {
+                Success = request.ExitCode == 0,
+                Outcome = outcome,
+                Source = request.Source
+            };
 
             await tracker.RecordAsync(record, cancellationToken).ConfigureAwait(false);
         }

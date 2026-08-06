@@ -69,7 +69,7 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Flush();
 
         var session = new FileTeeSession(stream, path, offset, Encoding.UTF8.GetByteCount(region),
-            maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles);
+            new TeeSessionPolicy(maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles));
         return (session, path);
     }
 
@@ -272,7 +272,7 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Flush();
 #pragma warning restore CA1849, VSTHRD103, S6966
         await using var session = new FileTeeSession(
-            stream, path, offset, Encoding.UTF8.GetByteCount(region), 1_048_576L, 0, false);
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
 
         var act = async () => await session.Writer.WriteLineAsync("first".AsMemory(), CancellationToken.None);
         await act.Should().NotThrowAsync();
@@ -305,7 +305,7 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Flush();
 #pragma warning restore CA1849, VSTHRD103, S6966
         await using var session = new FileTeeSession(
-            stream, path, offset, Encoding.UTF8.GetByteCount(region), 1_048_576L, 0, false);
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
         await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
 
         stream.ThrowOnFlush = true;
@@ -372,7 +372,8 @@ public sealed class FileTeeSessionTests : IDisposable
         await stream.WriteAsync(bytes);
         await stream.FlushAsync();
         var session = new FileTeeSession(
-            stream, path, statusRegionOffset: 0, Encoding.UTF8.GetByteCount(region), 1_048_576L, 0, false);
+            stream, path, statusRegionOffset: 0, Encoding.UTF8.GetByteCount(region),
+            new TeeSessionPolicy(1_048_576L, 0, false));
         await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
 
         var hint = await session.FinalizeAsync(0);

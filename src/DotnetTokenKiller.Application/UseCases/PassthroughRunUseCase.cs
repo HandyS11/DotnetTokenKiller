@@ -181,9 +181,11 @@ public sealed class PassthroughRunUseCase(
                 commandName,
                 Environment.CurrentDirectory,
                 new TokenStatistics(tokens, tokens, 0, 0.0),
-                elapsed,
-                exitCode == 0,
-                outcome);
+                elapsed)
+            {
+                Success = exitCode == 0,
+                Outcome = outcome
+            };
 
             await tracker.RecordAsync(record, cancellationToken).ConfigureAwait(false);
         }
