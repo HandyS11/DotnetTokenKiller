@@ -211,6 +211,52 @@ public class DotnetFormatFilterTests
         result.Should().NotContain("nothing to format");
     }
 
+    [Fact]
+    public void Apply_UnparseableElapsedValue_OmitsElapsedRatherThanReportingGarbage()
+    {
+        // The pattern accepts any run of digits and dots, so a value it cannot parse as a number
+        // reaches the summary builder. Dropping the elapsed part is the only honest option.
+        const string input = "Format complete in 1.2.3ms.";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet format (nothing to format)\n");
+    }
+
+    [Fact]
+    public void Apply_ElapsedWithNoFormattedFiles_ReportsNothingToFormatWithElapsed()
+    {
+        const string input = "Loading workspace.\nFormat complete in 2345ms.";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet format (nothing to format, 2.35s)\n");
+    }
+
+    [Fact]
+    public void Apply_WhitespaceOnlyOutputOnFailure_ReturnsEmpty()
+    {
+        // A failing run that printed nothing must not be dressed up as a success — blank output
+        // lets FilteredRunUseCase's raw-tail fallback show whatever really happened.
+        var result = _sut.Apply("   \n\t\n", exitCode: 1);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_DefaultRootPath_ShortensViolationPathsAgainstTheWorkingDirectory()
+    {
+        // The no-argument constructor is what DI uses; it falls back to the current directory.
+        var filter = new DotnetFormatFilter();
+        var input = $"{Path.Combine(Environment.CurrentDirectory, "src", "App.cs")}"
+                    + "(3,5): error WHITESPACE: Fix whitespace formatting.";
+
+        var result = filter.Apply(input, exitCode: 1);
+
+        result.Should().Contain("dotnet format: 1 violation");
+        result.Should().NotContain(Environment.CurrentDirectory);
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetFormatFilterTests).Assembly;

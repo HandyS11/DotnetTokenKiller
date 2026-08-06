@@ -202,6 +202,48 @@ public sealed class LogViewUseCaseTests
     }
 
     [Fact]
+    public async Task ViewAsync_ReturnsNoView_WhenTheIndexIsBelowOne()
+    {
+        // The command validates this too, but the use case is also reachable directly (and from the
+        // --list path), so a zero or negative index must not index into the match list.
+        var sut = new LogViewUseCase(new FakeStore(Entry(5, "build", "/proj")));
+
+        var result = await sut.ViewAsync(new LogQuery(ProjectPath: "/proj", Index: 0));
+
+        result.View.Should().BeNull();
+        result.Selection.Matches.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task ViewAsync_DoesNotInventATrailingBlankLine_WhenTheBodyHasNoFinalNewline()
+    {
+        // A log from a run killed mid-line ends without a newline. Counting a phantom empty line
+        // would make "showing last N of M" disagree with what the user can see.
+        var entry = Entry(5, "build", "/proj");
+        var sut = new LogViewUseCase(new FakeStore(entry).WithBody(entry, "line 1\nline 2"));
+
+        var result = await sut.ViewAsync(new LogQuery(ProjectPath: "/proj", Full: true));
+
+        result.View.Should().NotBeNull();
+        result.View.TotalLines.Should().Be(2);
+        result.View.Body.Should().Be("line 1\nline 2");
+    }
+
+    [Fact]
+    public async Task SelectAsync_MatchesTheFilesystemRoot_WithoutReducingItToNothing()
+    {
+        // Trimming the trailing separator from "/" (or "C:\") would leave an empty string, which
+        // matches nothing — so a run launched from the root would never find its own logs.
+        var root = Path.GetPathRoot(Path.GetFullPath("/"))!;
+        var entry = Entry(5, "build", root);
+        var sut = new LogViewUseCase(new FakeStore(entry));
+
+        var selection = await sut.SelectAsync(new LogQuery(ProjectPath: root));
+
+        selection.Matches.Should().ContainSingle().Which.Should().Be(entry);
+    }
+
+    [Fact]
     public async Task ViewAsync_ReturnsNoView_WhenNothingMatched()
     {
         var sut = new LogViewUseCase(new FakeStore());

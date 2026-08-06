@@ -287,6 +287,74 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task Writer_FlushDoesNotThrow_AndLatches_WhenTheUnderlyingStreamFailsToFlush()
+    {
+        // The pump flushes after every line, so a failing flush reaches the user's command by the
+        // same route a failing write would. It must be swallowed and latched identically — once
+        // latched, later flushes must not even touch the stream.
+        var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.log");
+        await using var stream = new ThrowingFileStream(path);
+        var rendered = RunningHeader().Render();
+        var region = TeeLogHeader.RenderStatusAndExit(null);
+        var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
+        var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
+        var headerBytes = Encoding.UTF8.GetBytes(rendered);
+#pragma warning disable CA1849, VSTHRD103, S6966
+        stream.Write(headerBytes, 0, headerBytes.Length);
+        stream.Flush();
+#pragma warning restore CA1849, VSTHRD103, S6966
+        await using var session = new FileTeeSession(
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
+
+        stream.ThrowOnFlush = true;
+        var act = async () => await session.Writer.FlushAsync(CancellationToken.None);
+        await act.Should().NotThrowAsync();
+
+        // Latched: the stream would flush fine now, but the sink is done for the rest of the run,
+        // so the write below never reaches the file either.
+        stream.ThrowOnFlush = false;
+        await session.Writer.FlushAsync(CancellationToken.None);
+        await session.Writer.WriteLineAsync("after the failure".AsMemory(), CancellationToken.None);
+        await session.Writer.FlushAsync();
+
+        TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Writer_ReportsUtf8AndLineFeed_AndIgnoresAttemptsToChangeTheLineEnding()
+    {
+        // PumpAsync captures sink.NewLine to build the text it hands the filter, so this property
+        // is what keeps that text identical on every platform — it must stay LF even if set.
+        var (session, _) = CreateSut(minBodyBytes: 0);
+
+        session.Writer.Encoding.Should().Be(Encoding.UTF8);
+        session.Writer.NewLine.Should().Be("\n");
+
+        session.Writer.NewLine = "\r\n";
+
+        session.Writer.NewLine.Should().Be("\n");
+        await session.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Writer_IgnoresSingleCharacterWrites_WhichTheLineBasedPumpNeverUses()
+    {
+        // Write(char) exists only because TextWriter requires it; routing it through the async path
+        // would deadlock, so it must be a no-op rather than reach the file by some other route.
+        var (session, path) = CreateSut(minBodyBytes: 0);
+
+        // Sync on purpose: this is the path TextWriter's non-async members funnel into, and the
+        // point of the test is that it reaches the file through no route at all.
+#pragma warning disable CA1849, VSTHRD103, S6966
+        session.Writer.Write('x');
+        session.Writer.Write("ignored too");
+#pragma warning restore CA1849, VSTHRD103, S6966
+        await session.FinalizeAsync(0);
+
+        TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path)).Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task FinalizeAsync_DoesNotThrow_WhenDisposalFailsAfterAWriteFailure()
     {
         // Reproduces the outer catch's own cleanup throwing: FlushAsync fails first (e.g. disk

@@ -9,4 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj"/>
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DotnetTokenKiller.Infrastructure.Tests"/>
+  </ItemGroup>
 </Project>

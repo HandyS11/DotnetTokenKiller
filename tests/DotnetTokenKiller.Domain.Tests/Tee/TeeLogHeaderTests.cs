@@ -231,6 +231,134 @@ public sealed class TeeLogHeaderTests
         TeeLogHeader.TryParse(contradictory, out _).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void TryParse_ReturnsFalse_ForEmptyText(string? text)
+    {
+        // A zero-length log file is the normal shape of a run killed before its header was flushed.
+        TeeLogHeader.TryParse(text!, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenAFieldLineHasNoColon()
+    {
+        const string text = "# dtk-log v2\n# command dotnet build\n---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenTheTextEndsMidHeader()
+    {
+        // Every line is well formed, but the text runs out before the delimiter — the shape of a
+        // header still being written when the reader looked.
+        const string text = "# dtk-log v2\n# command: dotnet build\n# cwd: /tmp";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenAFieldLineDoesNotStartWithAHash()
+    {
+        const string text = "# dtk-log v2\ncommand: dotnet build\n---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_ForAKeyThisVersionDoesNotWrite()
+    {
+        // An unknown key means the file was written by something that is not this grammar; reading
+        // the fields we do recognise and ignoring the rest would silently accept a foreign format.
+        const string text =
+            "# dtk-log v2\n"
+            + "# command: dotnet build\n"
+            + "# cwd: /tmp\n"
+            + "# nonsense: whatever\n"
+            + "# source: Run\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "# status: complete\n"
+            + "# exit:   0\n"
+            + "---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenTheSourceIsNotAKnownRunSource()
+    {
+        const string text =
+            "# dtk-log v2\n"
+            + "# command: dotnet build\n"
+            + "# cwd: /tmp\n"
+            + "# source: Telepathy\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "# status: complete\n"
+            + "# exit:   0\n"
+            + "---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenTheTimestampIsNotADate()
+    {
+        const string text =
+            "# dtk-log v2\n"
+            + "# command: dotnet build\n"
+            + "# cwd: /tmp\n"
+            + "# source: Run\n"
+            + "# utc: last Tuesday\n"
+            + "# status: complete\n"
+            + "# exit:   0\n"
+            + "---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenTheStatusIsNeitherRunningNorComplete()
+    {
+        const string text =
+            "# dtk-log v2\n"
+            + "# command: dotnet build\n"
+            + "# cwd: /tmp\n"
+            + "# source: Run\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "# status: puzzled \n"
+            + "# exit:   0          \n"
+            + "---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenACompleteRunsExitIsNotAnInteger()
+    {
+        const string text =
+            "# dtk-log v2\n"
+            + "# command: dotnet build\n"
+            + "# cwd: /tmp\n"
+            + "# source: Run\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "# status: complete\n"
+            + "# exit:   banana     \n"
+            + "---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void StripHeader_RemovesACrLfHeader()
+    {
+        // A log copied through a CRLF-normalizing tool still parses, so stripping must find the
+        // delimiter in that form too — otherwise the whole header is shown as if it were body.
+        var text = (Sample().Render() + "line one\n").Replace("\n", "\r\n", StringComparison.Ordinal);
+
+        TeeLogHeader.StripHeader(text).Should().Be("line one\r\n");
+    }
+
     [Fact]
     public void StripHeader_RemovesAV2Header()
     {

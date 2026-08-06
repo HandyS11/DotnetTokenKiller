@@ -149,6 +149,35 @@ public sealed class LogCommandTests
     }
 
     [Fact]
+    public async Task Run_ExplainsTheSizeFloorOnly_WhenEveryRunIsAlreadyKept()
+    {
+        // With tee.mode Always, "only failures are saved" would be wrong guidance; the 500-character
+        // floor is then the sole reason a run left nothing behind.
+        var (command, console, _) = Create(new FakeStore([]), TeeMode.Always);
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("500");
+        console.Output.Should().NotContain("Failures");
+    }
+
+    [Fact]
+    public async Task Run_ListWithNoMatches_ExplainsRatherThanPrintingAnEmptyTable()
+    {
+        // --list takes its own path to the store, so it needs its own empty-result handling; an
+        // empty table with a zero exit code would read as "nothing is wrong".
+        var (command, console, _) = Create(new FakeStore([]), TeeMode.Always);
+
+        var exitCode = await command.RunAsync(
+            new LogCommandSettings { List = true, All = true }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("no logs found");
+        console.Output.Should().NotContain("no logs for this project");
+    }
+
+    [Fact]
     public async Task Run_ReportsTheAvailableCount_WhenTheIndexIsTooHigh()
     {
         var entry = Entry(5, "build");

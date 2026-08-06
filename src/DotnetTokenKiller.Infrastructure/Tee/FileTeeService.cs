@@ -144,14 +144,12 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
     {
         // Tee logs can carry secrets from a failed command's output, so both the directory and the
         // file are kept owner-only (0700 / 0600). On Windows this is a no-op (POSIX modes only).
-        if (OperatingSystem.IsWindows())
+        if (!OperatingSystem.IsWindows())
         {
-            return;
+            File.SetUnixFileMode(
+                teeDir,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
-
-        File.SetUnixFileMode(
-            teeDir,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
     /// <summary>Deletes the oldest tee logs in excess of <paramref name="maxFiles"/>.</summary>

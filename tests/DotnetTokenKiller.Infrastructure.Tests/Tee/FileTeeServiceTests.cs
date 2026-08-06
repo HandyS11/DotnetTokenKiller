@@ -290,6 +290,27 @@ public sealed class FileTeeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task BeginAsync_ClosesTheLogFile_WhenTheHeaderWriteIsCancelled()
+    {
+        // Cancellation is the one failure that must not degrade to a NullTeeSession — it means the
+        // caller is stopping, not that tee broke. The stream is opened before the header is written,
+        // and ownership only transfers to the session on success, so this path has to close the file
+        // itself; a leaked handle would keep the empty log locked for the rest of the process.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var act = async () => await sut.BeginAsync("build", RunningHeader(), cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        var log = Directory.GetFiles(_tempDir, "*.log").Should().ContainSingle().Subject;
+        new FileInfo(log).Length.Should().Be(0); // the header never made it out
+        // Opening with FileShare.None fails if the service leaked its handle (observable on Windows).
+        var reopen = () => new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.None).Dispose();
+        reopen.Should().NotThrow();
+    }
+
+    [Fact]
     public async Task BeginAsync_ConfigProviderThrows_ReturnsNullSession()
     {
         // Covers the catch-all block: exceptions raised while opening the log must never surface.

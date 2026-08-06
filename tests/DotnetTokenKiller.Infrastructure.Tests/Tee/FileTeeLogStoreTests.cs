@@ -95,6 +95,52 @@ public sealed class FileTeeLogStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ListAsync_SkipsAnUnreadableLog_AndStillListsTheRest()
+    {
+        // One log the current user cannot open must not cost the user the whole listing. POSIX
+        // permission bits are a no-op on Windows, so this is guarded there.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        WriteLog(At(1), "build", "/proj", 0, "readable body");
+        WriteLog(At(5), "test", "/proj", 0, "secret body");
+        var unreadable = Directory.GetFiles(_tempDir)
+            .Single(p => Path.GetFileName(p).Contains("test", StringComparison.Ordinal));
+        var originalMode = File.GetUnixFileMode(unreadable);
+        try
+        {
+            File.SetUnixFileMode(unreadable, UnixFileMode.None);
+
+            // Running as root (common in CI containers) ignores 000 entirely, which would make the
+            // assertion below meaningless rather than merely skipped.
+            var reallyBlocked = false;
+            try
+            {
+                await File.ReadAllTextAsync(unreadable);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                reallyBlocked = true;
+            }
+
+            if (!reallyBlocked)
+            {
+                return;
+            }
+
+            var entries = await CreateSut().ListAsync();
+
+            entries.Should().ContainSingle().Which.Slug.Should().Be("build");
+        }
+        finally
+        {
+            File.SetUnixFileMode(unreadable, originalMode);
+        }
+    }
+
+    [Fact]
     public async Task ListAsync_OrdersNewestFirst()
     {
         WriteLog(At(1), "build", "/proj", 1, "old");

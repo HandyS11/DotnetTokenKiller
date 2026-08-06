@@ -32,6 +32,42 @@ public class PassthroughIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_TrackingAndTeeBothOff_OpensNeitherTheDatabaseNorALogAsync()
+    {
+        // The passthrough entry point exists to keep dtk's startup cost near zero for commands it
+        // does not filter. With nothing to record and nothing to log it must open neither store —
+        // a database file appearing here means that fast path silently regressed.
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tracking.enabled", "false");
+        await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tee.mode", "Never");
+        File.Delete(Path.Combine(dir, "tracking.db")); // `config set` itself is a tracked command
+
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "dotnet", "--version");
+
+        exitCode.Should().Be(0);
+        output.Should().NotBeEmpty();
+        File.Exists(Path.Combine(dir, "tracking.db")).Should().BeFalse();
+        Directory.Exists(Path.Combine(dir, "tee")).Should().BeFalse();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_TeeOnAndTrackingOff_WritesTheLogWithoutOpeningTheDatabaseAsync()
+    {
+        // Tee and tracking are independent switches. With only tee on, the log must still be
+        // written — and the database must still never be opened.
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tee.mode", "Always");
+        await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tracking.enabled", "false");
+        File.Delete(Path.Combine(dir, "tracking.db")); // `config set` itself is a tracked command
+
+        // A measurable subcommand: interactive ones keep their stdio attached and are never teed.
+        await IntegrationTestHelper.RunDtkInDirAsync(dir, "dotnet", "tool", "list");
+
+        File.Exists(Path.Combine(dir, "tracking.db")).Should().BeFalse();
+        Directory.Exists(Path.Combine(dir, "tee")).Should().BeTrue("a tee session was opened for the run");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Passthrough_MeasurableSubcommand_RecordsAMeasuredRow()
     {
         // An unfiltered run still leaves a trace. `dotnet list reference` is the exemplar: it is the

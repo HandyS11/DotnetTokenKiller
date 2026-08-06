@@ -397,6 +397,32 @@ public class GainCommandTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_Coverage_ReportsDegradedRuns()
+    {
+        // A filter that fell back to the raw tail, or faulted outright, still did its job badly
+        // rather than not at all — the report has to name both so they can be acted on.
+        var coverage = new CoverageSummary(
+            [
+                new CoverageDetail("test", RunOutcome.RawTailFallback, RunSource.Run, 2, 20_000,
+                    TimeSpan.FromSeconds(8)),
+                new CoverageDetail("restore", RunOutcome.FilterFaulted, RunSource.Pipe, 1, 5_000,
+                    TimeSpan.FromSeconds(2))
+            ],
+            3,
+            25_000);
+        var (command, console, _) = CreateForCoverage(coverage);
+
+        var exitCode = await command.RunAsync(new GainCommandSettings
+        {
+            Coverage = true
+        }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("RawTailFallback");
+        console.Output.Should().Contain("FilterFaulted");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_Coverage_NoData_WritesNoDataMessage()
     {
         var (command, console, _) = CreateForCoverage(new CoverageSummary([], 0, 0));

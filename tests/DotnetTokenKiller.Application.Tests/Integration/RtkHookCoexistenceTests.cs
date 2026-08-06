@@ -211,6 +211,80 @@ public sealed class RtkHookCoexistenceTests : IDisposable
         (await File.ReadAllTextAsync(RtkConfigPath)).Should().Be(original); // byte-unchanged
     }
 
+    [Theory]
+    [InlineData("""{ "permissions": { "allow": [] } }""")]                       // no hooks section
+    [InlineData("""{ "hooks": [] }""")]                                          // hooks is not an object
+    [InlineData("""{ "hooks": { "PostToolUse": [] } }""")]                       // no PreToolUse
+    [InlineData("""{ "hooks": { "PreToolUse": {} } }""")]                        // PreToolUse is not an array
+    [InlineData("""{ "hooks": { "PreToolUse": [ { "matcher": "Bash" } ] } }""")] // entry has no hooks array
+    [InlineData("""{ "hooks": { "PreToolUse": [ { "hooks": {} } ] } }""")]       // inner hooks is not an array
+    [InlineData("""{ "hooks": { "PreToolUse": [ { "hooks": [ { "type": "command" } ] } ] } }""")] // no command
+    [InlineData("""{ "hooks": { "PreToolUse": [ { "hooks": [ { "command": 42 } ] } ] } }""")]     // command not a string
+    public async Task IsRtkHookPresent_SettingsWithoutAnRtkHookCommand_ReturnsFalse(string settings)
+    {
+        // Every shape here is valid JSON that simply is not an rtk hook registration. Reading them
+        // must be a quiet "no", not a crash — these are another tool's files and dtk does not own them.
+        await WriteAsync(Path.Combine(UserClaudeDir, "settings.json"), settings);
+
+        CreateSut().IsRtkHookPresent(ProjectDir).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ReconcileRtkConfig_NestedArrayInsideExcludeCommands_LeavesFileUntouchedAndAdvises()
+    {
+        // The regex edit stops at the first ']', so a nested array makes the candidate text invalid
+        // TOML. The re-parse before writing is what catches that; without it this would clobber the file.
+        const string original = "[hooks]\nexclude_commands = [[\"a\"], \"git\"]\n";
+        await WriteAsync(RtkConfigPath, original);
+
+        var outcome = await CreateSut().ReconcileRtkConfigAsync(CancellationToken.None);
+
+        outcome.CreatedConfigPath.Should().BeNull();
+        outcome.UpdatedConfigPath.Should().BeNull();
+        outcome.Notes.Should().NotBeEmpty();
+        (await File.ReadAllTextAsync(RtkConfigPath)).Should().Be(original); // byte-unchanged
+    }
+
+    [Fact]
+    public async Task DefaultInstance_ResolvesTheRtkConfigUnderXdgConfigHome()
+    {
+        // The parameterless constructor is what production uses; these are the paths it picks.
+        var saved = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        var xdgHome = Path.Combine(_tempRoot, "xdg");
+        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", xdgHome);
+        try
+        {
+            var outcome = await new RtkHookCoexistence().ReconcileRtkConfigAsync(CancellationToken.None);
+
+            outcome.CreatedConfigPath.Should().Be(Path.Combine(xdgHome, "rtk", "config.toml"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", saved);
+        }
+    }
+
+    [Fact]
+    public void DefaultInstance_IgnoresARelativeXdgConfigHome_RatherThanWritingIntoTheWorkingDirectory()
+    {
+        // XDG requires an absolute path. Honoring a relative one would resolve a global config
+        // against whatever directory dtk happened to be launched from.
+        const string relative = "dtk-relative-xdg-should-be-ignored";
+        var saved = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", relative);
+        try
+        {
+            var act = () => new RtkHookCoexistence();
+
+            act.Should().NotThrow();
+            Directory.Exists(Path.Combine(Environment.CurrentDirectory, relative)).Should().BeFalse();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", saved);
+        }
+    }
+
     [Fact]
     public async Task ReconcileAsync_NoRtkHook_ReturnsNone()
     {

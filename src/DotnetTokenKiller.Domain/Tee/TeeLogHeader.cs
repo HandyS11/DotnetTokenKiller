@@ -252,16 +252,13 @@ public sealed record TeeLogHeader(
         var index = fileText.IndexOf(marker, StringComparison.Ordinal);
         if (index < 0)
         {
-            // CRLF variant; TryParse accepted it, so one of the two forms must be present.
+            // CRLF variant; TryParse accepted the text, so one of the two forms must be present —
+            // the not-found result below is unreachable in practice, kept only as the safe answer.
             marker = "\n" + Delimiter + "\r\n";
             index = fileText.IndexOf(marker, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                return fileText;
-            }
         }
 
-        return fileText[(index + marker.Length)..];
+        return index < 0 ? fileText : fileText[(index + marker.Length)..];
     }
 
     /// <summary>Resolves the exit field against the status field, rejecting any disagreement.</summary>

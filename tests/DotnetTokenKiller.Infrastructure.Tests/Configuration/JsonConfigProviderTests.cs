@@ -25,6 +25,34 @@ public sealed class JsonConfigProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task DefaultConstructor_HonoursTheConfigPathOverride_AndFallsBackWhenItIsBlank()
+    {
+        // The parameterless constructor is what production uses. Both halves of its path resolution
+        // are checked here; the fallback half is only constructed, never read or written, because
+        // its target is the developer's own %AppData%/dtk/config.json.
+        var saved = Environment.GetEnvironmentVariable("DTK_CONFIG_PATH");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfigPath, """{"tracking":{"retentionDays":42}}""");
+        try
+        {
+            Environment.SetEnvironmentVariable("DTK_CONFIG_PATH", ConfigPath);
+
+            (await new JsonConfigProvider().LoadAsync()).Tracking.RetentionDays.Should().Be(42);
+
+            // Blank is not a path: a whitespace override must fall through to the platform default
+            // rather than resolve to an empty file name.
+            Environment.SetEnvironmentVariable("DTK_CONFIG_PATH", "   ");
+            var fallback = () => new JsonConfigProvider();
+
+            fallback.Should().NotThrow();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DTK_CONFIG_PATH", saved);
+        }
+    }
+
+    [Fact]
     public void Load_ReturnsDefaults_WhenNoFileExists()
     {
         var sut = CreateSut();

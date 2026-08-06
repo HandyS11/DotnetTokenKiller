@@ -213,17 +213,11 @@ internal sealed partial class RtkHookCoexistence
                 }
             }
         }
-        catch (JsonException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            // Tolerate malformed settings — never fail integration over another tool's file.
-        }
-        catch (IOException)
-        {
-            // Tolerate a settings file we cannot read — never fail integration over another tool's file.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Tolerate a permission-denied settings file — never fail integration over another tool's file.
+            // Tolerate settings that are malformed (JsonException), unreadable (IOException) or
+            // permission-denied (UnauthorizedAccessException) — never fail integration over another
+            // tool's file. All three mean the same thing here: we cannot tell, so assume no hook.
         }
 
         return false;

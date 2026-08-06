@@ -74,23 +74,19 @@ public sealed class DoctorUseCase(ICommandRunner runner, IConfigProvider configP
     private static DiagnosticCheck CheckDbAccessible(string dbPath)
     {
         const string name = "tracking database";
-        try
-        {
-            if (File.Exists(dbPath))
-            {
-                return new DiagnosticCheck(name, true, $"Found at {dbPath}");
-            }
 
-            // A missing database (or its parent directory) is normal on a fresh install: the
-            // tracker creates both on first write. Report it as pending, not a failure —
-            // consistent with the tee-directory check below.
-            return new DiagnosticCheck(name, true,
-                $"No data yet — will be created at {dbPath}");
-        }
-        catch (Exception ex)
+        // No try/catch here, unlike the tee check below: File.Exists reports false for anything it
+        // cannot resolve — a malformed path, a permission-denied parent — rather than throwing, so
+        // there is no failure path to catch.
+        if (File.Exists(dbPath))
         {
-            return new DiagnosticCheck(name, false, $"Cannot access database path: {ex.Message}");
+            return new DiagnosticCheck(name, true, $"Found at {dbPath}");
         }
+
+        // A missing database (or its parent directory) is normal on a fresh install: the tracker
+        // creates both on first write. Report it as pending, not a failure — consistent with the
+        // tee-directory check below.
+        return new DiagnosticCheck(name, true, $"No data yet — will be created at {dbPath}");
     }
 
     private static DiagnosticCheck CheckTeeWritable(string teeDirectory)

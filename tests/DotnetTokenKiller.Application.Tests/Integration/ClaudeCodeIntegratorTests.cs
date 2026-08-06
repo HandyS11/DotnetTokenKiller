@@ -327,6 +327,31 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_RtkHookWithAnExistingRtkConfig_ReportsTheConfigAsUpdatedNotCreated()
+    {
+        // An rtk user who already has a config gets it edited in place. Reporting that under
+        // "created" would tell them a file appeared when in fact one of theirs was rewritten.
+        var userClaudeDir = Path.Combine(_tempDir, "rtk-home", ".claude");
+        var rtkConfigPath = Path.Combine(_tempDir, "rtk-config", "rtk", "config.toml");
+        Directory.CreateDirectory(Path.GetDirectoryName(rtkConfigPath)!);
+        await File.WriteAllTextAsync(rtkConfigPath, "[hooks]\nexclude_commands = [\"git\"]\n");
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath, """
+            { "hooks": { "PreToolUse": [ { "matcher": "Bash",
+              "hooks": [ { "type": "command", "command": "rtk hook claude" } ] } ] } }
+            """);
+        var sut = new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath), new HomePaths(_isolatedHome));
+
+        var result = await sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+
+        result.UpdatedFiles.Should().Contain(rtkConfigPath);
+        result.CreatedFiles.Should().NotContain(rtkConfigPath);
+        var toml = await File.ReadAllTextAsync(rtkConfigPath);
+        toml.Should().Contain("\"git\"").And.Contain("\"dotnet\"");
+    }
+
+    [Fact]
     public async Task IntegrateGlobalAsync_FreshHome_CreatesAllThreeFilesUnderHomeClaudeDir()
     {
         var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);

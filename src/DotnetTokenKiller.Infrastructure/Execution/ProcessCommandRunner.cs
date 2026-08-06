@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Domain.Execution;
@@ -9,28 +10,66 @@ namespace DotnetTokenKiller.Infrastructure.Execution;
 /// <summary>Runs system processes using <see cref="System.Diagnostics.Process"/>.</summary>
 public sealed class ProcessCommandRunner : ICommandRunner
 {
+    /// <summary>
+    /// How long the post-kill reap waits before giving up. Bounded so cancellation cleanup can never
+    /// hang: the kill was already issued, and if the OS is slow to tear the tree down we stop waiting.
+    /// </summary>
+    private static readonly TimeSpan ReapGracePeriod = TimeSpan.FromSeconds(5);
+
     /// <inheritdoc/>
-    public async Task<CommandResult> RunCapturedAsync(
+    public Task<CommandResult> RunCapturedAsync(
         string command,
         IReadOnlyList<string> args,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var psi = new ProcessStartInfo(command)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
-        };
-        psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
+        return RunRedirectedAsync(
+            command,
+            args,
+            static (reader, token) => reader.ReadToEndAsync(token),
+            static (reader, token) => reader.ReadToEndAsync(token),
+            cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public Task<CommandResult> RunStreamedAsync(
+        string command,
+        IReadOnlyList<string> args,
+        TextWriter stdOutSink,
+        TextWriter stdErrSink,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(stdOutSink);
+        ArgumentNullException.ThrowIfNull(stdErrSink);
+
+        return RunRedirectedAsync(
+            command,
+            args,
+            (reader, token) => PumpAsync(reader, stdOutSink, token),
+            (reader, token) => PumpAsync(reader, stdErrSink, token),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs a command with both output streams redirected, draining each one through the supplied
+    /// reader. Capture and streaming differ only in how a stream is drained, so everything else —
+    /// start, stdin close, cancellation kill, reap — lives here once.
+    /// </summary>
+    /// <param name="command">The executable to run.</param>
+    /// <param name="args">The arguments to pass to it.</param>
+    /// <param name="readStdOut">Drains the child's stdout and returns everything it read.</param>
+    /// <param name="readStdErr">Drains the child's stderr and returns everything it read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<CommandResult> RunRedirectedAsync(
+        string command,
+        IReadOnlyList<string> args,
+        Func<StreamReader, CancellationToken, Task<string>> readStdOut,
+        Func<StreamReader, CancellationToken, Task<string>> readStdErr,
+        CancellationToken cancellationToken)
+    {
+        var psi = CreateStartInfo(command, args, redirectStreams: true);
 
         using var process = StartProcess(psi, command);
 
@@ -43,9 +82,9 @@ public sealed class ProcessCommandRunner : ICommandRunner
 #pragma warning restore CA2016
         try
         {
-            // CRITICAL: Read both streams concurrently — sequential reads deadlock on large output
-            var stdOutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stdErrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            // CRITICAL: drain both streams concurrently — sequential reads deadlock on large output
+            var stdOutTask = readStdOut(process.StandardOutput, cancellationToken);
+            var stdErrTask = readStdErr(process.StandardError, cancellationToken);
             await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -59,7 +98,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
             // The read/wait tasks cancel the instant the token fires, which can unwind this method
             // before the registration callback's tree-kill has actually reaped the child. Kill and
             // wait for the whole tree here so the process is provably gone before we return.
-            await KillAndReapAsync(process).ConfigureAwait(false);
+            await KillAndReapAsync(process, ReapGracePeriod).ConfigureAwait(false);
             throw;
         }
         finally
@@ -68,63 +107,39 @@ public sealed class ProcessCommandRunner : ICommandRunner
         }
     }
 
-    /// <inheritdoc/>
-    public async Task<CommandResult> RunStreamedAsync(
+    /// <summary>Builds the start info every run shares, optionally with the streams redirected.</summary>
+    /// <param name="command">The executable to run.</param>
+    /// <param name="args">The arguments to pass to it.</param>
+    /// <param name="redirectStreams">
+    /// <see langword="true"/> to redirect stdin/stdout/stderr as UTF-8; <see langword="false"/> to
+    /// let the child inherit the console, as the passthrough path needs.
+    /// </param>
+    private static ProcessStartInfo CreateStartInfo(
         string command,
         IReadOnlyList<string> args,
-        TextWriter stdOutSink,
-        TextWriter stdErrSink,
-        CancellationToken cancellationToken = default)
+        bool redirectStreams)
     {
-        ArgumentNullException.ThrowIfNull(args);
-        ArgumentNullException.ThrowIfNull(stdOutSink);
-        ArgumentNullException.ThrowIfNull(stdErrSink);
-
         var psi = new ProcessStartInfo(command)
         {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
+            UseShellExecute = false
         };
+
+        if (redirectStreams)
+        {
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+            psi.RedirectStandardInput = true;
+            psi.StandardOutputEncoding = Encoding.UTF8;
+            psi.StandardErrorEncoding = Encoding.UTF8;
+        }
+
         psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         foreach (var arg in args)
         {
             psi.ArgumentList.Add(arg);
         }
 
-        using var process = StartProcess(psi, command);
-
-        // Close stdin immediately so a child that reads it sees EOF and exits instead of hanging
-        // forever waiting for input this non-interactive capture will never provide.
-        process.StandardInput.Close();
-
-#pragma warning disable CA2016 // CancellationToken is handled via registration below
-        var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
-#pragma warning restore CA2016
-        try
-        {
-            // CRITICAL: pump both streams concurrently — sequential reads deadlock on large output
-            var stdOutTask = PumpAsync(process.StandardOutput, stdOutSink, cancellationToken);
-            var stdErrTask = PumpAsync(process.StandardError, stdErrSink, cancellationToken);
-            await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            return new CommandResult(await stdOutTask.ConfigureAwait(false),
-                await stdErrTask.ConfigureAwait(false), process.ExitCode);
-        }
-        catch (OperationCanceledException)
-        {
-            await KillAndReapAsync(process).ConfigureAwait(false);
-            throw;
-        }
-        finally
-        {
-            await registration.DisposeAsync().ConfigureAwait(false);
-        }
+        return psi;
     }
 
     /// <summary>Copies a stream to a sink line by line, returning everything it copied.</summary>
@@ -164,15 +179,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var psi = new ProcessStartInfo(command)
-        {
-            UseShellExecute = false
-        };
-        psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
-        foreach (var arg in args)
-        {
-            psi.ArgumentList.Add(arg);
-        }
+        var psi = CreateStartInfo(command, args, redirectStreams: false);
 
         using var process = StartProcess(psi, command);
 
@@ -186,7 +193,7 @@ public sealed class ProcessCommandRunner : ICommandRunner
         }
         catch (OperationCanceledException)
         {
-            await KillAndReapAsync(process).ConfigureAwait(false);
+            await KillAndReapAsync(process, ReapGracePeriod).ConfigureAwait(false);
             throw;
         }
         finally
@@ -210,13 +217,17 @@ public sealed class ProcessCommandRunner : ICommandRunner
         }
     }
 
-    private static async Task KillAndReapAsync(Process process)
+    /// <summary>Kills the process tree and waits, at most <paramref name="gracePeriod"/>, for it to be reaped.</summary>
+    /// <param name="process">The process whose tree is torn down.</param>
+    /// <param name="gracePeriod">
+    /// How long to wait for the child to be reaped. Always <see cref="ReapGracePeriod"/> in
+    /// production; a parameter so the grace-elapsed path is reachable from a test.
+    /// </param>
+    private static async Task KillAndReapAsync(Process process, TimeSpan gracePeriod)
     {
         KillProcess(process);
 
-        // Bounded wait so cancellation cleanup can never hang: the kill was already issued, and if
-        // the OS is slow to tear the tree down we stop waiting once the grace period elapses.
-        using var grace = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var grace = new CancellationTokenSource(gracePeriod);
         try
         {
             await process.WaitForExitAsync(grace.Token).ConfigureAwait(false);
@@ -257,6 +268,10 @@ public sealed class ProcessCommandRunner : ICommandRunner
         }
     }
 
+    [ExcludeFromCodeCoverage(Justification =
+        "Windows-only backstop, reached solely via the OperatingSystem.IsWindows() guard in KillProcess. " +
+        "Coverage is measured on Linux, where every line here is unreachable and would otherwise be " +
+        "reported as permanently uncovered. The guard at the call site is still measured.")]
     private static void TryKillTreeWithTaskkill(int processId)
     {
         // Stryker disable all : Windows-only backstop, reached solely via the OperatingSystem.IsWindows()
