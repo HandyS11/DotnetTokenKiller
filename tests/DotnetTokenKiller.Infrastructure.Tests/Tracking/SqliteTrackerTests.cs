@@ -35,10 +35,12 @@ public class SqliteTrackerTests : IAsyncDisposable
             command,
             projectPath,
             new TokenStatistics(inputTokens, outputTokens, savedTokens, savingsPct),
-            TimeSpan.FromMilliseconds(500),
-            success,
-            outcome,
-            source);
+            TimeSpan.FromMilliseconds(500))
+        {
+            Success = success,
+            Outcome = outcome,
+            Source = source
+        };
     }
 
     [Fact]

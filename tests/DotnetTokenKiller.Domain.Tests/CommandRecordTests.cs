@@ -17,8 +17,10 @@ public class CommandRecordTests
             "build",
             "/home/user/MyApp",
             new TokenStatistics(1000, 150, 850, 85.0),
-            executionTime,
-            false);
+            executionTime)
+        {
+            Success = false
+        };
 
         record.Timestamp.Should().Be(timestamp);
         record.Command.Should().Be("build");
@@ -109,8 +111,12 @@ public class CommandRecordTests
     {
         var record = new CommandRecord(
             DateTimeOffset.UtcNow, "build", "/proj",
-            new TokenStatistics(1000, 150, 850, 85.0), TimeSpan.FromSeconds(1),
-            success: true, outcome: RunOutcome.Filtered, source: RunSource.Pipe);
+            new TokenStatistics(1000, 150, 850, 85.0), TimeSpan.FromSeconds(1))
+        {
+            Success = true,
+            Outcome = RunOutcome.Filtered,
+            Source = RunSource.Pipe
+        };
 
         record.Source.Should().Be(RunSource.Pipe);
     }

@@ -52,8 +52,8 @@ internal static class CliConfigurator
             dotnet.SetDescription("Run dotnet commands with filtered output");
             dotnet.AddCommand<DotnetBuildCommand>(DotnetSubcommands.Build)
                 .WithDescription("Run dotnet build with filtered output")
-                .WithExample(DotnetCommand, "build", "MyApp.slnx")
-                .WithExample(DotnetCommand, "build", "src/MyApp.csproj", "--no-restore");
+                .WithExample(DotnetCommand, DotnetSubcommands.Build, "MyApp.slnx")
+                .WithExample(DotnetCommand, DotnetSubcommands.Build, "src/MyApp.csproj", "--no-restore");
             dotnet.AddCommand<DotnetTestCommand>(DotnetSubcommands.Test)
                 .WithDescription("Run dotnet test with filtered output")
                 .WithExample(DotnetCommand, "test")
@@ -80,7 +80,7 @@ internal static class CliConfigurator
 
         config.AddCommand<Commands.PipeCommand>(PipeCommand)
             .WithDescription("Filter output piped in from a command dtk did not run")
-            .WithExample(PipeCommand, "build");
+            .WithExample(PipeCommand, DotnetSubcommands.Build);
 
         config.AddCommand<Commands.IntegrateCommand>(IntegrateCommand)
             .WithDescription("Install dtk integration artifacts for an AI assistant provider")
@@ -129,7 +129,7 @@ internal static class CliConfigurator
         config.AddCommand<Commands.LogCommand>(LogCommand)
             .WithDescription("Show the full output of a previous run")
             .WithExample("log")
-            .WithExample("log", "build")
+            .WithExample("log", DotnetSubcommands.Build)
             .WithExample("log", "--list")
             .WithExample("log", "--full");
 

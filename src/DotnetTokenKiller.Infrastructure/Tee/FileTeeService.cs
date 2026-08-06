@@ -94,8 +94,12 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
                 // would silently discard every log once the configured cap drops below it — clamp
                 // the guard to whichever is smaller instead.
                 return new FileTeeSession(stream, filePath, regionOffset, regionLength,
-                    teeConfig.MaxFileSizeBytes, minBodyBytes: Math.Min(500L, teeConfig.MaxFileSizeBytes),
-                    teeConfig.Mode == TeeMode.Failures, teeDir, teeConfig.MaxFiles);
+                    new TeeSessionPolicy(
+                        MaxBodyBytes: teeConfig.MaxFileSizeBytes,
+                        MinBodyBytes: Math.Min(500L, teeConfig.MaxFileSizeBytes),
+                        KeepOnlyOnFailure: teeConfig.Mode == TeeMode.Failures,
+                        TeeDir: teeDir,
+                        MaxFiles: teeConfig.MaxFiles));
             }
             catch
             {

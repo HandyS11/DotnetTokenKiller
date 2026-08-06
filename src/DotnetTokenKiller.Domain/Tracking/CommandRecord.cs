@@ -9,18 +9,18 @@ public sealed record CommandRecord
     /// <param name="projectPath">The working directory when the command ran.</param>
     /// <param name="tokens">Token usage statistics for the run.</param>
     /// <param name="executionTime">Total wall-clock time for the command.</param>
-    /// <param name="success">Whether the command exited with code 0.</param>
-    /// <param name="outcome">How the run produced its output.</param>
-    /// <param name="source">Where the filtered raw output came from.</param>
+    /// <remarks>
+    /// <see cref="Success"/>, <see cref="Outcome"/>, and <see cref="Source"/> are set through an
+    /// object initializer rather than as constructor arguments: they carry defaults that describe
+    /// the overwhelmingly common case (a successful, filtered, dtk-run command), and three trailing
+    /// optional parameters push the constructor past what a call site can read positionally.
+    /// </remarks>
     public CommandRecord(
         DateTimeOffset timestamp,
         string command,
         string projectPath,
         TokenStatistics tokens,
-        TimeSpan executionTime,
-        bool success = true,
-        RunOutcome outcome = RunOutcome.Filtered,
-        RunSource source = RunSource.Run)
+        TimeSpan executionTime)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
         ArgumentNullException.ThrowIfNull(tokens);
@@ -33,9 +33,6 @@ public sealed record CommandRecord
         SavedTokens = tokens.Saved;
         SavingsPercentage = tokens.SavingsPercentage;
         ExecutionTime = executionTime;
-        Success = success;
-        Outcome = outcome;
-        Source = source;
     }
 
     /// <summary>When the command ran.</summary>
@@ -63,7 +60,7 @@ public sealed record CommandRecord
     public TimeSpan ExecutionTime { get; init; }
 
     /// <summary>Whether the command exited with code 0.</summary>
-    public bool Success { get; init; }
+    public bool Success { get; init; } = true;
 
     /// <summary>How the run produced its output.</summary>
     public RunOutcome Outcome { get; init; } = RunOutcome.Filtered;

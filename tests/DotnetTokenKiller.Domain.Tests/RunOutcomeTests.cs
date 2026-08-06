@@ -57,9 +57,11 @@ public class RunOutcomeTests
             "publish",
             "/proj",
             new TokenStatistics(100, 100, 0, 0.0),
-            TimeSpan.FromMilliseconds(5),
-            success: true,
-            outcome: RunOutcome.PassthroughMeasured);
+            TimeSpan.FromMilliseconds(5))
+        {
+            Success = true,
+            Outcome = RunOutcome.PassthroughMeasured
+        };
 
         record.Outcome.Should().Be(RunOutcome.PassthroughMeasured);
     }

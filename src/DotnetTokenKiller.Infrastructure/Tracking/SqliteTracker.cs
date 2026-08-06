@@ -445,10 +445,12 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                 reader.GetString(1),
                 reader.GetString(2),
                 new TokenStatistics(reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetDouble(6)),
-                TimeSpan.FromMilliseconds(reader.GetDouble(7)),
-                reader.GetInt32(8) != 0,
-                outcome,
-                source));
+                TimeSpan.FromMilliseconds(reader.GetDouble(7)))
+            {
+                Success = reader.GetInt32(8) != 0,
+                Outcome = outcome,
+                Source = source
+            });
         }
 
         return results;

@@ -7,6 +7,9 @@ namespace DotnetTokenKiller.Cli.Formatting;
 /// <summary>Renders the rtk-style token-savings dashboard for <c>dtk gain</c>.</summary>
 internal static class GainDashboardRenderer
 {
+    /// <summary>The Spectre colour every "this went well" cue shares: a gain, a high percentage, a filtered run.</summary>
+    private const string GoodColor = "green";
+
     private const int MeterWidth = 24;
     private const int ImpactWidth = 10;
     private const int RuleWidth = 60;
@@ -56,7 +59,7 @@ internal static class GainDashboardRenderer
         {
             if (detail.SuccessDetail is { } sd)
             {
-                rows.Add((cmd, $"{cmd} (ok)", "green", sd));
+                rows.Add((cmd, $"{cmd} (ok)", GoodColor, sd));
             }
 
             if (detail.FailureDetail is { } fd)
@@ -111,7 +114,7 @@ internal static class GainDashboardRenderer
     /// <param name="saved">The saved-token delta.</param>
     internal static string SavedColor(long saved) => saved switch
     {
-        > 0 => "green",
+        > 0 => GoodColor,
         < 0 => "red",
         _ => "grey"
     };
@@ -123,7 +126,7 @@ internal static class GainDashboardRenderer
     /// <param name="pct">The savings percentage.</param>
     internal static string PctColor(double pct) => pct switch
     {
-        >= 80 => "green",
+        >= 80 => GoodColor,
         >= 40 => "yellow",
         _ => "red"
     };
@@ -183,7 +186,7 @@ internal static class GainDashboardRenderer
     /// <param name="outcome">The outcome to colour.</param>
     private static string OutcomeColor(RunOutcome outcome) => outcome switch
     {
-        RunOutcome.Filtered => "green",
+        RunOutcome.Filtered => GoodColor,
         RunOutcome.RawTailFallback or RunOutcome.FilterFaulted => "yellow",
         _ => "red"
     };

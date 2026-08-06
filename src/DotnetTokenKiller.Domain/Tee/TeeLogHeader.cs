@@ -112,21 +112,53 @@ public sealed record TeeLogHeader(
             return false;
         }
 
-        string? command = null;
-        string? cwd = null;
-        string? exit = null;
-        string? source = null;
-        string? status = null;
-        string? utc = null;
-        var sawDelimiter = false;
+        var fields = new HeaderFields();
+        if (!TryReadFields(lines, fields))
+        {
+            return false;
+        }
 
+        if (fields.Command is null || fields.Cwd is null || fields.Exit is null ||
+            fields.Source is null || fields.Utc is null)
+        {
+            return false;
+        }
+
+        if (!TryParseExit(fields.Exit, fields.Status, out var exitCode))
+        {
+            return false;
+        }
+
+        if (!Enum.TryParse<RunSource>(fields.Source, ignoreCase: false, out var runSource) ||
+            !DateTimeOffset.TryParse(fields.Utc, CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind, out var timestamp))
+        {
+            return false;
+        }
+
+        header = new TeeLogHeader(fields.Command, fields.Cwd, exitCode, runSource, timestamp);
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the <c># key: value</c> lines into <paramref name="fields"/>, stopping at the
+    /// delimiter. Whether the fields it collected are sufficient is the caller's judgement; this
+    /// only rejects text that is not a well-formed header at all.
+    /// </summary>
+    /// <param name="lines">The file's leading text, split on line feeds. Index 0 is the version line.</param>
+    /// <param name="fields">Receives the raw values, one per recognised key.</param>
+    /// <returns>
+    /// <see langword="false"/> on a malformed line, an unrecognised key, or a run of lines that
+    /// never reaches the delimiter.
+    /// </returns>
+    private static bool TryReadFields(string[] lines, HeaderFields fields)
+    {
         for (var i = 1; i < lines.Length; i++)
         {
             var line = lines[i].TrimEnd('\r');
             if (line == Delimiter)
             {
-                sawDelimiter = true;
-                break;
+                return true;
             }
 
             if (!line.StartsWith("# ", StringComparison.Ordinal))
@@ -141,55 +173,65 @@ public sealed record TeeLogHeader(
                 return false;
             }
 
-            var key = rest[..separator];
-            var value = rest[(separator + 1)..].TrimStart(' ');
+            if (!fields.TryAssign(rest[..separator], rest[(separator + 1)..].TrimStart(' ')))
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The raw, still-unvalidated field values collected while scanning a header.</summary>
+    private sealed class HeaderFields
+    {
+        public string? Command { get; private set; }
+
+        public string? Cwd { get; private set; }
+
+        public string? Exit { get; private set; }
+
+        public string? Source { get; private set; }
+
+        public string? Status { get; private set; }
+
+        public string? Utc { get; private set; }
+
+        /// <summary>Stores one header line's value under its key.</summary>
+        /// <param name="key">The key text, between <c>"# "</c> and the colon.</param>
+        /// <param name="value">The value text, already stripped of its leading spaces.</param>
+        /// <returns><see langword="false"/> when the key is not one this version writes.</returns>
+        public bool TryAssign(string key, string value)
+        {
             switch (key)
             {
                 case CommandKey:
-                    command = value;
+                    Command = value;
                     break;
                 case CwdKey:
-                    cwd = value;
+                    Cwd = value;
                     break;
                 case ExitKey:
                     // Trimmed at both ends: this field is padded to a fixed width so it can be
                     // overwritten in place. The others are not trimmed at the end, because Flatten
                     // can legitimately leave a trailing space in a command line.
-                    exit = value.TrimEnd(' ');
+                    Exit = value.TrimEnd(' ');
                     break;
                 case SourceKey:
-                    source = value;
+                    Source = value;
                     break;
                 case StatusKey:
-                    status = value.TrimEnd(' ');
+                    Status = value.TrimEnd(' ');
                     break;
                 case UtcKey:
-                    utc = value;
+                    Utc = value;
                     break;
                 default:
                     return false;
             }
-        }
 
-        if (!sawDelimiter || command is null || cwd is null || exit is null || source is null || utc is null)
-        {
-            return false;
+            return true;
         }
-
-        if (!TryParseExit(exit, status, out var exitCode))
-        {
-            return false;
-        }
-
-        if (!Enum.TryParse<RunSource>(source, ignoreCase: false, out var runSource) ||
-            !DateTimeOffset.TryParse(utc, CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind, out var timestamp))
-        {
-            return false;
-        }
-
-        header = new TeeLogHeader(command, cwd, exitCode, runSource, timestamp);
-        return true;
     }
 
     /// <summary>Returns the body of a tee log, without its header.</summary>

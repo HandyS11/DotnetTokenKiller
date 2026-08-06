@@ -66,27 +66,9 @@ internal sealed class LogCommand(
             return 1;
         }
 
-        string? subcommand = null;
-        if (settings.Subcommand.Length > 0)
+        if (!TryResolveSubcommand(settings.Subcommand, out var subcommand))
         {
-            if (DotnetSubcommands.TryMatch(settings.Subcommand, out var match))
-            {
-                subcommand = match.Name;
-            }
-            else if (PassthroughSubcommands.IsMeasurable(settings.Subcommand))
-            {
-                // Measurable passthrough runs (publish, ef migrations, ...) are tee'd exactly like a
-                // filtered run, under the slug PassthroughSubcommands.CommandName produces — the same
-                // computation production uses to name the file in the first place.
-                subcommand = PassthroughSubcommands.CommandName(settings.Subcommand);
-            }
-            else
-            {
-                console.MarkupLine(
-                    $"[red]No logs are kept for:[/] {string.Join(' ', settings.Subcommand).EscapeMarkup()}.");
-                console.MarkupLine($"Available: {AvailableSubcommands.EscapeMarkup()}");
-                return 1;
-            }
+            return 1;
         }
 
         var query = new LogQuery(
@@ -137,6 +119,44 @@ internal sealed class LogCommand(
 
         await TeeLogRenderer.RenderViewAsync(output, result.View, cancellationToken).ConfigureAwait(false);
         return 0;
+    }
+
+    /// <summary>
+    /// Resolves the positional subcommand argument to the slug its tee logs were filed under,
+    /// reporting the unknown-subcommand usage error itself so the caller only has to bail out.
+    /// </summary>
+    /// <param name="args">The raw positional arguments; empty means "every subcommand".</param>
+    /// <param name="subcommand">
+    /// The resolved slug, or <see langword="null"/> when <paramref name="args"/> is empty and the
+    /// query should therefore not be narrowed to one subcommand.
+    /// </param>
+    /// <returns><see langword="false"/> when the arguments name something dtk keeps no logs for.</returns>
+    private bool TryResolveSubcommand(string[] args, out string? subcommand)
+    {
+        subcommand = null;
+        if (args.Length == 0)
+        {
+            return true;
+        }
+
+        if (DotnetSubcommands.TryMatch(args, out var match))
+        {
+            subcommand = match.Name;
+            return true;
+        }
+
+        if (PassthroughSubcommands.IsMeasurable(args))
+        {
+            // Measurable passthrough runs (publish, ef migrations, ...) are tee'd exactly like a
+            // filtered run, under the slug PassthroughSubcommands.CommandName produces — the same
+            // computation production uses to name the file in the first place.
+            subcommand = PassthroughSubcommands.CommandName(args);
+            return true;
+        }
+
+        console.MarkupLine($"[red]No logs are kept for:[/] {string.Join(' ', args).EscapeMarkup()}.");
+        console.MarkupLine($"Available: {AvailableSubcommands.EscapeMarkup()}");
+        return false;
     }
 
     /// <summary>
