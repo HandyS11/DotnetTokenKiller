@@ -13,6 +13,8 @@ on:
       - develop
   schedule:
     - cron: '0 6 * * 1' # Every Monday at 06:00 UTC
+  # See ci.yml: a run dropped during an Actions outage is never replayed on its own.
+  workflow_dispatch:
 
 jobs:
   analyze:

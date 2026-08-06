@@ -7,6 +7,8 @@ on:
   push:
     branches:
       - develop
+  # See ci.yml: a run dropped during an Actions outage is never replayed on its own.
+  workflow_dispatch:
 
 jobs:
   build:

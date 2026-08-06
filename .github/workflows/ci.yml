@@ -8,6 +8,9 @@ on:
     branches:
       - develop
   pull_request:
+  # GitHub does not backfill events dropped during an Actions outage, so without a manual
+  # trigger a run skipped that way stays missing until the next push.
+  workflow_dispatch:
 
 jobs:
   build:
