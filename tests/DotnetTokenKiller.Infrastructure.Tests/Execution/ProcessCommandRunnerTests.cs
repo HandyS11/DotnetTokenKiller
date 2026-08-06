@@ -105,6 +105,67 @@ public sealed class ProcessCommandRunnerTests
     }
 
     [Fact]
+    public async Task KillAndReapAsync_ReturnsWithoutThrowing_WhenTheGracePeriodElapsesBeforeTheChildIsReaped()
+    {
+        // Cancellation cleanup must be bounded: the kill has already been issued, so a slow reap
+        // must end the wait rather than block the caller's unwind. A zero grace makes the timeout
+        // fire immediately instead of relying on a stubbornly unkillable process.
+        var reapMethod = typeof(ProcessCommandRunner)
+            .GetMethod("KillAndReapAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        var (cmd, args) = LongRunningCommand();
+        var psi = new ProcessStartInfo(cmd) { UseShellExecute = false };
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(psi)!;
+
+        var act = async () => await (Task)reapMethod.Invoke(null, [process, TimeSpan.Zero])!;
+
+        await act.Should().NotThrowAsync();
+        await process.WaitForExitAsync(); // the kill itself still happened, grace or no grace
+    }
+
+    [Fact]
+    public async Task RunStreamedAsync_Cancellation_KillsRunningProcess()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var (cmd, args) = LongRunningCommand();
+
+        var act = async () => await _sut.RunStreamedAsync(
+            cmd, args, TextWriter.Null, TextWriter.Null, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task RunStreamedAsync_NullSinks_ThrowArgumentNullException()
+    {
+        var nullStdOut = async () => await _sut.RunStreamedAsync("echo", [], null!, TextWriter.Null);
+        var nullStdErr = async () => await _sut.RunStreamedAsync("echo", [], TextWriter.Null, null!);
+        var nullArgs = async () => await _sut.RunStreamedAsync("echo", null!, TextWriter.Null, TextWriter.Null);
+
+        await nullStdOut.Should().ThrowAsync<ArgumentNullException>();
+        await nullStdErr.Should().ThrowAsync<ArgumentNullException>();
+        await nullArgs.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task RunStreamedAsync_SetsEnglishCliLanguageOnChildAsync()
+    {
+        // Both redirected paths share one start-info builder; this pins that the streamed path
+        // really does get the same environment the captured path is asserted to get above.
+        var (cmd, args) = PrintCliLanguageCommand();
+        var stdOut = new StringWriter { NewLine = "\n" };
+
+        await _sut.RunStreamedAsync(cmd, args, stdOut, TextWriter.Null);
+
+        stdOut.ToString().Trim().Should().Be("en");
+    }
+
+    [Fact]
     public async Task RunCapturedAsync_NullArgs_ThrowsArgumentNullException()
     {
         var act = async () => await _sut.RunCapturedAsync("echo", null!);

@@ -99,14 +99,11 @@ public sealed class FileTeeLogStore(IConfigProvider configProvider, string? teeD
 
             return new TeeLogEntry(path, header, info.Length, timestamp, slug);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // A log deleted by rotation between enumeration and reading is not an error worth
-            // failing the whole listing over.
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
+            // A log deleted by rotation between enumeration and reading (IOException), or one whose
+            // permissions this user cannot satisfy (UnauthorizedAccessException), is not an error
+            // worth failing the whole listing over — drop the entry and list the rest.
             return null;
         }
     }

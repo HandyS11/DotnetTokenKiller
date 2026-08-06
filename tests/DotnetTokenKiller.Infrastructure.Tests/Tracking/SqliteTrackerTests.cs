@@ -190,6 +190,42 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task LegacyDbWhoseColumnThePragmaProbeMisses_StillInitializesAsync()
+    {
+        // The probe compares names case-sensitively while SQLite treats them case-insensitively, so
+        // a column spelled `Success` reads as missing and the ALTER then reports it as a duplicate.
+        // That is the same "someone already added it" condition a concurrent initializer produces,
+        // and it must not fail the run — the column is there either way, which is all that matters.
+        var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "legacy.db");
+        try
+        {
+            await CreateLegacySchemaByHandAsync(dbPath);
+            await using (var legacy = new SqliteConnection($"Data Source={dbPath}"))
+            {
+                await legacy.OpenAsync();
+                await using var alter = legacy.CreateCommand();
+                alter.CommandText = "ALTER TABLE commands ADD COLUMN Success INTEGER NOT NULL DEFAULT 1";
+                await alter.ExecuteNonQueryAsync();
+            }
+
+            await using var tracker = new SqliteTracker($"Data Source={dbPath}");
+            var act = () => tracker.RecordAsync(MakeRecord(), default);
+
+            await act.Should().NotThrowAsync();
+            (await tracker.GetHistoryAsync(1, null)).Should().ContainSingle();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            var dir = Path.GetDirectoryName(dbPath);
+            if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task GetHistoryAsync_CapsResultsAtLimitAsync()
     {
         // History is bounded so a huge tracking db can't load an unbounded result set into memory.

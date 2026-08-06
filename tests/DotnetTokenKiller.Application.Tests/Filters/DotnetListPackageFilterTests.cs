@@ -189,6 +189,41 @@ public class DotnetListPackageFilterTests
     }
 
     [Fact]
+    public void Apply_Outdated_NoUpdatesButNonZeroExit_ReturnsEmptyForRawTailFallback()
+    {
+        // "all projects up to date" on a failed run would be a verdict the exit code contradicts.
+        // Blank output hands the decision back to FilteredRunUseCase's raw-tail fallback.
+        const string input = """
+                              Determining projects to restore...
+                            The given project `Alpha` has no updates given the current sources.
+                            """;
+
+        _sut.Apply(input, exitCode: 1).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_Outdated_MoreGroupsThanTheCap_StatesWhatWasOmitted()
+    {
+        // The audit variants share the plain variant's density rule: never print an unbounded list,
+        // and never truncate silently.
+        var sb = new StringBuilder();
+        sb.AppendLine("Project `Alpha` has the following updates to its packages")
+            .AppendLine("   [net10.0]:")
+            .AppendLine("   Top-level Package      Requested   Resolved   Latest");
+        for (var i = 0; i < 35; i++)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"   > Pkg{i:D2}                1.0.0       1.0.0      2.0.0");
+        }
+
+        var result = _sut.Apply(sb.ToString(), exitCode: 0);
+
+        result.Should().Contain("35 packages with updates");
+        result.Should().Contain("Pkg29 1.0.0 → 2.0.0", "the first 30 groups are listed");
+        result.Should().NotContain("Pkg30 ", "the 31st group is past the cap");
+        result.Should().Contain("… and 5 more");
+    }
+
+    [Fact]
     public Task Apply_DeprecatedFixture_MatchesSnapshot()
     {
         var result = _sut.Apply(LoadFixture("dotnet_list_package_deprecated_raw.txt"), exitCode: 0);

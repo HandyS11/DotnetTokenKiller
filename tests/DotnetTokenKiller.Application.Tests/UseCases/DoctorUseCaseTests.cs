@@ -145,6 +145,49 @@ public sealed class DoctorUseCaseTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_TeeDirectoryNotWritable_TeeCheckFails()
+    {
+        // The check exists to catch exactly this: a tee directory that is present but cannot be
+        // written to, which would otherwise show up later as silently missing logs.
+        // POSIX permission bits are a no-op on Windows, so this is guarded there.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(_tempDir);
+        var originalMode = File.GetUnixFileMode(_tempDir);
+        try
+        {
+            File.SetUnixFileMode(_tempDir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+
+            // Running as root (common in CI containers) ignores the mode entirely, which would make
+            // the assertion below meaningless rather than merely skipped.
+            var probe = Path.Combine(_tempDir, ".dtk-writability-probe");
+            try
+            {
+                await File.WriteAllTextAsync(probe, string.Empty);
+                File.Delete(probe);
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Good: the mode really does block writes for this user.
+            }
+
+            var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+
+            var teeCheck = checks.First(c => c.Name == "tee directory");
+            teeCheck.Passed.Should().BeFalse();
+            teeCheck.Message.Should().StartWith("Not writable:");
+        }
+        finally
+        {
+            File.SetUnixFileMode(_tempDir, originalMode);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_ReturnsAllFourChecks()
     {
         Directory.CreateDirectory(_tempDir);

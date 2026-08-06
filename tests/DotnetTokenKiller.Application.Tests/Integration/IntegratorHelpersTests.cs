@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Integration;
 using FluentAssertions;
 
@@ -318,6 +319,25 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*must contain a JSON object at the root*");
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_NullLiteralRoot_NamesWhatItFoundInsteadOfCrashing()
+    {
+        // JsonNode.Parse("null") returns null rather than a node, so the "what did we find instead"
+        // message has to describe it without dereferencing anything.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "null");
+
+        var hookEntry = new JsonObject();
+
+        var act = () => IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, "cmd", context, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*found 'null'*");
     }
 
     // --- IntegrationContext ---
@@ -803,6 +823,62 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Updated.Should().ContainSingle();
         context.Skipped.Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_LegacyDuplicateAlongsideForeignEntries_LeavesTheForeignEntriesAlone()
+    {
+        // PreToolUse is a shared array: other tools (and hand edits) put shapes there that dtk does
+        // not recognise — a bare string, an entry with no inner hooks list. Pruning the stale legacy
+        // registration must step over those rather than choke on them or drop them.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string legacyCommand = "python3 .claude/hooks/dotnet-to-dtk.py";
+        const string newCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    "a bare string an unrelated tool left here",
+                    new JsonObject { ["matcher"] = "Bash" },                       // no inner hooks list
+                    new JsonObject { ["matcher"] = "Bash", [HooksProperty] = "not an array" },
+                    // A non-object inside an inner hooks list, which both the search and the prune
+                    // walk element by element.
+                    new JsonObject { ["matcher"] = "Bash", [HooksProperty] = new JsonArray { "junk" } },
+                    HookEntry(legacyCommand),
+                    HookEntry(newCommand)
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(newCommand), newCommand, context, CancellationToken.None);
+
+        // Read as raw text rather than through ReadInnerCommandsAsync: the whole point of this case
+        // is that the array holds entries that helper (like any strict reader) cannot walk.
+        var written = await File.ReadAllTextAsync(path);
+        written.Should().NotContain(legacyCommand, "the stale legacy registration is what gets pruned");
+        Regex.Matches(written, Regex.Escape("dotnet-to-dtk.py")).Should().ContainSingle();
+        written.Should().Contain("a bare string an unrelated tool left here");
+        written.Should().Contain("not an array");
+        context.Updated.Should().ContainSingle();
+    }
+
+    private static JsonObject HookEntry(string command) => new()
+    {
+        ["matcher"] = "Bash",
+        [HooksProperty] = new JsonArray
+        {
+            new JsonObject
+            {
+                ["type"] = "command",
+                ["command"] = command
+            }
+        }
+    };
 
     [Fact]
     public async Task WriteSectionBasedFileAsync_EndMarkerFoundAtIndexZero_UsesEndMarkerLengthWhenSplicing()

@@ -82,6 +82,61 @@ public class FanOutTextWriterTests
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public void Encoding_MirrorsThePrimary_SoCallersSeeTheTerminalsEncoding()
+    {
+        var primary = new StringWriter();
+        var sut = new FanOutTextWriter(primary, new StringWriter());
+
+        sut.Encoding.Should().BeSameAs(primary.Encoding);
+    }
+
+    [Fact]
+    public void NewLine_ReadsAndWritesThroughToThePrimary()
+    {
+        // PumpAsync captures sink.NewLine to build the text it returns, so this property must
+        // report — and set — what the terminal actually terminates lines with.
+        var primary = new StringWriter { NewLine = "\n" };
+        var sut = new FanOutTextWriter(primary, new StringWriter());
+
+        sut.NewLine.Should().Be("\n");
+
+        sut.NewLine = "<EOL>";
+
+        primary.NewLine.Should().Be("<EOL>");
+        sut.NewLine.Should().Be("<EOL>");
+    }
+
+    [Fact]
+    public async Task FlushAsync_WithoutAToken_FlushesBothWriters()
+    {
+        // TextWriter.FlushAsync() is what a caller reaches by default; if it did not fan out, the
+        // tee would keep whatever the terminal had already shown buffered.
+        var primary = new RecordingWriter();
+        var secondary = new RecordingWriter();
+        var sut = new FanOutTextWriter(primary, secondary);
+
+        await sut.FlushAsync();
+
+        primary.FlushCalled.Should().BeTrue();
+        secondary.FlushCalled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Write_ReachesThePrimaryOnly()
+    {
+        // Documented behaviour: every non-fan-out member ends at Write(char), which the terminal
+        // sees and the tee does not.
+        var primary = new StringWriter();
+        var secondary = new StringWriter();
+        var sut = new FanOutTextWriter(primary, secondary);
+
+        sut.Write('x');
+
+        primary.ToString().Should().Be("x");
+        secondary.ToString().Should().BeEmpty();
+    }
+
     private sealed class ThrowingWriter : TextWriter
     {
         public override System.Text.Encoding Encoding => System.Text.Encoding.UTF8;

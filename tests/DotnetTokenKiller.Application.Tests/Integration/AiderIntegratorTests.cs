@@ -242,6 +242,25 @@ public sealed class AiderIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_BlockStyleAlreadyListingTheInstructions_SecondRunWithForce_DoesNotDuplicateEntry()
+    {
+        // Same idempotence guarantee as the flow-style case above, on the other list syntax: a
+        // re-run must find the existing item and leave the block exactly as it is.
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(ConfPath, "read:\n  - CONVENTIONS.md\n");
+
+        await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+        await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+
+        var text = await File.ReadAllTextAsync(ConfPath);
+        CountTopLevelKeys(text, "read").Should().Be(1);
+        CountOccurrences(text, ".aider-dtk-instructions.md").Should().Be(1);
+        text.Should().Be(AppendedTo(
+            "read:\n  - CONVENTIONS.md\n  - .aider-dtk-instructions.md",
+            DtkSectionMergedIntoExistingKey));
+    }
+
+    [Fact]
     public async Task IntegrateAsync_FlowStyleWithTrailingComment_WithForce_KeepsListValidAndPreservesComment()
     {
         Directory.CreateDirectory(_tempDir);

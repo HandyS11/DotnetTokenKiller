@@ -138,6 +138,22 @@ public sealed class ArgumentPreprocessorTests
     }
 
     [Fact]
+    public void InsertSeparator_ReturnsOriginal_WhenATwoTokenSubcommandUsesUpEveryArgument()
+    {
+        // "list package" is two tokens, so this is the two-token equivalent of `dtk dotnet build`:
+        // there is nothing after the subcommand to separate, and inserting "--" at the end would
+        // hand Spectre a trailing separator with no arguments behind it.
+        var args = new[]
+        {
+            "dotnet", "list", "package"
+        };
+
+        var result = ArgumentPreprocessor.InsertSeparator(args);
+
+        result.Should().BeSameAs(args);
+    }
+
+    [Fact]
     public void InsertSeparator_ReturnsOriginal_WhenUnknownSubcommand()
     {
         var args = new[]

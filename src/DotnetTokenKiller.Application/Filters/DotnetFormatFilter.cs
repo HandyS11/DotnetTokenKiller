@@ -37,7 +37,13 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
         }
 
         var lines = stripped.Split('\n');
-        var violations = Array.FindAll(lines, l => ViolationPattern().IsMatch(l));
+
+        // Matched once and carried, rather than testing with IsMatch here and re-matching per line
+        // when formatting: the second match can only reproduce the first, so keeping it would mean
+        // running the pattern twice per violation and writing an unreachable "no match" branch.
+        var violations = Array.ConvertAll(lines, l => ViolationPattern().Match(l))
+            .Where(m => m.Success)
+            .ToArray();
         if (violations.Length == 0 && exitCode != 0)
         {
             // Failed run with nothing parsed (crashed process, localized SDK, garbled output):
@@ -63,7 +69,7 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
         return $"✓ dotnet format (nothing to format{elapsedPart})\n";
     }
 
-    private string BuildViolationOutput(string[] violations)
+    private string BuildViolationOutput(Match[] violations)
     {
         var sb = new StringBuilder();
         sb.AppendLine(CultureInfo.InvariantCulture,
@@ -85,14 +91,8 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
         return sb.ToString().ReplaceLineEndings("\n");
     }
 
-    private string FormatViolationLine(string rawLine)
+    private string FormatViolationLine(Match match)
     {
-        var match = ViolationPattern().Match(rawLine);
-        if (!match.Success)
-        {
-            return rawLine.Trim();
-        }
-
         var shortPath = TextHelpers.ShortenPath(match.Groups["path"].Value.Trim(), RootPath);
         return
             $"{shortPath}({match.Groups["lineCol"].Value}): {match.Groups["level"].Value} {match.Groups["rest"].Value.Trim()}";
