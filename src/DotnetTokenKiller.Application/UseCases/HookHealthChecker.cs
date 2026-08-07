@@ -165,8 +165,14 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             return new DiagnosticCheck(name, true, "installed, registered, up to date");
         }
 
-        var refreshable = IsExactlyAuthentic(installed, installation.Script.Style)
-                          || (!ArtifactStamping.TryParse(installed, out _, out _)
+        // ArtifactStamping.TryParse (and therefore IsAuthentic) requires the stamp to be the last
+        // line of the file, so a trailing hand-added edit — e.g. a "# my own change" comment tacked
+        // on after the stamp — is correctly rejected here rather than misreported as merely stale.
+        // The legacy check below keys on HasStamp, not on "TryParse failed", for the same reason:
+        // otherwise that same trailing edit would read as an unstamped legacy file (it still
+        // contains the legacy signature) and get silently refreshed through the other branch.
+        var refreshable = ArtifactStamping.IsAuthentic(installed)
+                          || (!ArtifactStamping.HasStamp(installed)
                               && installed.Contains(installation.Script.LegacySignature, StringComparison.Ordinal));
 
         return refreshable
@@ -180,25 +186,6 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                 "modified locally — dtk will not overwrite it. Run 'dtk integrate "
                 + $"{installation.ProviderName} --force' to regenerate.");
     }
-
-    /// <summary>
-    /// Whether <paramref name="installed"/> is exactly the output some dtk generated for this
-    /// artifact — not just a file whose stamp still verifies.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="ArtifactStamping.IsAuthentic(string)"/> only hashes the body preceding the stamp
-    /// line; it never checks that the stamp line is the last line of the file. A local edit
-    /// appended after the stamp — e.g. a trailing <c># my own change</c> comment — leaves the
-    /// recorded digest untouched, so <c>IsAuthentic</c> alone would misreport a hand-edited script
-    /// as merely stale. Reconstructing the full stamped content from the parsed body and comparing
-    /// it byte-for-byte against <paramref name="installed"/> catches that trailing edit.
-    /// </remarks>
-    /// <param name="installed">The on-disk content to check.</param>
-    /// <param name="style">Comment syntax used for this artifact's stamp line.</param>
-    private static bool IsExactlyAuthentic(string installed, StampStyle style) =>
-        ArtifactStamping.TryParse(installed, out var body, out var hash)
-        && ArtifactStamping.ComputeHash(body) == hash
-        && string.Equals(installed, ArtifactStamping.Apply(body, style), StringComparison.Ordinal);
 
     /// <summary>Feeds a payload through the installed hook and asserts every subcommand is rewritten.</summary>
     /// <param name="installation">The installation to probe.</param>

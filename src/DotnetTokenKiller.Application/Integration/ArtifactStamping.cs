@@ -75,8 +75,24 @@ internal static class ArtifactStamping
     }
 
     /// <summary>
+    /// The exact characters that may follow the hash on a well-formed stamp line, one per
+    /// <see cref="StampStyle"/> — <see cref="StampStyle.HashComment"/> has nothing after the hash
+    /// but the newline; <see cref="StampStyle.HtmlComment"/> closes the HTML comment first. Tried
+    /// in order regardless of which style produced the content, since <see cref="TryParse"/> is not
+    /// told which style it is verifying.
+    /// </summary>
+    private static readonly string[] LineTerminators = ["\n", " -->\n"];
+
+    /// <summary>
     /// Splits stamped content into the body that was hashed and the digest recorded for it.
     /// </summary>
+    /// <remarks>
+    /// Requires the stamp line to be the last line of <paramref name="content"/>: the digest only
+    /// ever covers the body above the stamp, so anything appended below a genuine stamp — e.g. a
+    /// hand-added trailing comment — would otherwise still verify. A stamp that is not the last
+    /// line is therefore treated as not a well-formed stamp at all, not merely as one whose body
+    /// changed.
+    /// </remarks>
     /// <param name="content">File content to inspect.</param>
     /// <param name="body">Set to the content above the stamp line, line endings normalized.</param>
     /// <param name="hash">Set to the digest recorded on the stamp line.</param>
@@ -105,6 +121,12 @@ internal static class ArtifactStamping
             return false;
         }
 
+        var tail = normalized[(hashStart + HashLength)..];
+        if (!LineTerminators.Contains(tail, StringComparer.Ordinal))
+        {
+            return false;
+        }
+
         body = normalized[..(normalized.LastIndexOf('\n', prefixIndex) + 1)];
         hash = candidate;
         return true;
@@ -112,11 +134,29 @@ internal static class ArtifactStamping
 
     /// <summary>
     /// Whether the content carries a stamp whose digest still matches the body above it — i.e. the
-    /// body is untouched output of some dtk version.
+    /// body is untouched output of some dtk version, with nothing added below the stamp either.
     /// </summary>
     /// <param name="content">File content to verify.</param>
     internal static bool IsAuthentic(string content)
         => TryParse(content, out var body, out var hash) && ComputeHash(body) == hash;
+
+    /// <summary>
+    /// Whether the stamp's introductory text appears anywhere in <paramref name="content"/>,
+    /// regardless of whether the rest of the stamp is well-formed.
+    /// </summary>
+    /// <remarks>
+    /// This is the test for "has dtk ever stamped this file", used to tell a pre-stamping legacy
+    /// artifact (no stamp at all) apart from a stamped artifact that has since been damaged —
+    /// truncated, hand-edited, or had text appended below the stamp line. <see cref="TryParse"/>
+    /// returns <see langword="false"/> for both, so keying the legacy check on <c>!TryParse(...)</c>
+    /// would misclassify a damaged stamped artifact as legacy and refresh it without <c>--force</c>,
+    /// silently discarding whatever the damage was — exactly the data loss stamping exists to
+    /// prevent. Keying it on <c>!HasStamp(...)</c> instead only lets truly unstamped content take
+    /// the legacy path.
+    /// </remarks>
+    /// <param name="content">File content to check.</param>
+    internal static bool HasStamp(string content)
+        => content.ReplaceLineEndings("\n").Contains(StampPrefix, StringComparison.Ordinal);
 
     /// <summary>Computes the lowercase hex SHA-256 of the normalized body.</summary>
     /// <param name="body">The content to digest.</param>

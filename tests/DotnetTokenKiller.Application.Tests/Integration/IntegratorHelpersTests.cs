@@ -1317,6 +1317,42 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
+    public async Task WriteGeneratedFileAsync_TextAppendedAfterStamp_SkipsWithoutForceAndLeavesBytesIntact()
+    {
+        // The stamp's digest only ever covers the body above it, so a trailing hand-edit — e.g.
+        // "# my own change" tacked on below an otherwise-genuine stamp — must not read as either
+        // authentic (its own digest is untouched) or legacy (the file still contains
+        // _DTK_SUBCOMMANDS). Getting either wrong silently overwrites the edit.
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        var appended = stamped + "# my own change\n";
+        await File.WriteAllTextAsync(path, appended);
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        context.Updated.Should().BeEmpty();
+        (await File.ReadAllTextAsync(path)).Should().Be(appended, "a skip must leave the file byte-for-byte untouched");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_TextAppendedAfterStampWithForce_Overwrites()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        await File.WriteAllTextAsync(path, stamped + "# my own change\n");
+        var context = new IntegrationContext(force: true);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+        (await File.ReadAllTextAsync(path)).Should().Contain("print('v2')");
+    }
+
+    [Fact]
     public async Task WriteGeneratedFileAsync_UnrecognizedForeignFile_SkipsWithoutForce()
     {
         var path = Path.Combine(_tempDir, "hook.py");

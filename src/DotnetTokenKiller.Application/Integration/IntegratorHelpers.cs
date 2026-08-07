@@ -99,7 +99,7 @@ internal static class IntegratorHelpers
             return;
         }
 
-        var isLegacy = !ArtifactStamping.TryParse(existing, out _, out _)
+        var isLegacy = !ArtifactStamping.HasStamp(existing)
                        && existing.Contains(artifact.LegacySignature, StringComparison.Ordinal);
 
         if (!ArtifactStamping.IsAuthentic(existing) && !isLegacy && !context.Force)

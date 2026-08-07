@@ -92,4 +92,68 @@ public sealed class ArtifactStampingTests
         body.Should().Be("alpha\nbeta\n");
         hash.Should().Be(ArtifactStamping.ComputeHash("alpha\nbeta\n"));
     }
+
+    [Fact]
+    public void IsAuthentic_ContentAppendedAfterTheStamp_ReturnsFalse()
+    {
+        // The digest only ever covers the body above the stamp line. Without an explicit
+        // "the stamp must be the last line" rule, a trailing hand-edit would leave the recorded
+        // digest untouched and still read as authentic — silently discarding the edit on refresh.
+        var stamped = ArtifactStamping.Apply("original\n", StampStyle.HashComment);
+        var appended = stamped + "# my own change\n";
+
+        ArtifactStamping.IsAuthentic(appended).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryParse_ContentAppendedAfterTheStamp_ReturnsFalse()
+    {
+        var stamped = ArtifactStamping.Apply("original\n", StampStyle.HashComment);
+        var appended = stamped + "# my own change\n";
+
+        ArtifactStamping.TryParse(appended, out _, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void HasStamp_UnmodifiedStampedContent_ReturnsTrue()
+    {
+        var stamped = ArtifactStamping.Apply("original\n", StampStyle.HashComment);
+
+        ArtifactStamping.HasStamp(stamped).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasStamp_BodyEdited_ReturnsTrue()
+    {
+        // Malformed in the IsAuthentic sense (digest no longer matches), but the stamp's
+        // introductory text is still present — this must not be classified as "legacy".
+        var stamped = ArtifactStamping.Apply("original\n", StampStyle.HashComment);
+        var tampered = stamped.Replace("original", "edited", StringComparison.Ordinal);
+
+        ArtifactStamping.HasStamp(tampered).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasStamp_TruncatedHash_ReturnsTrue()
+    {
+        var stamped = ArtifactStamping.Apply("body\n", StampStyle.HashComment);
+        var truncated = stamped[..^10] + "\n";
+
+        ArtifactStamping.HasStamp(truncated).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasStamp_ContentAppendedAfterTheStamp_ReturnsTrue()
+    {
+        var stamped = ArtifactStamping.Apply("original\n", StampStyle.HashComment);
+        var appended = stamped + "# my own change\n";
+
+        ArtifactStamping.HasStamp(appended).Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasStamp_UnstampedContent_ReturnsFalse()
+    {
+        ArtifactStamping.HasStamp("just a file\n").Should().BeFalse();
+    }
 }
