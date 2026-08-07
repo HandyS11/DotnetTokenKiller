@@ -244,8 +244,10 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task MergeJsonSettingsAsync_ExistingWithDuplicateHook_SkipsFile()
+    public async Task MergeJsonSettingsAsync_ExistingWithDuplicateHook_ReportsUnchanged()
     {
+        // The hook entry is already registered: there is nothing to write, and --force would not
+        // change that, so this is a force-independent no-op reported as unchanged, not skipped.
         var context = new IntegrationContext(false);
         var path = Path.Combine(_tempDir, "settings.json");
         Directory.CreateDirectory(_tempDir);
@@ -284,7 +286,8 @@ public sealed class IntegratorHelpersTests : IDisposable
         await IntegratorHelpers.MergeJsonSettingsAsync(
             path, "PreToolUse", hookEntry, "python3 hook.py", context, CancellationToken.None);
 
-        context.Skipped.Should().ContainSingle();
+        context.Unchanged.Should().ContainSingle();
+        context.Skipped.Should().BeEmpty();
     }
 
     [Fact]
@@ -703,7 +706,7 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task MergeJsonSettingsAsync_ExistingNewProjectDirRootedCommand_IsIdempotent()
+    public async Task MergeJsonSettingsAsync_ExistingNewProjectDirRootedCommand_IsIdempotentAndReportsUnchanged()
     {
         var context = new IntegrationContext(false);
         var path = Path.Combine(_tempDir, "settings.json");
@@ -750,7 +753,10 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
         innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
-        context.Skipped.Should().ContainSingle();
+        // The command is already registered: nothing to write, and --force would not change that,
+        // so this is a force-independent no-op reported as unchanged, not skipped.
+        context.Unchanged.Should().ContainSingle();
+        context.Skipped.Should().BeEmpty();
         context.Updated.Should().BeEmpty();
     }
 

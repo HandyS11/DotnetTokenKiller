@@ -235,7 +235,12 @@ internal static class IntegratorHelpers
     /// Merges a hook entry into a JSON settings file under
     /// <c>hooks[<paramref name="hookEventKey"/>]</c>.
     /// Existing content is preserved; the entry is only added if not already present
-    /// (detected by matching <paramref name="hookCommand"/> in the "command" field).
+    /// (detected by matching <paramref name="hookCommand"/> in the "command" field). When the
+    /// entry is already present and no legacy entry needs replacing, nothing is written and the
+    /// path is reported <see cref="IntegrationContext.Unchanged"/> — this branch is
+    /// force-independent (there is nothing to write and <c>--force</c> would not change that), so
+    /// it must never be reported as a <see cref="IntegrationContext.Skipped"/> file, which implies
+    /// re-running with <c>--force</c> would help.
     /// If an entry carrying the pre-<c>$..._PROJECT_DIR</c> relative form of
     /// <paramref name="hookCommand"/> is found (see <see cref="DeriveLegacyCommand"/>), that stale
     /// entry is replaced in place instead of appending a duplicate alongside it — otherwise a
@@ -286,7 +291,7 @@ internal static class IntegratorHelpers
         {
             if (legacyEntry is null)
             {
-                context.Skipped.Add(path);
+                context.Unchanged.Add(path);
                 return;
             }
 

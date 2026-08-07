@@ -28,7 +28,12 @@ internal sealed class IntegrationContext
     /// <summary>Gets advisory messages accumulated during this integration run.</summary>
     internal List<string> Notes { get; } = [];
 
-    /// <summary>Gets the list of generated files that were already current during this run.</summary>
+    /// <summary>
+    /// Gets the list of file paths that needed no write during this run because the desired state
+    /// was already in place: a generated file already byte-identical to the stamped current
+    /// template, or a settings merge whose entry was already registered. Force-independent by
+    /// nature — <see cref="Force"/> would not change anything for these paths.
+    /// </summary>
     internal List<string> Unchanged { get; } = [];
 
     /// <summary>Builds an <see cref="IntegrationResult"/> from the accumulated lists.</summary>
