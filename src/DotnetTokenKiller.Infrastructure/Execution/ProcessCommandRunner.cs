@@ -98,16 +98,6 @@ public sealed class ProcessCommandRunner : ICommandRunner
 
         using var process = StartProcess(psi, command);
 
-        // Write the payload (if any) and close stdin either way, so a child that reads it sees EOF
-        // and exits instead of hanging forever waiting for input.
-        if (standardInput is not null)
-        {
-            await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        process.StandardInput.Close();
-
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
         var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
 #pragma warning restore CA2016
@@ -116,6 +106,30 @@ public sealed class ProcessCommandRunner : ICommandRunner
             // CRITICAL: drain both streams concurrently — sequential reads deadlock on large output
             var stdOutTask = readStdOut(process.StandardOutput, cancellationToken);
             var stdErrTask = readStdErr(process.StandardError, cancellationToken);
+
+            // CRITICAL: start draining before writing stdin — a child that fills its stdout pipe
+            // buffer before it has finished consuming stdin would otherwise deadlock: it blocks on
+            // its stdout write while we block on our stdin write, with nothing on either side
+            // reading. Writing after the drain tasks are already pumping avoids that.
+            //
+            // Write the payload (if any) and close stdin either way — even if the write throws
+            // (cancellation, or the child already closed its end) — so a child that reads it sees
+            // EOF and exits instead of hanging forever waiting for input. The registration above
+            // (and the catch below) cover cancellation while this write is in flight, same as they
+            // cover the drain/wait that follows.
+            try
+            {
+                if (standardInput is not null)
+                {
+                    await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                process.StandardInput.Close();
+            }
+
             await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();

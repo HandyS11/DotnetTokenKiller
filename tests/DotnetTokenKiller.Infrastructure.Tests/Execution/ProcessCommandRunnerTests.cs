@@ -298,6 +298,47 @@ public sealed class ProcessCommandRunnerTests
     }
 
     [Fact]
+    public async Task RunCapturedWithInputAsync_PayloadLargerThanAPipeBuffer_DoesNotDeadlockAsync()
+    {
+        // Regression test for a deadlock in an earlier version of this method, where the stdin
+        // payload was written *before* stdout/stderr draining started. A payload comfortably bigger
+        // than an OS pipe buffer (tens of KB) makes the child block trying to write its own echoed
+        // output back to us before it has finished reading all of our input, while we would still be
+        // blocked writing that input — nobody draining either side. A tiny payload (as the other
+        // tests above use) never fills the buffer, so it passes under either ordering and would not
+        // have caught the bug. This one hangs and times out under the old ordering, and completes
+        // quickly under the current one (drain tasks start before the stdin write).
+        var (cmd, args) = StdinDrainingCommand();
+        var payload = new string('a', 2_000_000); // no newlines: a no-op for `sort`, pure passthrough for `cat`
+
+        var task = _sut.RunCapturedWithInputAsync(cmd, args, payload, CancellationToken.None);
+        var done = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(15)));
+
+        done.Should().Be(task); // with draining started first, the child is never left blocked on stdout
+        var result = await task;
+        result.ExitCode.Should().Be(0);
+        // Trimming a trailing newline tolerates a platform command implementation that adds one;
+        // the point of this assertion is that none of the payload was lost, not exact byte framing.
+        result.StdOut.TrimEnd('\r', '\n').Should().Be(payload);
+    }
+
+    [Fact]
+    public async Task RunCapturedWithInputAsync_NullArgs_ThrowsArgumentNullException()
+    {
+        var act = async () => await _sut.RunCapturedWithInputAsync("echo", null!, string.Empty);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task RunCapturedWithInputAsync_NullStandardInput_ThrowsArgumentNullException()
+    {
+        var act = async () => await _sut.RunCapturedWithInputAsync("echo", [], null!);
+
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
     public async Task RunCapturedAsync_SetsEnglishCliLanguageOnChildAsync()
     {
         // Child echoes the env var back. If unset, Windows echoes the literal
