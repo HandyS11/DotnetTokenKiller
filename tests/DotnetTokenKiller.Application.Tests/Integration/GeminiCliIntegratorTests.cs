@@ -49,9 +49,13 @@ public sealed class GeminiCliIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
+        // GEMINI.md and settings.json are section/merge based and report skipped when already
+        // present. With generated-artifact stamping, the hook script is already byte-identical to
+        // the stamped current template, so it reports unchanged rather than skipped.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().HaveCount(3);
+        result.SkippedFiles.Should().HaveCount(2);
+        result.UnchangedFiles.Should().ContainSingle();
     }
 
     [Fact]
@@ -61,11 +65,14 @@ public sealed class GeminiCliIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        // GEMINI.md and hook are overwritten; settings.json is skipped because
-        // MergeSettingsJsonAsync is idempotent and the hook entry is already present.
+        // GEMINI.md is overwritten because section-based writes always replace under --force.
+        // Settings.json is skipped because the merge is idempotent and the hook entry is already
+        // present there. With generated-artifact stamping, the hook script has nothing to write
+        // over identical content, so it reports unchanged rather than updated.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().HaveCount(2);
+        result.UpdatedFiles.Should().ContainSingle();
         result.SkippedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().ContainSingle();
     }
 
     [Fact]

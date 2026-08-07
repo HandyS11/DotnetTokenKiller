@@ -96,8 +96,13 @@ public sealed class CopilotCliIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
+        // With generated-artifact stamping, the hook script is already byte-identical to the
+        // stamped current template, so it reports unchanged rather than skipped; the
+        // section-based instructions file and the plain-written registration JSON still report
+        // skipped.
         result.CreatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().HaveCount(3);
+        result.SkippedFiles.Should().HaveCount(2);
+        result.UnchangedFiles.Should().ContainSingle();
     }
 
     [Fact]
@@ -107,9 +112,13 @@ public sealed class CopilotCliIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
+        // The section-based instructions file and the plain-written registration JSON are always
+        // overwritten under --force. With generated-artifact stamping, the hook script has
+        // nothing to write over identical content, so it reports unchanged rather than updated.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().HaveCount(3);
+        result.UpdatedFiles.Should().HaveCount(2);
         result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().ContainSingle();
     }
 
     [Fact]

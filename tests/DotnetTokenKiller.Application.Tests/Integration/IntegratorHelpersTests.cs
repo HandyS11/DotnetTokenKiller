@@ -914,7 +914,8 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         await IntegratorHelpers.WriteHookAndSettingsAsync(spec, context, CancellationToken.None);
 
-        (await File.ReadAllTextAsync(scriptPath)).Should().Be(script);
+        (await File.ReadAllTextAsync(scriptPath)).Should().Be(
+            ArtifactStamping.Apply(script, StampStyle.HashComment));
         (await File.ReadAllTextAsync(settingsPath)).Should().Be(
             """
             {

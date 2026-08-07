@@ -108,6 +108,13 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
         ```
         """;
 
+    /// <summary>
+    /// Substring present in every generation of the skill file, used to recognize an unstamped copy
+    /// installed by dtk 0.6.0 or earlier. It is the frontmatter <c>name:</c> line, which has never
+    /// changed and cannot without breaking Claude Code's skill lookup.
+    /// </summary>
+    internal const string SkillLegacySignature = "name: dotnet-token-killer";
+
     /// <inheritdoc/>
     public string ProviderName => "claude";
 
@@ -131,9 +138,13 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     {
         var context = new IntegrationContext(force);
 
-        await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(baseDirectory, "skills", "dotnet-token-killer", "SKILL.md"),
-            SkillMarkdown, context, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteGeneratedFileAsync(
+            new GeneratedArtifact(
+                Path.Combine(baseDirectory, "skills", "dotnet-token-killer", "SKILL.md"),
+                SkillMarkdown,
+                StampStyle.HtmlComment,
+                SkillLegacySignature),
+            context, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.WriteHookAndSettingsAsync(
             new HookSpec(

@@ -206,7 +206,10 @@ internal static class IntegratorHelpers
         IntegrationContext context,
         CancellationToken cancellationToken)
     {
-        await WriteFileAsync(spec.ScriptPath, spec.Script, context, cancellationToken).ConfigureAwait(false);
+        await WriteGeneratedFileAsync(
+            new GeneratedArtifact(spec.ScriptPath, spec.Script, StampStyle.HashComment, HookLegacySignature),
+            context,
+            cancellationToken).ConfigureAwait(false);
 
         await MergeJsonSettingsAsync(
             spec.SettingsPath,

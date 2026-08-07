@@ -95,9 +95,12 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
         IntegrationContext context,
         CancellationToken cancellationToken)
     {
-        await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(hooksDir, HookScriptName),
-            HookScriptTemplates.CopilotCliHook,
+        await IntegratorHelpers.WriteGeneratedFileAsync(
+            new GeneratedArtifact(
+                Path.Combine(hooksDir, HookScriptName),
+                HookScriptTemplates.CopilotCliHook,
+                StampStyle.HashComment,
+                IntegratorHelpers.HookLegacySignature),
             context, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.WriteFileAsync(

@@ -49,9 +49,13 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
+        // With generated-artifact stamping, SKILL.md and the hook script are already
+        // byte-identical to the stamped current template, so they report unchanged rather than
+        // skipped; only settings.json (merge-based) reports skipped.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().HaveCount(3);
+        result.SkippedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().HaveCount(2);
     }
 
     [Fact]
@@ -61,10 +65,13 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        // SKILL.md and the Python hook are overwritten; settings.json is skipped because
-        // MergeSettingsJsonAsync is idempotent and the hook entry is already present.
+        // With generated-artifact stamping, a --force re-run over identical content writes nothing:
+        // the skill and hook are already current, so they report unchanged rather than updated.
+        // settings.json is skipped because MergeSettingsJsonAsync is idempotent and the hook entry
+        // is already present.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().HaveCount(2);
+        result.UpdatedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().HaveCount(2);
         result.SkippedFiles.Should().ContainSingle();
     }
 
