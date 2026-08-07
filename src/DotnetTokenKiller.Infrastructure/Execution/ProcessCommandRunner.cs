@@ -52,6 +52,25 @@ public sealed class ProcessCommandRunner : ICommandRunner
             cancellationToken);
     }
 
+    /// <inheritdoc/>
+    public Task<CommandResult> RunCapturedWithInputAsync(
+        string command,
+        IReadOnlyList<string> args,
+        string standardInput,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(standardInput);
+
+        return RunRedirectedAsync(
+            command,
+            args,
+            static (reader, token) => reader.ReadToEndAsync(token),
+            static (reader, token) => reader.ReadToEndAsync(token),
+            cancellationToken,
+            standardInput);
+    }
+
     /// <summary>
     /// Runs a command with both output streams redirected, draining each one through the supplied
     /// reader. Capture and streaming differ only in how a stream is drained, so everything else —
@@ -62,19 +81,31 @@ public sealed class ProcessCommandRunner : ICommandRunner
     /// <param name="readStdOut">Drains the child's stdout and returns everything it read.</param>
     /// <param name="readStdErr">Drains the child's stderr and returns everything it read.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="standardInput">
+    /// Text to write to the child's stdin before closing it, or <see langword="null"/> for no
+    /// payload. Either way, stdin is closed so a child that reads it sees EOF and exits instead of
+    /// hanging forever waiting for input this non-interactive capture will never otherwise provide.
+    /// </param>
     private static async Task<CommandResult> RunRedirectedAsync(
         string command,
         IReadOnlyList<string> args,
         Func<StreamReader, CancellationToken, Task<string>> readStdOut,
         Func<StreamReader, CancellationToken, Task<string>> readStdErr,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? standardInput = null)
     {
         var psi = CreateStartInfo(command, args, redirectStreams: true);
 
         using var process = StartProcess(psi, command);
 
-        // Close stdin immediately so a child that reads it sees EOF and exits instead of hanging
-        // forever waiting for input this non-interactive capture will never provide.
+        // Write the payload (if any) and close stdin either way, so a child that reads it sees EOF
+        // and exits instead of hanging forever waiting for input.
+        if (standardInput is not null)
+        {
+            await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         process.StandardInput.Close();
 
 #pragma warning disable CA2016 // CancellationToken is handled via registration below

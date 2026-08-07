@@ -294,6 +294,12 @@ public sealed class DoctorCommandTests : IDisposable
         {
             return Task.FromResult(new CommandResult(string.Empty, string.Empty, exitCode));
         }
+
+        public Task<CommandResult> RunCapturedWithInputAsync(string command, IReadOnlyList<string> args,
+            string standardInput, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CommandResult(string.Empty, string.Empty, exitCode));
+        }
     }
 
     /// <summary>Config provider returning an empty (not null) Tee.Directory, which the resolver

@@ -277,6 +277,27 @@ public sealed class ProcessCommandRunnerTests
     }
 
     [Fact]
+    public async Task RunCapturedWithInputAsync_WritesStdinAndCapturesTheEchoAsync()
+    {
+        var (cmd, args) = StdinDrainingCommand();
+
+        var result = await _sut.RunCapturedWithInputAsync(cmd, args, "axb\n", CancellationToken.None);
+
+        result.ExitCode.Should().Be(0);
+        result.StdOut.Should().Contain("axb");
+    }
+
+    [Fact]
+    public async Task RunCapturedWithInputAsync_EmptyInput_ClosesStdinSoTheChildExitsAsync()
+    {
+        var (cmd, args) = StdinDrainingCommand();
+
+        var result = await _sut.RunCapturedWithInputAsync(cmd, args, string.Empty, CancellationToken.None);
+
+        result.ExitCode.Should().Be(0);
+    }
+
+    [Fact]
     public async Task RunCapturedAsync_SetsEnglishCliLanguageOnChildAsync()
     {
         // Child echoes the env var back. If unset, Windows echoes the literal
