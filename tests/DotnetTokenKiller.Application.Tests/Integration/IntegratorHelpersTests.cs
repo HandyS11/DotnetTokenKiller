@@ -1228,4 +1228,128 @@ public sealed class IntegratorHelpersTests : IDisposable
     {
         IntegratorHelpers.ShouldSkipWrite(fileExists, force).Should().Be(expected);
     }
+
+    // --- WriteGeneratedFileAsync ---
+
+    private static GeneratedArtifact Artifact(string path, string body = "print('v2')\n")
+        => new(path, body, StampStyle.HashComment, "_DTK_SUBCOMMANDS");
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_FileMissing_CreatesItStamped()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Created.Should().ContainSingle().Which.Should().Be(path);
+        ArtifactStamping.IsAuthentic(await File.ReadAllTextAsync(path)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_AlreadyCurrent_ReportsUnchangedNotSkipped()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        var artifact = Artifact(path);
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(artifact.Body, artifact.Style));
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(artifact, context, default);
+
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Skipped.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_StampedOlderGeneration_RefreshesWithoutForce()
+    {
+        // The whole point of the feature: an untouched artifact from an older dtk is dtk's own
+        // output, so overwriting it destroys nothing.
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment));
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+        (await File.ReadAllTextAsync(path)).Should().Contain("print('v2')");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_UnstampedButRecognized_RefreshesAndNotes()
+    {
+        // Nothing installed by dtk 0.6.0 or earlier carries a stamp; without this branch the fix
+        // would not fire for a single existing user in the release that ships it.
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "_DTK_SUBCOMMANDS = (\"build\",)\n");
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+        context.Notes.Should().ContainSingle().Which.Should().Contain("older dtk");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_StampedButEdited_SkipsWithoutForce()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        await File.WriteAllTextAsync(path, stamped.Replace("v1", "mine", StringComparison.Ordinal));
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        (await File.ReadAllTextAsync(path)).Should().Contain("mine");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_UnrecognizedForeignFile_SkipsWithoutForce()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "# someone else's script\n");
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Skipped.Should().ContainSingle();
+        (await File.ReadAllTextAsync(path)).Should().Contain("someone else");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_StampedButEditedWithForce_Overwrites()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        await File.WriteAllTextAsync(path, stamped.Replace("v1", "mine", StringComparison.Ordinal));
+        var context = new IntegrationContext(force: true);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle();
+        (await File.ReadAllTextAsync(path)).Should().Contain("print('v2')");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_AlreadyCurrentWithForce_StillReportsUnchanged()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        var artifact = Artifact(path);
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(artifact.Body, artifact.Style));
+        var context = new IntegrationContext(force: true);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(artifact, context, default);
+
+        context.Unchanged.Should().ContainSingle();
+        context.Updated.Should().BeEmpty();
+    }
 }

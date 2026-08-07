@@ -47,6 +47,79 @@ internal static class IntegratorHelpers
     internal static bool ShouldSkipWrite(bool fileExists, bool force) => fileExists && !force;
 
     /// <summary>
+    /// Substring present in every generation of the Python hooks, used to recognize an unstamped
+    /// copy installed by dtk 0.6.0 or earlier.
+    /// </summary>
+    internal const string HookLegacySignature = "_DTK_SUBCOMMANDS";
+
+    /// <summary>
+    /// Writes an artifact dtk generates in full, refreshing it when dtk can prove it wrote the
+    /// copy already on disk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The rule, in order: a missing file is created; a file already equal to the stamped current
+    /// template is reported unchanged; a file whose stamp still verifies came from an older dtk
+    /// and is refreshed; an unstamped file carrying
+    /// <see cref="GeneratedArtifact.LegacySignature"/> predates stamping and is refreshed with a
+    /// note; anything else is left alone unless <c>--force</c> is passed.
+    /// </para>
+    /// <para>
+    /// The legacy branch exists because no artifact installed before stamping carries a stamp, so
+    /// without it every existing user would fall through to the skip branch and the refresh would
+    /// only begin working one release after the one that adds it. It costs a one-time overwrite
+    /// for anyone who hand-edited an unstamped hook, which is why the overwrite is reported rather
+    /// than silent, and it becomes unreachable once one stamped generation is installed.
+    /// </para>
+    /// </remarks>
+    /// <param name="artifact">The artifact to write.</param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task WriteGeneratedFileAsync(
+        GeneratedArtifact artifact,
+        IntegrationContext context,
+        CancellationToken cancellationToken)
+    {
+        var content = ArtifactStamping.Apply(artifact.Body, artifact.Style);
+
+        if (!File.Exists(artifact.Path))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(artifact.Path)!);
+            await File.WriteAllTextAsync(artifact.Path, content, cancellationToken).ConfigureAwait(false);
+            context.Created.Add(artifact.Path);
+            return;
+        }
+
+        var existing = (await File.ReadAllTextAsync(artifact.Path, cancellationToken).ConfigureAwait(false))
+            .ReplaceLineEndings("\n");
+
+        if (string.Equals(existing, content, StringComparison.Ordinal))
+        {
+            context.Unchanged.Add(artifact.Path);
+            return;
+        }
+
+        var isLegacy = !ArtifactStamping.TryParse(existing, out _, out _)
+                       && existing.Contains(artifact.LegacySignature, StringComparison.Ordinal);
+
+        if (!ArtifactStamping.IsAuthentic(existing) && !isLegacy && !context.Force)
+        {
+            context.Skipped.Add(artifact.Path);
+            return;
+        }
+
+        await File.WriteAllTextAsync(artifact.Path, content, cancellationToken).ConfigureAwait(false);
+        context.Updated.Add(artifact.Path);
+
+        if (isLegacy)
+        {
+            context.Notes.Add(
+                $"{artifact.Path} was written by an older dtk and carried no provenance stamp; it was "
+                + "regenerated. Any local edits to it are recoverable from version control.");
+        }
+    }
+
+    /// <summary>
     /// Writes a file that uses begin/end section markers to track a dtk-managed block.
     /// If the file already exists — whether or not it contains the section marker — and
     /// <c>context.Force</c> is <see langword="false"/>: skips, leaving the file completely

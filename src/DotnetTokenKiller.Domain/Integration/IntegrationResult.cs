@@ -22,4 +22,14 @@ public sealed record IntegrationResult(
         : this(createdFiles, updatedFiles, skippedFiles, [])
     {
     }
+
+    /// <summary>
+    /// Gets the dtk-generated files that were already current, so nothing was written.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="SkippedFiles"/>, which means "left alone because dtk could not
+    /// prove it wrote this". Merging the two would make the CLI advise <c>--force</c> for a file
+    /// that is already up to date, where the flag would change nothing.
+    /// </remarks>
+    public IReadOnlyList<string> UnchangedFiles { get; init; } = [];
 }
