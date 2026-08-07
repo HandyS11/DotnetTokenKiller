@@ -17,7 +17,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Declared <see langword="internal"/> because its primary constructor takes the internal
 /// <see cref="HomePaths"/>; reached polymorphically via <see cref="IProviderIntegrator"/> through DI.
 /// </remarks>
-internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator
+internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
 {
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
@@ -54,17 +54,37 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     public string ProviderName => "copilot-cli";
 
     /// <inheritdoc/>
+    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    {
+        var hooksDir = scope == HookScope.Global ? home.CopilotHooksDir : Path.Combine(directory, ".github", "hooks");
+
+        return
+        [
+            new HookInstallation(
+                ProviderName,
+                scope,
+                new GeneratedArtifact(
+                    Path.Combine(hooksDir, HookScriptName),
+                    HookScriptTemplates.CopilotCliHook,
+                    StampStyle.HashComment,
+                    IntegratorHelpers.HookLegacySignature),
+                Path.Combine(hooksDir, HookJsonName),
+                HookPayloadKind.CopilotCli)
+        ];
+    }
+
+    /// <inheritdoc/>
     public async Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
     {
         var context = new IntegrationContext(force);
-        var hooksDir = Path.Combine(directory, ".github", "hooks");
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             Path.Combine(directory, ".github", "copilot-instructions.md"),
             SectionMarker, SectionEndMarker, CopilotSection,
             context, cancellationToken).ConfigureAwait(false);
 
-        await WriteHookArtifactsAsync(hooksDir, HookCwdRelative, context, cancellationToken).ConfigureAwait(false);
+        await WriteHookArtifactsAsync(directory, HookScope.Project, HookCwdRelative, context, cancellationToken)
+            .ConfigureAwait(false);
 
         return context.ToResult();
     }
@@ -76,7 +96,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
 
         // Global (~/.copilot/hooks) is not a git-tracked location, so an absolute cwd is portable and
         // unambiguous here (unlike the repo variant, which uses a relative cwd for a committed file).
-        await WriteHookArtifactsAsync(home.CopilotHooksDir, home.CopilotHooksDir, context, cancellationToken)
+        await WriteHookArtifactsAsync(home.Home, HookScope.Global, home.CopilotHooksDir, context, cancellationToken)
             .ConfigureAwait(false);
 
         context.Notes.Add(
@@ -89,22 +109,20 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     /// <summary>Relative <c>cwd</c> for the repository hook (resolved by Copilot CLI against the repo root).</summary>
     private const string HookCwdRelative = ".github/hooks";
 
-    private static async Task WriteHookArtifactsAsync(
-        string hooksDir,
+    private async Task WriteHookArtifactsAsync(
+        string directory,
+        HookScope scope,
         string cwd,
         IntegrationContext context,
         CancellationToken cancellationToken)
     {
-        await IntegratorHelpers.WriteGeneratedFileAsync(
-            new GeneratedArtifact(
-                Path.Combine(hooksDir, HookScriptName),
-                HookScriptTemplates.CopilotCliHook,
-                StampStyle.HashComment,
-                IntegratorHelpers.HookLegacySignature),
-            context, cancellationToken).ConfigureAwait(false);
+        var hookInstallation = DescribeHooks(directory, scope)[0];
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(hookInstallation.Script, context, cancellationToken)
+            .ConfigureAwait(false);
 
         await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(hooksDir, HookJsonName),
+            hookInstallation.RegistrationPath,
             BuildHookJson(cwd),
             context, cancellationToken).ConfigureAwait(false);
     }
