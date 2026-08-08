@@ -1,4 +1,4 @@
-**Status:** Designed — implementation plan pending
+**Status:** Implemented — see [the plan](../plans/2026-08-07-integration-freshness.md)
 **Implements:** §8 of [2026-07-27-rtk-gap-analysis.md](2026-07-27-rtk-gap-analysis.md), plus the
 deployed-artifact half of §7's failure mode
 
