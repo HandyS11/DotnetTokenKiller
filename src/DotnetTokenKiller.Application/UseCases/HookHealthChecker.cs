@@ -41,13 +41,29 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             {
                 foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
                 {
-                    if (!File.Exists(installation.Script.Path))
+                    var scriptExists = File.Exists(installation.Script.Path);
+                    var (registered, registrationMessage) = await ReadRegisteredCommandAsync(
+                        installation, cancellationToken).ConfigureAwait(false);
+
+                    // An installation is present when either the script exists or the registration
+                    // names it — a hook whose script was moved or deleted after being registered
+                    // must still surface (as a failure), not be silently skipped as "no integration
+                    // here". Only when neither holds is there truly nothing to report.
+                    if (!scriptExists && registered is null)
                     {
                         continue;
                     }
 
-                    var (registered, registrationMessage) = await ReadRegisteredCommandAsync(
-                        installation, cancellationToken).ConfigureAwait(false);
+                    if (!scriptExists)
+                    {
+                        checks.Add(new DiagnosticCheck(
+                            CheckName(installation, "hook"),
+                            false,
+                            $"{installation.Script.Path} is registered but missing. "
+                            + $"Run 'dtk integrate {installation.ProviderName}' to reinstall it."));
+                        continue;
+                    }
+
                     checks.Add(await BuildStatusCheckAsync(installation, registered, registrationMessage, cancellationToken)
                         .ConfigureAwait(false));
 
@@ -264,13 +280,29 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
     /// Takes the interpreter from the registered command's first token, so an install whose command
     /// was edited is probed the way the host CLI will actually run it.
     /// </summary>
+    /// <remarks>
+    /// A quoted first token (e.g. Windows' <c>"C:\Program Files\Python\python.exe" hook.py</c>) is
+    /// taken whole, up to its closing quote, rather than split on the space it contains — splitting
+    /// on whitespace alone would take just <c>"C:\Program</c> and fail a working install.
+    /// </remarks>
     /// <param name="registeredCommand">The command found in the registration file.</param>
     private static string ResolveInterpreter(string registeredCommand)
     {
-        var first = registeredCommand.Split(
-            [' ', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        var trimmed = registeredCommand.TrimStart(' ', '\t');
 
-        return string.IsNullOrEmpty(first) ? "python3" : first.Trim('"');
+        if (trimmed.Length == 0)
+        {
+            return "python3";
+        }
+
+        if (trimmed[0] == '"')
+        {
+            var closingQuote = trimmed.IndexOf('"', 1);
+            return closingQuote < 0 ? trimmed[1..] : trimmed[1..closingQuote];
+        }
+
+        var end = trimmed.IndexOfAny([' ', '\t']);
+        return end < 0 ? trimmed : trimmed[..end];
     }
 
     /// <summary>Builds the stdin payload in the shape the provider's host CLI sends.</summary>

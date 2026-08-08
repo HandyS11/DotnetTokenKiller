@@ -29,7 +29,10 @@ internal static class IntegratorHelpers
     /// left untouched and reported <see cref="IntegrationContext.Skipped"/> unless
     /// <see cref="IntegrationContext.Force"/> is set: unlike <see cref="WriteGeneratedFileAsync"/>,
     /// this method has no stamp to prove dtk wrote the differing copy, so it cannot tell a user
-    /// edit from a stale dtk write and must not overwrite without <c>--force</c>.
+    /// edit from a stale dtk write and must not overwrite without <c>--force</c>. When the existing
+    /// file cannot be read (locked, permission denied), dtk cannot prove it wrote that file, so it
+    /// is never reported <see cref="IntegrationContext.Unchanged"/> — it falls back to the same
+    /// skip-or-force decision as a content difference.
     /// </remarks>
     /// <param name="path">Path to the target file.</param>
     /// <param name="content">The full content to write.</param>
@@ -45,10 +48,10 @@ internal static class IntegratorHelpers
 
         if (exists)
         {
-            var existing = (await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false))
-                .ReplaceLineEndings("\n");
+            var existing = await TryReadExistingAsync(path, cancellationToken).ConfigureAwait(false);
 
-            if (string.Equals(existing, content.ReplaceLineEndings("\n"), StringComparison.Ordinal))
+            if (existing is not null
+                && string.Equals(existing, content.ReplaceLineEndings("\n"), StringComparison.Ordinal))
             {
                 context.Unchanged.Add(path);
                 return;
@@ -64,6 +67,29 @@ internal static class IntegratorHelpers
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, content, cancellationToken).ConfigureAwait(false);
         (exists ? context.Updated : context.Created).Add(path);
+    }
+
+    /// <summary>
+    /// Reads an existing file's content, normalized to <c>\n</c> line endings, or
+    /// <see langword="null"/> when the file exists but cannot be read (locked, permission denied).
+    /// A read failure must never be mistaken for "file doesn't exist" or "content differs" by the
+    /// caller — both <see cref="WriteFileAsync"/> and <see cref="WriteGeneratedFileAsync"/> treat a
+    /// <see langword="null"/> result as "cannot prove authorship" and fall back to the skip-or-force
+    /// decision, matching the guarded-read pattern in <c>HookHealthChecker</c>.
+    /// </summary>
+    /// <param name="path">Path to the existing file to read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<string?> TryReadExistingAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false))
+                .ReplaceLineEndings("\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
@@ -103,6 +129,13 @@ internal static class IntegratorHelpers
     /// for anyone who hand-edited an unstamped hook, which is why the overwrite is reported rather
     /// than silent, and it becomes unreachable once one stamped generation is installed.
     /// </para>
+    /// <para>
+    /// When the existing artifact cannot be read (locked, permission denied), dtk cannot prove it
+    /// wrote the copy on disk, so that copy is never treated as up to date or legacy: without
+    /// <c>--force</c> it is reported <see cref="IntegrationContext.Skipped"/>, matching an
+    /// unrecognized foreign file; with <c>--force</c> it is overwritten like any other differing
+    /// copy.
+    /// </para>
     /// </remarks>
     /// <param name="artifact">The artifact to write.</param>
     /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
@@ -122,8 +155,20 @@ internal static class IntegratorHelpers
             return;
         }
 
-        var existing = (await File.ReadAllTextAsync(artifact.Path, cancellationToken).ConfigureAwait(false))
-            .ReplaceLineEndings("\n");
+        var existing = await TryReadExistingAsync(artifact.Path, cancellationToken).ConfigureAwait(false);
+
+        if (existing is null)
+        {
+            if (!context.Force)
+            {
+                context.Skipped.Add(artifact.Path);
+                return;
+            }
+
+            await File.WriteAllTextAsync(artifact.Path, content, cancellationToken).ConfigureAwait(false);
+            context.Updated.Add(artifact.Path);
+            return;
+        }
 
         if (string.Equals(existing, content, StringComparison.Ordinal))
         {

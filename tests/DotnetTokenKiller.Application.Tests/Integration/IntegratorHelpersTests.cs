@@ -117,6 +117,32 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Updated.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileUnreadable_NoForce_SkipsInsteadOfThrowing()
+    {
+        // dtk cannot prove it wrote a file it cannot read, so an unreadable existing file must
+        // never be treated as Unchanged, and the read failure (locked, permission denied) must not
+        // abort the whole integration run — it falls back to the same skip-or-force decision as a
+        // content difference. An exclusive lock held from within this process is used rather than
+        // chmod, since chmod-based "unreadable" files are not reliably unreadable when tests run as
+        // root.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "content");
+
+        await using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => IntegratorHelpers.WriteFileAsync(path, "content", context, CancellationToken.None);
+
+            await act.Should().NotThrowAsync();
+        }
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        context.Unchanged.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+    }
+
     // --- WriteSectionBasedFileAsync ---
 
     [Fact]
@@ -1453,6 +1479,32 @@ public sealed class IntegratorHelpersTests : IDisposable
         await IntegratorHelpers.WriteGeneratedFileAsync(artifact, context, default);
 
         context.Unchanged.Should().ContainSingle();
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_ExistingArtifactUnreadable_NoForce_SkipsInsteadOfThrowing()
+    {
+        // Same hazard as WriteFileAsync: dtk cannot prove authorship of an artifact it cannot read,
+        // so it must never be refreshed or reported Unchanged, and the read failure must not crash
+        // the whole 'dtk integrate' run. An exclusive lock held from within this process is used
+        // rather than chmod, since chmod-based "unreadable" files are not reliably unreadable when
+        // tests run as root.
+        var path = Path.Combine(_tempDir, "hook.py");
+        var artifact = Artifact(path);
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(artifact.Body, artifact.Style));
+        var context = new IntegrationContext(force: false);
+
+        await using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => IntegratorHelpers.WriteGeneratedFileAsync(artifact, context, default);
+
+            await act.Should().NotThrowAsync();
+        }
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        context.Unchanged.Should().BeEmpty();
         context.Updated.Should().BeEmpty();
     }
 }

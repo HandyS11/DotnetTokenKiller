@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Execution;
@@ -205,5 +206,94 @@ public sealed class HookHealthCheckerTests : IDisposable
             Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_QuotedInterpreterPathWithSpace_ProbesWithTheWholeQuotedPath()
+    {
+        // On Windows a registration commonly reads "C:\Program Files\Python\python.exe" hook.py.
+        // Splitting the registered command on whitespace alone would take just "C:\Program and
+        // report a false failure on a working install.
+        await IntegrateAsync();
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(installation.RegistrationPath));
+        const string interpreter = "C:\\Program Files\\Python\\python.exe";
+        ReplaceStringValue(root, "python3", $"\"{interpreter}\"");
+        await File.WriteAllTextAsync(installation.RegistrationPath, root!.ToJsonString());
+
+        await _sut.RunAsync(Integrators, _tempDir, default);
+
+        await _runner.Received().RunCapturedWithInputAsync(
+            interpreter,
+            Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptMovedOrDeletedButStillRegistered_FailsNamingTheMissingScript()
+    {
+        // A hook registered in settings.json whose script was moved or deleted must not be silently
+        // skipped as "no integration here" — that would report a broken integration as healthy,
+        // which is the exact failure class this checker exists to catch.
+        await IntegrateAsync();
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        File.Delete(installation.Script.Path);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().ContainSingle("one root cause must produce one failure, not two");
+        checks[0].Passed.Should().BeFalse();
+        checks[0].Message.Should().Contain(installation.Script.Path).And.Contain("missing");
+    }
+
+    /// <summary>Replaces every string value containing <paramref name="oldSubstring"/> in a JSON tree.</summary>
+    /// <param name="node">The JSON node (object, array, or value) to search and mutate in place.</param>
+    /// <param name="oldSubstring">The substring to look for in each string value.</param>
+    /// <param name="newSubstring">The substring to replace it with.</param>
+    private static void ReplaceStringValue(JsonNode? node, string oldSubstring, string newSubstring)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var key in obj.Select(pair => pair.Key).ToList())
+            {
+                if (TryReplace(obj[key], oldSubstring, newSubstring, out var replaced))
+                {
+                    obj[key] = replaced;
+                }
+                else
+                {
+                    ReplaceStringValue(obj[key], oldSubstring, newSubstring);
+                }
+            }
+        }
+        else if (node is JsonArray arr)
+        {
+            for (var i = 0; i < arr.Count; i++)
+            {
+                if (TryReplace(arr[i], oldSubstring, newSubstring, out var replaced))
+                {
+                    arr[i] = replaced;
+                }
+                else
+                {
+                    ReplaceStringValue(arr[i], oldSubstring, newSubstring);
+                }
+            }
+        }
+    }
+
+    private static bool TryReplace(JsonNode? value, string oldSubstring, string newSubstring, out string? replaced)
+    {
+        if (value is JsonValue jsonValue
+            && jsonValue.TryGetValue<string>(out var text)
+            && text.Contains(oldSubstring, StringComparison.Ordinal))
+        {
+            replaced = text.Replace(oldSubstring, newSubstring, StringComparison.Ordinal);
+            return true;
+        }
+
+        replaced = null;
+        return false;
     }
 }
