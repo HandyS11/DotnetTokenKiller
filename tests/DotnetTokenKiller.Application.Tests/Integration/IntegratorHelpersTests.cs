@@ -1321,11 +1321,15 @@ public sealed class IntegratorHelpersTests : IDisposable
     {
         // The stamp's digest only ever covers the body above it, so a trailing hand-edit — e.g.
         // "# my own change" tacked on below an otherwise-genuine stamp — must not read as either
-        // authentic (its own digest is untouched) or legacy (the file still contains
-        // _DTK_SUBCOMMANDS). Getting either wrong silently overwrites the edit.
+        // authentic (its own digest is untouched) or legacy. The installed body deliberately
+        // carries the real _DTK_SUBCOMMANDS legacy signature so this test actually exercises the
+        // legacy branch's "no stamp at all" test (ArtifactStamping.HasStamp) rather than passing
+        // vacuously because the body happens not to contain the signature: a legacy check keyed on
+        // "!TryParse(...) && Contains(signature)" instead would misclassify this exact file as
+        // legacy and refresh it anyway, discarding the edit through the other branch.
         var path = Path.Combine(_tempDir, "hook.py");
         Directory.CreateDirectory(_tempDir);
-        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        var stamped = ArtifactStamping.Apply("_DTK_SUBCOMMANDS = (\"build\",)\n", StampStyle.HashComment);
         var appended = stamped + "# my own change\n";
         await File.WriteAllTextAsync(path, appended);
         var context = new IntegrationContext(force: false);
@@ -1340,9 +1344,14 @@ public sealed class IntegratorHelpersTests : IDisposable
     [Fact]
     public async Task WriteGeneratedFileAsync_TextAppendedAfterStampWithForce_Overwrites()
     {
+        // Mirror of the skip case above, same installed content, so the pair pins "without --force
+        // it is skipped, with --force it is overwritten" for the identical scenario. --force bypasses
+        // the authentic/legacy decision entirely, so unlike the skip test above this one does not
+        // discriminate between the correct and buggy legacy check — it exists to confirm --force
+        // still works for this specific installed content, not to pin which check produced isLegacy.
         var path = Path.Combine(_tempDir, "hook.py");
         Directory.CreateDirectory(_tempDir);
-        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        var stamped = ArtifactStamping.Apply("_DTK_SUBCOMMANDS = (\"build\",)\n", StampStyle.HashComment);
         await File.WriteAllTextAsync(path, stamped + "# my own change\n");
         var context = new IntegrationContext(force: true);
 

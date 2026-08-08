@@ -98,11 +98,20 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             return (null, $"not registered — {installation.RegistrationPath} does not exist");
         }
 
+        string content;
+        try
+        {
+            content = await File.ReadAllTextAsync(installation.RegistrationPath, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return (null, $"{installation.RegistrationPath} could not be read: {ex.Message}");
+        }
+
         JsonNode? root;
         try
         {
-            var content = await File.ReadAllTextAsync(installation.RegistrationPath, cancellationToken)
-                .ConfigureAwait(false);
             root = JsonNode.Parse(content);
         }
         catch (JsonException ex)
@@ -156,8 +165,17 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                 $"{registrationMessage}. Run 'dtk integrate {installation.ProviderName}'.");
         }
 
-        var installed = (await File.ReadAllTextAsync(installation.Script.Path, cancellationToken)
-            .ConfigureAwait(false)).ReplaceLineEndings("\n");
+        string installed;
+        try
+        {
+            installed = (await File.ReadAllTextAsync(installation.Script.Path, cancellationToken)
+                .ConfigureAwait(false)).ReplaceLineEndings("\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new DiagnosticCheck(name, false, $"{installation.Script.Path} could not be read: {ex.Message}");
+        }
+
         var current = ArtifactStamping.Apply(installation.Script.Body, installation.Script.Style);
 
         if (string.Equals(installed, current, StringComparison.Ordinal))

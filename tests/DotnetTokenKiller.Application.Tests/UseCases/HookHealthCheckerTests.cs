@@ -122,6 +122,42 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_RegistrationUnreadable_StatusFailsNamingPathAndReason()
+    {
+        // An I/O failure reading the registration (locked, permission-denied, ...) must become a
+        // failed check, not an unhandled exception out of RunAsync. An exclusive lock held from
+        // within this process is used rather than chmod, since chmod-based "unreadable" files are
+        // not reliably unreadable when tests run as root.
+        await IntegrateAsync();
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+
+        await using (new FileStream(installation.RegistrationPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+            checks.Should().ContainSingle();
+            checks[0].Passed.Should().BeFalse();
+            checks[0].Message.Should().Contain(installation.RegistrationPath).And.Contain("could not be read");
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptUnreadable_StatusFailsNamingPathAndReason()
+    {
+        await IntegrateAsync();
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+
+        await using (new FileStream(installation.Script.Path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+            var status = checks.First(c => c.Name == "gemini hook (project)");
+            status.Passed.Should().BeFalse();
+            status.Message.Should().Contain(installation.Script.Path).And.Contain("could not be read");
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_HookDoesNotRewrite_ProbeFailsAndNamesTheSubcommand()
     {
         await IntegrateAsync();
