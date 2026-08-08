@@ -55,7 +55,13 @@ public sealed class DocsBindingTests
         }
     }
 
-    /// <summary>All command names in the Spectre tree, walked depth-first (e.g. "log", "list package").</summary>
+    /// <summary>
+    /// Every full command phrase in the Spectre tree, walked depth-first (e.g. "log",
+    /// "list", "list package") — the full space-joined path at each node, not just the
+    /// immediate token, so a check that a command is documented actually binds to the phrase a
+    /// user would type (e.g. "list package", "dotnet build"), not to any generic word that happens
+    /// to appear somewhere in the docs.
+    /// </summary>
     private static List<string> RegisteredCommandNames()
     {
         var names = new List<string>();
@@ -66,8 +72,9 @@ public sealed class DocsBindingTests
         {
             foreach (var name in ParseCommandsSection(RunHelp([.. path, "--help"])))
             {
-                into.Add(name);
-                Walk([.. path, name], into);
+                string[] fullPath = [.. path, name];
+                into.Add(string.Join(' ', fullPath));
+                Walk(fullPath, into);
             }
         }
     }
