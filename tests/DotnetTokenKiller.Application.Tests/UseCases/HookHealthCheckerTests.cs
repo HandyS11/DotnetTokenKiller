@@ -38,8 +38,22 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private IReadOnlyList<IHookIntegrator> Integrators => [new GeminiCliIntegrator(Home)];
 
-    private async Task IntegrateAsync()
-        => await new GeminiCliIntegrator(Home).IntegrateAsync(_tempDir, force: false, default);
+    private async Task IntegrateAsync(HookScope scope = HookScope.Project)
+    {
+        var integrator = new GeminiCliIntegrator(Home);
+        if (scope == HookScope.Global)
+        {
+            await integrator.IntegrateGlobalAsync(force: false, default);
+        }
+        else
+        {
+            await integrator.IntegrateAsync(_tempDir, force: false, default);
+        }
+    }
+
+    /// <summary>Lowercased scope label matching the <c>(project)</c>/<c>(global)</c> suffix in check names.</summary>
+    /// <param name="scope">The scope to render.</param>
+    private static string ScopeLabel(HookScope scope) => scope.ToString().ToLowerInvariant();
 
     [Fact]
     public async Task RunAsync_NoHooksAnywhere_ReportsOnePassingInformationalCheck()
@@ -63,49 +77,85 @@ public sealed class HookHealthCheckerTests : IDisposable
         checks.Select(c => c.Name).Should().Contain("gemini hook (project)", "gemini hook probe (project)");
     }
 
-    [Fact]
-    public async Task RunAsync_ScriptStale_StatusFailsAndNamesTheRemedy()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_ScriptStale_StatusFailsAndNamesTheRemedy(bool isGlobal)
     {
-        await IntegrateAsync();
-        var scriptPath = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0].Script.Path;
+        var scope = isGlobal ? HookScope.Global : HookScope.Project;
+        await IntegrateAsync(scope);
+        var scriptPath = Integrators[0].DescribeHooks(_tempDir, scope)[0].Script.Path;
         await File.WriteAllTextAsync(
             scriptPath,
             ArtifactStamping.Apply("_DTK_SUBCOMMANDS = (\"build\",)\n", StampStyle.HashComment));
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
-        var status = checks.First(c => c.Name == "gemini hook (project)");
+        var status = checks.First(c => c.Name == $"gemini hook ({ScopeLabel(scope)})");
         status.Passed.Should().BeFalse();
         status.Message.Should().Contain("stale").And.Contain("dtk integrate gemini");
         status.Message.Should().NotContain("--force", "a stale-but-unmodified hook refreshes without it");
+
+        if (scope == HookScope.Global)
+        {
+            status.Message.Should().Contain("--global", "a global hook's remedy must refresh the global install");
+        }
+        else
+        {
+            status.Message.Should().NotContain("--global", "a project hook's remedy must not send the user to --global");
+        }
     }
 
-    [Fact]
-    public async Task RunAsync_ScriptEditedLocally_StatusFailsAndAsksForForce()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_ScriptEditedLocally_StatusFailsAndAsksForForce(bool isGlobal)
     {
-        await IntegrateAsync();
-        var scriptPath = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0].Script.Path;
+        var scope = isGlobal ? HookScope.Global : HookScope.Project;
+        await IntegrateAsync(scope);
+        var scriptPath = Integrators[0].DescribeHooks(_tempDir, scope)[0].Script.Path;
         await File.AppendAllTextAsync(scriptPath, "# my own change\n");
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
-        var status = checks.First(c => c.Name == "gemini hook (project)");
+        var status = checks.First(c => c.Name == $"gemini hook ({ScopeLabel(scope)})");
         status.Passed.Should().BeFalse();
         status.Message.Should().Contain("modified").And.Contain("--force");
+
+        if (scope == HookScope.Global)
+        {
+            status.Message.Should().Contain("--global --force", "the scope and force flags must combine");
+        }
+        else
+        {
+            status.Message.Should().NotContain("--global");
+        }
     }
 
-    [Fact]
-    public async Task RunAsync_ScriptPresentButNotRegistered_StatusFailsAndProbeIsNotRun()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_ScriptPresentButNotRegistered_StatusFailsAndProbeIsNotRun(bool isGlobal)
     {
-        await IntegrateAsync();
-        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        var scope = isGlobal ? HookScope.Global : HookScope.Project;
+        await IntegrateAsync(scope);
+        var installation = Integrators[0].DescribeHooks(_tempDir, scope)[0];
         await File.WriteAllTextAsync(installation.RegistrationPath, "{}");
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
         checks.Should().ContainSingle("one root cause must produce one failure, not two");
         checks[0].Passed.Should().BeFalse();
-        checks[0].Message.Should().Contain("not registered");
+        checks[0].Message.Should().Contain("not registered").And.Contain("dtk integrate gemini");
+
+        if (scope == HookScope.Global)
+        {
+            checks[0].Message.Should().Contain("--global", "a global hook's remedy must refresh the global install");
+        }
+        else
+        {
+            checks[0].Message.Should().NotContain("--global", "a project hook's remedy must not send the user to --global");
+        }
     }
 
     [Fact]
@@ -158,18 +208,30 @@ public sealed class HookHealthCheckerTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task RunAsync_HookDoesNotRewrite_ProbeFailsAndNamesTheSubcommand()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_HookDoesNotRewrite_ProbeFailsAndNamesTheSubcommand(bool isGlobal)
     {
-        await IntegrateAsync();
+        var scope = isGlobal ? HookScope.Global : HookScope.Project;
+        await IntegrateAsync(scope);
         _runner.RunCapturedWithInputAsync(null!, null!, null!)
             .ReturnsForAnyArgs(new CommandResult("dtk dotnet build", string.Empty, 0));
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
-        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
+        var probe = checks.First(c => c.Name == $"gemini hook probe ({ScopeLabel(scope)})");
         probe.Passed.Should().BeFalse();
-        probe.Message.Should().Contain("list package");
+        probe.Message.Should().Contain("list package").And.Contain("dtk integrate gemini");
+
+        if (scope == HookScope.Global)
+        {
+            probe.Message.Should().Contain("--global");
+        }
+        else
+        {
+            probe.Message.Should().NotContain("--global");
+        }
     }
 
     [Fact]
@@ -230,21 +292,34 @@ public sealed class HookHealthCheckerTests : IDisposable
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task RunAsync_ScriptMovedOrDeletedButStillRegistered_FailsNamingTheMissingScript()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_ScriptMovedOrDeletedButStillRegistered_FailsNamingTheMissingScript(bool isGlobal)
     {
         // A hook registered in settings.json whose script was moved or deleted must not be silently
         // skipped as "no integration here" — that would report a broken integration as healthy,
         // which is the exact failure class this checker exists to catch.
-        await IntegrateAsync();
-        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        var scope = isGlobal ? HookScope.Global : HookScope.Project;
+        await IntegrateAsync(scope);
+        var installation = Integrators[0].DescribeHooks(_tempDir, scope)[0];
         File.Delete(installation.Script.Path);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
         checks.Should().ContainSingle("one root cause must produce one failure, not two");
         checks[0].Passed.Should().BeFalse();
-        checks[0].Message.Should().Contain(installation.Script.Path).And.Contain("missing");
+        checks[0].Message.Should().Contain(installation.Script.Path).And.Contain("missing")
+            .And.Contain("dtk integrate gemini");
+
+        if (scope == HookScope.Global)
+        {
+            checks[0].Message.Should().Contain("--global");
+        }
+        else
+        {
+            checks[0].Message.Should().NotContain("--global");
+        }
     }
 
     /// <summary>Replaces every string value containing <paramref name="oldSubstring"/> in a JSON tree.</summary>

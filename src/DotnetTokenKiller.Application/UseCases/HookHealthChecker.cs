@@ -60,7 +60,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                             CheckName(installation, "hook"),
                             false,
                             $"{installation.Script.Path} is registered but missing. "
-                            + $"Run 'dtk integrate {installation.ProviderName}' to reinstall it."));
+                            + $"Run '{RemedyCommand(installation)}' to reinstall it."));
                         continue;
                     }
 
@@ -178,7 +178,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             return new DiagnosticCheck(
                 name,
                 false,
-                $"{registrationMessage}. Run 'dtk integrate {installation.ProviderName}'.");
+                $"{registrationMessage}. Run '{RemedyCommand(installation)}'.");
         }
 
         string installed;
@@ -213,12 +213,12 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             ? new DiagnosticCheck(
                 name,
                 false,
-                $"stale — written by an older dtk. Run 'dtk integrate {installation.ProviderName}' to refresh.")
+                $"stale — written by an older dtk. Run '{RemedyCommand(installation)}' to refresh.")
             : new DiagnosticCheck(
                 name,
                 false,
-                "modified locally — dtk will not overwrite it. Run 'dtk integrate "
-                + $"{installation.ProviderName} --force' to regenerate.");
+                "modified locally — dtk will not overwrite it. Run '"
+                + $"{RemedyCommand(installation, "--force")}' to regenerate.");
     }
 
     /// <summary>Feeds a payload through the installed hook and asserts every subcommand is rewritten.</summary>
@@ -263,7 +263,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                     name,
                     false,
                     $"does not rewrite: {string.Join(", ", missing)}. "
-                    + $"Run 'dtk integrate {installation.ProviderName}' to refresh the hook.");
+                    + $"Run '{RemedyCommand(installation)}' to refresh the hook.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -331,4 +331,19 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
     /// <param name="label">The check label.</param>
     private static string CheckName(HookInstallation installation, string label)
         => $"{installation.ProviderName} {label} ({installation.Scope.ToString().ToLowerInvariant()})";
+
+    /// <summary>
+    /// Renders the <c>dtk integrate</c> remedy command for one installation, appending
+    /// <c>--global</c> whenever that installation lives in the user's home config. Every remedy
+    /// message must go through this so a global-hook failure can never be pointed at the plain,
+    /// project-scoped command — which refreshes the wrong installation and leaves doctor red.
+    /// </summary>
+    /// <param name="installation">The installation the remedy command targets.</param>
+    /// <param name="extraFlags">Additional flags to append after the scope flag, e.g. <c>--force</c>.</param>
+    private static string RemedyCommand(HookInstallation installation, string? extraFlags = null)
+    {
+        var scopeFlag = installation.Scope == HookScope.Global ? " --global" : string.Empty;
+        var trailingFlags = string.IsNullOrEmpty(extraFlags) ? string.Empty : $" {extraFlags}";
+        return $"dtk integrate {installation.ProviderName}{scopeFlag}{trailingFlags}";
+    }
 }
