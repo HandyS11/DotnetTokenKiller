@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration;
@@ -35,45 +36,10 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
 
         var checks = new List<DiagnosticCheck>();
 
-        foreach (var integrator in integrators)
+        await foreach (var candidate in EnumerateCandidatesAsync(integrators, projectDirectory, cancellationToken)
+            .ConfigureAwait(false))
         {
-            foreach (var scope in new[] { HookScope.Project, HookScope.Global })
-            {
-                foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
-                {
-                    var scriptExists = File.Exists(installation.Script.Path);
-                    var (registered, registrationMessage) = await ReadRegisteredCommandAsync(
-                        installation, cancellationToken).ConfigureAwait(false);
-
-                    // An installation is present when either the script exists or the registration
-                    // names it — a hook whose script was moved or deleted after being registered
-                    // must still surface (as a failure), not be silently skipped as "no integration
-                    // here". Only when neither holds is there truly nothing to report.
-                    if (!scriptExists && registered is null)
-                    {
-                        continue;
-                    }
-
-                    if (!scriptExists)
-                    {
-                        checks.Add(new DiagnosticCheck(
-                            CheckName(installation, "hook"),
-                            false,
-                            $"{installation.Script.Path} is registered but missing. "
-                            + $"Run 'dtk integrate {installation.ProviderName}' to reinstall it."));
-                        continue;
-                    }
-
-                    checks.Add(await BuildStatusCheckAsync(installation, registered, registrationMessage, cancellationToken)
-                        .ConfigureAwait(false));
-
-                    if (registered is not null)
-                    {
-                        checks.Add(await ProbeAsync(installation, registered, cancellationToken)
-                            .ConfigureAwait(false));
-                    }
-                }
-            }
+            checks.AddRange(await CheckInstallationAsync(candidate, cancellationToken).ConfigureAwait(false));
         }
 
         if (checks.Count == 0)
@@ -87,6 +53,97 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
 
         return checks;
     }
+
+    /// <summary>
+    /// Yields every hook installation, across all integrators and both scopes, that has something to
+    /// report — i.e. the presence filter from <see cref="RunAsync"/> already applied.
+    /// </summary>
+    /// <remarks>
+    /// An installation is present when either the script exists or the registration names it — a
+    /// hook whose script was moved or deleted after being registered must still surface (as a
+    /// failure), not be silently skipped as "no integration here". Only when neither holds is there
+    /// truly nothing to report.
+    /// </remarks>
+    /// <param name="integrators">The hook-installing providers to inspect.</param>
+    /// <param name="projectDirectory">The directory to treat as the project root.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async IAsyncEnumerable<HookInstallationCandidate> EnumerateCandidatesAsync(
+        IReadOnlyList<IHookIntegrator> integrators,
+        string projectDirectory,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        foreach (var integrator in integrators)
+        {
+            foreach (var scope in new[] { HookScope.Project, HookScope.Global })
+            {
+                foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
+                {
+                    var scriptExists = File.Exists(installation.Script.Path);
+                    var (registered, registrationMessage) = await ReadRegisteredCommandAsync(
+                        installation, cancellationToken).ConfigureAwait(false);
+
+                    if (!scriptExists && registered is null)
+                    {
+                        continue;
+                    }
+
+                    yield return new HookInstallationCandidate(installation, scriptExists, registered, registrationMessage);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs the status check for one installation, plus the probe when registration was found.
+    /// </summary>
+    /// <remarks>
+    /// The probe is skipped when registration was not found, so one root cause — an unregistered
+    /// hook — yields one failure rather than two.
+    /// </remarks>
+    /// <param name="candidate">The installation to check, and what its presence scan found.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<IReadOnlyList<DiagnosticCheck>> CheckInstallationAsync(
+        HookInstallationCandidate candidate,
+        CancellationToken cancellationToken)
+    {
+        var (installation, scriptExists, registered, registrationMessage) = candidate;
+
+        if (!scriptExists)
+        {
+            return
+            [
+                new DiagnosticCheck(
+                    CheckName(installation, "hook"),
+                    false,
+                    $"{installation.Script.Path} is registered but missing. "
+                    + $"Run '{RemedyCommand(installation)}' to reinstall it.")
+            ];
+        }
+
+        var checks = new List<DiagnosticCheck>
+        {
+            await BuildStatusCheckAsync(installation, registered, registrationMessage, cancellationToken)
+                .ConfigureAwait(false)
+        };
+
+        if (registered is not null)
+        {
+            checks.Add(await ProbeAsync(installation, registered, cancellationToken).ConfigureAwait(false));
+        }
+
+        return checks;
+    }
+
+    /// <summary>One hook installation together with what the presence scan found for it.</summary>
+    /// <param name="Installation">The installation being checked.</param>
+    /// <param name="ScriptExists">Whether the hook script file exists on disk.</param>
+    /// <param name="RegisteredCommand">The command found in the registration, or <see langword="null"/>.</param>
+    /// <param name="RegistrationMessage">The reason no command was found, when applicable.</param>
+    private sealed record HookInstallationCandidate(
+        HookInstallation Installation,
+        bool ScriptExists,
+        string? RegisteredCommand,
+        string RegistrationMessage);
 
     /// <summary>
     /// Finds the command the host CLI is configured to run for this hook, by locating any string in
@@ -178,7 +235,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             return new DiagnosticCheck(
                 name,
                 false,
-                $"{registrationMessage}. Run 'dtk integrate {installation.ProviderName}'.");
+                $"{registrationMessage}. Run '{RemedyCommand(installation)}'.");
         }
 
         string installed;
@@ -213,12 +270,12 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             ? new DiagnosticCheck(
                 name,
                 false,
-                $"stale — written by an older dtk. Run 'dtk integrate {installation.ProviderName}' to refresh.")
+                $"stale — written by an older dtk. Run '{RemedyCommand(installation)}' to refresh.")
             : new DiagnosticCheck(
                 name,
                 false,
-                "modified locally — dtk will not overwrite it. Run 'dtk integrate "
-                + $"{installation.ProviderName} --force' to regenerate.");
+                "modified locally — dtk will not overwrite it. Run '"
+                + $"{RemedyCommand(installation, "--force")}' to regenerate.");
     }
 
     /// <summary>Feeds a payload through the installed hook and asserts every subcommand is rewritten.</summary>
@@ -263,7 +320,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                     name,
                     false,
                     $"does not rewrite: {string.Join(", ", missing)}. "
-                    + $"Run 'dtk integrate {installation.ProviderName}' to refresh the hook.");
+                    + $"Run '{RemedyCommand(installation)}' to refresh the hook.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -331,4 +388,19 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
     /// <param name="label">The check label.</param>
     private static string CheckName(HookInstallation installation, string label)
         => $"{installation.ProviderName} {label} ({installation.Scope.ToString().ToLowerInvariant()})";
+
+    /// <summary>
+    /// Renders the <c>dtk integrate</c> remedy command for one installation, appending
+    /// <c>--global</c> whenever that installation lives in the user's home config. Every remedy
+    /// message must go through this so a global-hook failure can never be pointed at the plain,
+    /// project-scoped command — which refreshes the wrong installation and leaves doctor red.
+    /// </summary>
+    /// <param name="installation">The installation the remedy command targets.</param>
+    /// <param name="extraFlags">Additional flags to append after the scope flag, e.g. <c>--force</c>.</param>
+    private static string RemedyCommand(HookInstallation installation, string? extraFlags = null)
+    {
+        var scopeFlag = installation.Scope == HookScope.Global ? " --global" : string.Empty;
+        var trailingFlags = string.IsNullOrEmpty(extraFlags) ? string.Empty : $" {extraFlags}";
+        return $"dtk integrate {installation.ProviderName}{scopeFlag}{trailingFlags}";
+    }
 }
