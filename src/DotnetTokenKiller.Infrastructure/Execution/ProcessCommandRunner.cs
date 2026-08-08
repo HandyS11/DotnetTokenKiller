@@ -121,13 +121,35 @@ public sealed class ProcessCommandRunner : ICommandRunner
             {
                 if (standardInput is not null)
                 {
-                    await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken)
-                        .ConfigureAwait(false);
+                    try
+                    {
+                        await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (IOException)
+                    {
+                        // Broken pipe: the child exited, crashed, or otherwise stopped reading stdin
+                        // before we finished writing. That is normal behaviour for a child process —
+                        // e.g. a hook script with a syntax error exits immediately without touching
+                        // stdin — not a failure of this run. Swallow it here so the drain below still
+                        // captures whatever the child actually wrote and its real exit code; do not
+                        // widen this to catch anything else, a genuine stdout/stderr drain failure
+                        // must still surface.
+                    }
                 }
             }
             finally
             {
-                process.StandardInput.Close();
+                try
+                {
+                    process.StandardInput.Close();
+                }
+                catch (IOException)
+                {
+                    // Same broken-pipe reason as the write above: closing an already-broken pipe can
+                    // itself throw on flush. Still non-fatal for the same reason — swallow it so the
+                    // child's real output and exit code are what this call reports.
+                }
             }
 
             await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);

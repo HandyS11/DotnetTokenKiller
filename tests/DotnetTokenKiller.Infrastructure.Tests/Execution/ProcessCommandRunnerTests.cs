@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using DotnetTokenKiller.Infrastructure.Execution;
 using FluentAssertions;
 using Xunit;
@@ -308,8 +309,25 @@ public sealed class ProcessCommandRunnerTests
         // tests above use) never fills the buffer, so it passes under either ordering and would not
         // have caught the bug. This one hangs and times out under the old ordering, and completes
         // quickly under the current one (drain tasks start before the stdin write).
+        //
+        // The payload is many identical short lines rather than one giant line: Windows `sort` has a
+        // per-line length limit far below 2 MB, so a single huge line fails there (which is exactly
+        // what triggered the broken-pipe defect this test's sibling below guards). Sorting identical
+        // lines is order-preserving — the output is the same multiset of lines regardless of how
+        // `sort` orders them — so `sort` still round-trips the content just like `cat` does. The
+        // total size stays comfortably above an OS pipe buffer, so the deadlock this test targets is
+        // still reachable.
         var (cmd, args) = StdinDrainingCommand();
-        var payload = new string('a', 2_000_000); // no newlines: a no-op for `sort`, pure passthrough for `cat`
+        const int lineCount = 20_000;
+        const int lineLength = 100;
+        var line = new string('a', lineLength);
+        var payloadBuilder = new StringBuilder(lineCount * (lineLength + 1));
+        for (var i = 0; i < lineCount; i++)
+        {
+            payloadBuilder.Append(line).Append('\n');
+        }
+
+        var payload = payloadBuilder.ToString();
 
         var task = _sut.RunCapturedWithInputAsync(cmd, args, payload, CancellationToken.None);
         var done = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(15)));
@@ -317,9 +335,37 @@ public sealed class ProcessCommandRunnerTests
         done.Should().Be(task); // with draining started first, the child is never left blocked on stdout
         var result = await task;
         result.ExitCode.Should().Be(0);
-        // Trimming a trailing newline tolerates a platform command implementation that adds one;
-        // the point of this assertion is that none of the payload was lost, not exact byte framing.
-        result.StdOut.TrimEnd('\r', '\n').Should().Be(payload);
+        // Windows `sort` may rewrite line endings (LF -> CRLF) and/or add or drop a trailing
+        // newline, so normalise both sides before comparing rather than requiring byte-exact
+        // framing. The assertion is still "nothing was lost", just tolerant of that platform-level
+        // line-ending rewrite.
+        var normalizedActual = result.StdOut.ReplaceLineEndings("\n").TrimEnd('\n');
+        var normalizedExpected = payload.ReplaceLineEndings("\n").TrimEnd('\n');
+        normalizedActual.Should().Be(normalizedExpected);
+    }
+
+    [Fact]
+    public async Task RunCapturedWithInputAsync_ChildStopsReadingStdin_ReturnsTheChildsExitCodeInsteadOfThrowingAsync()
+    {
+        // Regression test for a defect where a child that stops reading stdin before consuming the
+        // whole payload — because it exits, crashes, or simply never reads input at all — made the
+        // stdin write (or the close's flush) raise "IOException: The pipe is being closed", which
+        // escaped RunRedirectedAsync and discarded the child's real output and exit code. That is
+        // normal behaviour for a child process, not an error: HookHealthChecker.ProbeAsync hits this
+        // whenever an installed hook script has a syntax error, since Python then exits immediately
+        // without ever reading the JSON payload on stdin. The probe must surface Python's actual
+        // exit code and stderr, not a broken-pipe message that hides them.
+        var (cmd, args) = ExitCodeCommand(3);
+
+        // Bigger than an OS pipe buffer (tens of KB) so the write is still in flight — or blocked
+        // waiting for the reader — when the child exits and closes its end of the pipe underneath us.
+        var payload = new string('a', 2_000_000);
+
+        var task = _sut.RunCapturedWithInputAsync(cmd, args, payload, CancellationToken.None);
+        var done = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(15)));
+
+        done.Should().Be(task); // must return, not hang or throw, once the child has exited
+        (await task).ExitCode.Should().Be(3);
     }
 
     [Fact]
