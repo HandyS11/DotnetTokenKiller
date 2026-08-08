@@ -1,5 +1,7 @@
+using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Integration;
 
 namespace DotnetTokenKiller.Application.UseCases;
 
@@ -10,28 +12,49 @@ namespace DotnetTokenKiller.Application.UseCases;
 public sealed record DiagnosticCheck(string Name, bool Passed, string Message);
 
 /// <summary>Runs a series of self-diagnostic checks to verify dtk is set up correctly.</summary>
+/// <remarks>
+/// Declared <see langword="internal"/> (rather than <see langword="public"/>, its original
+/// accessibility) because its primary constructor takes the internal <see cref="HookHealthChecker"/>:
+/// a primary constructor is as accessible as its containing type, and the compiler rejects (CS0051)
+/// a public constructor exposing a less-accessible parameter type. Its only consumer,
+/// <c>DoctorCommand</c>, is internal and resolves it through DI.
+/// </remarks>
 /// <param name="runner">The command runner used to probe the dotnet SDK.</param>
 /// <param name="configProvider">The configuration provider.</param>
-public sealed class DoctorUseCase(ICommandRunner runner, IConfigProvider configProvider)
+/// <param name="hookHealth">Checks installed rewrite hooks.</param>
+/// <param name="integrators">All provider integrators; the hook-installing ones are inspected.</param>
+internal sealed class DoctorUseCase(
+    ICommandRunner runner,
+    IConfigProvider configProvider,
+    HookHealthChecker hookHealth,
+    IEnumerable<IProviderIntegrator> integrators)
 {
     /// <summary>
     /// Runs all diagnostic checks and returns the results.
     /// </summary>
     /// <param name="dbPath">Resolved path to the tracking database file.</param>
     /// <param name="teeDirectory">Resolved path to the tee output directory.</param>
+    /// <param name="projectDirectory">The directory to treat as the project root for hook checks.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task<IReadOnlyList<DiagnosticCheck>> RunAsync(
+    internal async Task<IReadOnlyList<DiagnosticCheck>> RunAsync(
         string dbPath,
         string teeDirectory,
+        string projectDirectory,
         CancellationToken cancellationToken = default)
     {
-        return
-        [
+        var checks = new List<DiagnosticCheck>
+        {
             await CheckDotnetSdkAsync(cancellationToken).ConfigureAwait(false),
             await CheckConfigAsync(cancellationToken).ConfigureAwait(false),
             CheckDbAccessible(dbPath),
             CheckTeeWritable(teeDirectory)
-        ];
+        };
+
+        checks.AddRange(await hookHealth
+            .RunAsync([.. integrators.OfType<IHookIntegrator>()], projectDirectory, cancellationToken)
+            .ConfigureAwait(false));
+
+        return checks;
     }
 
     private async Task<DiagnosticCheck> CheckDotnetSdkAsync(CancellationToken cancellationToken)

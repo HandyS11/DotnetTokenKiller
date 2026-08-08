@@ -145,6 +145,14 @@ It checks SDK, config, DB, and tee — but not whether the hook is installed, re
 hook integrity. The strongest version feeds a sample payload through the *installed* hook and
 asserts the rewrite comes back.
 
+> **Resolved 2026-08-07.** `doctor` now checks every installed hook: present, registered in the
+> host CLI's settings, and current against the generator — then feeds a payload through the
+> installed script via the interpreter the registration actually names, asserting every canonical
+> subcommand comes back rewritten. Generated artifacts carry a provenance stamp, so an untouched
+> hook from an older dtk refreshes on the next `dtk integrate` without `--force`, which is what
+> made §7's failure mode survivable on already-deployed machines.
+> See [the design](2026-08-07-integration-freshness-design.md).
+
 ## 9. Smaller items
 
 - **Negative-savings accounting.** When `dotnet format` prints nothing, raw = 0 tokens while DTK's

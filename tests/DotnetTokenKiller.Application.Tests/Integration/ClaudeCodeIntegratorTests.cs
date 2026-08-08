@@ -43,29 +43,38 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsAllFiles()
+    public async Task IntegrateAsync_SecondRun_NoForce_ReportsAllFilesUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
+        // With generated-artifact stamping, SKILL.md and the hook script are already
+        // byte-identical to the stamped current template, so they report unchanged rather than
+        // skipped. settings.json's merge is also idempotent — the hook entry is already
+        // registered, so dtk can prove there is nothing to write there either — so it reports
+        // unchanged too, not skipped: nothing here would change if --force were added.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().HaveCount(3);
+        result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().HaveCount(3);
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesSkillAndHookFiles()
+    public async Task IntegrateAsync_SecondRun_WithForce_ReportsAllFilesUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        // SKILL.md and the Python hook are overwritten; settings.json is skipped because
-        // MergeSettingsJsonAsync is idempotent and the hook entry is already present.
+        // With generated-artifact stamping, a --force re-run over identical content writes nothing:
+        // the skill and hook are already current, so they report unchanged rather than updated.
+        // settings.json's merge is idempotent and the hook entry is already present, so it is also
+        // unchanged, not skipped — force-independent by nature, so --force changes nothing here.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().HaveCount(2);
-        result.SkippedFiles.Should().ContainSingle();
+        result.UpdatedFiles.Should().BeEmpty();
+        result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().HaveCount(3);
     }
 
     [Fact]
@@ -135,16 +144,17 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SettingsJsonAlreadyHasHook_SkipsFile()
+    public async Task IntegrateAsync_SettingsJsonAlreadyHasHook_ReportsUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         // First run created settings.json with the hook.
-        // Second run should detect the hook and skip.
+        // Second run should detect the hook is already registered and report it unchanged: there
+        // is nothing to write, and --force would not change that.
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
-        result.SkippedFiles.Should().Contain(settingsPath);
+        result.UnchangedFiles.Should().Contain(settingsPath);
     }
 
     [Fact]

@@ -67,24 +67,34 @@ public sealed class AiderIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsBothFiles()
+    public async Task IntegrateAsync_SecondRun_NoForce_SkipsConfAndReportsInstructionsUnchanged()
     {
+        // The instructions file's content is deterministic, so a repeat run finds it
+        // byte-identical and reports it unchanged rather than skipped: WriteFileAsync must never
+        // print false "use --force" advice for a file --force would not change. The conf file
+        // goes through WriteSectionBasedFileAsync, which has no such comparison and always
+        // reports skipped for an existing file without --force.
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        result.SkippedFiles.Should().HaveCount(2);
+        result.SkippedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().ContainSingle();
         result.CreatedFiles.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesBothFiles()
+    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesConfAndReportsInstructionsUnchanged()
     {
+        // The conf file has no identical-content check and is always rewritten under --force. The
+        // instructions file has nothing to write over identical content, so it reports unchanged
+        // rather than updated.
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        result.UpdatedFiles.Should().HaveCount(2);
+        result.UpdatedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().ContainSingle();
         result.CreatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
     }

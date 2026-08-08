@@ -63,6 +63,19 @@ public sealed class DoctorCommandTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_NoHookInstalled_PrintsTheHookIntegrationRow()
+    {
+        // Create() wires no IHookIntegrator into the use case, so this holds regardless of
+        // whether the process happens to run inside a directory with a real hook installed.
+        Directory.CreateDirectory(_tempDir);
+        var (command, console) = Create(0);
+
+        await command.RunAsync(CancellationToken.None);
+
+        console.Output.Should().Contain("hook integration");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_NullConfigPaths_ReportsSharedTrackerAndTeeDefaultPaths()
     {
         // With null config paths and no env override, doctor must report the EXACT default paths
@@ -75,7 +88,7 @@ public sealed class DoctorCommandTests : IDisposable
             console.Profile.Width = 400; // avoid wrapping the long absolute paths in the output
             var configProvider = new NullPathsConfigProvider();
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -103,7 +116,7 @@ public sealed class DoctorCommandTests : IDisposable
             console.Profile.Width = 400;
             var configProvider = new EmptyTeeDirectoryConfigProvider();
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -133,7 +146,7 @@ public sealed class DoctorCommandTests : IDisposable
             console.Profile.Width = 400;
             var configProvider = new StubConfigProvider(_tempDir); // config points tee elsewhere
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -158,7 +171,7 @@ public sealed class DoctorCommandTests : IDisposable
         console.Profile.Width = 400;
         var configProvider = new StubConfigProvider(_tempDir); // db = _tempDir/tracking.db, tee = _tempDir
         var runner = new StubCommandRunner(0);
-        var useCase = new DoctorUseCase(runner, configProvider);
+        var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
         var command = new DoctorCommand(useCase, configProvider, console);
 
         var exitCode = await command.RunAsync(CancellationToken.None);
@@ -214,7 +227,7 @@ public sealed class DoctorCommandTests : IDisposable
             // Config has null DbPath — so env var is the only way to resolve a valid path
             var configProvider = new NullPathsConfigProvider();
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -233,7 +246,7 @@ public sealed class DoctorCommandTests : IDisposable
         var console = new TestConsole();
         var configProvider = new StubConfigProvider(_tempDir);
         var runner = new StubCommandRunner(dotnetExitCode);
-        var useCase = new DoctorUseCase(runner, configProvider);
+        var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
         var command = new DoctorCommand(useCase, configProvider, console);
         return (command, console);
     }
@@ -291,6 +304,12 @@ public sealed class DoctorCommandTests : IDisposable
 
         public Task<CommandResult> RunStreamedAsync(string command, IReadOnlyList<string> args,
             TextWriter stdOutSink, TextWriter stdErrSink, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new CommandResult(string.Empty, string.Empty, exitCode));
+        }
+
+        public Task<CommandResult> RunCapturedWithInputAsync(string command, IReadOnlyList<string> args,
+            string standardInput, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new CommandResult(string.Empty, string.Empty, exitCode));
         }

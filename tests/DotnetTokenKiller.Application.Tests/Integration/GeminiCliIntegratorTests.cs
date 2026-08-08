@@ -43,29 +43,39 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsAllFiles()
+    public async Task IntegrateAsync_SecondRun_NoForce_SkipsGeminiMdOnly()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
+        // GEMINI.md is section-based and reports skipped when already present without --force.
+        // With generated-artifact stamping, the hook script is already byte-identical to the
+        // stamped current template, so it reports unchanged rather than skipped. settings.json's
+        // merge is idempotent — the hook entry is already registered, so dtk can prove there is
+        // nothing to write there either — so it reports unchanged too, not skipped.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().HaveCount(3);
+        result.SkippedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesGeminiMdAndHook()
+    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesGeminiMdOnly()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        // GEMINI.md and hook are overwritten; settings.json is skipped because
-        // MergeSettingsJsonAsync is idempotent and the hook entry is already present.
+        // GEMINI.md is overwritten because section-based writes always replace under --force.
+        // With generated-artifact stamping, the hook script has nothing to write over identical
+        // content, so it reports unchanged rather than updated. settings.json's merge is
+        // idempotent and the hook entry is already present, so it is also unchanged, not skipped —
+        // force-independent by nature, so --force changes nothing there.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().HaveCount(2);
-        result.SkippedFiles.Should().ContainSingle();
+        result.UpdatedFiles.Should().ContainSingle();
+        result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().HaveCount(2);
     }
 
     [Fact]
@@ -136,13 +146,13 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SettingsAlreadyHasHook_SkipsFile()
+    public async Task IntegrateAsync_SettingsAlreadyHasHook_ReportsUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        result.SkippedFiles.Should().Contain(SettingsPath);
+        result.UnchangedFiles.Should().Contain(SettingsPath);
     }
 
     [Fact]

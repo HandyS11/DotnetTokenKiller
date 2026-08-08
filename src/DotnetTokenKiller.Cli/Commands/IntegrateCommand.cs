@@ -76,13 +76,20 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             console.MarkupLine($"[yellow]updated[/]  {Markup.Escape(RelativePath(directory, file))}");
         }
 
+        foreach (var file in result.UnchangedFiles)
+        {
+            console.MarkupLine($"[grey]unchanged[/] {Markup.Escape(RelativePath(directory, file))}");
+        }
+
         foreach (var file in result.SkippedFiles)
         {
             // Once --force was already passed, telling the user to "use --force" is never true:
-            // WriteFileAsync/WriteSectionBasedFileAsync always honor force, so any remaining skip
-            // (e.g. a hook already registered) is a force-independent no-op, not something a
-            // repeated --force would change. Force *merges/appends* the managed section and
-            // preserves user content — it never overwrites — so the hint must not say "overwrite".
+            // every remaining producer of SkippedFiles (WriteFileAsync, WriteSectionBasedFileAsync,
+            // WriteGeneratedFileAsync's unauthenticated-content branch) is gated on !force, so under
+            // --force this loop never actually runs. A force-independent no-op — e.g. a settings
+            // merge whose hook entry is already registered — is reported in UnchangedFiles instead,
+            // never here. Force *merges/appends* the managed section and preserves user content — it
+            // never overwrites — so the hint must not say "overwrite".
             var hint = settings.Force ? string.Empty : " [grey](use --force to integrate into existing files)[/]";
             console.MarkupLine($"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))}{hint}");
         }
@@ -103,10 +110,15 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
     /// <c>.aider.conf.yml</c> without the dtk <c>read:</c> key) might never have been functionally
     /// integrated — the CLI cannot tell that apart from a file that already carries dtk's exact
     /// managed content, so without <c>--force</c> it must never claim "Done" or "Already
-    /// integrated". Once <c>--force</c> is passed, <see cref="IntegratorHelpers.ShouldSkipWrite"/>
-    /// -based skips can no longer occur (they require <c>!force</c>), so any remaining skip must
-    /// come from content-based detection (e.g. the hook command is already registered) — "Already
-    /// integrated" is honest in that case.
+    /// integrated". A generated artifact (the Python hook, <c>SKILL.md</c>) that is already
+    /// byte-identical to the current stamped template, and a settings merge whose hook entry is
+    /// already registered, both arrive in <see cref="IntegrationResult.UnchangedFiles"/> rather
+    /// than <see cref="IntegrationResult.SkippedFiles"/> — dtk can prove nothing needs to change
+    /// there, so they never trigger the skipped-files warning below, force or not. Once
+    /// <c>--force</c> is passed, every remaining <see cref="IntegratorHelpers.ShouldSkipWrite"/>
+    /// -gated skip is unreachable too (they all require <c>!force</c>), so <c>SkippedFiles</c> is
+    /// always empty under <c>--force</c> — the summary correctly falls through to "Done"/"Already
+    /// integrated" below.
     /// </summary>
     /// <param name="result">The integration result whose created/updated/skipped sets drive the summary.</param>
     /// <param name="force">Whether the integration ran with the force flag.</param>

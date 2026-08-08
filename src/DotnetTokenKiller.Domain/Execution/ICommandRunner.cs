@@ -36,4 +36,18 @@ public interface ICommandRunner
         TextWriter stdOutSink,
         TextWriter stdErrSink,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs the command, writes <paramref name="standardInput"/> to its stdin, closes stdin, and
+    /// captures stdout/stderr.
+    /// </summary>
+    /// <param name="command">The executable to run.</param>
+    /// <param name="args">Arguments to pass to the executable.</param>
+    /// <param name="standardInput">Text to write to the child's standard input before closing it.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<CommandResult> RunCapturedWithInputAsync(
+        string command,
+        IReadOnlyList<string> args,
+        string standardInput,
+        CancellationToken cancellationToken = default);
 }

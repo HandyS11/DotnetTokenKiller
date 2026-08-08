@@ -557,6 +557,78 @@ public class IntegrateCommandTests
         stub.LastGlobalForce.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task RunAsync_SecondRunWithNoChanges_ReportsAlreadyIntegratedRatherThanAdvisingForce()
+    {
+        // Before generated-artifact stamping, a repeat run put the hook and skill in the skipped
+        // bucket and told the user to re-run with --force — advice that would have changed nothing.
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-freshness-{Guid.NewGuid():N}");
+
+        try
+        {
+            var settings = new IntegrateCommandSettings { Provider = "claude", Directory = dir };
+
+            var firstConsole = new TestConsole();
+            (await CreateClaudeCommand(dir, firstConsole).RunAsync(settings, CancellationToken.None)).Should().Be(0);
+            firstConsole.Output.Should().Contain("created");
+
+            // TestConsole.Clear(bool) clears the terminal (writes ANSI clear codes into Output), it
+            // does not reset the captured Output buffer — so a fresh console/command pair is used for
+            // the second run to observe only its output, wired against the same on-disk install.
+            var secondConsole = new TestConsole();
+            (await CreateClaudeCommand(dir, secondConsole).RunAsync(settings, CancellationToken.None)).Should().Be(0);
+
+            secondConsole.Output.Should().Contain("Already integrated");
+            secondConsole.Output.Should().NotContain("--force");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_SecondRunWithNoChanges_ListsTheUnchangedArtifacts()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-freshness-{Guid.NewGuid():N}");
+
+        try
+        {
+            var settings = new IntegrateCommandSettings { Provider = "claude", Directory = dir };
+
+            await CreateClaudeCommand(dir, new TestConsole()).RunAsync(settings, CancellationToken.None);
+
+            var secondConsole = new TestConsole();
+            await CreateClaudeCommand(dir, secondConsole).RunAsync(settings, CancellationToken.None);
+
+            secondConsole.Output.Should().Contain("unchanged");
+            secondConsole.Output.Should().Contain("dotnet-to-dtk.py");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    /// <summary>
+    /// Builds a real (non-stub) Claude integration command rooted at an isolated home, so repeat
+    /// runs against <paramref name="dir"/> exercise the actual freshness detection in
+    /// <see cref="IntegratorHelpers.WriteGeneratedFileAsync"/> and
+    /// <see cref="IntegratorHelpers.MergeJsonSettingsAsync"/> rather than a canned
+    /// <see cref="IntegrationResult"/>.
+    /// </summary>
+    /// <param name="dir">The project directory to integrate into.</param>
+    /// <param name="console">The console the command writes its output to.</param>
+    private static IntegrateCommand CreateClaudeCommand(string dir, TestConsole console)
+    {
+        var isolatedHome = Path.Combine(dir, "isolated-home");
+        var userClaudeDir = Path.Combine(isolatedHome, ".claude");
+        var rtkConfigPath = Path.Combine(dir, "isolated-config", "rtk", "config.toml");
+        return new IntegrateCommand(
+            new IntegrateUseCase([new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath), new HomePaths(isolatedHome))]),
+            console);
+    }
+
     private static (IntegrateCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)

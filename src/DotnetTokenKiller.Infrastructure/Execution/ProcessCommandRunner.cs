@@ -52,6 +52,25 @@ public sealed class ProcessCommandRunner : ICommandRunner
             cancellationToken);
     }
 
+    /// <inheritdoc/>
+    public Task<CommandResult> RunCapturedWithInputAsync(
+        string command,
+        IReadOnlyList<string> args,
+        string standardInput,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(standardInput);
+
+        return RunRedirectedAsync(
+            command,
+            args,
+            static (reader, token) => reader.ReadToEndAsync(token),
+            static (reader, token) => reader.ReadToEndAsync(token),
+            cancellationToken,
+            standardInput);
+    }
+
     /// <summary>
     /// Runs a command with both output streams redirected, draining each one through the supplied
     /// reader. Capture and streaming differ only in how a stream is drained, so everything else —
@@ -62,20 +81,22 @@ public sealed class ProcessCommandRunner : ICommandRunner
     /// <param name="readStdOut">Drains the child's stdout and returns everything it read.</param>
     /// <param name="readStdErr">Drains the child's stderr and returns everything it read.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="standardInput">
+    /// Text to write to the child's stdin before closing it, or <see langword="null"/> for no
+    /// payload. Either way, stdin is closed so a child that reads it sees EOF and exits instead of
+    /// hanging forever waiting for input this non-interactive capture will never otherwise provide.
+    /// </param>
     private static async Task<CommandResult> RunRedirectedAsync(
         string command,
         IReadOnlyList<string> args,
         Func<StreamReader, CancellationToken, Task<string>> readStdOut,
         Func<StreamReader, CancellationToken, Task<string>> readStdErr,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? standardInput = null)
     {
         var psi = CreateStartInfo(command, args, redirectStreams: true);
 
         using var process = StartProcess(psi, command);
-
-        // Close stdin immediately so a child that reads it sees EOF and exits instead of hanging
-        // forever waiting for input this non-interactive capture will never provide.
-        process.StandardInput.Close();
 
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
         var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
@@ -85,6 +106,52 @@ public sealed class ProcessCommandRunner : ICommandRunner
             // CRITICAL: drain both streams concurrently — sequential reads deadlock on large output
             var stdOutTask = readStdOut(process.StandardOutput, cancellationToken);
             var stdErrTask = readStdErr(process.StandardError, cancellationToken);
+
+            // CRITICAL: start draining before writing stdin — a child that fills its stdout pipe
+            // buffer before it has finished consuming stdin would otherwise deadlock: it blocks on
+            // its stdout write while we block on our stdin write, with nothing on either side
+            // reading. Writing after the drain tasks are already pumping avoids that.
+            //
+            // Write the payload (if any) and close stdin either way — even if the write throws
+            // (cancellation, or the child already closed its end) — so a child that reads it sees
+            // EOF and exits instead of hanging forever waiting for input. The registration above
+            // (and the catch below) cover cancellation while this write is in flight, same as they
+            // cover the drain/wait that follows.
+            try
+            {
+                if (standardInput is not null)
+                {
+                    try
+                    {
+                        await process.StandardInput.WriteAsync(standardInput.AsMemory(), cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (IOException)
+                    {
+                        // Broken pipe: the child exited, crashed, or otherwise stopped reading stdin
+                        // before we finished writing. That is normal behaviour for a child process —
+                        // e.g. a hook script with a syntax error exits immediately without touching
+                        // stdin — not a failure of this run. Swallow it here so the drain below still
+                        // captures whatever the child actually wrote and its real exit code; do not
+                        // widen this to catch anything else, a genuine stdout/stderr drain failure
+                        // must still surface.
+                    }
+                }
+            }
+            finally
+            {
+                try
+                {
+                    process.StandardInput.Close();
+                }
+                catch (IOException)
+                {
+                    // Same broken-pipe reason as the write above: closing an already-broken pipe can
+                    // itself throw on flush. Still non-fatal for the same reason — swallow it so the
+                    // child's real output and exit code are what this call reports.
+                }
+            }
+
             await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();

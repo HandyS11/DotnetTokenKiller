@@ -19,7 +19,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// through the public <see cref="IProviderIntegrator"/> via DI, and tests reach it directly via
 /// <c>InternalsVisibleTo</c>.
 /// </remarks>
-internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator
+internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
 {
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
@@ -53,10 +53,31 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
     public string ProviderName => "gemini";
 
     /// <inheritdoc/>
+    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    {
+        var geminiDir = scope == HookScope.Global ? home.GeminiDir : Path.Combine(directory, ".gemini");
+
+        return
+        [
+            new HookInstallation(
+                ProviderName,
+                scope,
+                new GeneratedArtifact(
+                    Path.Combine(geminiDir, "hooks", "dotnet-to-dtk.py"),
+                    HookScriptTemplates.GeminiHook,
+                    StampStyle.HashComment,
+                    IntegratorHelpers.HookLegacySignature),
+                Path.Combine(geminiDir, "settings.json"),
+                HookPayloadKind.GeminiCli)
+        ];
+    }
+
+    /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
             Path.Combine(directory, "GEMINI.md"),
-            Path.Combine(directory, ".gemini"),
+            directory,
+            HookScope.Project,
             HookCommand,
             force,
             cancellationToken);
@@ -65,14 +86,16 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
     public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
             Path.Combine(home.GeminiDir, "GEMINI.md"),
-            home.GeminiDir,
+            home.Home,
+            HookScope.Global,
             GlobalHookCommand,
             force,
             cancellationToken);
 
-    private static async Task<IntegrationResult> IntegrateCoreAsync(
+    private async Task<IntegrationResult> IntegrateCoreAsync(
         string contextFilePath,
-        string geminiDir,
+        string hookDirectory,
+        HookScope scope,
         string hookCommand,
         bool force,
         CancellationToken cancellationToken)
@@ -84,11 +107,13 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
             SectionMarker, SectionEndMarker, GeminiSection,
             context, cancellationToken).ConfigureAwait(false);
 
+        var hookInstallation = DescribeHooks(hookDirectory, scope)[0];
+
         await IntegratorHelpers.WriteHookAndSettingsAsync(
             new HookSpec(
-                Path.Combine(geminiDir, "hooks", "dotnet-to-dtk.py"),
-                HookScriptTemplates.GeminiHook,
-                Path.Combine(geminiDir, "settings.json"),
+                hookInstallation.Script.Path,
+                hookInstallation.Script.Body,
+                hookInstallation.RegistrationPath,
                 "BeforeTool",
                 "run_shell_command",
                 hookCommand),

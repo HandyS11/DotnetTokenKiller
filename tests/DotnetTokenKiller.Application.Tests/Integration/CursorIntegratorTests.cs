@@ -30,24 +30,32 @@ public sealed class CursorIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsFile()
+    public async Task IntegrateAsync_SecondRun_NoForce_ReportsFileUnchanged()
     {
+        // The rule file's content is deterministic, so a repeat run finds it byte-identical and
+        // reports it unchanged rather than skipped: WriteFileAsync must never print false
+        // "use --force" advice for a file --force would not change.
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        result.SkippedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().ContainSingle();
+        result.SkippedFiles.Should().BeEmpty();
         result.CreatedFiles.Should().BeEmpty();
+        result.UpdatedFiles.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesFile()
+    public async Task IntegrateAsync_SecondRun_WithForce_StillReportsFileUnchanged()
     {
+        // Identical content has nothing to write over, so even --force reports unchanged rather
+        // than updated.
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        result.UpdatedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().ContainSingle();
+        result.UpdatedFiles.Should().BeEmpty();
         result.CreatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
     }

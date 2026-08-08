@@ -19,7 +19,10 @@ public sealed class CommandDispatchIntegrationTests
     {
         var dir = IntegrationTestHelper.NewIsolatedDir();
 
-        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "doctor");
+        // Isolate HOME/USERPROFILE too: doctor's hook health check inspects global-scope
+        // integrations under the real user profile, so this test's result must not depend on
+        // whatever the host machine happens to have installed there.
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, isolateHome: true, "doctor");
 
         exitCode.Should().Be(0);
         output.Should().Contain("dotnet SDK");

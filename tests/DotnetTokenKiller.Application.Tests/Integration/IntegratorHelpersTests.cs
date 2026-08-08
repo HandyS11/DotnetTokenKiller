@@ -66,6 +66,83 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Skipped.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileIdenticalContent_NoForce_ReportsUnchangedNotSkipped()
+    {
+        // A file already byte-identical to what dtk would write is force-independent: there is
+        // nothing to write and --force would not change that, so this must never surface as
+        // "skipped ... use --force" — that would be false advice.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "content");
+
+        await IntegratorHelpers.WriteFileAsync(path, "content", context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be("content");
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Skipped.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+        context.Created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileIdenticalContent_WithForce_StillReportsUnchanged()
+    {
+        var context = new IntegrationContext(true);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "content");
+
+        await IntegratorHelpers.WriteFileAsync(path, "content", context, CancellationToken.None);
+
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileIdenticalAfterLineEndingNormalization_NoForce_ReportsUnchanged()
+    {
+        // Comparison normalizes both sides to '\n', matching WriteGeneratedFileAsync, so a file
+        // that only differs by CRLF-vs-LF line endings is still recognized as identical.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "line1\r\nline2\r\n");
+
+        await IntegratorHelpers.WriteFileAsync(path, "line1\nline2\n", context, CancellationToken.None);
+
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Skipped.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileUnreadable_NoForce_SkipsInsteadOfThrowing()
+    {
+        // dtk cannot prove it wrote a file it cannot read, so an unreadable existing file must
+        // never be treated as Unchanged, and the read failure (locked, permission denied) must not
+        // abort the whole integration run — it falls back to the same skip-or-force decision as a
+        // content difference. An exclusive lock held from within this process is used rather than
+        // chmod, since chmod-based "unreadable" files are not reliably unreadable when tests run as
+        // root.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "content");
+
+        await using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => IntegratorHelpers.WriteFileAsync(path, "content", context, CancellationToken.None);
+
+            await act.Should().NotThrowAsync();
+        }
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        context.Unchanged.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+    }
+
     // --- WriteSectionBasedFileAsync ---
 
     [Fact]
@@ -244,8 +321,10 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task MergeJsonSettingsAsync_ExistingWithDuplicateHook_SkipsFile()
+    public async Task MergeJsonSettingsAsync_ExistingWithDuplicateHook_ReportsUnchanged()
     {
+        // The hook entry is already registered: there is nothing to write, and --force would not
+        // change that, so this is a force-independent no-op reported as unchanged, not skipped.
         var context = new IntegrationContext(false);
         var path = Path.Combine(_tempDir, "settings.json");
         Directory.CreateDirectory(_tempDir);
@@ -284,7 +363,8 @@ public sealed class IntegratorHelpersTests : IDisposable
         await IntegratorHelpers.MergeJsonSettingsAsync(
             path, "PreToolUse", hookEntry, "python3 hook.py", context, CancellationToken.None);
 
-        context.Skipped.Should().ContainSingle();
+        context.Unchanged.Should().ContainSingle();
+        context.Skipped.Should().BeEmpty();
     }
 
     [Fact]
@@ -703,7 +783,7 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task MergeJsonSettingsAsync_ExistingNewProjectDirRootedCommand_IsIdempotent()
+    public async Task MergeJsonSettingsAsync_ExistingNewProjectDirRootedCommand_IsIdempotentAndReportsUnchanged()
     {
         var context = new IntegrationContext(false);
         var path = Path.Combine(_tempDir, "settings.json");
@@ -750,7 +830,10 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
         innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
-        context.Skipped.Should().ContainSingle();
+        // The command is already registered: nothing to write, and --force would not change that,
+        // so this is a force-independent no-op reported as unchanged, not skipped.
+        context.Unchanged.Should().ContainSingle();
+        context.Skipped.Should().BeEmpty();
         context.Updated.Should().BeEmpty();
     }
 
@@ -914,7 +997,8 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         await IntegratorHelpers.WriteHookAndSettingsAsync(spec, context, CancellationToken.None);
 
-        (await File.ReadAllTextAsync(scriptPath)).Should().Be(script);
+        (await File.ReadAllTextAsync(scriptPath)).Should().Be(
+            ArtifactStamping.Apply(script, StampStyle.HashComment));
         (await File.ReadAllTextAsync(settingsPath)).Should().Be(
             """
             {
@@ -1227,5 +1311,200 @@ public sealed class IntegratorHelpersTests : IDisposable
     public void ShouldSkipWrite_ReturnsExpected(bool fileExists, bool force, bool expected)
     {
         IntegratorHelpers.ShouldSkipWrite(fileExists, force).Should().Be(expected);
+    }
+
+    // --- WriteGeneratedFileAsync ---
+
+    private static GeneratedArtifact Artifact(string path, string body = "print('v2')\n")
+        => new(path, body, StampStyle.HashComment, "_DTK_SUBCOMMANDS");
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_FileMissing_CreatesItStamped()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Created.Should().ContainSingle().Which.Should().Be(path);
+        ArtifactStamping.IsAuthentic(await File.ReadAllTextAsync(path)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_AlreadyCurrent_ReportsUnchangedNotSkipped()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        var artifact = Artifact(path);
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(artifact.Body, artifact.Style));
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(artifact, context, default);
+
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Skipped.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_StampedOlderGeneration_RefreshesWithoutForce()
+    {
+        // The whole point of the feature: an untouched artifact from an older dtk is dtk's own
+        // output, so overwriting it destroys nothing.
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment));
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+        (await File.ReadAllTextAsync(path)).Should().Contain("print('v2')");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_UnstampedButRecognized_RefreshesAndNotes()
+    {
+        // Nothing installed by dtk 0.6.0 or earlier carries a stamp; without this branch the fix
+        // would not fire for a single existing user in the release that ships it.
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "_DTK_SUBCOMMANDS = (\"build\",)\n");
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+        context.Notes.Should().ContainSingle().Which.Should().Contain("older dtk");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_StampedButEdited_SkipsWithoutForce()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        await File.WriteAllTextAsync(path, stamped.Replace("v1", "mine", StringComparison.Ordinal));
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        (await File.ReadAllTextAsync(path)).Should().Contain("mine");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_TextAppendedAfterStamp_SkipsWithoutForceAndLeavesBytesIntact()
+    {
+        // The stamp's digest only ever covers the body above it, so a trailing hand-edit — e.g.
+        // "# my own change" tacked on below an otherwise-genuine stamp — must not read as either
+        // authentic (its own digest is untouched) or legacy. The installed body deliberately
+        // carries the real _DTK_SUBCOMMANDS legacy signature so this test actually exercises the
+        // legacy branch's "no stamp at all" test (ArtifactStamping.HasStamp) rather than passing
+        // vacuously because the body happens not to contain the signature: a legacy check keyed on
+        // "!TryParse(...) && Contains(signature)" instead would misclassify this exact file as
+        // legacy and refresh it anyway, discarding the edit through the other branch.
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("_DTK_SUBCOMMANDS = (\"build\",)\n", StampStyle.HashComment);
+        var appended = stamped + "# my own change\n";
+        await File.WriteAllTextAsync(path, appended);
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        context.Updated.Should().BeEmpty();
+        (await File.ReadAllTextAsync(path)).Should().Be(appended, "a skip must leave the file byte-for-byte untouched");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_TextAppendedAfterStampWithForce_Overwrites()
+    {
+        // Mirror of the skip case above, same installed content, so the pair pins "without --force
+        // it is skipped, with --force it is overwritten" for the identical scenario. --force bypasses
+        // the authentic/legacy decision entirely, so unlike the skip test above this one does not
+        // discriminate between the correct and buggy legacy check — it exists to confirm --force
+        // still works for this specific installed content, not to pin which check produced isLegacy.
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("_DTK_SUBCOMMANDS = (\"build\",)\n", StampStyle.HashComment);
+        await File.WriteAllTextAsync(path, stamped + "# my own change\n");
+        var context = new IntegrationContext(force: true);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+        (await File.ReadAllTextAsync(path)).Should().Contain("print('v2')");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_UnrecognizedForeignFile_SkipsWithoutForce()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "# someone else's script\n");
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Skipped.Should().ContainSingle();
+        (await File.ReadAllTextAsync(path)).Should().Contain("someone else");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_StampedButEditedWithForce_Overwrites()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        Directory.CreateDirectory(_tempDir);
+        var stamped = ArtifactStamping.Apply("print('v1')\n", StampStyle.HashComment);
+        await File.WriteAllTextAsync(path, stamped.Replace("v1", "mine", StringComparison.Ordinal));
+        var context = new IntegrationContext(force: true);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(Artifact(path), context, default);
+
+        context.Updated.Should().ContainSingle();
+        (await File.ReadAllTextAsync(path)).Should().Contain("print('v2')");
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_AlreadyCurrentWithForce_StillReportsUnchanged()
+    {
+        var path = Path.Combine(_tempDir, "hook.py");
+        var artifact = Artifact(path);
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(artifact.Body, artifact.Style));
+        var context = new IntegrationContext(force: true);
+
+        await IntegratorHelpers.WriteGeneratedFileAsync(artifact, context, default);
+
+        context.Unchanged.Should().ContainSingle();
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteGeneratedFileAsync_ExistingArtifactUnreadable_NoForce_SkipsInsteadOfThrowing()
+    {
+        // Same hazard as WriteFileAsync: dtk cannot prove authorship of an artifact it cannot read,
+        // so it must never be refreshed or reported Unchanged, and the read failure must not crash
+        // the whole 'dtk integrate' run. An exclusive lock held from within this process is used
+        // rather than chmod, since chmod-based "unreadable" files are not reliably unreadable when
+        // tests run as root.
+        var path = Path.Combine(_tempDir, "hook.py");
+        var artifact = Artifact(path);
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(artifact.Body, artifact.Style));
+        var context = new IntegrationContext(force: false);
+
+        await using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var act = () => IntegratorHelpers.WriteGeneratedFileAsync(artifact, context, default);
+
+            await act.Should().NotThrowAsync();
+        }
+
+        context.Skipped.Should().ContainSingle().Which.Should().Be(path);
+        context.Unchanged.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
     }
 }

@@ -59,6 +59,14 @@ dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
 
 Package versions are managed centrally in `Directory.Packages.props`. Add version numbers there; `.csproj` files reference packages without version attributes.
 
+## Versioning
+
+`Directory.Build.props` carries a `<Version>` placeholder for local builds; it is not the source of
+truth. When a maintainer pushes a release tag (`vX.Y.Z`), the `Publish` workflow
+(`.github/workflows/publish.yml`) rewrites `Directory.Build.props` from the tag name before restoring,
+building, and packing, so the version NuGet actually publishes always comes from the tag. You do not
+need to bump the placeholder as part of a pull request.
+
 ## How to Add a New Filter
 
 To add filtering support for a new `dotnet` subcommand (e.g., `dotnet publish`):

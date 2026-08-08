@@ -125,6 +125,19 @@ internal static class IntegrationTestHelper
         string isolatedDir, params string[] args) =>
         RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir);
 
+    /// <summary>Runs dtk against an explicit isolated directory, with <c>HOME</c>/<c>USERPROFILE</c>
+    /// also redirected there. Use this only for tests whose result depends on global-scope state
+    /// under the real user profile (e.g. <c>doctor</c>'s hook health check) — see the isolation
+    /// opt-in comment on the underlying <c>RunProcessAsync</c> overload for why every other caller
+    /// must not do this.</summary>
+    /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>.</param>
+    /// <param name="isolateHome">When <see langword="true"/>, redirects <c>HOME</c>/<c>USERPROFILE</c>
+    /// to <paramref name="isolatedDir"/> as well.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    internal static Task<(string Output, int ExitCode)> RunDtkInDirAsync(
+        string isolatedDir, bool isolateHome, params string[] args) =>
+        RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir, isolateHome: isolateHome);
+
     /// <summary>Runs dtk against an explicit isolated directory with stdin piped in.</summary>
     /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>.</param>
     /// <param name="stdin">The text to write to the process's standard input.</param>
@@ -190,7 +203,8 @@ internal static class IntegrationTestHelper
     }
 
     private static async Task<(string Output, int ExitCode)> RunProcessAsync(
-        string executable, IEnumerable<string> args, string isolatedDir, string? stdin = null)
+        string executable, IEnumerable<string> args, string isolatedDir, string? stdin = null,
+        bool isolateHome = false)
     {
         var psi = new ProcessStartInfo(executable)
         {
@@ -214,6 +228,23 @@ internal static class IntegrationTestHelper
                 ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
             }
         };
+
+        if (isolateHome)
+        {
+            // Opt-in only: doctor's hook health check inspects global-scope integrations under
+            // the real user profile (~/.claude, ~/.gemini, ~/.copilot), which HomePaths resolves
+            // via Environment.SpecialFolder.UserProfile (HOME on Unix, USERPROFILE on Windows).
+            // Without this override, that test's result depends on whatever the host machine
+            // happens to have installed there. This must stay opt-in rather than the default: it
+            // previously applied to every spawned process, including the raw `dotnet` baseline
+            // that the token-savings assertions measure against, which strips HOME/USERPROFILE of
+            // ~/.nuget/packages and ~/.dotnet and collapses that baseline to a short failure
+            // message instead of real build output.
+            Directory.CreateDirectory(isolatedDir);
+            psi.Environment["HOME"] = isolatedDir;
+            psi.Environment["USERPROFILE"] = isolatedDir;
+        }
+
         if (stdin is not null)
         {
             // Only settable once RedirectStandardInput is true; setting it unconditionally throws

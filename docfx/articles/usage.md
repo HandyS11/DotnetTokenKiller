@@ -159,7 +159,11 @@ dtk integrate aider       # Aider instructions + .aider.conf.yml section
 dtk integrate jetbrains   # JetBrains AI guidelines section
 ```
 
-All commands accept `--force` to overwrite existing files and `--dir <path>` to target a specific directory.
+All commands accept `--force`/`-f` to overwrite existing files and `--dir <path>`/`-d` to target a specific directory. `--global`/`-g` installs into your home config instead of the project — supported for **claude**, **gemini**, **aider**, and **copilot-cli** (the providers with a home config) — and cannot be combined with `--dir`:
+
+```sh
+dtk integrate claude --global      # ~/.claude, applies to every project
+```
 
 See [AI Agent Setup](ai-agent-setup.md) for details on what each provider installs.
 
@@ -282,6 +286,17 @@ dtk completion fish > ~/.config/fish/completions/dtk.fish
 dtk completion powershell >> $PROFILE
 ```
 
+## Verbosity
+
+Add `-v` / `--verbose` to any `dtk dotnet` (or `dtk pipe`) command to echo the resolved command line before running it. Add `--vv` instead to also dump the raw, unfiltered `dotnet` output and the elapsed time — useful when the filtered result looks wrong and you need to see what dtk actually saw:
+
+```sh
+dtk dotnet build --verbose
+dtk dotnet test --vv
+```
+
+`--vv` implies everything `-v`/`--verbose` shows, plus the raw dump; the two are not combined.
+
 ## Quiet Mode
 
 Add `-q` / `--quiet` to any `dtk dotnet` command to suppress DTK meta-output and forward only the filtered content. This is useful when piping output into other tools:
@@ -291,7 +306,7 @@ dtk dotnet build -q | grep "error"
 dtk dotnet test -q > test-results.txt
 ```
 
-In quiet mode, verbosity flags (`-v`, `--vv`) and `--show-log` are ignored — only the filtered command output is written.
+In quiet mode, verbosity flags (`-v`/`--verbose`, `--vv`) and `--show-log` are ignored — only the filtered command output is written.
 
 ## Passthrough Behavior
 

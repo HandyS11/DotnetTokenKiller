@@ -105,12 +105,26 @@ public sealed class SubcommandBindingTests
 
         File.Exists(hookPath).Should().BeTrue("this repo ships its own copy of the Claude hook at {0}", hookPath);
 
-        var committed = File.ReadAllText(hookPath);
+        var committed = File.ReadAllText(hookPath).ReplaceLineEndings("\n");
 
+        // The committed copy is compared against the *stamped* form, because that is what a user
+        // receives. Comparing against the bare template would let this repo's copy and the
+        // installed one diverge in exactly the field that decides whether dtk will refresh it.
         committed.Should().Be(
-            HookScriptTemplates.ClaudeHook,
+            ArtifactStamping.Apply(HookScriptTemplates.ClaudeHook, StampStyle.HashComment),
             "the committed hook must be regenerated whenever the template changes, or this repo's own "
             + "agent sessions silently stop rewriting the newest subcommand");
+    }
+
+    [Fact]
+    public void RepoClaudeHook_CarriesAVerifiableStamp()
+    {
+        var repoRoot = FindRepoRoot();
+        var committed = File.ReadAllText(Path.Combine(repoRoot, ".claude", "hooks", "dotnet-to-dtk.py"));
+
+        ArtifactStamping.IsAuthentic(committed).Should().BeTrue(
+            "an unverifiable stamp would make dtk treat this repo's own hook as user-edited and refuse "
+            + "to refresh it");
     }
 
     [Fact]

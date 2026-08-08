@@ -26,7 +26,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <c>InternalsVisibleTo</c>.
 /// </remarks>
 internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
 {
     /// <summary>
     /// Quoted and rooted at <c>$CLAUDE_PROJECT_DIR</c> (the absolute project root Claude Code
@@ -108,22 +108,52 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
         ```
         """;
 
+    /// <summary>
+    /// Substring present in every generation of the skill file, used to recognize an unstamped copy
+    /// installed by dtk 0.6.0 or earlier. It is the frontmatter <c>name:</c> line, which has never
+    /// changed and cannot without breaking Claude Code's skill lookup.
+    /// </summary>
+    internal const string SkillLegacySignature = "name: dotnet-token-killer";
+
     /// <inheritdoc/>
     public string ProviderName => "claude";
+
+    /// <inheritdoc/>
+    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    {
+        var baseDirectory = scope == HookScope.Global ? home.ClaudeDir : Path.Combine(directory, ".claude");
+
+        return
+        [
+            new HookInstallation(
+                ProviderName,
+                scope,
+                new GeneratedArtifact(
+                    Path.Combine(baseDirectory, "hooks", "dotnet-to-dtk.py"),
+                    HookScriptTemplates.ClaudeHook,
+                    StampStyle.HashComment,
+                    IntegratorHelpers.HookLegacySignature),
+                Path.Combine(baseDirectory, "settings.json"),
+                HookPayloadKind.ClaudeCode)
+        ];
+    }
 
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateAsync(
         string directory,
         bool force,
         CancellationToken cancellationToken)
-        => IntegrateCoreAsync(Path.Combine(directory, ".claude"), directory, HookCommand, force, cancellationToken);
+        => IntegrateCoreAsync(
+            Path.Combine(directory, ".claude"), directory, HookScope.Project, directory, HookCommand, force, cancellationToken);
 
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(home.ClaudeDir, home.Home, GlobalHookCommand, force, cancellationToken);
+        => IntegrateCoreAsync(home.ClaudeDir, home.Home, HookScope.Global, home.Home, GlobalHookCommand, force, cancellationToken);
 
     private async Task<IntegrationResult> IntegrateCoreAsync(
         string baseDirectory,
+        string hookDirectory,
+        HookScope scope,
         string reconcileDir,
         string hookCommand,
         bool force,
@@ -131,15 +161,21 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     {
         var context = new IntegrationContext(force);
 
-        await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(baseDirectory, "skills", "dotnet-token-killer", "SKILL.md"),
-            SkillMarkdown, context, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteGeneratedFileAsync(
+            new GeneratedArtifact(
+                Path.Combine(baseDirectory, "skills", "dotnet-token-killer", "SKILL.md"),
+                SkillMarkdown,
+                StampStyle.HtmlComment,
+                SkillLegacySignature),
+            context, cancellationToken).ConfigureAwait(false);
+
+        var hookInstallation = DescribeHooks(hookDirectory, scope)[0];
 
         await IntegratorHelpers.WriteHookAndSettingsAsync(
             new HookSpec(
-                Path.Combine(baseDirectory, "hooks", "dotnet-to-dtk.py"),
-                HookScriptTemplates.ClaudeHook,
-                Path.Combine(baseDirectory, "settings.json"),
+                hookInstallation.Script.Path,
+                hookInstallation.Script.Body,
+                hookInstallation.RegistrationPath,
                 "PreToolUse",
                 "Bash",
                 hookCommand),

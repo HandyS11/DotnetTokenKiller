@@ -80,9 +80,15 @@ context consumed.
 - **Format filtering** — shows only violations with workspace-relative paths
 - **`list package` filtering** — collapses per-TFM duplication across plain, `--outdated`,
   `--deprecated`, and `--vulnerable` (~80.9% savings)
+- **Pipe mode** — `dtk pipe <subcommand>` filters output dtk did not produce: CI logs, or any
+  invocation the hook missed
+- **Log retrieval** — `dtk log` returns a previous run's full output instead of re-running the build
+- **Filter coverage** — `dtk gain --coverage` ranks every command by unfiltered tokens at stake, so
+  the next filter is chosen from data
 - **8 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Cursor, Windsurf, Aider, JetBrains AI
 - **Token analytics** — tracks per-command savings over time with `dtk gain`
-- **Self-diagnostics** — `dtk doctor` validates your setup in one command
+- **Self-diagnostics** — `dtk doctor` validates your setup, including feeding a sample payload
+  through your installed hook to prove it still fires
 - **Shell completion** — bash, zsh, fish, and PowerShell
 - **Log teeing** — optionally saves raw output to disk for post-mortem inspection
 
@@ -282,10 +288,22 @@ Unfiltered tokens: 48.0K
 ## Diagnostics
 
 ```sh
-dtk doctor
+$ dtk doctor
+  ✔  dotnet SDK: Found dotnet 10.0.100
+  ✔  config file: Loaded successfully (or using defaults)
+  ✔  tracking database: Found at ~/.local/share/dtk/tracking.db
+  ✔  tee directory: Writable at /tmp/dtk
+  ✔  claude hook (project): installed, registered, up to date
+  ✔  claude hook probe (project): rewrites all 6 subcommands
+
+All checks passed.
 ```
 
-Checks dotnet SDK, config file, tracking database, and tee directory. Exits `1` if any check fails.
+The probe runs your installed hook script through the interpreter your `settings.json` actually
+names, feeding it a command that exercises every subcommand dtk filters. A hook left over from an
+older dtk fails here, naming the subcommands it no longer rewrites and the command that fixes it.
+
+Checks dotnet SDK, config file, tracking database, tee directory, and every installed hook. Exits `1` if any check fails.
 
 ## Configuration
 

@@ -15,6 +15,29 @@ internal static class IntegratorHelpers
 {
     private const string HooksKey = "hooks";
 
+    /// <summary>
+    /// Writes a whole-file artifact, refreshing it whenever there is something to change and
+    /// leaving it alone otherwise.
+    /// </summary>
+    /// <remarks>
+    /// When the target already exists and its content (line endings normalized to <c>\n</c> on
+    /// both sides) is byte-identical to <paramref name="content"/>, nothing is written and the
+    /// path is reported <see cref="IntegrationContext.Unchanged"/> — this branch is
+    /// force-independent (there is nothing to write and <c>--force</c> would not change that), so
+    /// it must never be reported as <see cref="IntegrationContext.Skipped"/>, which implies
+    /// re-running with <c>--force</c> would help. When the existing content differs, the file is
+    /// left untouched and reported <see cref="IntegrationContext.Skipped"/> unless
+    /// <see cref="IntegrationContext.Force"/> is set: unlike <see cref="WriteGeneratedFileAsync"/>,
+    /// this method has no stamp to prove dtk wrote the differing copy, so it cannot tell a user
+    /// edit from a stale dtk write and must not overwrite without <c>--force</c>. When the existing
+    /// file cannot be read (locked, permission denied), dtk cannot prove it wrote that file, so it
+    /// is never reported <see cref="IntegrationContext.Unchanged"/> — it falls back to the same
+    /// skip-or-force decision as a content difference.
+    /// </remarks>
+    /// <param name="path">Path to the target file.</param>
+    /// <param name="content">The full content to write.</param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     internal static async Task WriteFileAsync(
         string path,
         string content,
@@ -22,6 +45,18 @@ internal static class IntegratorHelpers
         CancellationToken cancellationToken)
     {
         var exists = File.Exists(path);
+
+        if (exists)
+        {
+            var existing = await TryReadExistingAsync(path, cancellationToken).ConfigureAwait(false);
+
+            if (existing is not null
+                && string.Equals(existing, content.ReplaceLineEndings("\n"), StringComparison.Ordinal))
+            {
+                context.Unchanged.Add(path);
+                return;
+            }
+        }
 
         if (ShouldSkipWrite(exists, context.Force))
         {
@@ -35,6 +70,29 @@ internal static class IntegratorHelpers
     }
 
     /// <summary>
+    /// Reads an existing file's content, normalized to <c>\n</c> line endings, or
+    /// <see langword="null"/> when the file exists but cannot be read (locked, permission denied).
+    /// A read failure must never be mistaken for "file doesn't exist" or "content differs" by the
+    /// caller — both <see cref="WriteFileAsync"/> and <see cref="WriteGeneratedFileAsync"/> treat a
+    /// <see langword="null"/> result as "cannot prove authorship" and fall back to the skip-or-force
+    /// decision, matching the guarded-read pattern in <c>HookHealthChecker</c>.
+    /// </summary>
+    /// <param name="path">Path to the existing file to read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<string?> TryReadExistingAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false))
+                .ReplaceLineEndings("\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Decides whether a write to an existing file should be skipped: <see langword="true"/>
     /// whenever <paramref name="fileExists"/> and <paramref name="force"/> is <see langword="false"/>.
     /// This is the single source of truth for "existing file, no --force ⇒ leave it alone",
@@ -45,6 +103,98 @@ internal static class IntegratorHelpers
     /// <param name="fileExists">Whether the target file already exists.</param>
     /// <param name="force">Whether the integration is running with the force flag.</param>
     internal static bool ShouldSkipWrite(bool fileExists, bool force) => fileExists && !force;
+
+    /// <summary>
+    /// Substring present in every generation of the Python hooks, used to recognize an unstamped
+    /// copy installed by dtk 0.6.0 or earlier.
+    /// </summary>
+    internal const string HookLegacySignature = "_DTK_SUBCOMMANDS";
+
+    /// <summary>
+    /// Writes an artifact dtk generates in full, refreshing it when dtk can prove it wrote the
+    /// copy already on disk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The rule, in order: a missing file is created; a file already equal to the stamped current
+    /// template is reported unchanged; a file whose stamp still verifies came from an older dtk
+    /// and is refreshed; an unstamped file carrying
+    /// <see cref="GeneratedArtifact.LegacySignature"/> predates stamping and is refreshed with a
+    /// note; anything else is left alone unless <c>--force</c> is passed.
+    /// </para>
+    /// <para>
+    /// The legacy branch exists because no artifact installed before stamping carries a stamp, so
+    /// without it every existing user would fall through to the skip branch and the refresh would
+    /// only begin working one release after the one that adds it. It costs a one-time overwrite
+    /// for anyone who hand-edited an unstamped hook, which is why the overwrite is reported rather
+    /// than silent, and it becomes unreachable once one stamped generation is installed.
+    /// </para>
+    /// <para>
+    /// When the existing artifact cannot be read (locked, permission denied), dtk cannot prove it
+    /// wrote the copy on disk, so that copy is never treated as up to date or legacy: without
+    /// <c>--force</c> it is reported <see cref="IntegrationContext.Skipped"/>, matching an
+    /// unrecognized foreign file; with <c>--force</c> it is overwritten like any other differing
+    /// copy.
+    /// </para>
+    /// </remarks>
+    /// <param name="artifact">The artifact to write.</param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task WriteGeneratedFileAsync(
+        GeneratedArtifact artifact,
+        IntegrationContext context,
+        CancellationToken cancellationToken)
+    {
+        var content = ArtifactStamping.Apply(artifact.Body, artifact.Style);
+
+        if (!File.Exists(artifact.Path))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(artifact.Path)!);
+            await File.WriteAllTextAsync(artifact.Path, content, cancellationToken).ConfigureAwait(false);
+            context.Created.Add(artifact.Path);
+            return;
+        }
+
+        var existing = await TryReadExistingAsync(artifact.Path, cancellationToken).ConfigureAwait(false);
+
+        if (existing is null)
+        {
+            if (!context.Force)
+            {
+                context.Skipped.Add(artifact.Path);
+                return;
+            }
+
+            await File.WriteAllTextAsync(artifact.Path, content, cancellationToken).ConfigureAwait(false);
+            context.Updated.Add(artifact.Path);
+            return;
+        }
+
+        if (string.Equals(existing, content, StringComparison.Ordinal))
+        {
+            context.Unchanged.Add(artifact.Path);
+            return;
+        }
+
+        var isLegacy = !ArtifactStamping.HasStamp(existing)
+                       && existing.Contains(artifact.LegacySignature, StringComparison.Ordinal);
+
+        if (!ArtifactStamping.IsAuthentic(existing) && !isLegacy && !context.Force)
+        {
+            context.Skipped.Add(artifact.Path);
+            return;
+        }
+
+        await File.WriteAllTextAsync(artifact.Path, content, cancellationToken).ConfigureAwait(false);
+        context.Updated.Add(artifact.Path);
+
+        if (isLegacy)
+        {
+            context.Notes.Add(
+                $"{artifact.Path} was written by an older dtk and carried no provenance stamp; it was "
+                + "regenerated. Any local edits to it are recoverable from version control.");
+        }
+    }
 
     /// <summary>
     /// Writes a file that uses begin/end section markers to track a dtk-managed block.
@@ -133,7 +283,10 @@ internal static class IntegratorHelpers
         IntegrationContext context,
         CancellationToken cancellationToken)
     {
-        await WriteFileAsync(spec.ScriptPath, spec.Script, context, cancellationToken).ConfigureAwait(false);
+        await WriteGeneratedFileAsync(
+            new GeneratedArtifact(spec.ScriptPath, spec.Script, StampStyle.HashComment, HookLegacySignature),
+            context,
+            cancellationToken).ConfigureAwait(false);
 
         await MergeJsonSettingsAsync(
             spec.SettingsPath,
@@ -159,7 +312,12 @@ internal static class IntegratorHelpers
     /// Merges a hook entry into a JSON settings file under
     /// <c>hooks[<paramref name="hookEventKey"/>]</c>.
     /// Existing content is preserved; the entry is only added if not already present
-    /// (detected by matching <paramref name="hookCommand"/> in the "command" field).
+    /// (detected by matching <paramref name="hookCommand"/> in the "command" field). When the
+    /// entry is already present and no legacy entry needs replacing, nothing is written and the
+    /// path is reported <see cref="IntegrationContext.Unchanged"/> — this branch is
+    /// force-independent (there is nothing to write and <c>--force</c> would not change that), so
+    /// it must never be reported as a <see cref="IntegrationContext.Skipped"/> file, which implies
+    /// re-running with <c>--force</c> would help.
     /// If an entry carrying the pre-<c>$..._PROJECT_DIR</c> relative form of
     /// <paramref name="hookCommand"/> is found (see <see cref="DeriveLegacyCommand"/>), that stale
     /// entry is replaced in place instead of appending a duplicate alongside it — otherwise a
@@ -210,7 +368,7 @@ internal static class IntegratorHelpers
         {
             if (legacyEntry is null)
             {
-                context.Skipped.Add(path);
+                context.Unchanged.Add(path);
                 return;
             }
 
