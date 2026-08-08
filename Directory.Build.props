@@ -6,6 +6,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
+    <!--
+      Placeholder for local builds only. The Publish workflow (.github/workflows/publish.yml)
+      overwrites this value from the pushed release tag (`VERSION=${GITHUB_REF_NAME#v}`) before
+      packing, so the published package version always comes from the tag, not from this number.
+    -->
     <Version>0.5.0</Version>
     <IsPackable>false</IsPackable>
 
