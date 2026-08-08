@@ -211,7 +211,15 @@ internal static class IntegrationTestHelper
                 // integration tests never write into the user's real database/config.
                 ["DTK_DB_PATH"] = Path.Combine(isolatedDir, "tracking.db"),
                 ["DTK_TEE_DIR"] = Path.Combine(isolatedDir, "tee"),
-                ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
+                ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json"),
+
+                // Isolate the home directory too: doctor's hook health check inspects
+                // global-scope integrations under the real user profile (~/.claude, ~/.gemini,
+                // ~/.copilot), which HomePaths resolves via Environment.SpecialFolder.UserProfile
+                // (HOME on Unix, USERPROFILE on Windows). Without this override, these tests would
+                // pass or fail based on whatever the host machine happens to have installed there.
+                ["HOME"] = isolatedDir,
+                ["USERPROFILE"] = isolatedDir
             }
         };
         if (stdin is not null)

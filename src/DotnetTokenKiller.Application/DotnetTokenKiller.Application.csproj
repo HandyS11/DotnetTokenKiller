@@ -15,5 +15,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DotnetTokenKiller.Application.Tests"/>
     <InternalsVisibleTo Include="DotnetTokenKiller.Cli.IntegrationTests"/>
+    <InternalsVisibleTo Include="dtk"/>
   </ItemGroup>
 </Project>

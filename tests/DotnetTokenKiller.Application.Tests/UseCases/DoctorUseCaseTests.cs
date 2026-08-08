@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
@@ -15,7 +16,11 @@ public sealed class DoctorUseCaseTests : IDisposable
 
     public DoctorUseCaseTests()
     {
-        _sut = new DoctorUseCase(_runner, _configProvider);
+        _sut = new DoctorUseCase(
+            _runner,
+            _configProvider,
+            new HookHealthChecker(_runner),
+            [new GeminiCliIntegrator(new HomePaths(_tempDir))]);
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
         _runner.RunCapturedAsync(null!, null!)
             .ReturnsForAnyArgs(new CommandResult("10.0.0", string.Empty, 0));
@@ -35,7 +40,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
             .ReturnsForAnyArgs(new CommandResult("10.0.100", string.Empty, 0));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
         dotnetCheck.Passed.Should().BeTrue();
@@ -49,7 +54,7 @@ public sealed class DoctorUseCaseTests : IDisposable
             .ReturnsForAnyArgs(Task.FromException<CommandResult>(
                 new InvalidOperationException("dotnet not found")));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
         dotnetCheck.Passed.Should().BeFalse();
@@ -62,7 +67,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
             .ReturnsForAnyArgs(new CommandResult(string.Empty, string.Empty, 1));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
         dotnetCheck.Passed.Should().BeFalse();
@@ -73,7 +78,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var configCheck = checks.First(c => c.Name == "config file");
         configCheck.Passed.Should().BeTrue();
@@ -86,7 +91,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(dbPath, string.Empty);
 
-        var checks = await _sut.RunAsync(dbPath, _tempDir);
+        var checks = await _sut.RunAsync(dbPath, _tempDir, _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
         dbCheck.Passed.Should().BeTrue();
@@ -99,7 +104,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var dbPath = Path.Combine(_tempDir, "nonexistent.db");
 
-        var checks = await _sut.RunAsync(dbPath, _tempDir);
+        var checks = await _sut.RunAsync(dbPath, _tempDir, _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
         dbCheck.Passed.Should().BeTrue();
@@ -113,7 +118,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         // first write — so this must pass ("will be created"), not false-alarm.
         var dbPath = Path.Combine(_tempDir, "missing-dir", "tracking.db");
 
-        var checks = await _sut.RunAsync(dbPath, _tempDir);
+        var checks = await _sut.RunAsync(dbPath, _tempDir, _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
         dbCheck.Passed.Should().BeTrue();
@@ -125,7 +130,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         Directory.CreateDirectory(_tempDir);
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var teeCheck = checks.First(c => c.Name == "tee directory");
         teeCheck.Passed.Should().BeTrue();
@@ -137,7 +142,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         var nonExistent = Path.Combine(_tempDir, "tee");
 
-        var checks = await _sut.RunAsync("/tmp/test.db", nonExistent);
+        var checks = await _sut.RunAsync("/tmp/test.db", nonExistent, _tempDir);
 
         var teeCheck = checks.First(c => c.Name == "tee directory");
         teeCheck.Passed.Should().BeTrue();
@@ -175,7 +180,7 @@ public sealed class DoctorUseCaseTests : IDisposable
                 // Good: the mode really does block writes for this user.
             }
 
-            var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+            var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
             var teeCheck = checks.First(c => c.Name == "tee directory");
             teeCheck.Passed.Should().BeFalse();
@@ -188,13 +193,15 @@ public sealed class DoctorUseCaseTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_ReturnsAllFourChecks()
+    public async Task RunAsync_ReturnsAllFourBaselineChecksPlusHookIntegration()
     {
         Directory.CreateDirectory(_tempDir);
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        // Four baseline checks (SDK, config, database, tee) plus the single "hook integration"
+        // check HookHealthChecker reports when no hook is installed for the configured integrator.
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
-        checks.Should().HaveCount(4);
+        checks.Should().HaveCount(5);
     }
 
     [Fact]
@@ -204,7 +211,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         _configProvider.LoadAsync()
             .ReturnsForAnyArgs(Task.FromException<DtkConfig>(new IOException("Config file corrupted")));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var configCheck = checks.First(c => c.Name == "config file");
         configCheck.Passed.Should().BeFalse();
@@ -215,7 +222,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     public async Task RunAsync_DbPathWithNoDirectory_PassesAsWillBeCreated()
     {
         // A bare filename with no directory component still resolves to a pending database.
-        var checks = await _sut.RunAsync("tracking.db", _tempDir);
+        var checks = await _sut.RunAsync("tracking.db", _tempDir, _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
         dbCheck.Passed.Should().BeTrue();
@@ -228,7 +235,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
             .ReturnsForAnyArgs(new CommandResult(string.Empty, string.Empty, 42));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
         dotnetCheck.Message.Should().Contain("exited with code").And.Contain("42");
@@ -239,7 +246,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var configCheck = checks.First(c => c.Name == "config file");
         configCheck.Message.Should().Contain("Loaded successfully");
@@ -251,7 +258,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         _configProvider.LoadAsync()
             .ReturnsForAnyArgs(Task.FromException<DtkConfig>(new IOException("boom")));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var configCheck = checks.First(c => c.Name == "config file");
         configCheck.Message.Should().StartWith("Failed to load config:");
@@ -263,7 +270,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         _runner.RunCapturedAsync("dotnet", Arg.Any<IReadOnlyList<string>>())
             .ReturnsForAnyArgs(new CommandResult("9.0.200", string.Empty, 0));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
         dotnetCheck.Message.Should().StartWith("Found dotnet ");
@@ -276,7 +283,7 @@ public sealed class DoctorUseCaseTests : IDisposable
             .ReturnsForAnyArgs(Task.FromException<CommandResult>(
                 new InvalidOperationException("not installed")));
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var dotnetCheck = checks.First(c => c.Name == "dotnet SDK");
         dotnetCheck.Message.Should().StartWith("Could not run dotnet:");
@@ -287,7 +294,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         Directory.CreateDirectory(_tempDir);
 
-        await _sut.RunAsync("/tmp/test.db", _tempDir);
+        await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         // After the check, no .dtk-probe-* files should remain
         var probeFiles = Directory.GetFiles(_tempDir, ".dtk-probe-*");
@@ -299,7 +306,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         Directory.CreateDirectory(_tempDir);
 
-        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir);
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         var teeCheck = checks.First(c => c.Name == "tee directory");
         teeCheck.Message.Should().StartWith("Writable at ");
@@ -310,7 +317,7 @@ public sealed class DoctorUseCaseTests : IDisposable
     {
         var nonExistent = Path.Combine(_tempDir, "tee");
 
-        var checks = await _sut.RunAsync("/tmp/test.db", nonExistent);
+        var checks = await _sut.RunAsync("/tmp/test.db", nonExistent, _tempDir);
 
         var teeCheck = checks.First(c => c.Name == "tee directory");
         teeCheck.Message.Should().Contain("Does not exist yet");
@@ -323,7 +330,7 @@ public sealed class DoctorUseCaseTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         await File.WriteAllTextAsync(dbPath, string.Empty);
 
-        var checks = await _sut.RunAsync(dbPath, _tempDir);
+        var checks = await _sut.RunAsync(dbPath, _tempDir, _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
         dbCheck.Message.Should().StartWith("Found at ");
@@ -335,9 +342,18 @@ public sealed class DoctorUseCaseTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var dbPath = Path.Combine(_tempDir, "nonexistent.db");
 
-        var checks = await _sut.RunAsync(dbPath, _tempDir);
+        var checks = await _sut.RunAsync(dbPath, _tempDir, _tempDir);
 
         var dbCheck = checks.First(c => c.Name == "tracking database");
         dbCheck.Message.Should().Contain("No data yet");
+    }
+
+    [Fact]
+    public async Task RunAsync_NoHooksInstalled_StillReportsTheFourBaselineChecksPlusHookStatus()
+    {
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        checks.Select(c => c.Name).Should().Contain(
+            ["dotnet SDK", "config file", "tracking database", "tee directory", "hook integration"]);
     }
 }

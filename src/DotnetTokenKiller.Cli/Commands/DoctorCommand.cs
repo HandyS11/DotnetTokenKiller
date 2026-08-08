@@ -34,7 +34,7 @@ internal sealed class DoctorCommand(
 
         var teeDirectory = TeeDirectoryResolver.Resolve(config.Tee, null);
 
-        var checks = await doctorUseCase.RunAsync(dbPath, teeDirectory, cancellationToken)
+        var checks = await doctorUseCase.RunAsync(dbPath, teeDirectory, Environment.CurrentDirectory, cancellationToken)
             .ConfigureAwait(false);
 
         var allPassed = true;
