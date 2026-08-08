@@ -19,10 +19,7 @@ public sealed class DocsBindingTests
     /// the pressure valve that stops an inconvenient failure from getting the whole test disabled,
     /// not a place to park undocumented surface.
     /// </summary>
-    private static readonly Dictionary<string, string> Allowed = new(StringComparer.Ordinal)
-    {
-        ["--vv"] = "debug-only dump of raw dotnet output; documented in the SKILL flags table, not the articles"
-    };
+    private static readonly Dictionary<string, string> Allowed = new(StringComparer.Ordinal);
 
     [Fact]
     public void EveryRegisteredCommand_IsDocumented()
