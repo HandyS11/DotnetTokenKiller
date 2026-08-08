@@ -5,6 +5,19 @@ DTK integrates with AI coding agents to automatically reduce token usage from `d
 > [!IMPORTANT]
 > **Python 3 requirement**: The Claude Code and Gemini CLI integrations install Python-based hooks that run at command interception time. Make sure `python3` is available on your `PATH` before using `dtk integrate claude` or `dtk integrate gemini`. Other providers (Copilot, Cursor, Windsurf, Aider, JetBrains) do not require Python.
 
+## Installing globally
+
+Pass `--global` (`-g`) to install into your home directory instead of a project, so the integration applies across every project you touch:
+
+```sh
+dtk integrate claude      --global   # ~/.claude
+dtk integrate gemini      --global   # ~/.gemini
+dtk integrate aider       --global   # ~/.aider.conf.yml
+dtk integrate copilot-cli --global   # ~/.copilot/hooks
+```
+
+`--global` is supported only for the providers with a home config — **claude**, **gemini**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
+
 ## Claude Code
 
 A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`.
@@ -350,3 +363,17 @@ For any AI agent that runs terminal commands, the general approach is:
 1. Install DTK globally: `dotnet tool install -g DotnetTokenKiller`
 2. Configure the agent to prefix `dotnet build|test|restore|clean|format|list package` with `dtk`
 3. The agent receives compact, filtered output — reducing token usage by 50–98%
+
+## Upgrading dtk
+
+The hook installed in your project carries the list of subcommands dtk filters, so a dtk release
+that adds one leaves your installed hook a version behind. Re-run the integration after upgrading:
+
+```sh
+dotnet tool update -g DotnetTokenKiller
+dtk integrate claude          # refreshes the hook and skill in place
+```
+
+dtk stamps the files it generates, so an artifact you have not edited is refreshed without
+`--force`; one you have edited is left alone and reported. To check the state of an installation
+without changing anything, run `dtk doctor`.

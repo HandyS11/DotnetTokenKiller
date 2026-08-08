@@ -116,6 +116,33 @@ dtk gain --export csv --project
 
 Fields containing commas, quotes, or newlines are RFC 4180-quoted.
 
+## Filter coverage
+
+`dtk gain` measures what dtk saved. `dtk gain --coverage` measures what it did **not** — every
+command that ran unfiltered, ranked by the tokens at stake:
+
+```sh
+dtk gain --coverage
+```
+
+Each row carries:
+
+- **Command** — the `dotnet` subcommand as invoked.
+- **Outcome** — `Filtered` when a filter produced the output; `RawTailFallback` when the command
+  failed and its filter produced nothing, so the raw tail was emitted instead; `FilterFaulted` when
+  the filter threw and dtk fell back to the raw output unchanged; `PassthroughMeasured` when no
+  filter is registered for that subcommand but the output was still captured and counted; and
+  `PassthroughUnmeasured` when no filter exists and the output was not captured, so its size is
+  unknown (shown as `not measured`).
+- **Source** — `run` for output dtk produced itself, `pipe` for output supplied through
+  `dtk pipe`. Piped runs are tracked separately because dtk did not control the invocation and
+  cannot vouch for the exit code it was not given.
+
+It composes with `--days`, `--project`, `--command`, and `--json`, but not with `--export`.
+
+The ranking is what makes the next filter a data-driven choice rather than a guess: the command at
+the top of the unfiltered list is the one costing the most tokens today.
+
 ## Resetting Data
 
 To clear tracking data:

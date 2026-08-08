@@ -64,6 +64,8 @@ dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 | `dtk dotnet clean`   | Clean with filtered output |
 | `dtk dotnet format`  | Format with filtered output |
 | `dtk dotnet list package` | List package references with filtered output |
+| `dtk pipe <subcommand>` | Filter output dtk did not produce (CI logs, missed invocations) |
+| `dtk log`            | Retrieve a previous run's full output without re-running it |
 | `dtk gain`           | Show token savings analytics |
 | `dtk reset`          | Clear all tracking data |
 | `dtk config show`    | Display current configuration |

@@ -31,6 +31,8 @@ dtk dotnet list package --outdated
 - **Format filtering** — shows only violations with workspace-relative paths
 - **`list package` filtering** — collapses per-TFM duplication across plain, `--outdated`,
   `--deprecated`, and `--vulnerable` (~80.9% savings)
+- **Pipe mode** — `dtk pipe <subcommand>` filters output dtk did not produce (CI logs, missed invocations)
+- **Log retrieval** — `dtk log` retrieves a previous run's full output without re-running it
 - **Token analytics** — tracks per-command token savings over time with `dtk gain`
 - **Log teeing** — optionally saves raw output to disk for post-mortem inspection
 - **AI agent integration** — `dtk integrate` installs hooks for 8 providers: Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Cursor, Windsurf, Aider, and JetBrains AI
