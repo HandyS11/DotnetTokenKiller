@@ -66,6 +66,57 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Skipped.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileIdenticalContent_NoForce_ReportsUnchangedNotSkipped()
+    {
+        // A file already byte-identical to what dtk would write is force-independent: there is
+        // nothing to write and --force would not change that, so this must never surface as
+        // "skipped ... use --force" — that would be false advice.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "content");
+
+        await IntegratorHelpers.WriteFileAsync(path, "content", context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be("content");
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Skipped.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+        context.Created.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileIdenticalContent_WithForce_StillReportsUnchanged()
+    {
+        var context = new IntegrationContext(true);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "content");
+
+        await IntegratorHelpers.WriteFileAsync(path, "content", context, CancellationToken.None);
+
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteFileAsync_ExistingFileIdenticalAfterLineEndingNormalization_NoForce_ReportsUnchanged()
+    {
+        // Comparison normalizes both sides to '\n', matching WriteGeneratedFileAsync, so a file
+        // that only differs by CRLF-vs-LF line endings is still recognized as identical.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "file.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "line1\r\nline2\r\n");
+
+        await IntegratorHelpers.WriteFileAsync(path, "line1\nline2\n", context, CancellationToken.None);
+
+        context.Unchanged.Should().ContainSingle().Which.Should().Be(path);
+        context.Skipped.Should().BeEmpty();
+        context.Updated.Should().BeEmpty();
+    }
+
     // --- WriteSectionBasedFileAsync ---
 
     [Fact]

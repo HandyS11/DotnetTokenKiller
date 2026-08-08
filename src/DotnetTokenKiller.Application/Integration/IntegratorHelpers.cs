@@ -15,6 +15,26 @@ internal static class IntegratorHelpers
 {
     private const string HooksKey = "hooks";
 
+    /// <summary>
+    /// Writes a whole-file artifact, refreshing it whenever there is something to change and
+    /// leaving it alone otherwise.
+    /// </summary>
+    /// <remarks>
+    /// When the target already exists and its content (line endings normalized to <c>\n</c> on
+    /// both sides) is byte-identical to <paramref name="content"/>, nothing is written and the
+    /// path is reported <see cref="IntegrationContext.Unchanged"/> — this branch is
+    /// force-independent (there is nothing to write and <c>--force</c> would not change that), so
+    /// it must never be reported as <see cref="IntegrationContext.Skipped"/>, which implies
+    /// re-running with <c>--force</c> would help. When the existing content differs, the file is
+    /// left untouched and reported <see cref="IntegrationContext.Skipped"/> unless
+    /// <see cref="IntegrationContext.Force"/> is set: unlike <see cref="WriteGeneratedFileAsync"/>,
+    /// this method has no stamp to prove dtk wrote the differing copy, so it cannot tell a user
+    /// edit from a stale dtk write and must not overwrite without <c>--force</c>.
+    /// </remarks>
+    /// <param name="path">Path to the target file.</param>
+    /// <param name="content">The full content to write.</param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     internal static async Task WriteFileAsync(
         string path,
         string content,
@@ -22,6 +42,18 @@ internal static class IntegratorHelpers
         CancellationToken cancellationToken)
     {
         var exists = File.Exists(path);
+
+        if (exists)
+        {
+            var existing = (await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false))
+                .ReplaceLineEndings("\n");
+
+            if (string.Equals(existing, content.ReplaceLineEndings("\n"), StringComparison.Ordinal))
+            {
+                context.Unchanged.Add(path);
+                return;
+            }
+        }
 
         if (ShouldSkipWrite(exists, context.Force))
         {

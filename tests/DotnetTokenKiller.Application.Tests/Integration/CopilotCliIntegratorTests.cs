@@ -90,35 +90,38 @@ public sealed class CopilotCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsAllFiles()
+    public async Task IntegrateAsync_SecondRun_NoForce_SkipsInstructionsAndReportsRestUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         // With generated-artifact stamping, the hook script is already byte-identical to the
-        // stamped current template, so it reports unchanged rather than skipped; the
-        // section-based instructions file and the plain-written registration JSON still report
-        // skipped.
+        // stamped current template, so it reports unchanged rather than skipped. The
+        // plain-written registration JSON is deterministic too, so a repeat run finds it
+        // byte-identical and reports it unchanged rather than skipped — WriteFileAsync must never
+        // print false "use --force" advice for a file --force would not change. Only the
+        // section-based instructions file has no such comparison and still reports skipped.
         result.CreatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().HaveCount(2);
-        result.UnchangedFiles.Should().ContainSingle();
+        result.SkippedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_OverwritesFiles()
+    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesInstructionsAndReportsRestUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        // The section-based instructions file and the plain-written registration JSON are always
-        // overwritten under --force. With generated-artifact stamping, the hook script has
-        // nothing to write over identical content, so it reports unchanged rather than updated.
+        // The section-based instructions file has no identical-content check and is always
+        // rewritten under --force. The hook script (generated-artifact stamping) and the
+        // plain-written registration JSON both have nothing to write over identical content, so
+        // both report unchanged rather than updated.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().HaveCount(2);
+        result.UpdatedFiles.Should().ContainSingle();
         result.SkippedFiles.Should().BeEmpty();
-        result.UnchangedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().HaveCount(2);
     }
 
     [Fact]

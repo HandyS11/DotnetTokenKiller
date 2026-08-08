@@ -291,7 +291,7 @@ Unfiltered tokens: 48.0K
 $ dtk doctor
   ✔  dotnet SDK: Found dotnet 10.0.100
   ✔  config file: Loaded successfully (or using defaults)
-  ✔  tracking database: Found at ~/.local/share/dtk/dtk.db
+  ✔  tracking database: Found at ~/.local/share/dtk/tracking.db
   ✔  tee directory: Writable at /tmp/dtk
   ✔  claude hook (project): installed, registered, up to date
   ✔  claude hook probe (project): rewrites all 6 subcommands
