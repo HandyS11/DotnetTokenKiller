@@ -83,7 +83,7 @@ public class FilteredRunUseCaseTests
         await _teeService.Received(1).BeginAsync(
             "list package",
             Arg.Is<TeeLogHeader>(h =>
-                h!.ExitCode == null &&
+                h.ExitCode == null &&
                 h.CommandLine == "dotnet list package" &&
                 h.ProjectPath == Environment.CurrentDirectory),
             Arg.Any<CancellationToken>());
@@ -214,7 +214,7 @@ public class FilteredRunUseCaseTests
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r!.Command == "build" &&
+                r.Command == "build" &&
                 r.InputTokens == 6 &&
                 r.OutputTokens == 2 &&
                 r.SavedTokens == 4),
@@ -232,7 +232,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Command == "build"),
+            Arg.Is<CommandRecord>(r => r.Command == "build"),
             Arg.Any<CancellationToken>());
     }
 
@@ -247,7 +247,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", [], 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Command == "dotnet"),
+            Arg.Is<CommandRecord>(r => r.Command == "dotnet"),
             Arg.Any<CancellationToken>());
     }
 
@@ -264,7 +264,7 @@ public class FilteredRunUseCaseTests
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r!.InputTokens == 2 &&
+                r.InputTokens == 2 &&
                 r.OutputTokens == 6 &&
                 r.SavedTokens == -4 &&
                 r.SavingsPercentage < 0),
@@ -473,7 +473,7 @@ public class FilteredRunUseCaseTests
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r!.InputTokens == 0 &&
+                r.InputTokens == 0 &&
                 r.OutputTokens == 0 &&
                 Math.Abs(r.SavingsPercentage) < 0.01),
             Arg.Any<CancellationToken>());
@@ -493,7 +493,7 @@ public class FilteredRunUseCaseTests
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r!.InputTokens == 2 &&
+                r.InputTokens == 2 &&
                 r.OutputTokens == 1 &&
                 r.SavedTokens == 1 &&
                 Math.Abs(r.SavingsPercentage - 50.0) < 0.01),
@@ -601,7 +601,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => Math.Abs(r!.SavingsPercentage) < 0.001),
+            Arg.Is<CommandRecord>(r => Math.Abs(r.SavingsPercentage) < 0.001),
             Arg.Any<CancellationToken>());
     }
 
@@ -783,7 +783,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Success),
+            Arg.Is<CommandRecord>(r => r.Success),
             Arg.Any<CancellationToken>());
     }
 
@@ -799,7 +799,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => !r!.Success),
+            Arg.Is<CommandRecord>(r => !r.Success),
             Arg.Any<CancellationToken>());
     }
 
@@ -974,7 +974,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.Filtered),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.Filtered),
             Arg.Any<CancellationToken>());
     }
 
@@ -989,7 +989,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
             Arg.Any<CancellationToken>());
     }
 
@@ -1004,7 +1004,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.RawTailFallback),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.RawTailFallback),
             Arg.Any<CancellationToken>());
     }
 
@@ -1023,7 +1023,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
             Arg.Any<CancellationToken>());
     }
 
@@ -1044,7 +1044,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
             Arg.Any<CancellationToken>());
     }
 
@@ -1061,7 +1061,7 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(new DotnetListPackageFilter(), "dotnet", ListPackageArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Command == "list package"),
+            Arg.Is<CommandRecord>(r => r.Command == "list package"),
             Arg.Any<CancellationToken>());
     }
 }

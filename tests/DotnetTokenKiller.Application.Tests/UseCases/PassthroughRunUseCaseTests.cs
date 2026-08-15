@@ -49,7 +49,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         exitCode.Should().Be(0);
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r!.Outcome == RunOutcome.PassthroughMeasured &&
+                r.Outcome == RunOutcome.PassthroughMeasured &&
                 r.Command == "publish" &&
                 r.InputTokens > 0),
             Arg.Any<CancellationToken>());
@@ -67,7 +67,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r!.SavedTokens == 0 &&
+                r.SavedTokens == 0 &&
                 r.SavingsPercentage == 0.0 &&
                 r.InputTokens == r.OutputTokens),
             Arg.Any<CancellationToken>());
@@ -85,7 +85,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
             Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>());
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r!.Outcome == RunOutcome.PassthroughUnmeasured &&
+                r.Outcome == RunOutcome.PassthroughUnmeasured &&
                 r.Command == "run" &&
                 r.InputTokens == 0),
             Arg.Any<CancellationToken>());
@@ -158,7 +158,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         await _sut.RunAsync(DtkConfig.Default, "dotnet", ["list", "package", "--outdated"]);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Command == "list package"),
+            Arg.Is<CommandRecord>(r => r.Command == "list package"),
             Arg.Any<CancellationToken>());
     }
 
@@ -192,7 +192,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.InputTokens > 0),
+            Arg.Is<CommandRecord>(r => r.InputTokens > 0),
             Arg.Any<CancellationToken>());
     }
 
