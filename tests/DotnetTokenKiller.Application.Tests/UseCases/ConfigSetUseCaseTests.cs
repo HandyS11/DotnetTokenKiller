@@ -17,7 +17,7 @@ public sealed class ConfigSetUseCaseTests
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
         _configProvider.SaveAsync(null!)
             .ReturnsForAnyArgs(Task.CompletedTask)
-            .AndDoes(call => _savedConfig = call.Arg<DtkConfig>()!);
+            .AndDoes(call => _savedConfig = call.Arg<DtkConfig>());
     }
 
     [Fact]

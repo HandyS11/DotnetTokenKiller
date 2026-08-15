@@ -60,7 +60,7 @@ public class PipeFilterUseCaseTests
         await Create("raw").RunAsync(_filter, "list package", 0, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Source == RunSource.Pipe && r.Command == "list package"),
+            Arg.Is<CommandRecord>(r => r.Source == RunSource.Pipe && r.Command == "list package"),
             Arg.Any<CancellationToken>());
     }
 
@@ -99,7 +99,7 @@ public class PipeFilterUseCaseTests
         await _teeService.Received(1).BeginAsync(
             "list package",
             Arg.Is<TeeLogHeader>(h =>
-                h!.ExitCode == null &&
+                h.ExitCode == null &&
                 h.Source == RunSource.Pipe &&
                 h.CommandLine == "dotnet list package" &&
                 h.ProjectPath == Environment.CurrentDirectory),

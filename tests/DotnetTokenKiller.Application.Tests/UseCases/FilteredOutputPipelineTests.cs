@@ -49,7 +49,7 @@ public class FilteredOutputPipelineTests
         await _sut.ProcessAsync(Request(source: RunSource.Pipe), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Source == RunSource.Pipe && r.Command == "build"),
+            Arg.Is<CommandRecord>(r => r.Source == RunSource.Pipe && r.Command == "build"),
             Arg.Any<CancellationToken>());
     }
 
@@ -61,7 +61,7 @@ public class FilteredOutputPipelineTests
         await _sut.ProcessAsync(Request(), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
             Arg.Any<CancellationToken>());
     }
 
@@ -73,7 +73,7 @@ public class FilteredOutputPipelineTests
         await _sut.ProcessAsync(Request(exitCode: 1), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.RawTailFallback),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.RawTailFallback),
             Arg.Any<CancellationToken>());
     }
 
@@ -88,7 +88,7 @@ public class FilteredOutputPipelineTests
         await _sut.ProcessAsync(Request(raw: "   ", exitCode: 1), NullTeeSession.Instance);
 
         await _tracker.Received(1).RecordAsync(
-            Arg.Is<CommandRecord>(r => r!.Outcome == RunOutcome.FilterFaulted),
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
             Arg.Any<CancellationToken>());
     }
 
