@@ -49,14 +49,16 @@
     "fileMetadataFiles": [],
     "template": [
       "default",
-      "modern"
+      "modern",
+      "template"
     ],
     "globalMetadata": {
       "_appTitle": "DotnetTokenKiller",
-      "_appName": "\u00a0DotnetTokenKiller",
+      "_appName": "DotnetTokenKiller",
       "_appFaviconPath": "images/icon.png",
       "_appLogoPath": "images/icon.png",
-      "_appFooter": "DotnetTokenKiller &mdash; Reduce LLM token usage from dotnet CLI output",
+      "_appFooter": "<div class=\"dtk-footer\"><span>DotnetTokenKiller &mdash; fewer tokens out of <code>dotnet</code></span><nav><a href=\"https://github.com/HandyS11/DotnetTokenKiller\">GitHub</a><a href=\"https://www.nuget.org/packages/DotnetTokenKiller\">NuGet</a><a href=\"https://github.com/HandyS11/DotnetTokenKiller/releases\">Releases</a><a href=\"https://github.com/HandyS11/DotnetTokenKiller/blob/develop/LICENSE\">MIT licence</a></nav></div>",
+      "_description": "A .NET CLI proxy that filters dotnet build, test, restore, clean, format, and list package output down to what your AI agent actually needs.",
       "_enableSearch": true,
       "_enableNewTab": true,
       "_disableContribution": false,

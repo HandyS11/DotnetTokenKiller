@@ -1,6 +1,6 @@
 # AI Agent Setup
 
-DTK integrates with AI coding agents to automatically reduce token usage from `dotnet` commands.
+Each supported agent gets a hook that rewrites `dotnet …` to `dtk dotnet …` before the command runs, so the filtering happens whether or not the agent remembers to ask for it. One `dtk integrate` command installs it.
 
 > [!IMPORTANT]
 > **Python 3 requirement**: The Claude Code and Gemini CLI integrations install Python-based hooks that run at command interception time. Make sure `python3` is available on your `PATH` before using `dtk integrate claude` or `dtk integrate gemini`. Other providers (Copilot, Cursor, Windsurf, Aider, JetBrains) do not require Python.

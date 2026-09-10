@@ -1,5 +1,7 @@
 # Usage Guide
 
+Every command dtk supports, the flags it accepts, and what each one changes about the output. If you only need the short version: prefix any supported `dotnet` command with `dtk` and everything else stays the same.
+
 ## General Syntax
 
 ```sh

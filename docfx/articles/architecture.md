@@ -1,6 +1,6 @@
 # Architecture
 
-DotnetTokenKiller follows a clean architecture pattern with four layers, each in its own project.
+How the codebase is laid out, for anyone adding a filter or tracking down where a piece of output gets dropped. dtk follows a clean architecture pattern with four layers, each in its own project.
 
 ## Project Structure
 

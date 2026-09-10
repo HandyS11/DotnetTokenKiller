@@ -1,0 +1,914 @@
+/*
+ * DotnetTokenKiller documentation theme.
+ *
+ * Layered on top of docfx's `default` + `modern` templates. Overrides are kept to
+ * Bootstrap custom properties (`--bs-*`) and documented docfx selectors wherever
+ * possible, so a docfx upgrade shifts as little as possible underneath us.
+ *
+ * Colour is semantic here, not decorative:
+ *   violet  - dtk's own voice (brand, chrome, links, the filtered pane)
+ *   noise   - output that dtk strips
+ *   signal  - output that survives the filter
+ */
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+/* ---------------------------------------------------------------- tokens -- */
+
+:root {
+  --dtk-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Mono',
+    Consolas, monospace;
+  --dtk-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+
+  --dtk-violet: #7c4dff;
+  --dtk-violet-deep: #512bd4;
+
+  --dtk-rail: 3px;
+  --dtk-radius: 10px;
+  --dtk-measure: 74ch;
+}
+
+[data-bs-theme='dark'] {
+  --dtk-void: #0b0910;
+  --dtk-surface: #14101f;
+  --dtk-surface-raised: #1b1630;
+  --dtk-hairline: #2a2340;
+  --dtk-hairline-strong: #3d3260;
+  --dtk-ink: #e6e1f2;
+  --dtk-ink-dim: #a49bc0;
+  --dtk-noise: #857d9d;
+  --dtk-signal: #34d399;
+  --dtk-path: #8fd0ff;
+  --dtk-token: #c4a7ff;
+  --dtk-accent: var(--dtk-violet);
+  --dtk-accent-wash: rgba(124, 77, 255, 0.14);
+  --dtk-danger: #ff6b81;
+
+  --bs-body-bg: var(--dtk-void);
+  --bs-body-color: var(--dtk-ink);
+  --bs-emphasis-color: #fff;
+  --bs-secondary-color: var(--dtk-ink-dim);
+  --bs-border-color: var(--dtk-hairline);
+  --bs-link-color: #a889ff;
+  --bs-link-color-rgb: 168, 137, 255;
+  --bs-link-hover-color: #c3aeff;
+  --bs-link-hover-color-rgb: 195, 174, 255;
+  --bs-body-bg-rgb: 11, 9, 16;
+  --bs-body-color-rgb: 230, 225, 242;
+  --bs-code-color: #b79bff;
+  --bs-heading-color: #f2eeff;
+}
+
+[data-bs-theme='light'] {
+  --dtk-void: #fbfaff;
+  --dtk-surface: #fff;
+  --dtk-surface-raised: #f4f0ff;
+  --dtk-hairline: #e2dcf5;
+  --dtk-hairline-strong: #cabbf0;
+  --dtk-ink: #1d1830;
+  --dtk-ink-dim: #57506e;
+  --dtk-noise: #736c8a;
+  --dtk-signal: #0d7f57;
+  --dtk-path: #0a5c94;
+  --dtk-token: var(--dtk-violet-deep);
+  --dtk-accent: var(--dtk-violet-deep);
+  --dtk-accent-wash: rgba(81, 43, 212, 0.08);
+  --dtk-danger: #c62b45;
+
+  --bs-body-bg: var(--dtk-void);
+  --bs-body-color: var(--dtk-ink);
+  --bs-secondary-color: var(--dtk-ink-dim);
+  --bs-border-color: var(--dtk-hairline);
+  --bs-link-color: var(--dtk-violet-deep);
+  --bs-link-color-rgb: 81, 43, 212;
+  --bs-link-hover-color: #3c1ba6;
+  --bs-link-hover-color-rgb: 60, 27, 166;
+  --bs-body-bg-rgb: 251, 250, 255;
+  --bs-body-color-rgb: 29, 24, 48;
+  --bs-code-color: var(--dtk-violet-deep);
+  --bs-heading-color: #120e22;
+}
+
+body {
+  font-family: var(--dtk-sans);
+  background-color: var(--dtk-void);
+}
+
+/* ------------------------------------------------------------ typography -- */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.navbar-brand,
+.toc,
+.affix,
+#breadcrumb {
+  font-family: var(--dtk-mono);
+}
+
+article h1 {
+  font-size: 2.05rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  margin-bottom: 1.1rem;
+}
+
+article h2 {
+  font-size: 1.4rem;
+  letter-spacing: -0.02em;
+  padding-top: 0.55rem;
+  margin-top: 2.6rem;
+  border-top: 1px solid var(--dtk-hairline);
+}
+
+article h3 {
+  font-size: 1.12rem;
+  letter-spacing: -0.01em;
+  margin-top: 1.9rem;
+}
+
+article p,
+article li {
+  max-width: var(--dtk-measure);
+  line-height: 1.68;
+}
+
+article > p:first-of-type {
+  color: var(--dtk-ink-dim);
+  font-size: 1.06rem;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------------------- navbar -- */
+
+header .navbar {
+  background-color: color-mix(in srgb, var(--dtk-void) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+header {
+  border-bottom-color: var(--dtk-hairline) !important;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--bs-heading-color);
+}
+
+.navbar-brand > img {
+  border-radius: 6px;
+  margin-right: 0.5rem;
+}
+
+.navbar-nav .nav-link {
+  font-family: var(--dtk-mono);
+  font-size: 0.86rem;
+  color: var(--dtk-ink-dim);
+}
+
+.navbar-nav .nav-link:hover,
+.navbar-nav .nav-link.active {
+  color: var(--dtk-accent);
+}
+
+/* docfx renders the navbar icon links (GitHub, NuGet) from main.js `iconLinks`. */
+form.icons .btn {
+  color: var(--dtk-ink-dim);
+}
+
+form.icons .btn:hover {
+  color: var(--dtk-accent);
+}
+
+#search input.form-control {
+  font-family: var(--dtk-mono);
+  font-size: 0.84rem;
+  background-color: var(--dtk-surface);
+  border-color: var(--dtk-hairline);
+  color: var(--dtk-ink);
+}
+
+#search input.form-control:focus {
+  border-color: var(--dtk-accent);
+  box-shadow: 0 0 0 3px var(--dtk-accent-wash);
+}
+
+/* --------------------------------------------------- table of contents -- */
+
+.toc .nav-link {
+  font-size: 0.855rem;
+  color: var(--dtk-ink-dim);
+  border-left: var(--dtk-rail) solid transparent;
+  border-radius: 0;
+  padding-left: 0.7rem;
+}
+
+.toc .nav-link:hover {
+  color: var(--dtk-ink);
+  background-color: var(--dtk-accent-wash);
+}
+
+.toc .nav-link.active {
+  color: var(--dtk-accent);
+  font-weight: 700;
+  background-color: var(--dtk-accent-wash);
+  border-left-color: var(--dtk-accent);
+}
+
+.affix h5 {
+  font-family: var(--dtk-mono);
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--dtk-ink-dim);
+}
+
+.affix ul > li > a {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--dtk-noise);
+  border-left: var(--dtk-rail) solid var(--dtk-hairline);
+  padding-left: 0.65rem;
+}
+
+.affix ul > li > a:hover,
+.affix ul > li.active > a {
+  color: var(--dtk-accent);
+  border-left-color: var(--dtk-accent);
+  background: none;
+}
+
+/* ------------------------------------------------------------ code blocks -- */
+
+code,
+pre,
+kbd {
+  font-family: var(--dtk-mono);
+  font-variant-ligatures: none;
+}
+
+:not(pre) > code {
+  background-color: var(--dtk-accent-wash);
+  border-radius: 4px;
+  padding: 0.12em 0.36em;
+  font-size: 0.87em;
+}
+
+article pre {
+  background-color: var(--dtk-surface);
+  border: 1px solid var(--dtk-hairline);
+  border-radius: var(--dtk-radius);
+  font-size: 0.845rem;
+  line-height: 1.6;
+}
+
+article pre > code {
+  background: none;
+  padding: 1rem 1.1rem;
+}
+
+/* A violet rail marks shell blocks - commands and their transcripts - so they
+   read differently from a config file or a C# snippet. The landing page's
+   terminal chrome is not repeated here: with no command name to carry, a title
+   bar would be decoration rather than information. */
+article pre:has(> code.lang-sh),
+article pre:has(> code.lang-bash),
+article pre:has(> code.lang-console),
+article pre:has(> code.lang-powershell) {
+  border-left: var(--dtk-rail) solid var(--dtk-accent);
+  border-radius: 0 var(--dtk-radius) var(--dtk-radius) 0;
+}
+
+/* Syntax highlighting, tuned to the violet ramp. */
+[data-bs-theme='dark'] .hljs-keyword,
+[data-bs-theme='dark'] .hljs-built_in,
+[data-bs-theme='dark'] .hljs-literal {
+  color: #c4a7ff;
+}
+
+[data-bs-theme='dark'] .hljs-string,
+[data-bs-theme='dark'] .hljs-attr {
+  color: #7ee2b8;
+}
+
+[data-bs-theme='dark'] .hljs-title,
+[data-bs-theme='dark'] .hljs-name {
+  color: #8fd0ff;
+}
+
+[data-bs-theme='dark'] .hljs-comment,
+[data-bs-theme='dark'] .hljs-meta {
+  color: var(--dtk-noise);
+}
+
+[data-bs-theme='dark'] .hljs-number,
+[data-bs-theme='dark'] .hljs-type {
+  color: #ffb38a;
+}
+
+/* ---------------------------------------------------------------- tables -- */
+
+article table {
+  font-size: 0.9rem;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+article table > thead > tr > th {
+  font-family: var(--dtk-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--dtk-ink-dim);
+  border-bottom: 2px solid var(--dtk-hairline-strong);
+}
+
+article table > tbody > tr:hover {
+  background-color: var(--dtk-accent-wash);
+}
+
+/* ------------------------------------------------------------ blockquote -- */
+
+article blockquote {
+  border-left: var(--dtk-rail) solid var(--dtk-accent);
+  background-color: var(--dtk-accent-wash);
+  padding: 0.85rem 1.1rem;
+  border-radius: 0 var(--dtk-radius) var(--dtk-radius) 0;
+  color: var(--dtk-ink);
+}
+
+article blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------- footer -- */
+
+footer {
+  border-top-color: var(--dtk-hairline) !important;
+  background-color: var(--dtk-surface);
+  font-family: var(--dtk-mono);
+  font-size: 0.82rem;
+}
+
+.dtk-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.4rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.dtk-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+}
+
+.dtk-footer a {
+  color: var(--dtk-ink-dim);
+  text-decoration: none;
+}
+
+.dtk-footer a:hover {
+  color: var(--dtk-accent);
+  text-decoration: underline;
+}
+
+/* =========================================================== landing page = */
+
+body[data-layout='landing'] main.container-xxl {
+  max-width: 1180px;
+}
+
+body[data-layout='landing'] article {
+  padding-top: 0.5rem;
+}
+
+.dtk-hero {
+  padding: 2.2rem 0 0.5rem;
+}
+
+.dtk-hero h1 {
+  font-family: var(--dtk-mono);
+  font-size: clamp(1.9rem, 4.4vw, 3.05rem);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.045em;
+  margin: 0 0 1rem;
+  max-width: 21ch;
+}
+
+.dtk-hero h1 .dtk-strike {
+  color: var(--dtk-noise);
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.dtk-hero-lede {
+  color: var(--dtk-ink-dim);
+  font-size: 1.06rem;
+  line-height: 1.6;
+  max-width: 62ch;
+  margin-bottom: 1.5rem;
+}
+
+.dtk-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: center;
+  margin-bottom: 2.4rem;
+}
+
+.dtk-btn {
+  font-family: var(--dtk-mono);
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 0.6rem 1.15rem;
+  border-radius: var(--dtk-radius);
+  text-decoration: none;
+  border: 1px solid var(--dtk-hairline-strong);
+  color: var(--dtk-ink);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.dtk-btn:hover {
+  border-color: var(--dtk-accent);
+  background-color: var(--dtk-accent-wash);
+  color: var(--dtk-ink);
+  text-decoration: none;
+}
+
+.dtk-btn-primary {
+  background-color: var(--dtk-violet-deep);
+  border-color: var(--dtk-violet-deep);
+  color: #fff;
+}
+
+.dtk-btn-primary:hover {
+  background-color: var(--dtk-violet);
+  border-color: var(--dtk-violet);
+  color: #fff;
+}
+
+/* -- the diff: two terminals, noise on the left, signal on the right ------- */
+
+.dtk-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: stretch;
+  margin-bottom: 0.9rem;
+}
+
+.dtk-term {
+  background-color: var(--dtk-surface);
+  border: 1px solid var(--dtk-hairline);
+  border-radius: var(--dtk-radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dtk-term-out {
+  border-color: var(--dtk-hairline-strong);
+  box-shadow: 0 0 0 1px var(--dtk-accent-wash);
+}
+
+.dtk-term-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.8rem;
+  background-color: var(--dtk-surface-raised);
+  border-bottom: 1px solid var(--dtk-hairline);
+  font-family: var(--dtk-mono);
+  font-size: 0.76rem;
+  color: var(--dtk-ink-dim);
+}
+
+.dtk-term-dots {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dtk-hairline-strong);
+  box-shadow:
+    13px 0 0 var(--dtk-hairline-strong),
+    26px 0 0 var(--dtk-hairline-strong);
+  margin-right: 26px;
+}
+
+.dtk-term-out .dtk-term-bar {
+  color: var(--dtk-accent);
+}
+
+.dtk-term-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--dtk-noise);
+}
+
+.dtk-term pre {
+  margin: 0;
+  padding: 0.8rem 0.9rem;
+  background: none;
+  border: 0;
+  font-family: var(--dtk-mono);
+  font-size: 0.735rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  flex: 1;
+  white-space: pre;
+}
+
+.dtk-term-cut {
+  margin-top: auto;
+  padding: 0.55rem 0.9rem;
+  border-top: 1px dashed var(--dtk-hairline);
+  font-family: var(--dtk-mono);
+  font-size: 0.73rem;
+  color: var(--dtk-noise);
+}
+
+.dtk-term pre b {
+  font-weight: 400;
+  color: var(--dtk-ink);
+}
+
+.dtk-noise-line {
+  color: var(--dtk-noise);
+}
+
+.dtk-kept {
+  color: var(--dtk-signal);
+}
+
+.dtk-path {
+  color: var(--dtk-path);
+}
+
+.dtk-code {
+  color: var(--dtk-token);
+}
+
+.dtk-elide {
+  color: var(--dtk-noise);
+  font-style: italic;
+}
+
+.dtk-diff-note {
+  font-size: 0.93rem;
+  line-height: 1.65;
+  color: var(--dtk-ink-dim);
+  max-width: 74ch;
+  margin-bottom: 2.6rem;
+}
+
+.dtk-diff-note b {
+  font-family: var(--dtk-mono);
+  font-weight: 700;
+  color: var(--dtk-accent);
+}
+
+/* One orchestrated moment on load: the noise dims and the filtered pane
+   arrives. Nothing else on the page animates on scroll. */
+@media (prefers-reduced-motion: no-preference) {
+  .dtk-diff[data-animate='pending'] .dtk-noise-line {
+    color: var(--dtk-ink);
+  }
+
+  .dtk-diff[data-animate='pending'] .dtk-term-out {
+    opacity: 0;
+  }
+
+  .dtk-diff[data-animate='running'] .dtk-noise-line {
+    color: var(--dtk-noise);
+    transition: color 0.5s ease 0.25s;
+  }
+
+  .dtk-diff[data-animate='running'] .dtk-term-out {
+    opacity: 1;
+    transition: opacity 0.45s ease 0.55s;
+  }
+}
+
+/* ---- install line ------------------------------------------------------- */
+
+.dtk-install {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background-color: var(--dtk-surface);
+  border: 1px solid var(--dtk-hairline);
+  border-left: var(--dtk-rail) solid var(--dtk-accent);
+  border-radius: var(--dtk-radius);
+  padding: 0.7rem 0.9rem;
+  font-family: var(--dtk-mono);
+  font-size: 0.87rem;
+  margin-bottom: 3rem;
+  max-width: 46rem;
+}
+
+.dtk-install span.dtk-prompt {
+  color: var(--dtk-accent);
+  user-select: none;
+}
+
+.dtk-install code {
+  background: none;
+  padding: 0;
+  color: var(--dtk-ink);
+  flex: 1;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.dtk-copy {
+  flex: none;
+  font-family: var(--dtk-mono);
+  font-size: 0.75rem;
+  padding: 0.28rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--dtk-hairline-strong);
+  background: none;
+  color: var(--dtk-ink-dim);
+  cursor: pointer;
+}
+
+.dtk-copy:hover {
+  color: var(--dtk-accent);
+  border-color: var(--dtk-accent);
+}
+
+.dtk-copy[data-copied='true'] {
+  color: var(--dtk-signal);
+  border-color: var(--dtk-signal);
+}
+
+/* ---- savings strip ------------------------------------------------------ */
+
+.dtk-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background-color: var(--dtk-hairline);
+  border: 1px solid var(--dtk-hairline);
+  border-radius: var(--dtk-radius);
+  overflow: hidden;
+  margin-bottom: 3.2rem;
+}
+
+.dtk-stat {
+  background-color: var(--dtk-surface);
+  padding: 1.15rem 1.1rem;
+}
+
+.dtk-stat dt {
+  font-family: var(--dtk-mono);
+  font-size: clamp(1.6rem, 3.4vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  color: var(--dtk-accent);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.dtk-stat dd {
+  font-family: var(--dtk-mono);
+  font-size: 0.79rem;
+  color: var(--dtk-ink-dim);
+  margin: 0.45rem 0 0;
+}
+
+/* ---- section headings on the landing page ------------------------------- */
+
+.dtk-section {
+  margin-bottom: 3.2rem;
+}
+
+.dtk-section > h2 {
+  font-family: var(--dtk-mono);
+  font-size: 1.28rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  border: 0;
+  padding: 0;
+  margin: 0 0 0.4rem;
+}
+
+.dtk-section > p {
+  color: var(--dtk-ink-dim);
+  max-width: 66ch;
+  margin-bottom: 1.5rem;
+}
+
+/* ---- what it filters ---------------------------------------------------- */
+
+.dtk-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 1.4rem 2rem;
+}
+
+.dtk-filter {
+  border-left: var(--dtk-rail) solid var(--dtk-hairline-strong);
+  padding-left: 1rem;
+}
+
+.dtk-filter:hover {
+  border-left-color: var(--dtk-accent);
+}
+
+.dtk-filter h3 {
+  font-family: var(--dtk-mono);
+  font-size: 0.94rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  color: var(--bs-heading-color);
+}
+
+.dtk-filter p {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--dtk-ink-dim);
+  margin: 0;
+}
+
+/* ---- agents ------------------------------------------------------------- */
+
+.dtk-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.3rem;
+}
+
+.dtk-agent {
+  font-family: var(--dtk-mono);
+  font-size: 0.79rem;
+  padding: 0.34rem 0.7rem;
+  border: 1px solid var(--dtk-hairline);
+  border-radius: 999px;
+  color: var(--dtk-ink-dim);
+  background-color: var(--dtk-surface);
+}
+
+/* ---- next steps --------------------------------------------------------- */
+
+.dtk-next {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.9rem;
+}
+
+.dtk-next a {
+  display: block;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid var(--dtk-hairline);
+  border-radius: var(--dtk-radius);
+  background-color: var(--dtk-surface);
+  text-decoration: none;
+  color: var(--dtk-ink);
+}
+
+.dtk-next a:hover {
+  border-color: var(--dtk-accent);
+  background-color: var(--dtk-accent-wash);
+  text-decoration: none;
+}
+
+.dtk-next strong {
+  font-family: var(--dtk-mono);
+  font-size: 0.9rem;
+  display: block;
+  margin-bottom: 0.22rem;
+}
+
+.dtk-next span {
+  font-size: 0.85rem;
+  color: var(--dtk-ink-dim);
+}
+
+/* --------------------------------------------------------------- responsive */
+
+@media (max-width: 800px) {
+  .dtk-diff {
+    grid-template-columns: 1fr;
+  }
+
+  .dtk-term pre {
+    font-size: 0.7rem;
+  }
+}
+
+/* ------------------------------------------------------------------ focus -- */
+
+a:focus-visible,
+button:focus-visible,
+.dtk-btn:focus-visible,
+.dtk-copy:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--dtk-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media print {
+  .dtk-diff,
+  .dtk-stats {
+    break-inside: avoid;
+  }
+}
+
+/* Failure counts in the filtered pane read as failures, not as chrome. */
+.dtk-fail {
+  color: var(--dtk-danger);
+}
+
+/* ------------------------------------------------------------- search -- */
+
+.search-results {
+  padding-top: 1.6rem;
+}
+
+.search-list {
+  font-family: var(--dtk-mono);
+  font-size: 0.82rem;
+  color: var(--dtk-ink-dim);
+  padding-bottom: 0.9rem;
+  margin-bottom: 1.4rem;
+  border-bottom: 1px solid var(--dtk-hairline);
+}
+
+/* docfx anchors these on #search-results, so the selectors are matched to it. */
+#search-results > .sr-items .sr-item {
+  max-width: 78ch;
+  padding-left: 1rem;
+  border-left: var(--dtk-rail) solid var(--dtk-hairline);
+  margin-bottom: 1.7rem;
+}
+
+#search-results > .sr-items .sr-item:hover {
+  border-left-color: var(--dtk-accent);
+}
+
+#search-results > .sr-items .sr-item > .item-title {
+  font-family: var(--dtk-mono);
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.2rem;
+}
+
+#search-results > .sr-items .sr-item > .item-title a {
+  text-decoration: none;
+  color: var(--bs-heading-color);
+}
+
+#search-results > .sr-items .sr-item > .item-title a:hover {
+  color: var(--dtk-accent);
+  text-decoration: underline;
+}
+
+/* The full URL repeats what the title already says, so it stays out of the way. */
+#search-results > .sr-items .sr-item > .item-href {
+  font-family: var(--dtk-mono);
+  font-size: 0.73rem;
+  color: var(--dtk-noise);
+  margin-bottom: 0.45rem;
+  overflow-wrap: anywhere;
+}
+
+#search-results > .sr-items .sr-item > .item-brief {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--dtk-ink-dim);
+}

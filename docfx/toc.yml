@@ -1,8 +1,8 @@
-- name: Articles
+- name: Guide
   href: articles/
   homepage: articles/getting-started.md
 - name: Examples
   href: articles/examples/
   homepage: articles/examples/index.md
-- name: API Reference
+- name: API
   href: api/
