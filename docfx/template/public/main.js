@@ -5,30 +5,52 @@
  * `iconLinks`, `start`) so a docfx upgrade does not break it.
  */
 
-/** Copies the install command, then confirms it on the button itself. */
+const COPY_SHORTCUT = /Mac|iPhone|iPad/.test(navigator.userAgent)
+  ? '⌘C'
+  : 'Ctrl+C'
+
+/** Puts a node's text under the user's selection, ready for a manual copy. */
+function selectContents(node) {
+  const range = document.createRange()
+  range.selectNodeContents(node)
+  const selection = window.getSelection()
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
+
+/** Copies the adjacent command, then reports the result on the button itself. */
 function wireCopyButtons() {
   for (const button of document.querySelectorAll('.dtk-copy')) {
-    button.addEventListener('click', async () => {
-      const text = button.parentElement?.querySelector('code')?.textContent
-      if (!text) {
-        return
-      }
+    const code = button.parentElement?.querySelector('code')
+    if (!code) {
+      continue
+    }
 
-      try {
-        await navigator.clipboard.writeText(text.trim())
-      } catch {
-        button.textContent = 'Press Ctrl+C'
-        return
-      }
+    const label = button.textContent
+    let revertTimer
 
-      const label = button.dataset.label ?? button.textContent
-      button.dataset.label = label
-      button.dataset.copied = 'true'
-      button.textContent = 'Copied'
-      setTimeout(() => {
-        button.dataset.copied = 'false'
+    /* Every outcome reverts to the original label, so the button can never be
+       left showing a stale message. */
+    const report = (message, copied, revertAfterMs) => {
+      clearTimeout(revertTimer)
+      button.textContent = message
+      button.dataset.copied = copied
+      revertTimer = setTimeout(() => {
         button.textContent = label
-      }, 1600)
+        button.dataset.copied = 'false'
+      }, revertAfterMs)
+    }
+
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code.textContent.trim())
+        report('Copied', 'true', 1600)
+      } catch {
+        /* Clipboard access can be refused - over plain HTTP, or by permission.
+           Select the command first so the shortcut has something to act on. */
+        selectContents(code)
+        report(`Press ${COPY_SHORTCUT}`, 'false', 4000)
+      }
     })
   }
 }

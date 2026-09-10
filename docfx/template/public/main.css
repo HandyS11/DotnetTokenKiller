@@ -166,7 +166,10 @@ article > p:first-of-type {
 /* --------------------------------------------------------------- navbar -- */
 
 header .navbar {
+  /* Plain colour first: engines without color-mix() drop the line below. */
+  background-color: var(--dtk-void);
   background-color: color-mix(in srgb, var(--dtk-void) 88%, transparent);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
