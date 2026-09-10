@@ -1,6 +1,6 @@
 # Configuration
 
-Settings can be managed via CLI or by editing the JSON file directly.
+dtk reads its settings from a JSON file that controls how aggressively it filters, where it writes logs, and how it counts tokens. You can edit that file directly or go through `dtk config`, which validates what you write.
 
 ## CLI (recommended)
 
