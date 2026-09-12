@@ -14,6 +14,9 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     private const string Separator = "---";
     private const int MessageMaxLen = 120;
 
+    /// <summary>Stands in for the diagnostic code on MSBuild output that carries none (Exec tasks).</summary>
+    private const string NoCode = "(no code)";
+
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the raw build output.</summary>
@@ -26,33 +29,39 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             return string.Empty;
         }
 
-        var (diagnostics, projectCount, elapsed) = ParseLines(AnsiStrip.Strip(rawOutput).Split('\n'));
-        var errors = diagnostics.Where(d => d.Level == "error").ToList();
-        var warnings = diagnostics.Where(d => d.Level == "warning").ToList();
-        var context = BuildContext(projectCount, elapsed);
+        var parsed = ParseLines(AnsiStrip.Strip(rawOutput).Split('\n'));
+        var errors = parsed.Diagnostics.Where(d => d.Level == "error").ToList();
+        var warnings = parsed.Diagnostics.Where(d => d.Level == "warning").ToList();
+        var context = BuildContext(parsed.ProjectCount, parsed.Elapsed);
 
-        if (exitCode == 0 && errors.Count == 0 && warnings.Count == 0)
+        // MSBuild's own "N Error(s)" tally is the authority on how many diagnostics the build
+        // raised. It counts ones this filter deliberately collapses (the same error reported once
+        // per target framework) and ones the regexes never matched, so taking the larger of the two
+        // stops the header from quietly reporting fewer problems than the build actually found.
+        var errorTotal = Math.Max(parsed.DeclaredErrors ?? 0, errors.Count);
+        var warningTotal = Math.Max(parsed.DeclaredWarnings ?? 0, warnings.Count);
+
+        if (errors.Count == 0 && warnings.Count == 0)
         {
-            return $"✓ dotnet build{context}\n";
+            // Nothing parsed (crashed process, localized SDK, garbled output). A clean tick is only
+            // honest when MSBuild's summary agrees there was nothing to report; otherwise degrade to
+            // blank so FilteredRunUseCase's raw-tail fallback surfaces the output we failed to read.
+            return exitCode == 0 && errorTotal == 0 && warningTotal == 0
+                ? $"✓ dotnet build{context}\n"
+                : string.Empty;
         }
 
-        if (exitCode != 0 && errors.Count == 0 && warnings.Count == 0)
-        {
-            // Failed run with nothing parsed (crashed process, localized SDK, garbled output):
-            // degrade to blank so FilteredRunUseCase's raw-tail fallback surfaces the real output
-            // instead of a misleadingly clean "0 errors, 0 warnings" header.
-            return string.Empty;
-        }
-
-        return FormatDiagnostics(errors, warnings, context, exitCode);
+        return FormatDiagnostics(errors, warnings, context, exitCode, errorTotal, warningTotal);
     }
 
-    private (List<Diagnostic> Diagnostics, int ProjectCount, string Elapsed) ParseLines(string[] lines)
+    private ParsedOutput ParseLines(string[] lines)
     {
         var diagnostics = new List<Diagnostic>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var projectCount = 0;
         var elapsed = string.Empty;
+        int? declaredErrors = null;
+        int? declaredWarnings = null;
 
         foreach (var rawLine in lines)
         {
@@ -70,6 +79,27 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             if (elapsedMatch.Success)
             {
                 elapsed = FormatElapsed(elapsedMatch.Value);
+                continue;
+            }
+
+            // MSBuild's end-of-build tally ("    3 Error(s)"). Read before it is discarded as
+            // noise: it is the only count in the output that is not derived from what we parsed.
+            var countMatch = DeclaredCountPattern().Match(line);
+            if (countMatch.Success)
+            {
+                if (int.TryParse(countMatch.Groups["count"].Value, NumberStyles.None,
+                        CultureInfo.InvariantCulture, out var declared))
+                {
+                    if (countMatch.Groups["kind"].Value == "Error")
+                    {
+                        declaredErrors = declared;
+                    }
+                    else
+                    {
+                        declaredWarnings = declared;
+                    }
+                }
+
                 continue;
             }
 
@@ -107,7 +137,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
                 TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
         }
 
-        return (diagnostics, projectCount, elapsed);
+        return new ParsedOutput(diagnostics, projectCount, elapsed, declaredErrors, declaredWarnings);
     }
 
     private bool TryAddDiagnosticLine(string line, HashSet<string> seen, List<Diagnostic> diagnostics)
@@ -118,8 +148,10 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             return false;
         }
 
+        // The message is part of the key because the code is optional: without it, two unrelated
+        // codeless diagnostics reported at the same position would collapse into one.
         var key =
-            $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}";
+            $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}:{diagMatch.Groups["message"].Value}";
         if (seen.Add(key))
         {
             diagnostics.Add(new Diagnostic(
@@ -135,7 +167,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     }
 
     private static string FormatDiagnostics(List<Diagnostic> errors, List<Diagnostic> warnings, string context,
-        int exitCode)
+        int exitCode, int errorTotal, int warningTotal)
     {
         var sb = new StringBuilder();
 
@@ -150,26 +182,48 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             }
 
             sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"dotnet build: 0 errors, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{context}")
+                    $"dotnet build: {Tally(errorTotal, errors.Count, "error")}, {Tally(warningTotal, warnings.Count, "warning")}{context}")
                 .AppendLine(Separator);
             AppendGroupedByCode(sb, warnings);
         }
         else
         {
             sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"dotnet build: {errors.Count} error{(errors.Count == 1 ? "" : "s")}, {warnings.Count} warning{(warnings.Count == 1 ? "" : "s")}{context}")
+                    $"dotnet build: {Tally(errorTotal, errors.Count, "error")}, {Tally(warningTotal, warnings.Count, "warning")}{context}")
                 .AppendLine(Separator);
             AppendGroupedByFile(sb, errors);
             AppendTopCodes(sb, errors);
             if (warnings.Count > 0)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{warnings.Count} warning{(warnings.Count == 1 ? "" : "s")} suppressed (use --vv to see)");
+                    $"{Tally(warningTotal, warnings.Count, "warning")} suppressed (use --vv to see)");
             }
         }
 
         // Normalize to '\n' so output stays identical across platforms; AppendLine emits '\r\n' on Windows.
         return sb.ToString().ReplaceLineEndings("\n");
+    }
+
+    /// <summary>
+    /// Renders a diagnostic count, annotating it with "(N shown)" when this filter can display
+    /// fewer entries than the build reported — duplicates collapsed across target frameworks or
+    /// projects, or shapes the regexes did not match. Without the annotation that shortfall is
+    /// invisible and the header reads as an authoritative, complete count.
+    /// </summary>
+    /// <param name="total">The count the build reported.</param>
+    /// <param name="shown">The number of distinct entries rendered below the header.</param>
+    /// <param name="noun">The singular noun to render ("error" or "warning").</param>
+    private static string Tally(int total, int shown, string noun)
+    {
+        var label = $"{total} {noun}{(total == 1 ? "" : "s")}";
+        return total == shown ? label : $"{label} ({shown} shown)";
+    }
+
+    /// <summary>Renders a diagnostic code, standing in for codeless MSBuild output.</summary>
+    /// <param name="code">The parsed code, empty when the diagnostic carried none.</param>
+    private static string CodeLabel(string code)
+    {
+        return code.Length == 0 ? NoCode : code;
     }
 
     private static string BuildContext(int projectCount, string elapsed)
@@ -219,8 +273,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
                || NoiseRestoringPattern().IsMatch(line)
                || NoiseRestoredPattern().IsMatch(line)
                || NoiseBuildStartedPattern().IsMatch(line)
-               || NoiseBuildResultPattern().IsMatch(line)
-               || NoiseCountPattern().IsMatch(line);
+               || NoiseBuildResultPattern().IsMatch(line);
     }
 
     private static void AppendGroupedByCode(StringBuilder sb, List<Diagnostic> diags)
@@ -228,7 +281,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         foreach (var group in diags.GroupBy(d => d.Code).OrderBy(g => g.Key))
         {
             var items = group.ToList();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{group.Key} ({items.Count}x)");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{CodeLabel(group.Key)} ({items.Count}x)");
             foreach (var d in items)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  {d.File}:{d.Line} — {d.Message}");
@@ -245,7 +298,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
                 $"{group.Key} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
             foreach (var d in items)
             {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"  ({d.Line},{d.Col}) {d.Code}: {d.Message}");
+                var code = d.Code.Length == 0 ? string.Empty : $"{d.Code}: ";
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  ({d.Line},{d.Col}) {code}{d.Message}");
             }
         }
     }
@@ -256,7 +310,7 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             .GroupBy(d => d.Code)
             .OrderByDescending(g => g.Count())
             .Take(5)
-            .Select(g => $"{g.Key} ({g.Count()}x)")
+            .Select(g => $"{CodeLabel(g.Key)} ({g.Count()}x)")
             .ToList();
 
         if (topCodes.Count > 0)
@@ -267,16 +321,19 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
     // Matches: /path/file.cs(10,5): error CS0001: message [project.csproj]
     // - file matches lazily up to the (line,col) anchor so paths containing parens (e.g. "Program Files (x86)") survive
-    // - code allows lower-case prefixes (xUnit1013, IDE0055) in addition to CS/MSB
+    // - code allows lower-case prefixes (xUnit1013, IDE0055) in addition to CS/MSB, and is optional
+    //   because MSBuild tasks may report "error : message" with no code at all
     // - message captures the full text and only the trailing "[project]" suffix is peeled off at end-of-line,
     //   so messages containing brackets (e.g. "'string[]'") are kept intact
     [GeneratedRegex(
-        @"^\s*(?<file>.+?)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?<code>[A-Za-z]+\d+):\s+(?<message>.+?)(?:\s+\[(?<project>[^\]]+)\])?\s*$")]
+        @"^\s*(?<file>.+?)\((?<line>\d+),(?<col>\d+)\):\s+(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s+\[(?<project>[^\]]+)\])?\s*$")]
     private static partial Regex DiagnosticPattern();
 
-    // Matches: "MSBUILD : error MSB1001: message" or "CSC : error CS2012: message" (no file/line/col)
+    // Matches: "MSBUILD : error MSB1001: message" or "CSC : error CS2012: message" (no file/line/col).
+    // The code is optional: Exec tasks emit "EXEC : warning : could not lock config file", and
+    // requiring a code dropped those from the listing and the count alike.
     [GeneratedRegex(
-        @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?<code>[A-Za-z]+\d+):\s+(?<message>.+?)(?:\s*\[.+?\])?\s*$")]
+        @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s*\[.+?\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
 
     // Matches: "  MyProject -> /path/to/bin/MyProject.dll" (or .exe)
@@ -311,9 +368,23 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     [GeneratedRegex(@"^Build (succeeded|FAILED)\.?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex NoiseBuildResultPattern();
 
-    // Noise: "    0 Warning(s)" and "    0 Error(s)"
-    [GeneratedRegex(@"^\s+\d+ (Warning|Error)\(s\)\s*$")]
-    private static partial Regex NoiseCountPattern();
+    // MSBuild's end-of-build tally: "    0 Warning(s)" and "    3 Error(s)". Not noise — it is the
+    // only authoritative diagnostic count in the output, so it is captured rather than discarded.
+    [GeneratedRegex(@"^\s+(?<count>\d+) (?<kind>Warning|Error)\(s\)\s*$")]
+    private static partial Regex DeclaredCountPattern();
 
     private sealed record Diagnostic(string File, string Line, string Col, string Level, string Code, string Message);
+
+    /// <summary>Everything a single pass over the raw output yields.</summary>
+    /// <param name="Diagnostics">The distinct diagnostics parsed, in the order encountered.</param>
+    /// <param name="ProjectCount">How many project output lines were seen.</param>
+    /// <param name="Elapsed">The formatted build duration, empty when absent.</param>
+    /// <param name="DeclaredErrors">MSBuild's own error tally, null when the output carried none.</param>
+    /// <param name="DeclaredWarnings">MSBuild's own warning tally, null when the output carried none.</param>
+    private sealed record ParsedOutput(
+        List<Diagnostic> Diagnostics,
+        int ProjectCount,
+        string Elapsed,
+        int? DeclaredErrors,
+        int? DeclaredWarnings);
 }

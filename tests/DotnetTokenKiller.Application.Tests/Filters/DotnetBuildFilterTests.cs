@@ -824,6 +824,89 @@ public class DotnetBuildFilterTests
         result.Should().NotStartWith("✓ dotnet build");
     }
 
+    [Fact]
+    public void Apply_CodelessExecWarning_IsCountedAndShown()
+    {
+        // MSBuild's Exec task emits warnings with no diagnostic code. The code was mandatory in
+        // SimpleDiagnosticPattern, so these vanished from both the listing and the count: a real
+        // build reporting "2 Warning(s)" was summarised by dtk as "1 warning".
+        const string input = "EXEC : warning : could not lock config file .git/config: File exists [/p/a.csproj]";
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 0);
+
+        result.Should().Contain("1 warning");
+        result.Should().Contain("could not lock config file .git/config: File exists");
+    }
+
+    [Fact]
+    public void Apply_CodelessErrorAlongsideCodedError_CountsBoth()
+    {
+        // The dangerous shape: the codeless error is dropped while the coded one still renders, so
+        // the header states a confident "1 error" and the dropped failure never reaches the reader.
+        const string input = """
+                             EXEC : error : the command exited with code 255 [/p/a.csproj]
+                             /p/X.cs(1,1): error CS0029: bad [/p/a.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().Contain("2 errors");
+        result.Should().Contain("the command exited with code 255");
+    }
+
+    [Fact]
+    public void Apply_DiagnosticRepeatedPerTargetFramework_ReportsMsbuildTotalAndShownCount()
+    {
+        // A multi-targeted project reports each diagnostic once per TFM and MSBuild counts them all.
+        // Collapsing them keeps the output small, but the header must not silently claim there was
+        // only one: it reports MSBuild's total and annotates how many distinct entries are shown.
+        const string input = """
+                             /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net8.0]
+                             /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net10.0]
+                                 0 Warning(s)
+                                 2 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("dotnet build: 2 errors (1 shown), 0 warnings");
+        result.Should().Contain("Bad.cs (1 error)");
+    }
+
+    [Fact]
+    public void Apply_MsbuildSummaryAgreesWithParsedCount_OmitsShownAnnotation()
+    {
+        // The annotation is a discrepancy signal, not decoration: when nothing was collapsed or
+        // missed it must stay out of the header.
+        const string input = """
+                             /p/A.cs(1,1): error CS0001: msg [/p/a.csproj]
+                                 0 Warning(s)
+                                 1 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("dotnet build: 1 error, 0 warnings");
+        result.Should().NotContain("shown");
+    }
+
+    [Fact]
+    public void Apply_SucceededButSummaryReportsUnparsedWarnings_FallsBackToRawOutput()
+    {
+        // Nothing parsed while MSBuild declares warnings means the parser missed them (localised
+        // SDK, unfamiliar shape). Returning blank hands over to the raw-tail fallback rather than
+        // printing a clean tick over output we failed to read.
+        const string input = """
+                             Somme avertissement non analysable
+                                 2 Warning(s)
+                                 0 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 0);
+
+        result.Should().BeEmpty();
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetBuildFilterTests).Assembly;
