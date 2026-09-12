@@ -16,5 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Benchmarks.Corpus/DotnetTokenKiller.Benchmarks.Corpus.csproj"/>
+    <ProjectReference Include="../../src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj"/>
   </ItemGroup>
 </Project>
