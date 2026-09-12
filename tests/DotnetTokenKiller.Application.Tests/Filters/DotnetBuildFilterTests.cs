@@ -106,9 +106,11 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
-        // Exact: pins the empty file/line/col slots a simple diagnostic renders with.
+        // Exact: a tool-level diagnostic has no file, line or column, so it groups under "(no file)"
+        // and renders without a position. Emitting the empty slots produced a nameless heading and a
+        // "(,)" stub that read like a location the filter had lost.
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
     }
 
     [Fact]
@@ -127,7 +129,7 @@ public class DotnetBuildFilterTests
 
         // Exact: proves the unmatched line contributes nothing and the duplicate is dropped.
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
     }
 
     [Fact]
@@ -388,7 +390,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1003: Specify either a project or solution file.\nTop codes: MSB1003 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1003: Specify either a project or solution file.\nTop codes: MSB1003 (1x)\n");
     }
 
     [Fact]
@@ -428,12 +430,14 @@ public class DotnetBuildFilterTests
     [Fact]
     public void Apply_SimpleDiagnostic_OutputContainsLevelAndFormattedEntry()
     {
-        // Kills string mutations on SimpleDiagnostic groups (lines 92-94) — verifies exact level, code, message extraction
+        // Kills string mutations on SimpleDiagnostic groups (lines 92-94) — verifies exact level, code,
+        // message extraction, and that a fileless diagnostic drops the "{file}:{line} — " prefix
+        // rather than rendering it empty as ": —".
         const string input = "MSBUILD : warning MSB4011: This is a warning.";
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
-        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nMSB4011 (1x)\n  : \u2014 This is a warning.\n");
+        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nMSB4011 (1x)\n  This is a warning.\n");
     }
 
     [Fact]
@@ -522,7 +526,7 @@ public class DotnetBuildFilterTests
 
         // Both have different messages but same code — should both appear since key includes message
         result.Should().Be(
-            "dotnet build: 2 errors, 0 warnings\n---\n (2 errors)\n  (,) MSB1001: First.\n  (,) MSB1001: Second.\nTop codes: MSB1001 (2x)\n");
+            "dotnet build: 2 errors, 0 warnings\n---\n(no file) (2 errors)\n  MSB1001: First.\n  MSB1001: Second.\nTop codes: MSB1001 (2x)\n");
     }
 
     [Fact]
@@ -574,7 +578,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1001: Something went wrong.\nTop codes: MSB1001 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Something went wrong.\nTop codes: MSB1001 (1x)\n");
     }
 
     [Fact]
@@ -587,7 +591,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB3021: Unable to copy file.\nTop codes: MSB3021 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB3021: Unable to copy file.\nTop codes: MSB3021 (1x)\n");
     }
 
     [Fact]
@@ -682,7 +686,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\n (2 errors)\n  (,) MSB1001: Unknown switch.\n  (,) MSB1002: Unknown switch.\nTop codes: MSB1001 (1x), MSB1002 (1x)\n");
+        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\n(no file) (2 errors)\n  MSB1001: Unknown switch.\n  MSB1002: Unknown switch.\nTop codes: MSB1001 (1x), MSB1002 (1x)\n");
     }
 
     [Fact]

@@ -3,15 +3,16 @@
 How `dtk` filters `dotnet build` and `dotnet clean` output.
 
 > **How to read these examples.** Every pair below is captured from a real run against the
-> projects in `samples/`, and `BuildExamplesTests` re-runs each _Raw_ block through the filter
-> on every build to prove the _dtk_ block still matches. Absolute paths are rewritten to
-> `/repo` so the output is machine-independent.
+> projects in `samples/`, and `ExamplesBindingTests` replays each _Raw_ block through the real
+> filter on every build, so a page cannot drift from what the tool actually prints. Absolute paths
+> are rewritten to `/repo` to keep the captures machine-independent, and a non-zero exit code is
+> noted beside the command that produced it.
 
 > **Why the raw output may not look like your terminal.** When `dotnet` writes to a terminal it
 > uses the .NET terminal logger, which prints a compact live-updating summary. When its output is
-> redirected — which is exactly what `dtk` does — MSBuild falls back to the classic console
-> logger shown here, which prints each diagnostic twice: once inline and again in the
-> end-of-build summary. That duplication is a large part of what `dtk` removes.
+> redirected — which is exactly what `dtk` does — MSBuild falls back to the classic console logger
+> shown here, which prints each diagnostic twice: once inline and again in the end-of-build
+> summary. That duplication is a large part of what `dtk` removes.
 
 > **Log files:** when the output is too large to display, dtk writes the full output to a log
 > file. Pass `--show-log` to print its path.
@@ -40,9 +41,10 @@ Time Elapsed 00:00:01.19
 ✓ dotnet build (1 project, 1.19s)
 ```
 
-Token reduction: **9 lines -> 1 lines**
+Token reduction: **7 lines -> 1 line**
 
 ---
+
 ## Success - multiple projects
 
 **Raw** (`dotnet build samples/SampleApp.MultiProject/SampleApp.MultiProject.csproj`)
@@ -67,14 +69,15 @@ Time Elapsed 00:00:01.34
 ✓ dotnet build (2 projects, 1.34s)
 ```
 
-Token reduction: **11 lines -> 1 lines**
+Token reduction: **9 lines -> 1 line**
 
 ---
+
 ## Single error
 
 Note how the one error appears twice in the raw output - inline and again under `Build FAILED.` - and once in the dtk summary.
 
-**Raw** (`dotnet build samples/SampleApp.Broken/SampleApp.Broken.csproj`)
+**Raw** (`dotnet build samples/SampleApp.Broken/SampleApp.Broken.csproj`) — exit code 1
 
 ```sh
   Determining projects to restore...
@@ -100,14 +103,15 @@ samples/SampleApp.Broken/BrokenClass.cs (1 error)
 Top codes: CS0029 (1x)
 ```
 
-Token reduction: **11 lines -> 5 lines**
+Token reduction: **8 lines -> 5 lines**
 
 ---
+
 ## Many errors across multiple files
 
 The errors are grouped by file and ranked by frequency, so the file with the most problems is the first thing read. `Top codes` lists the five most frequent codes.
 
-**Raw** (`dotnet build samples/SampleApp.MultiError/SampleApp.MultiError.csproj`)
+**Raw** (`dotnet build samples/SampleApp.MultiError/SampleApp.MultiError.csproj`) — exit code 1
 
 ```sh
   Determining projects to restore...
@@ -200,9 +204,10 @@ samples/SampleApp.MultiError/UndefinedReferences.cs (3 errors)
 Top codes: RCS1181 (4x), S2325 (3x), CS0103 (2x), CS0029 (2x), CS0266 (2x)
 ```
 
-Token reduction: **53 lines -> 30 lines**
+Token reduction: **50 lines -> 30 lines**
 
 ---
+
 ## Warnings
 
 Incremental builds skip re-emitting warnings, so `dotnet clean` must precede this run to capture them. Warnings are grouped by code rather than by file: the frequency counts surface the most common pattern first.
@@ -349,9 +354,10 @@ S2325 (6x)
   samples/SampleApp.Warnings/UnusedCode.cs:6 — Make 'DoWork' a static method.
 ```
 
-Token reduction: **78 lines -> 54 lines**
+Token reduction: **75 lines -> 54 lines**
 
 ---
+
 ## Clean - success
 
 **Raw** (`dotnet clean samples/SampleApp/SampleApp.csproj`)
@@ -392,6 +398,4 @@ Time Elapsed 00:00:00.34
 ✓ dotnet clean
 ```
 
-Token reduction: **27 lines -> 1 lines**
-
----
+Token reduction: **25 lines -> 1 line**

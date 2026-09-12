@@ -17,6 +17,9 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     /// <summary>Stands in for the diagnostic code on MSBuild output that carries none (Exec tasks).</summary>
     private const string NoCode = "(no code)";
 
+    /// <summary>Groups diagnostics that name no source file, such as tool- and project-level errors.</summary>
+    private const string NoFile = "(no file)";
+
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the raw build output.</summary>
@@ -284,7 +287,10 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             sb.AppendLine(CultureInfo.InvariantCulture, $"{CodeLabel(group.Key)} ({items.Count}x)");
             foreach (var d in items)
             {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"  {d.File}:{d.Line} — {d.Message}");
+                // A diagnostic with no file has no line either; emitting the separators anyway
+                // renders ": —", which reads like a location the filter dropped.
+                var location = d.File.Length == 0 ? string.Empty : $"{d.File}:{d.Line} — ";
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  {location}{d.Message}");
             }
         }
     }
@@ -294,12 +300,16 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         foreach (var group in errors.GroupBy(d => d.File).OrderByDescending(g => g.Count()))
         {
             var items = group.ToList();
+            var file = group.Key.Length == 0 ? NoFile : group.Key;
             sb.AppendLine(CultureInfo.InvariantCulture,
-                $"{group.Key} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
+                $"{file} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
             foreach (var d in items)
             {
+                // Tool-level diagnostics (MSBUILD, CSC) carry neither position nor, sometimes, a
+                // code; both are omitted rather than rendered as the empty "(,)" and ": " stubs.
+                var position = d.Line.Length == 0 ? string.Empty : $"({d.Line},{d.Col}) ";
                 var code = d.Code.Length == 0 ? string.Empty : $"{d.Code}: ";
-                sb.AppendLine(CultureInfo.InvariantCulture, $"  ({d.Line},{d.Col}) {code}{d.Message}");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"  {position}{code}{d.Message}");
             }
         }
     }
