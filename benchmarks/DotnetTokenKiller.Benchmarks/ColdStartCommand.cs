@@ -1,20 +1,35 @@
-using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.Versioning;
 using DotnetTokenKiller.Benchmarks.Corpus;
+using DotnetTokenKiller.Benchmarks.Corpus.Savings;
 using DotnetTokenKiller.Benchmarks.Support;
+using DotnetTokenKiller.Domain.Filters;
+using DotnetTokenKiller.Domain.Text;
+using DotnetTokenKiller.Infrastructure.Tracking;
 
 namespace DotnetTokenKiller.Benchmarks;
 
 /// <summary>
-/// Times the real <c>dtk</c> binary end to end, out of process.
+/// Times the real <c>dtk</c> binary end to end, out of process, in three scenarios.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Uses <c>dtk pipe build</c> with a fixture on stdin. That routes through PipeFilterUseCase into
-/// the same FilteredOutputPipeline as a wrapped command, exercising process start, JIT, the DI
-/// graph, the config load, ANSI stripping, filtering, both token counts and the SQLite write —
-/// without running a dotnet build, which would swamp the measurement and cannot be relied on to
-/// run on a developer machine at all.
+/// <c>dtk pipe build</c> with a fixture on stdin routes through PipeFilterUseCase into the same
+/// FilteredOutputPipeline as a wrapped command, exercising process start, JIT, the DI graph, the
+/// config load, ANSI stripping, filtering, both token counts and the SQLite write. It reads stdin
+/// to the end before any of that starts, so it measures dtk as a strictly serial cost.
+/// </para>
+/// <para>
+/// <c>dtk dotnet build</c> is the path users run, and it is shaped differently: dtk launches
+/// <c>dotnet</c>, streams its output into the tee log while it runs, and only then filters and
+/// tracks. A <see cref="FakeDotnet"/> stands in for the SDK, once exiting at once (the worst case:
+/// nothing for setup to overlap with) and once after sleeping <see cref="DelayedChildSleep"/> (the
+/// best case: an idle CPU to overlap with). A real build competes for cores, so for output this
+/// fixture's size (2.6 KB) its cost lies between the two; dtk's per-line tee flush and token
+/// counting grow with output size, so this bracket does not say anything about a much larger build
+/// log. Each iteration times the fake child alone and then dtk wrapping it, and records
+/// the difference: pairing adjacent runs cancels machine drift, which subtracting two separately
+/// collected medians would not.
 /// </para>
 /// <para>
 /// Hand-written rather than a BenchmarkDotNet job: BenchmarkDotNet would measure its own harness
@@ -28,14 +43,28 @@ internal static class ColdStartCommand
     private const string Fixture = "dotnet_build_errors.txt";
 
     /// <summary>
-    /// The exit code <c>dtk pipe build --exit-code 1</c> must reproduce for <see cref="Fixture"/>,
-    /// a real captured failing build. Anything else means the child did not run the pipeline this
-    /// harness intends to measure, so the sample is not trustworthy.
+    /// The exit code dtk must reproduce for <see cref="Fixture"/>, a real captured failing build,
+    /// in every scenario. Anything else means the child did not run the pipeline this harness
+    /// intends to measure, so the sample is not trustworthy.
     /// </summary>
     private const int ExpectedExitCode = 1;
 
+    /// <summary>
+    /// How long the delayed fake child sleeps: longer than the tiktoken vocabulary load and the
+    /// SQLite setup combined, so setup started in the background can overlap it completely.
+    /// </summary>
+    private static readonly TimeSpan DelayedChildSleep = TimeSpan.FromMilliseconds(1000);
+
     internal static async Task<int> RunAsync(string[] args)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            await Console.Error.WriteLineAsync(
+                "cold-start needs a POSIX shell: its wrapped scenarios run dtk against a shell-script "
+                + "stand-in for dotnet. Run it on Linux or macOS.").ConfigureAwait(false);
+            return 1;
+        }
+
         var binary = ResolveBinary(args);
 
         if (binary is null)
@@ -52,73 +81,251 @@ internal static class ColdStartCommand
         }
 
         var input = FixtureCorpus.Load(Fixture);
+        var summaryLine = FilteredSummaryLine(input);
         using var state = HermeticState.Enter();
 
         await Console.Out.WriteLineAsync($"Cold start: {binary}").ConfigureAwait(false);
         await Console.Out.WriteLineAsync(string.Create(
             CultureInfo.InvariantCulture,
+            $"Built: {File.GetLastWriteTime(binary):yyyy-MM-dd HH:mm:ss} (local)")).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(string.Create(
+            CultureInfo.InvariantCulture,
             $"Input: {Fixture} ({input.Length} chars), exit code {ExpectedExitCode}")).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(
-            $"Runs: {WarmupRuns} warmup + {MeasuredRuns} measured").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync().ConfigureAwait(false);
+            $"Runs per scenario: {WarmupRuns} warmup + {MeasuredRuns} measured").ConfigureAwait(false);
 
-        for (var i = 0; i < WarmupRuns; i++)
-        {
-            await TimeOnceAsync(binary, input).ConfigureAwait(false);
-        }
+        await MeasurePipeAsync(binary, state, input, summaryLine).ConfigureAwait(false);
 
-        var samples = new List<double>(MeasuredRuns);
-        for (var i = 0; i < MeasuredRuns; i++)
-        {
-            samples.Add(await TimeOnceAsync(binary, input).ConfigureAwait(false));
-        }
+        await MeasureWrappedAsync(
+            binary, state, input, summaryLine, TimeSpan.Zero,
+            "dotnet build, instant child (worst case: nothing for setup to overlap with)").ConfigureAwait(false);
 
-        await TimingReport.WriteAsync(samples).ConfigureAwait(false);
+        await MeasureWrappedAsync(
+            binary, state, input, summaryLine, DelayedChildSleep,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"dotnet build, child sleeping {DelayedChildSleep.TotalMilliseconds:0} ms (best case: an idle CPU to overlap with)"))
+            .ConfigureAwait(false);
+
         return 0;
     }
 
-    private static async Task<double> TimeOnceAsync(string binary, string input)
+    /// <summary>Scenario 1: <c>dtk pipe build</c> with the fixture on stdin, wall-clock per spawn.</summary>
+    /// <param name="binary">The dtk binary.</param>
+    /// <param name="state">The hermetic state holding the tracking database this scenario's dtk
+    /// runs must each record a row in.</param>
+    /// <param name="input">The fixture text.</param>
+    /// <param name="summaryLine">The line every dtk run must print.</param>
+    private static async Task MeasurePipeAsync(string binary, HermeticState state, string input, string summaryLine)
     {
-        var info = new ProcessStartInfo(binary)
+        await WriteHeadingAsync("pipe build, fixture on stdin (wall-clock)").ConfigureAwait(false);
+
+        string[] arguments = ["pipe", "build", "--exit-code", ExpectedExitCode.ToString(CultureInfo.InvariantCulture)];
+        var samples = new List<double>(MeasuredRuns);
+        var before = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
+
+        for (var i = 0; i < WarmupRuns + MeasuredRuns; i++)
         {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        info.ArgumentList.Add("pipe");
-        info.ArgumentList.Add("build");
-        info.ArgumentList.Add("--exit-code");
-        info.ArgumentList.Add(ExpectedExitCode.ToString(CultureInfo.InvariantCulture));
+            var run = await TimedProcess.RunAsync(binary, arguments, standardInput: input).ConfigureAwait(false);
+            EnsureDtkFiltered(run, binary, summaryLine);
 
-        var started = Stopwatch.GetTimestamp();
-        using var process = Process.Start(info)
-                            ?? throw new InvalidOperationException($"Could not start {binary}.");
+            if (i >= WarmupRuns)
+            {
+                samples.Add(run.Milliseconds);
+            }
+        }
 
-        await process.StandardInput.WriteAsync(input).ConfigureAwait(false);
-        process.StandardInput.Close();
+        var after = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
+        EnsureTrackingRecorded("pipe build", before, after);
 
-        // Drain both pipes before waiting: a child that fills its stdout buffer blocks forever.
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
-        await process.WaitForExitAsync().ConfigureAwait(false);
+        await TimingReport.WriteAsync(samples).ConfigureAwait(false);
+    }
 
-        if (process.ExitCode != ExpectedExitCode)
+    /// <summary>
+    /// Scenarios 2 and 3: <c>dtk dotnet build</c> wrapping a <see cref="FakeDotnet"/>, sampled in
+    /// pairs of child alone then dtk wrapping it.
+    /// </summary>
+    /// <param name="binary">The dtk binary.</param>
+    /// <param name="state">The hermetic state the fake child is written under.</param>
+    /// <param name="input">The fixture text the fake child prints.</param>
+    /// <param name="summaryLine">The line every dtk run must print.</param>
+    /// <param name="childSleep">How long the fake child sleeps before printing.</param>
+    /// <param name="heading">The section heading.</param>
+    [UnsupportedOSPlatform("windows")]
+    private static async Task MeasureWrappedAsync(
+        string binary,
+        HermeticState state,
+        string input,
+        string summaryLine,
+        TimeSpan childSleep,
+        string heading)
+    {
+        await WriteHeadingAsync(heading).ConfigureAwait(false);
+
+        var fake = FakeDotnet.Create(
+            Path.Combine(
+                state.RootPath,
+                string.Create(CultureInfo.InvariantCulture, $"fake-dotnet-{childSleep.TotalMilliseconds:0}ms")),
+            input,
+            ExpectedExitCode,
+            childSleep);
+
+        string[] arguments = ["dotnet", "build"];
+        var overhead = new List<double>(MeasuredRuns);
+        var wall = new List<double>(MeasuredRuns);
+        var before = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
+
+        for (var i = 0; i < WarmupRuns + MeasuredRuns; i++)
+        {
+            var child = await TimedProcess.RunAsync(fake.ScriptPath, []).ConfigureAwait(false);
+            EnsureFakeChildRan(child, fake, input);
+
+            var wrapped = await TimedProcess
+                .RunAsync(binary, arguments, prependToPath: fake.DirectoryPath)
+                .ConfigureAwait(false);
+            EnsureDtkFiltered(wrapped, binary, summaryLine);
+
+            if (i >= WarmupRuns)
+            {
+                overhead.Add(wrapped.Milliseconds - child.Milliseconds);
+                wall.Add(wrapped.Milliseconds);
+            }
+        }
+
+        var after = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
+        EnsureTrackingRecorded(heading, before, after);
+
+        await Console.Out.WriteLineAsync("dtk overhead (wrapped minus child alone, paired per iteration)")
+            .ConfigureAwait(false);
+        await TimingReport.WriteAsync(overhead).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync("wrapped wall-clock").ConfigureAwait(false);
+        await TimingReport.WriteAsync(wall).ConfigureAwait(false);
+    }
+
+    private static async Task WriteHeadingAsync(string heading)
+    {
+        await Console.Out.WriteLineAsync().ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(heading).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The first non-empty line the build filter produces for <paramref name="input"/>: its summary.
+    /// It carries the fixture's own counts and elapsed time and no file paths, so it is the same
+    /// whatever directory dtk runs in, which the rest of the filtered output is not.
+    /// </summary>
+    /// <param name="input">The raw fixture text.</param>
+    private static string FilteredSummaryLine(string input) =>
+        SavingsScenarios.FilterFor(FilterKeys.Build)
+            .Apply(AnsiStrip.Strip(input), ExpectedExitCode)
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .First(line => !string.IsNullOrWhiteSpace(line));
+
+    /// <summary>Throws unless dtk exited as expected and printed the filtered fixture's summary.</summary>
+    /// <param name="run">The timed dtk run.</param>
+    /// <param name="binary">The dtk binary, for the message.</param>
+    /// <param name="summaryLine">The line from <see cref="FilteredSummaryLine"/>.</param>
+    /// <exception cref="InvalidOperationException">Either check failed.</exception>
+    private static void EnsureDtkFiltered(TimedRun run, string binary, string summaryLine)
+    {
+        if (run.ExitCode != ExpectedExitCode)
         {
             // A binary that starts and exits with the wrong code (a crash, a bad argument, a
             // missing filter registration) would otherwise still produce a plausible-looking
             // timing sample. Fail loudly instead, with enough of the child's own output to
             // diagnose it.
-            var stderr = await stderrTask.ConfigureAwait(false);
-            var stdout = await stdoutTask.ConfigureAwait(false);
-            var diagnostic = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-
             throw new InvalidOperationException(
-                $"{binary} exited with code {process.ExitCode}, expected {ExpectedExitCode}. "
-                + $"Output:\n{diagnostic}");
+                $"{binary} exited with code {run.ExitCode}, expected {ExpectedExitCode}. "
+                + $"Output:\n{run.Diagnostic}");
         }
 
-        return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        if (!run.StdOut.Contains(summaryLine, StringComparison.Ordinal))
+        {
+            // The exit code alone cannot prove the pipeline ran over this fixture. On a wrapped
+            // scenario whose PATH wiring broke, the real SDK runs `dotnet build` with no project,
+            // which also exits 1, and dtk would then filter that output instead.
+            throw new InvalidOperationException(
+                $"{binary} exited with code {ExpectedExitCode} but did not print the build filter's "
+                + $"summary line for {Fixture}:\n  {summaryLine}\nso it did not filter that fixture. "
+                + "On a wrapped scenario, the real dotnet SDK most likely ran instead of the fake one; "
+                + "otherwise the dtk binary's build filter differs from this source tree (a stale "
+                + "Release build, or an installed dtk found on PATH). "
+                + $"Output:\n{run.StdOut}");
+        }
+    }
+
+    /// <summary>
+    /// Throws unless the fake child, run alone, reproduced the fixture and its exit code. Timing dtk
+    /// against a child that prints something else would measure the wrong pipeline.
+    /// </summary>
+    /// <param name="run">The timed fake-child run.</param>
+    /// <param name="fake">The fake child, for the message.</param>
+    /// <param name="input">The fixture text it must print verbatim.</param>
+    /// <exception cref="InvalidOperationException">Either check failed.</exception>
+    private static void EnsureFakeChildRan(TimedRun run, FakeDotnet fake, string input)
+    {
+        if (run.ExitCode == ExpectedExitCode && string.Equals(run.StdOut, input, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"The fake dotnet at {fake.ScriptPath} did not reproduce {Fixture}: exit code {run.ExitCode} "
+            + $"(expected {ExpectedExitCode}), {run.StdOut.Length} chars on stdout (expected {input.Length}). "
+            + $"Stderr:\n{run.StdErr}");
+    }
+
+    /// <summary>
+    /// Reads the running totals a scenario's tracking rows must move, straight from the tracking
+    /// database rather than trusting dtk's own exit code: <c>FilteredOutputPipeline</c> swallows
+    /// every exception from tracking so a faulted tokenizer load or SQLite write never breaks a
+    /// user's build, which also means dtk still exits as expected and prints its summary having
+    /// silently skipped that work. Pooling is disabled so the connection this opens is fully
+    /// released on dispose, before the next scenario's dtk children open the same file to write.
+    /// </summary>
+    /// <param name="dbPath">The tracking database path, from <see cref="HermeticState.DbPath"/>.</param>
+    private static async Task<(int Commands, long InputTokens)> ReadTrackingCountsAsync(string dbPath)
+    {
+        var tracker = new SqliteTracker($"Data Source={dbPath};Pooling=False");
+        try
+        {
+            var summary = await tracker.GetSummaryAsync(days: 1, projectPath: null).ConfigureAwait(false);
+            return (summary.TotalCommands, summary.TotalInputTokens);
+        }
+        finally
+        {
+            await tracker.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Throws unless a scenario's dtk runs each recorded a tracking row with a non-zero input
+    /// token count. Without this, a silently faulted tracking step would still leave dtk exiting
+    /// and printing normally (see <see cref="ReadTrackingCountsAsync"/>), so this harness would
+    /// accept the resulting sample as a valid, faster-than-real timing.
+    /// </summary>
+    /// <param name="scenario">The scenario name, for the exception message.</param>
+    /// <param name="before">Totals read before the scenario's runs.</param>
+    /// <param name="after">Totals read after the scenario's runs.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Fewer than <see cref="WarmupRuns"/> + <see cref="MeasuredRuns"/> rows were recorded, or their
+    /// input-token total did not grow.
+    /// </exception>
+    private static void EnsureTrackingRecorded(
+        string scenario, (int Commands, long InputTokens) before, (int Commands, long InputTokens) after)
+    {
+        const int expectedRuns = WarmupRuns + MeasuredRuns;
+        var actualRuns = after.Commands - before.Commands;
+        var tokenDelta = after.InputTokens - before.InputTokens;
+
+        if (actualRuns != expectedRuns || tokenDelta <= 0)
+        {
+            throw new InvalidOperationException(
+                $"{scenario}: dtk's tracking step did not record every run, so this scenario's timings "
+                + $"skipped that work and are not trustworthy. Expected {expectedRuns} new tracking rows "
+                + $"with a positive input-token delta; the tracking database shows {actualRuns} new rows "
+                + $"and an input-token delta of {tokenDelta}.");
+        }
     }
 
     /// <summary>

@@ -33,6 +33,9 @@ internal sealed class HermeticState : IDisposable
         Environment.SetEnvironmentVariable("DTK_TEE_DIR", TeeDir);
     }
 
+    /// <summary>The temporary directory everything else lives under, deleted on dispose.</summary>
+    internal string RootPath => _root.FullName;
+
     internal string ConfigPath { get; }
 
     internal string DbPath { get; }

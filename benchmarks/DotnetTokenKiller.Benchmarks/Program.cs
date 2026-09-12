@@ -10,7 +10,7 @@ internal static class Program
           dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks
               Runs the BenchmarkDotNet suite (add -- --filter '*Filter*' to narrow).
           dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start
-              Times the published dtk binary end to end, out of process.
+              Times the built dtk binary end to end, out of process: piped, and wrapping a fake dotnet.
           dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- tokenizer-load
               Times the one-time tiktoken vocabulary load, one fresh process per sample.
           dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- update-baseline
