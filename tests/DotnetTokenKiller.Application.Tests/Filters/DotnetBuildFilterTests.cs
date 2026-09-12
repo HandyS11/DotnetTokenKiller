@@ -106,9 +106,11 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
-        // Exact: pins the empty file/line/col slots a simple diagnostic renders with.
+        // Exact: a tool-level diagnostic has no file, line or column, so it groups under "(no file)"
+        // and renders without a position. Emitting the empty slots produced a nameless heading and a
+        // "(,)" stub that read like a location the filter had lost.
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
     }
 
     [Fact]
@@ -127,7 +129,7 @@ public class DotnetBuildFilterTests
 
         // Exact: proves the unmatched line contributes nothing and the duplicate is dropped.
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
     }
 
     [Fact]
@@ -388,7 +390,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1003: Specify either a project or solution file.\nTop codes: MSB1003 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1003: Specify either a project or solution file.\nTop codes: MSB1003 (1x)\n");
     }
 
     [Fact]
@@ -428,12 +430,14 @@ public class DotnetBuildFilterTests
     [Fact]
     public void Apply_SimpleDiagnostic_OutputContainsLevelAndFormattedEntry()
     {
-        // Kills string mutations on SimpleDiagnostic groups (lines 92-94) — verifies exact level, code, message extraction
+        // Kills string mutations on SimpleDiagnostic groups (lines 92-94) — verifies exact level, code,
+        // message extraction, and that a fileless diagnostic drops the "{file}:{line} — " prefix
+        // rather than rendering it empty as ": —".
         const string input = "MSBUILD : warning MSB4011: This is a warning.";
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
-        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nMSB4011 (1x)\n  : \u2014 This is a warning.\n");
+        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nMSB4011 (1x)\n  This is a warning.\n");
     }
 
     [Fact]
@@ -522,7 +526,7 @@ public class DotnetBuildFilterTests
 
         // Both have different messages but same code — should both appear since key includes message
         result.Should().Be(
-            "dotnet build: 2 errors, 0 warnings\n---\n (2 errors)\n  (,) MSB1001: First.\n  (,) MSB1001: Second.\nTop codes: MSB1001 (2x)\n");
+            "dotnet build: 2 errors, 0 warnings\n---\n(no file) (2 errors)\n  MSB1001: First.\n  MSB1001: Second.\nTop codes: MSB1001 (2x)\n");
     }
 
     [Fact]
@@ -574,7 +578,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB1001: Something went wrong.\nTop codes: MSB1001 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Something went wrong.\nTop codes: MSB1001 (1x)\n");
     }
 
     [Fact]
@@ -587,7 +591,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n (1 error)\n  (,) MSB3021: Unable to copy file.\nTop codes: MSB3021 (1x)\n");
+            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB3021: Unable to copy file.\nTop codes: MSB3021 (1x)\n");
     }
 
     [Fact]
@@ -682,7 +686,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\n (2 errors)\n  (,) MSB1001: Unknown switch.\n  (,) MSB1002: Unknown switch.\nTop codes: MSB1001 (1x), MSB1002 (1x)\n");
+        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\n(no file) (2 errors)\n  MSB1001: Unknown switch.\n  MSB1002: Unknown switch.\nTop codes: MSB1001 (1x), MSB1002 (1x)\n");
     }
 
     [Fact]
@@ -822,6 +826,110 @@ public class DotnetBuildFilterTests
         result.Should().Contain("CS0168");
         result.Should().Contain("1 warning");
         result.Should().NotStartWith("✓ dotnet build");
+    }
+
+    [Fact]
+    public void Apply_CodelessExecWarning_IsCountedAndShown()
+    {
+        // MSBuild's Exec task emits warnings with no diagnostic code. The code was mandatory in
+        // SimpleDiagnosticPattern, so these vanished from both the listing and the count: a real
+        // build reporting "2 Warning(s)" was summarised by dtk as "1 warning".
+        const string input = "EXEC : warning : could not lock config file .git/config: File exists [/p/a.csproj]";
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 0);
+
+        result.Should().Contain("1 warning");
+        result.Should().Contain("could not lock config file .git/config: File exists");
+    }
+
+    [Fact]
+    public void Apply_CodelessErrorAlongsideCodedError_CountsBoth()
+    {
+        // The dangerous shape: the codeless error is dropped while the coded one still renders, so
+        // the header states a confident "1 error" and the dropped failure never reaches the reader.
+        const string input = """
+                             EXEC : error : the command exited with code 255 [/p/a.csproj]
+                             /p/X.cs(1,1): error CS0029: bad [/p/a.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().Contain("2 errors");
+        result.Should().Contain("the command exited with code 255");
+    }
+
+    [Fact]
+    public void Apply_DiagnosticRepeatedPerTargetFramework_ReportsMsbuildTotalAndShownCount()
+    {
+        // A multi-targeted project reports each diagnostic once per TFM and MSBuild counts them all.
+        // Collapsing them keeps the output small, but the header must not silently claim there was
+        // only one: it reports MSBuild's total and annotates how many distinct entries are shown.
+        const string input = """
+                             /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net8.0]
+                             /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net10.0]
+                                 0 Warning(s)
+                                 2 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("dotnet build: 2 errors (1 shown), 0 warnings");
+        result.Should().Contain("Bad.cs (1 error)");
+    }
+
+    [Fact]
+    public void Apply_MsbuildSummaryAgreesWithParsedCount_OmitsShownAnnotation()
+    {
+        // The annotation is a discrepancy signal, not decoration: when nothing was collapsed or
+        // missed it must stay out of the header.
+        const string input = """
+                             /p/A.cs(1,1): error CS0001: msg [/p/a.csproj]
+                                 0 Warning(s)
+                                 1 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("dotnet build: 1 error, 0 warnings");
+        result.Should().NotContain("shown");
+    }
+
+    [Fact]
+    public void Apply_SucceededButSummaryReportsUnparsedWarnings_FallsBackToRawOutput()
+    {
+        // Nothing parsed while MSBuild declares warnings means the parser missed them (localised
+        // SDK, unfamiliar shape). Returning blank hands over to the raw-tail fallback rather than
+        // printing a clean tick over output we failed to read.
+        const string input = """
+                             Somme avertissement non analysable
+                                 2 Warning(s)
+                                 0 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 0);
+
+        result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_DiagnosticsDifferingOnlyBeyondTheTruncationLimit_AreRenderedOnce()
+    {
+        // The dedupe key must be built from the values that get rendered, not the raw capture.
+        // Keyed on the raw message these two are distinct and both survive, and truncation then
+        // renders them as byte-identical lines: the reader sees the same error twice, and the
+        // "(N shown)" annotation claims both were distinct entries worth showing.
+        var shared = new string('X', 120);
+        var input = $"""
+                     /path/A.cs(1,1): error CS0001: {shared}AAA [P.csproj]
+                     /path/A.cs(1,1): error CS0001: {shared}BBB [P.csproj]
+                         0 Warning(s)
+                         2 Error(s)
+                     """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            $"dotnet build: 2 errors (1 shown), 0 warnings\n---\nA.cs (1 error)\n  (1,1) CS0001: {shared}...\nTop codes: CS0001 (1x)\n");
     }
 
     private static string LoadFixture(string resourceName)

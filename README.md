@@ -35,36 +35,36 @@ run can produce **200+ lines** where only 5–10 actually matter. Every extra li
 wastes precious context window space.
 
 <details>
-<summary><strong>Example: 27 lines of raw <code>dotnet test</code> output → 5 lines with dtk</strong></summary>
+<summary><strong>Example: 14 lines of raw <code>dotnet test</code> output → 5 lines with dtk</strong></summary>
 
-**Before (raw `dotnet test`):**
+**Raw** (`dotnet test samples/SampleApp.Tests/SampleApp.Tests.csproj`) — exit code 1
 
 ```sh
-Restore complete (0.4s)
-  SampleApp.Tests succeeded (0.1s) → bin/Debug/net10.0/SampleApp.Tests.dll
-  SampleApp succeeded (0.1s) → bin/Debug/net10.0/SampleApp.dll
-  Build succeeded in 0.8s
-Test run for /home/user/samples/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll (.NETCoreApp,Version=v10.0)
-VSTest version 17.13.0 (x64)
-Starting test execution, please wait...
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  SampleApp.Tests -> /repo/samples/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll
+Test run for /repo/samples/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll (.NETCoreApp,Version=v10.0)
 A total of 1 test files matched the specified pattern.
-  Failed AlwaysFails [5 ms]
+  Failed SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]
   Error Message:
    Intentional failure
   Stack Trace:
-     at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails() in /home/user/samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
+     at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails() in /repo/samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
 
-Failed!  - Failed:     1, Passed:     3, Skipped:     0, Total:     4, Duration: 42 ms
+Failed!  - Failed:     1, Passed:     3, Skipped:     0, Total:     4, Duration: 26 ms - SampleApp.Tests.dll (net10.0)
+[xUnit.net 00:00:00.15]     SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [FAIL]
 ```
 
-**After (`dtk dotnet test`):**
+**dtk** (`dtk dotnet test samples/SampleApp.Tests/SampleApp.Tests.csproj`)
 
 ```sh
 FAILURES (1):
-  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [5 ms]
+  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]
     Intentional failure
     at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
-dotnet test: 1 failed, 3 passed (1 project, 0.07s)
+dotnet test: 1 failed, 3 passed (1 project, 0.03s)
 ```
 
 </details>
