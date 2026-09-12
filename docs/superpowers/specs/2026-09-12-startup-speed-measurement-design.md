@@ -1,4 +1,4 @@
-**Status:** Designed
+**Status:** Implemented — see [the plan](../plans/2026-09-12-startup-speed-measurement.md)
 
 ## Context
 
