@@ -62,10 +62,14 @@ six filters, `TokenEstimator`, and the fixtures. Nothing in it touches Infrastru
 the benchmark classes do.
 
 ```
-Benchmarks.Corpus  → Application                              (library, no benchmark machinery)
-Benchmarks         → Benchmarks.Corpus, Application, Infrastructure, Cli   (BenchmarkDotNet exe)
+Benchmarks.Corpus  → Application                        (library, no benchmark machinery)
+Benchmarks         → Benchmarks.Corpus, Infrastructure   (BenchmarkDotNet exe)
 Application.Tests  → Application, Benchmarks.Corpus
 ```
+
+Cli is not referenced by either. `CliConfigurator` is `internal`, with `InternalsVisibleTo` for
+`Cli.IntegrationTests` alone, so the command tree cannot be measured in process at all; the
+cold-start harness covers it out of process instead.
 
 Application.Tests gains one reference, to a project that itself references only Application, so
 the layering holds and BenchmarkDotNet stays out of the test run entirely.
