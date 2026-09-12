@@ -1,4 +1,4 @@
-**Status:** Designed — implementation plan pending
+**Status:** Designed — see [the plan](../plans/2026-09-12-benchmark-project.md)
 **Amended:** 2026-09-12 — split into Benchmarks.Corpus + Benchmarks to preserve the
 repository's one-to-one test layering
 
