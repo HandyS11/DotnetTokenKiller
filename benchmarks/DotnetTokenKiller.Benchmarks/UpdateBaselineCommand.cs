@@ -14,7 +14,7 @@ internal static class UpdateBaselineCommand
         Console.WriteLine(
             $"Tokenizer {baseline.Tokenizer} (fingerprint {baseline.TokenizerFingerprint})");
         Console.WriteLine();
-        Console.WriteLine($"{"scenario",-28} {"raw",8} {"filtered",9} {"saved",8}");
+        Console.WriteLine($"{"scenario",-28} {"raw",8} {"filtered",9} {"saved %",8}");
 
         foreach (var scenario in baseline.Scenarios)
         {
