@@ -456,3 +456,11 @@ dotnet_diagnostic.xUnit1045.severity = none # Object might be serializable (bull
 
 [**/samples/*/**.cs]
 generated_code = true
+
+# BenchmarkDotNet requires benchmark methods to be instance methods so it can bind them to a
+# per-instance [Params] / [GlobalSetup] lifecycle. Methods that happen not to read instance state
+# still cannot be made static, so the "could be static" rules are off for the runner only.
+[benchmarks/DotnetTokenKiller.Benchmarks/**.cs]
+dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.S2325.severity = none
+dotnet_diagnostic.CA1515.severity = none # BenchmarkDotNet requires public benchmark classes

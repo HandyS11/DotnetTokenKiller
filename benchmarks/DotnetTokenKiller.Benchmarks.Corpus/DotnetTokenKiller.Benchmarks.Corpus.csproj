@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DotnetTokenKiller.Benchmarks.Corpus</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!--
+      Embedded from the test project's directory rather than copied: these are the real captured
+      dotnet outputs the filter tests already assert against, and a second copy in git would be
+      free to drift from the first. LinkBase puts them under a Fixtures.* resource prefix here.
+
+      Recursive, matching the test project's own glob: a fixture added in a subdirectory would
+      otherwise be filtered by the tests but absent from the corpus, and both FixtureCorpusTests'
+      count and SavingsEngineTests' one-scenario-per-fixture assertion would still pass, because
+      the corpus and the scenario set would agree with each other while disagreeing with the
+      fixtures directory.
+    -->
+    <EmbeddedResource Include="../../tests/DotnetTokenKiller.Application.Tests/Fixtures/**/*.txt"
+                      LinkBase="Fixtures"/>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj"/>
+  </ItemGroup>
+</Project>

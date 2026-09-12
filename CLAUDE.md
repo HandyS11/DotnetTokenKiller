@@ -31,6 +31,18 @@ dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
 # Inspect package references with filtered output
 dtk dotnet list package --outdated
 
+# Run the benchmark suite (Release only; the full run takes tens of minutes)
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- --filter '*FilterBenchmarks*'
+
+# Measure the end-to-end cold-start cost of the built binary
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start
+
+# Measure the one-time tiktoken vocabulary load (one fresh process per sample, ~10s)
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- tokenizer-load
+
+# Regenerate the savings baseline after intentionally changing a filter
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- update-baseline
+
 # Inspect code quality with ReSharper CLT (jb is a local dotnet tool)
 jb inspectcode DotnetTokenKiller.slnx --output=artifacts/inspectcode.xml --format=Xml
 
@@ -49,6 +61,35 @@ The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.pr
 ```bash
 git config core.hooksPath .githooks
 ```
+
+## Benchmarks
+
+`benchmarks/DotnetTokenKiller.Benchmarks.Corpus` holds the fixture corpus, a seeded log generator
+and the savings engine; `benchmarks/DotnetTokenKiller.Benchmarks` holds the BenchmarkDotNet suite.
+
+Performance here has two dimensions, gated differently:
+
+- **Token savings** is deterministic and hard-gated. `SavingsBaselineTests` compares every scenario
+  against `benchmarks/DotnetTokenKiller.Benchmarks.Corpus/Baselines/savings-baseline.json` and runs
+  as part of `dotnet test`. **Changing a filter's output changes its savings and fails this test.**
+  That is intended: regenerate with `update-baseline` and let the diff show how the numbers moved.
+- **Timings** are never gated. Shared CI runners vary too much for a threshold to mean anything, so
+  the suite runs on demand via the `Benchmarks` workflow and uploads its results as artifacts.
+
+Two costs cannot be measured in process and have their own verbs instead of BenchmarkDotNet jobs:
+
+- `cold-start` times the built `dtk` binary end to end (`dtk pipe build` with a fixture on stdin),
+  55 spawns, median and p95.
+- `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
+  `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
+  in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
+  Do not "simplify" this back into a `[Benchmark]`; there is no in-process form of it that is not
+  a lie. Measured 2026-09-12: `cl100k_base` median 112.7 ms, `o200k_base` median 173.6 ms, against
+  a 287.9 ms cold-start median on the same machine.
+
+Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
+did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in
+the workflow's `filter` input cannot go green with an empty artifact.
 
 ## Architecture & Stack
 

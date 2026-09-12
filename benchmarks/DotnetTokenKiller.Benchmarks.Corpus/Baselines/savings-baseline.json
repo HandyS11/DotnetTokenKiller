@@ -1,0 +1,182 @@
+{
+  "tokenizer": "cl100k_base",
+  "tokenizerFingerprint": 78,
+  "scenarios": [
+    {
+      "id": "build/errors",
+      "fixture": "dotnet_build_errors.txt",
+      "filterKey": "build",
+      "exitCode": 1,
+      "rawBytes": 2603,
+      "rawTokens": 710,
+      "filteredTokens": 140,
+      "savedTokens": 570,
+      "savingsPercent": 80.3
+    },
+    {
+      "id": "build/success",
+      "fixture": "dotnet_build_success.txt",
+      "filterKey": "build",
+      "exitCode": 0,
+      "rawBytes": 1713,
+      "rawTokens": 483,
+      "filteredTokens": 15,
+      "savedTokens": 468,
+      "savingsPercent": 96.9
+    },
+    {
+      "id": "build/warnings",
+      "fixture": "dotnet_build_warnings.txt",
+      "filterKey": "build",
+      "exitCode": 0,
+      "rawBytes": 2007,
+      "rawTokens": 550,
+      "filteredTokens": 140,
+      "savedTokens": 410,
+      "savingsPercent": 74.5
+    },
+    {
+      "id": "clean/raw",
+      "fixture": "dotnet_clean_raw.txt",
+      "filterKey": "clean",
+      "exitCode": 0,
+      "rawBytes": 1252,
+      "rawTokens": 302,
+      "filteredTokens": 6,
+      "savedTokens": 296,
+      "savingsPercent": 98
+    },
+    {
+      "id": "format/files",
+      "fixture": "dotnet_format_files_raw.txt",
+      "filterKey": "format",
+      "exitCode": 0,
+      "rawBytes": 333,
+      "rawTokens": 85,
+      "filteredTokens": 16,
+      "savedTokens": 69,
+      "savingsPercent": 81.2
+    },
+    {
+      "id": "format/verbose-nothing",
+      "fixture": "dotnet_format_verbose_nothing_raw.txt",
+      "filterKey": "format",
+      "exitCode": 0,
+      "rawBytes": 2190,
+      "rawTokens": 502,
+      "filteredTokens": 16,
+      "savedTokens": 486,
+      "savingsPercent": 96.8
+    },
+    {
+      "id": "format/violations",
+      "fixture": "dotnet_format_violations_raw.txt",
+      "filterKey": "format",
+      "exitCode": 1,
+      "rawBytes": 289,
+      "rawTokens": 72,
+      "filteredTokens": 70,
+      "savedTokens": 2,
+      "savingsPercent": 2.8
+    },
+    {
+      "id": "list-package/all",
+      "fixture": "dotnet_list_package_raw.txt",
+      "filterKey": "list package",
+      "exitCode": 0,
+      "rawBytes": 7894,
+      "rawTokens": 1992,
+      "filteredTokens": 530,
+      "savedTokens": 1462,
+      "savingsPercent": 73.4
+    },
+    {
+      "id": "list-package/deprecated",
+      "fixture": "dotnet_list_package_deprecated_raw.txt",
+      "filterKey": "list package",
+      "exitCode": 0,
+      "rawBytes": 1787,
+      "rawTokens": 486,
+      "filteredTokens": 74,
+      "savedTokens": 412,
+      "savingsPercent": 84.8
+    },
+    {
+      "id": "list-package/outdated",
+      "fixture": "dotnet_list_package_outdated_raw.txt",
+      "filterKey": "list package",
+      "exitCode": 0,
+      "rawBytes": 2233,
+      "rawTokens": 652,
+      "filteredTokens": 48,
+      "savedTokens": 604,
+      "savingsPercent": 92.6
+    },
+    {
+      "id": "list-package/vulnerable",
+      "fixture": "dotnet_list_package_vulnerable_raw.txt",
+      "filterKey": "list package",
+      "exitCode": 0,
+      "rawBytes": 600,
+      "rawTokens": 162,
+      "filteredTokens": 81,
+      "savedTokens": 81,
+      "savingsPercent": 50
+    },
+    {
+      "id": "restore/raw",
+      "fixture": "dotnet_restore_raw.txt",
+      "filterKey": "restore",
+      "exitCode": 0,
+      "rawBytes": 1962,
+      "rawTokens": 506,
+      "filteredTokens": 15,
+      "savedTokens": 491,
+      "savingsPercent": 97
+    },
+    {
+      "id": "test/all-pass",
+      "fixture": "dotnet_test_all_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 778,
+      "rawTokens": 218,
+      "filteredTokens": 19,
+      "savedTokens": 199,
+      "savingsPercent": 91.3
+    },
+    {
+      "id": "test/failures",
+      "fixture": "dotnet_test_failures.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 3156,
+      "rawTokens": 808,
+      "filteredTokens": 181,
+      "savedTokens": 627,
+      "savingsPercent": 77.6
+    },
+    {
+      "id": "test/multiproject-partial",
+      "fixture": "dotnet_test_multiproject_partial_match.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 2913,
+      "rawTokens": 763,
+      "filteredTokens": 19,
+      "savedTokens": 744,
+      "savingsPercent": 97.5
+    },
+    {
+      "id": "test/zero",
+      "fixture": "dotnet_test_zero.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 834,
+      "rawTokens": 216,
+      "filteredTokens": 16,
+      "savedTokens": 200,
+      "savingsPercent": 92.6
+    }
+  ]
+}

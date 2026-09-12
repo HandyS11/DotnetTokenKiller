@@ -1,0 +1,59 @@
+name: Benchmarks
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: 'BenchmarkDotNet filter glob, e.g. *FilterBenchmarks*'
+        required: false
+        default: '*'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Run benchmarks
+        env:
+          BENCHMARK_FILTER: ${{ inputs.filter }}
+        run: >
+          dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks
+          -- --filter "$BENCHMARK_FILTER" --artifacts artifacts/benchmarks
+
+      - name: Measure cold start
+        run: |
+          dotnet build src/DotnetTokenKiller.Cli -c Release
+          mkdir -p artifacts/benchmarks
+          dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start \
+            | tee artifacts/benchmarks/cold-start.txt
+
+      - name: Measure tokenizer vocabulary load
+        run: |
+          mkdir -p artifacts/benchmarks
+          dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- tokenizer-load \
+            > artifacts/benchmarks/tokenizer-load.txt
+          cat artifacts/benchmarks/tokenizer-load.txt
+
+      - name: Upload results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-results
+          path: artifacts/benchmarks/**
+          retention-days: 30

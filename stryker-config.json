@@ -4,6 +4,9 @@
     "ignore-methods": [
       "ConfigureAwait"
     ],
+    "mutate": [
+      "!**/benchmarks/**/*.cs"
+    ],
     "reporters": [
       "json",
       "html",
