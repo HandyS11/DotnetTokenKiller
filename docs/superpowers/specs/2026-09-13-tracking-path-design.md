@@ -1,4 +1,4 @@
-**Status:** Approved — plan to follow
+**Status:** Implemented — see [the plan](../plans/2026-09-13-tracking-path.md)
 
 ## Context
 
