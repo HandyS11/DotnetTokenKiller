@@ -78,6 +78,20 @@ To add filtering support for a new `dotnet` subcommand (e.g., `dotnet publish`):
 5. **Add a sample project** (optional) — if the new command benefits from a reproducible fixture, add one under `samples/`.
 6. **Update documentation** — add the new command to the Usage Guide, Architecture filters table, and Output Examples.
 
+## Savings Baseline
+
+`dotnet test` gates the percentage of tokens each filter removes. If you change what a filter emits, the savings change and `SavingsBaselineTests` fails with a table of the drifted scenarios. That is the gate working, not a flaky test.
+
+Regenerate the baseline and commit the result alongside your change:
+
+```sh
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- update-baseline
+```
+
+The diff then records how your change moved the savings, which is the point.
+
+A dependency bump to `Microsoft.ML.Tokenizers.Data.*` can also shift every count at once. The test message distinguishes the two cases using a recorded tokenizer fingerprint, and says which it saw.
+
 ## Pull Request Process
 
 1. Fork the repository and create a feature branch from `develop`.

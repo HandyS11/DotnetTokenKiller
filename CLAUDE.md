@@ -31,6 +31,15 @@ dtk dotnet format DotnetTokenKiller.slnx --no-restore --verify-no-changes
 # Inspect package references with filtered output
 dtk dotnet list package --outdated
 
+# Run the benchmark suite (Release only; the full run takes tens of minutes)
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- --filter '*FilterBenchmarks*'
+
+# Measure the end-to-end cold-start cost of the built binary
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start
+
+# Regenerate the savings baseline after intentionally changing a filter
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- update-baseline
+
 # Inspect code quality with ReSharper CLT (jb is a local dotnet tool)
 jb inspectcode DotnetTokenKiller.slnx --output=artifacts/inspectcode.xml --format=Xml
 
@@ -49,6 +58,20 @@ The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.pr
 ```bash
 git config core.hooksPath .githooks
 ```
+
+## Benchmarks
+
+`benchmarks/DotnetTokenKiller.Benchmarks.Corpus` holds the fixture corpus, a seeded log generator
+and the savings engine; `benchmarks/DotnetTokenKiller.Benchmarks` holds the BenchmarkDotNet suite.
+
+Performance here has two dimensions, gated differently:
+
+- **Token savings** is deterministic and hard-gated. `SavingsBaselineTests` compares every scenario
+  against `benchmarks/DotnetTokenKiller.Benchmarks.Corpus/Baselines/savings-baseline.json` and runs
+  as part of `dotnet test`. **Changing a filter's output changes its savings and fails this test.**
+  That is intended: regenerate with `update-baseline` and let the diff show how the numbers moved.
+- **Timings** are never gated. Shared CI runners vary too much for a threshold to mean anything, so
+  the suite runs on demand via the `Benchmarks` workflow and uploads its results as artifacts.
 
 ## Architecture & Stack
 
