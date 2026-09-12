@@ -1,6 +1,6 @@
 using System.Text;
-using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Benchmarks.Corpus;
+using DotnetTokenKiller.Benchmarks.Corpus.Savings;
 using DotnetTokenKiller.Domain.Filters;
 using FluentAssertions;
 
@@ -44,7 +44,7 @@ public sealed class LogCorpusGeneratorTests
     {
         var raw = LogCorpusGenerator.Generate(filterKey, CorpusTier.Medium);
 
-        var filtered = FilterFor(filterKey).Apply(raw, exitCode: 0);
+        var filtered = SavingsScenarios.FilterFor(filterKey).Apply(raw, exitCode: 0);
 
         // The load-bearing assertion of this task. A generator that drifted into line shapes no
         // filter recognises would still be deterministic and still hit its size target, while
@@ -55,15 +55,4 @@ public sealed class LogCorpusGeneratorTests
             Encoding.UTF8.GetByteCount(raw) / 2,
             "{0} should condense its generated log by at least half", filterKey);
     }
-
-    private static IOutputFilter FilterFor(string filterKey) => filterKey switch
-    {
-        FilterKeys.Build => new DotnetBuildFilter("/repo"),
-        FilterKeys.Test => new DotnetTestFilter("/repo"),
-        FilterKeys.Restore => new DotnetRestoreFilter("/repo"),
-        FilterKeys.Clean => new DotnetCleanFilter("/repo"),
-        FilterKeys.Format => new DotnetFormatFilter("/repo"),
-        FilterKeys.ListPackage => new DotnetListPackageFilter(),
-        _ => throw new ArgumentOutOfRangeException(nameof(filterKey), filterKey, "No filter."),
-    };
 }
