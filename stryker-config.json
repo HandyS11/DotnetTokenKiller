@@ -5,7 +5,7 @@
       "ConfigureAwait"
     ],
     "mutate": [
-      "!benchmarks/**/*.cs"
+      "!**/benchmarks/**/*.cs"
     ],
     "reporters": [
       "json",
