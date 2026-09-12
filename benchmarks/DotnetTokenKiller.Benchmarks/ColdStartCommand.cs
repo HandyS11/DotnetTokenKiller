@@ -5,6 +5,7 @@ using DotnetTokenKiller.Benchmarks.Corpus.Savings;
 using DotnetTokenKiller.Benchmarks.Support;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Text;
+using DotnetTokenKiller.Infrastructure.Tracking;
 
 namespace DotnetTokenKiller.Benchmarks;
 
@@ -23,8 +24,10 @@ namespace DotnetTokenKiller.Benchmarks;
 /// <c>dotnet</c>, streams its output into the tee log while it runs, and only then filters and
 /// tracks. A <see cref="FakeDotnet"/> stands in for the SDK, once exiting at once (the worst case:
 /// nothing for setup to overlap with) and once after sleeping <see cref="DelayedChildSleep"/> (the
-/// best case: an idle CPU to overlap with). A real build competes for cores, so its cost lies
-/// between the two. Each iteration times the fake child alone and then dtk wrapping it, and records
+/// best case: an idle CPU to overlap with). A real build competes for cores, so for output this
+/// fixture's size (2.6 KB) its cost lies between the two; dtk's per-line tee flush and token
+/// counting grow with output size, so this bracket does not say anything about a much larger build
+/// log. Each iteration times the fake child alone and then dtk wrapping it, and records
 /// the difference: pairing adjacent runs cancels machine drift, which subtracting two separately
 /// collected medians would not.
 /// </para>
@@ -84,11 +87,14 @@ internal static class ColdStartCommand
         await Console.Out.WriteLineAsync($"Cold start: {binary}").ConfigureAwait(false);
         await Console.Out.WriteLineAsync(string.Create(
             CultureInfo.InvariantCulture,
+            $"Built: {File.GetLastWriteTime(binary):yyyy-MM-dd HH:mm:ss} (local)")).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(string.Create(
+            CultureInfo.InvariantCulture,
             $"Input: {Fixture} ({input.Length} chars), exit code {ExpectedExitCode}")).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(
             $"Runs per scenario: {WarmupRuns} warmup + {MeasuredRuns} measured").ConfigureAwait(false);
 
-        await MeasurePipeAsync(binary, input, summaryLine).ConfigureAwait(false);
+        await MeasurePipeAsync(binary, state, input, summaryLine).ConfigureAwait(false);
 
         await MeasureWrappedAsync(
             binary, state, input, summaryLine, TimeSpan.Zero,
@@ -106,14 +112,17 @@ internal static class ColdStartCommand
 
     /// <summary>Scenario 1: <c>dtk pipe build</c> with the fixture on stdin, wall-clock per spawn.</summary>
     /// <param name="binary">The dtk binary.</param>
+    /// <param name="state">The hermetic state holding the tracking database this scenario's dtk
+    /// runs must each record a row in.</param>
     /// <param name="input">The fixture text.</param>
     /// <param name="summaryLine">The line every dtk run must print.</param>
-    private static async Task MeasurePipeAsync(string binary, string input, string summaryLine)
+    private static async Task MeasurePipeAsync(string binary, HermeticState state, string input, string summaryLine)
     {
         await WriteHeadingAsync("pipe build, fixture on stdin (wall-clock)").ConfigureAwait(false);
 
         string[] arguments = ["pipe", "build", "--exit-code", ExpectedExitCode.ToString(CultureInfo.InvariantCulture)];
         var samples = new List<double>(MeasuredRuns);
+        var before = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
 
         for (var i = 0; i < WarmupRuns + MeasuredRuns; i++)
         {
@@ -125,6 +134,9 @@ internal static class ColdStartCommand
                 samples.Add(run.Milliseconds);
             }
         }
+
+        var after = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
+        EnsureTrackingRecorded("pipe build", before, after);
 
         await TimingReport.WriteAsync(samples).ConfigureAwait(false);
     }
@@ -161,6 +173,7 @@ internal static class ColdStartCommand
         string[] arguments = ["dotnet", "build"];
         var overhead = new List<double>(MeasuredRuns);
         var wall = new List<double>(MeasuredRuns);
+        var before = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
 
         for (var i = 0; i < WarmupRuns + MeasuredRuns; i++)
         {
@@ -178,6 +191,9 @@ internal static class ColdStartCommand
                 wall.Add(wrapped.Milliseconds);
             }
         }
+
+        var after = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
+        EnsureTrackingRecorded(heading, before, after);
 
         await Console.Out.WriteLineAsync("dtk overhead (wrapped minus child alone, paired per iteration)")
             .ConfigureAwait(false);
@@ -231,7 +247,9 @@ internal static class ColdStartCommand
             throw new InvalidOperationException(
                 $"{binary} exited with code {ExpectedExitCode} but did not print the build filter's "
                 + $"summary line for {Fixture}:\n  {summaryLine}\nso it did not filter that fixture. "
-                + "On a wrapped scenario, the real dotnet SDK most likely ran instead of the fake one. "
+                + "On a wrapped scenario, the real dotnet SDK most likely ran instead of the fake one; "
+                + "otherwise the dtk binary's build filter differs from this source tree (a stale "
+                + "Release build, or an installed dtk found on PATH). "
                 + $"Output:\n{run.StdOut}");
         }
     }
@@ -255,6 +273,59 @@ internal static class ColdStartCommand
             $"The fake dotnet at {fake.ScriptPath} did not reproduce {Fixture}: exit code {run.ExitCode} "
             + $"(expected {ExpectedExitCode}), {run.StdOut.Length} chars on stdout (expected {input.Length}). "
             + $"Stderr:\n{run.StdErr}");
+    }
+
+    /// <summary>
+    /// Reads the running totals a scenario's tracking rows must move, straight from the tracking
+    /// database rather than trusting dtk's own exit code: <c>FilteredOutputPipeline</c> swallows
+    /// every exception from tracking so a faulted tokenizer load or SQLite write never breaks a
+    /// user's build, which also means dtk still exits as expected and prints its summary having
+    /// silently skipped that work. Pooling is disabled so the connection this opens is fully
+    /// released on dispose, before the next scenario's dtk children open the same file to write.
+    /// </summary>
+    /// <param name="dbPath">The tracking database path, from <see cref="HermeticState.DbPath"/>.</param>
+    private static async Task<(int Commands, long InputTokens)> ReadTrackingCountsAsync(string dbPath)
+    {
+        var tracker = new SqliteTracker($"Data Source={dbPath};Pooling=False");
+        try
+        {
+            var summary = await tracker.GetSummaryAsync(days: 1, projectPath: null).ConfigureAwait(false);
+            return (summary.TotalCommands, summary.TotalInputTokens);
+        }
+        finally
+        {
+            await tracker.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Throws unless a scenario's dtk runs each recorded a tracking row with a non-zero input
+    /// token count. Without this, a silently faulted tracking step would still leave dtk exiting
+    /// and printing normally (see <see cref="ReadTrackingCountsAsync"/>), so this harness would
+    /// accept the resulting sample as a valid, faster-than-real timing.
+    /// </summary>
+    /// <param name="scenario">The scenario name, for the exception message.</param>
+    /// <param name="before">Totals read before the scenario's runs.</param>
+    /// <param name="after">Totals read after the scenario's runs.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Fewer than <see cref="WarmupRuns"/> + <see cref="MeasuredRuns"/> rows were recorded, or their
+    /// input-token total did not grow.
+    /// </exception>
+    private static void EnsureTrackingRecorded(
+        string scenario, (int Commands, long InputTokens) before, (int Commands, long InputTokens) after)
+    {
+        const int expectedRuns = WarmupRuns + MeasuredRuns;
+        var actualRuns = after.Commands - before.Commands;
+        var tokenDelta = after.InputTokens - before.InputTokens;
+
+        if (actualRuns != expectedRuns || tokenDelta <= 0)
+        {
+            throw new InvalidOperationException(
+                $"{scenario}: dtk's tracking step did not record every run, so this scenario's timings "
+                + $"skipped that work and are not trustworthy. Expected {expectedRuns} new tracking rows "
+                + $"with a positive input-token delta; the tracking database shows {actualRuns} new rows "
+                + $"and an input-token delta of {tokenDelta}.");
+        }
     }
 
     /// <summary>

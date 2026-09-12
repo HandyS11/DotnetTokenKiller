@@ -835,7 +835,8 @@ Expected: exit 0 after about 3 minutes, with three headed sections:
 2. `dotnet build, instant child (…)`, with two blocks: `dtk overhead` (median in the same
    few-hundred-millisecond range as section 1) and `wrapped wall-clock`.
 3. `dotnet build, child sleeping 1000 ms (…)`, with `wrapped wall-clock` median above 1000 ms
-   by no more than section 2's overhead median.
+   by no more than section 2's overhead median (superseded: see the spec's Testing section — this
+   bound omitted the fake child's own cost).
 
 If any figure is outside those bounds, stop and investigate before continuing.
 

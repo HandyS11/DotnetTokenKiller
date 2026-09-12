@@ -38,6 +38,7 @@ jobs:
 
       - name: Measure cold start
         run: |
+          set -o pipefail
           dotnet build src/DotnetTokenKiller.Cli -c Release
           mkdir -p artifacts/benchmarks
           dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start \

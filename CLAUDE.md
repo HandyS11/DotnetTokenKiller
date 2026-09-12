@@ -35,6 +35,7 @@ dtk dotnet list package --outdated
 dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- --filter '*FilterBenchmarks*'
 
 # Measure the end-to-end cold-start cost of the built binary (piped, and wrapping a fake dotnet; ~3 min, Linux/macOS)
+dotnet build src/DotnetTokenKiller.Cli -c Release
 dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start
 
 # Measure the one-time tiktoken vocabulary load (one fresh process per sample, ~10s)
@@ -78,15 +79,18 @@ Performance here has two dimensions, gated differently:
 
 Two costs cannot be measured in process and have their own verbs instead of BenchmarkDotNet jobs:
 
-- `cold-start` times the built `dtk` binary end to end in three scenarios, 55 spawns each: `dtk pipe
-  build` with a fixture on stdin, and `dtk dotnet build` wrapping a generated shell-script `dotnet`
-  on the child's `PATH` that either exits at once or sleeps 1000 ms first. The wrapped scenarios run
-  the fake child alone and then dtk around it on every iteration, and report the paired difference
-  as dtk's overhead. The instant child is the worst case (nothing for background setup to overlap
-  with); the sleeping child is the best case (an idle CPU). A real build lies between them. Every
-  sample must print the build filter's summary line, because the real SDK found on `PATH` by mistake
-  also exits 1. Needs a POSIX shell. Measured 2026-09-12: pipe 287.2 ms; wrapped overhead 285.8 ms
-  (instant child) and 288.4 ms (1000 ms child, wall-clock 1291.0 ms).
+- `cold-start` times the built `dtk` binary end to end in three scenarios, 55 dtk spawns each (the
+  wrapped scenarios also spawn the fake child alone 55 times): `dtk pipe build` with a fixture on
+  stdin, and `dtk dotnet build` wrapping a generated shell-script `dotnet` on the child's `PATH`
+  that either exits at once or sleeps 1000 ms first. The wrapped scenarios run the fake child alone
+  and then dtk around it on every iteration, and report the paired difference as dtk's overhead. The
+  instant child is the worst case (nothing for background setup to overlap with); the sleeping child
+  is the best case (an idle CPU). For output this fixture's size (2.6 KB), a real build's cost lies
+  between them; dtk's per-line tee flush and token counting grow with output size, so this bracket
+  says nothing about a much larger build log. Every sample must print the build filter's summary
+  line, because the real SDK found on `PATH` by mistake also exits 1. Needs a POSIX shell. Measured
+  2026-09-12: pipe 287.2 ms; wrapped overhead 285.8 ms (instant child) and 288.4 ms (1000 ms child,
+  wall-clock 1291.0 ms).
 - `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
   `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
   in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
