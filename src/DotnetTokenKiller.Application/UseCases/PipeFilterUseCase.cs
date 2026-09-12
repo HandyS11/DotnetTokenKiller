@@ -33,6 +33,9 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
         ArgumentNullException.ThrowIfNull(options);
 
         var startTimestamp = Stopwatch.GetTimestamp();
+
+        // Before reading stdin, so setup overlaps a slow producer on the other end of the pipe.
+        var prepared = await pipeline.BeginAsync(cancellationToken).ConfigureAwait(false);
         var raw = await input.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
         // Piped input is read to completion before anything can be written, so this path gains no
@@ -62,6 +65,6 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             options.Normalized(),
             startTimestamp);
 
-        return await pipeline.ProcessAsync(request, session, cancellationToken).ConfigureAwait(false);
+        return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
     }
 }

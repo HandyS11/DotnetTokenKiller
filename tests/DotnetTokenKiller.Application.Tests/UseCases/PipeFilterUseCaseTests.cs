@@ -105,4 +105,44 @@ public class PipeFilterUseCaseTests
                 h.ProjectPath == Environment.CurrentDirectory),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task RunAsync_StartsTrackingSetupBeforeStdinIsRead()
+    {
+        // Setup overlaps a slow producer on the other end of the pipe. The reader waits (bounded)
+        // for the warm-up to start, so a use case that starts it only after reading fails here.
+        var warmUpStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _tracker.WarmUpAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                warmUpStarted.TrySetResult();
+                return Task.CompletedTask;
+            });
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        var reader = new WarmUpAwareReader(warmUpStarted.Task, "piped input");
+        var pipeline = new FilteredOutputPipeline(_tracker, TextWriter.Null, _configProvider);
+
+        await new PipeFilterUseCase(pipeline, _teeService, reader)
+            .RunAsync(_filter, "build", 0, new OutputOptions());
+
+        reader.WarmUpStartedBeforeRead.Should().BeTrue();
+    }
+
+    /// <summary>A stdin stand-in that records whether tracking setup had started when it was read.</summary>
+    /// <param name="warmUpStarted">Completes once tracking setup has started.</param>
+    /// <param name="content">The content to return from <see cref="ReadToEndAsync"/>.</param>
+    private sealed class WarmUpAwareReader(Task warmUpStarted, string content) : TextReader
+    {
+        public bool WarmUpStartedBeforeRead { get; private set; }
+
+        public override async Task<string> ReadToEndAsync(CancellationToken cancellationToken)
+        {
+            // Captured into a local: VSTHRD003 flags awaiting a Task read directly from a field
+            // (which is what a primary-constructor parameter becomes once captured).
+            var pending = warmUpStarted;
+            var first = await Task.WhenAny(pending, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
+            WarmUpStartedBeforeRead = first == pending;
+            return content;
+        }
+    }
 }

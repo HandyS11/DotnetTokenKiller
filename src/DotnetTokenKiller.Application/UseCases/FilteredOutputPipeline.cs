@@ -26,7 +26,28 @@ public sealed class FilteredOutputPipeline(
     TextWriter output,
     IConfigProvider configProvider)
 {
-    /// <summary>Filters the request's output, writes it, and records the run.</summary>
+    /// <summary>
+    /// Loads the configuration for a run and, when tracking is enabled, starts tracking setup in the
+    /// background. Call it as the run starts, before its output exists, and pass the result to
+    /// <see cref="ProcessAsync(FilteredOutputRequest, ITeeSession, PreparedRun, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The loaded configuration and the started warm-up.</returns>
+    public async Task<PreparedRun> BeginAsync(CancellationToken cancellationToken = default)
+    {
+        var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
+        var warmUp = config.Tracking.Enabled
+            ? TrackingWarmUp.Start(tracker, config.Tracking.Tokenizer, cancellationToken)
+            : TrackingWarmUp.None;
+
+        return new PreparedRun(config, warmUp);
+    }
+
+    /// <summary>Filters the request's output, writes it, and records the run, preparing it first.</summary>
+    /// <remarks>
+    /// For callers with no earlier point to start setup at: the configuration load and tracking setup
+    /// run here, serially, exactly as they did before <see cref="BeginAsync"/> existed.
+    /// </remarks>
     /// <param name="request">The output and metadata to process.</param>
     /// <param name="session">
     /// The log opened for this run, finalized here. Callers with nothing to log pass
@@ -42,7 +63,30 @@ public sealed class FilteredOutputPipeline(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(session);
 
-        var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
+        var prepared = await BeginAsync(cancellationToken).ConfigureAwait(false);
+        return await ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Filters the request's output, writes it, and records the run.</summary>
+    /// <param name="request">The output and metadata to process.</param>
+    /// <param name="session">
+    /// The log opened for this run, finalized here. Callers with nothing to log pass
+    /// <see cref="NullTeeSession.Instance"/>.
+    /// </param>
+    /// <param name="prepared">What <see cref="BeginAsync"/> returned when this run started.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The request's exit code, unchanged.</returns>
+    public async Task<int> ProcessAsync(
+        FilteredOutputRequest request,
+        ITeeSession session,
+        PreparedRun prepared,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(prepared);
+
+        var config = prepared.Config;
         var options = request.Options.Normalized();
         var stripped = AnsiStrip.Strip(request.RawOutput);
 
@@ -91,7 +135,7 @@ public sealed class FilteredOutputPipeline(
             await output.WriteLineAsync(logHint).ConfigureAwait(false);
         }
 
-        await TrackIfEnabledAsync(config, request, stripped, filtered,
+        await TrackIfEnabledAsync(prepared, request, stripped, filtered,
                 Stopwatch.GetElapsedTime(request.StartTimestamp), outcome, cancellationToken)
             .ConfigureAwait(false);
 
@@ -183,7 +227,7 @@ public sealed class FilteredOutputPipeline(
     }
 
     private async Task TrackIfEnabledAsync(
-        DtkConfig config,
+        PreparedRun prepared,
         FilteredOutputRequest request,
         string stripped,
         string filtered,
@@ -191,6 +235,7 @@ public sealed class FilteredOutputPipeline(
         RunOutcome outcome,
         CancellationToken cancellationToken)
     {
+        var config = prepared.Config;
         if (!config.Tracking.Enabled)
         {
             return;
@@ -198,6 +243,10 @@ public sealed class FilteredOutputPipeline(
 
         try
         {
+            // Setup started in BeginAsync has usually finished while the child ran. This never
+            // throws; a failed setup resurfaces in Estimate or RecordAsync below, inside this catch.
+            await prepared.WarmUp.WhenReadyAsync().ConfigureAwait(false);
+
             var inputTokens = TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
             var outputTokens = TokenEstimator.Estimate(filtered, config.Tracking.Tokenizer);
             var savedTokens = inputTokens - outputTokens;
