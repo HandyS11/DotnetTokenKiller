@@ -27,6 +27,13 @@ internal static class ColdStartCommand
     private const int MeasuredRuns = 50;
     private const string Fixture = "dotnet_build_errors.txt";
 
+    /// <summary>
+    /// The exit code <c>dtk pipe build --exit-code 1</c> must reproduce for <see cref="Fixture"/>,
+    /// a real captured failing build. Anything else means the child did not run the pipeline this
+    /// harness intends to measure, so the sample is not trustworthy.
+    /// </summary>
+    private const int ExpectedExitCode = 1;
+
     internal static async Task<int> RunAsync(string[] args)
     {
         var binary = ResolveBinary(args);
@@ -79,8 +86,14 @@ internal static class ColdStartCommand
     /// <summary>Nearest-rank percentile over the sorted samples.</summary>
     /// <param name="sorted">The samples, already sorted ascending.</param>
     /// <param name="fraction">The percentile to compute, in the range [0, 1].</param>
+    /// <exception cref="ArgumentException"><paramref name="sorted"/> is empty.</exception>
     private static double Percentile(List<double> sorted, double fraction)
     {
+        if (sorted.Count == 0)
+        {
+            throw new ArgumentException("Cannot compute a percentile of an empty sample set.", nameof(sorted));
+        }
+
         var rank = (int)Math.Ceiling(fraction * sorted.Count) - 1;
         return sorted[Math.Clamp(rank, 0, sorted.Count - 1)];
     }
@@ -106,10 +119,25 @@ internal static class ColdStartCommand
         process.StandardInput.Close();
 
         // Drain both pipes before waiting: a child that fills its stdout buffer blocks forever.
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
         await process.WaitForExitAsync().ConfigureAwait(false);
+
+        if (process.ExitCode != ExpectedExitCode)
+        {
+            // A binary that starts and exits with the wrong code (a crash, a bad argument, a
+            // missing filter registration) would otherwise still produce a plausible-looking
+            // timing sample. Fail loudly instead, with enough of the child's own output to
+            // diagnose it.
+            var stderr = await stderrTask.ConfigureAwait(false);
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            var diagnostic = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+
+            throw new InvalidOperationException(
+                $"{binary} exited with code {process.ExitCode}, expected {ExpectedExitCode}. "
+                + $"Output:\n{diagnostic}");
+        }
 
         return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
     }
