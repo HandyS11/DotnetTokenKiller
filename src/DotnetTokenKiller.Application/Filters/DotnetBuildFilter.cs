@@ -125,19 +125,21 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
                 continue;
             }
 
-            var simpleKey = $"{simpleDiagMatch.Groups["code"].Value}:{simpleDiagMatch.Groups["message"].Value}";
-            if (!seen.Add(simpleKey))
-            {
-                continue;
-            }
-
-            diagnostics.Add(new Diagnostic(
+            var simpleDiagnostic = new Diagnostic(
                 string.Empty,
                 string.Empty,
                 string.Empty,
                 simpleDiagMatch.Groups["level"].Value,
                 simpleDiagMatch.Groups["code"].Value,
-                TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
+                TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen));
+
+            // Keyed off the rendered message for the same reason as the file-anchored diagnostics.
+            if (!seen.Add($"{simpleDiagnostic.Code}:{simpleDiagnostic.Message}"))
+            {
+                continue;
+            }
+
+            diagnostics.Add(simpleDiagnostic);
         }
 
         return new ParsedOutput(diagnostics, projectCount, elapsed, declaredErrors, declaredWarnings);
@@ -151,19 +153,22 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             return false;
         }
 
-        // The message is part of the key because the code is optional: without it, two unrelated
-        // codeless diagnostics reported at the same position would collapse into one.
-        var key =
-            $"{diagMatch.Groups["file"].Value}({diagMatch.Groups["line"].Value},{diagMatch.Groups["col"].Value}):{diagMatch.Groups["code"].Value}:{diagMatch.Groups["message"].Value}";
-        if (seen.Add(key))
+        var diagnostic = new Diagnostic(
+            TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), RootPath),
+            diagMatch.Groups["line"].Value,
+            diagMatch.Groups["col"].Value,
+            diagMatch.Groups["level"].Value,
+            diagMatch.Groups["code"].Value,
+            TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen));
+
+        // Key off what gets rendered, not the raw capture. Two diagnostics differing only past the
+        // truncation limit, or whose paths shorten to the same relative path, render as identical
+        // lines — keyed on the raw text both survive and the reader sees the same error twice. The
+        // message is in the key because the code is optional: without it, two unrelated codeless
+        // diagnostics reported at the same position would collapse into one.
+        if (seen.Add($"{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{diagnostic.Message}"))
         {
-            diagnostics.Add(new Diagnostic(
-                TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), RootPath),
-                diagMatch.Groups["line"].Value,
-                diagMatch.Groups["col"].Value,
-                diagMatch.Groups["level"].Value,
-                diagMatch.Groups["code"].Value,
-                TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen)));
+            diagnostics.Add(diagnostic);
         }
 
         return true;

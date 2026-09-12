@@ -911,6 +911,27 @@ public class DotnetBuildFilterTests
         result.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Apply_DiagnosticsDifferingOnlyBeyondTheTruncationLimit_AreRenderedOnce()
+    {
+        // The dedupe key must be built from the values that get rendered, not the raw capture.
+        // Keyed on the raw message these two are distinct and both survive, and truncation then
+        // renders them as byte-identical lines: the reader sees the same error twice, and the
+        // "(N shown)" annotation claims both were distinct entries worth showing.
+        var shared = new string('X', 120);
+        var input = $"""
+                     /path/A.cs(1,1): error CS0001: {shared}AAA [P.csproj]
+                     /path/A.cs(1,1): error CS0001: {shared}BBB [P.csproj]
+                         0 Warning(s)
+                         2 Error(s)
+                     """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            $"dotnet build: 2 errors (1 shown), 0 warnings\n---\nA.cs (1 error)\n  (1,1) CS0001: {shared}...\nTop codes: CS0001 (1x)\n");
+    }
+
     private static string LoadFixture(string resourceName)
     {
         var assembly = typeof(DotnetBuildFilterTests).Assembly;
