@@ -1,7 +1,9 @@
-using System.Diagnostics;
 using System.Globalization;
 using DotnetTokenKiller.Benchmarks.Corpus;
+using DotnetTokenKiller.Benchmarks.Corpus.Savings;
 using DotnetTokenKiller.Benchmarks.Support;
+using DotnetTokenKiller.Domain.Filters;
+using DotnetTokenKiller.Domain.Text;
 
 namespace DotnetTokenKiller.Benchmarks;
 
@@ -52,6 +54,7 @@ internal static class ColdStartCommand
         }
 
         var input = FixtureCorpus.Load(Fixture);
+        var summaryLine = FilteredSummaryLine(input);
         using var state = HermeticState.Enter();
 
         await Console.Out.WriteLineAsync($"Cold start: {binary}").ConfigureAwait(false);
@@ -62,63 +65,66 @@ internal static class ColdStartCommand
             $"Runs: {WarmupRuns} warmup + {MeasuredRuns} measured").ConfigureAwait(false);
         await Console.Out.WriteLineAsync().ConfigureAwait(false);
 
-        for (var i = 0; i < WarmupRuns; i++)
-        {
-            await TimeOnceAsync(binary, input).ConfigureAwait(false);
-        }
-
+        string[] arguments = ["pipe", "build", "--exit-code", ExpectedExitCode.ToString(CultureInfo.InvariantCulture)];
         var samples = new List<double>(MeasuredRuns);
-        for (var i = 0; i < MeasuredRuns; i++)
+
+        for (var i = 0; i < WarmupRuns + MeasuredRuns; i++)
         {
-            samples.Add(await TimeOnceAsync(binary, input).ConfigureAwait(false));
+            var run = await TimedProcess.RunAsync(binary, arguments, standardInput: input).ConfigureAwait(false);
+            EnsureDtkFiltered(run, binary, summaryLine);
+
+            if (i >= WarmupRuns)
+            {
+                samples.Add(run.Milliseconds);
+            }
         }
 
         await TimingReport.WriteAsync(samples).ConfigureAwait(false);
         return 0;
     }
 
-    private static async Task<double> TimeOnceAsync(string binary, string input)
+    /// <summary>
+    /// The first non-empty line the build filter produces for <paramref name="input"/>: its summary.
+    /// It carries the fixture's own counts and elapsed time and no file paths, so it is the same
+    /// whatever directory dtk runs in, which the rest of the filtered output is not.
+    /// </summary>
+    /// <param name="input">The raw fixture text.</param>
+    private static string FilteredSummaryLine(string input) =>
+        SavingsScenarios.FilterFor(FilterKeys.Build)
+            .Apply(AnsiStrip.Strip(input), ExpectedExitCode)
+            .Split('\n')
+            .Select(line => line.TrimEnd('\r'))
+            .First(line => !string.IsNullOrWhiteSpace(line));
+
+    /// <summary>Throws unless dtk exited as expected and printed the filtered fixture's summary.</summary>
+    /// <param name="run">The timed dtk run.</param>
+    /// <param name="binary">The dtk binary, for the message.</param>
+    /// <param name="summaryLine">The line from <see cref="FilteredSummaryLine"/>.</param>
+    /// <exception cref="InvalidOperationException">Either check failed.</exception>
+    private static void EnsureDtkFiltered(TimedRun run, string binary, string summaryLine)
     {
-        var info = new ProcessStartInfo(binary)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        info.ArgumentList.Add("pipe");
-        info.ArgumentList.Add("build");
-        info.ArgumentList.Add("--exit-code");
-        info.ArgumentList.Add(ExpectedExitCode.ToString(CultureInfo.InvariantCulture));
-
-        var started = Stopwatch.GetTimestamp();
-        using var process = Process.Start(info)
-                            ?? throw new InvalidOperationException($"Could not start {binary}.");
-
-        await process.StandardInput.WriteAsync(input).ConfigureAwait(false);
-        process.StandardInput.Close();
-
-        // Drain both pipes before waiting: a child that fills its stdout buffer blocks forever.
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
-        await process.WaitForExitAsync().ConfigureAwait(false);
-
-        if (process.ExitCode != ExpectedExitCode)
+        if (run.ExitCode != ExpectedExitCode)
         {
             // A binary that starts and exits with the wrong code (a crash, a bad argument, a
             // missing filter registration) would otherwise still produce a plausible-looking
             // timing sample. Fail loudly instead, with enough of the child's own output to
             // diagnose it.
-            var stderr = await stderrTask.ConfigureAwait(false);
-            var stdout = await stdoutTask.ConfigureAwait(false);
-            var diagnostic = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-
             throw new InvalidOperationException(
-                $"{binary} exited with code {process.ExitCode}, expected {ExpectedExitCode}. "
-                + $"Output:\n{diagnostic}");
+                $"{binary} exited with code {run.ExitCode}, expected {ExpectedExitCode}. "
+                + $"Output:\n{run.Diagnostic}");
         }
 
-        return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        if (!run.StdOut.Contains(summaryLine, StringComparison.Ordinal))
+        {
+            // The exit code alone cannot prove the pipeline ran over this fixture. On a wrapped
+            // scenario whose PATH wiring broke, the real SDK runs `dotnet build` with no project,
+            // which also exits 1, and dtk would then filter that output instead.
+            throw new InvalidOperationException(
+                $"{binary} exited with code {ExpectedExitCode} but did not print the build filter's "
+                + $"summary line for {Fixture}:\n  {summaryLine}\nso it did not filter that fixture. "
+                + "On a wrapped scenario, the real dotnet SDK most likely ran instead of the fake one. "
+                + $"Output:\n{run.StdOut}");
+        }
     }
 
     /// <summary>
