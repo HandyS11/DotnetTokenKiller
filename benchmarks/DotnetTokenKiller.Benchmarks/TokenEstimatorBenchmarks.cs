@@ -4,7 +4,6 @@ using DotnetTokenKiller.Benchmarks.Corpus;
 using DotnetTokenKiller.Benchmarks.Corpus.Savings;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Filters;
-using Microsoft.ML.Tokenizers;
 
 namespace DotnetTokenKiller.Benchmarks;
 
@@ -32,8 +31,13 @@ public class TokenEstimatorBenchmarks
         _raw = LogCorpusGenerator.Generate(FilterKeys.Build, Tier);
         _filtered = SavingsScenarios.FilterFor(FilterKeys.Build).Apply(_raw, exitCode: 0);
 
-        // Warm the tokenizer cache so the vocabulary load is not charged to the first iteration.
-        // Cold load is measured separately by TokenizerLoadBenchmarks.
+        // Warm the tokenizer cache so the one-time vocabulary load is not charged to the first
+        // iteration: the benchmarks below are about steady-state tokenization, which is what a
+        // process pays on every call after the first. The load itself cannot be measured in
+        // process at all — Microsoft.ML.Tokenizers caches the parsed vocabulary in internal
+        // static state that no [IterationSetup] can clear, so BenchmarkDotNet's own warmup
+        // invocation would populate it and every measured iteration would be a cache hit. The
+        // `tokenizer-load` verb measures it honestly instead, one fresh process per sample.
         TokenEstimator.Estimate("warmup", Tokenizer);
     }
 
@@ -47,20 +51,4 @@ public class TokenEstimatorBenchmarks
     [Benchmark]
     public int EstimateRawThenFiltered() =>
         TokenEstimator.Estimate(_raw, Tokenizer) + TokenEstimator.Estimate(_filtered, Tokenizer);
-}
-
-/// <summary>
-/// The one-time vocabulary load. <see cref="TokenEstimator"/> caches tokenizers in a private
-/// static dictionary that cannot be cleared from outside the type, so this constructs the
-/// tokenizer directly — the same underlying work the first <c>Estimate</c> call of a process pays
-/// for, and a plausible dominant cost for a short log.
-/// </summary>
-[MemoryDiagnoser]
-public class TokenizerLoadBenchmarks
-{
-    [Params("cl100k_base", "o200k_base")]
-    public string Encoding { get; set; } = "cl100k_base";
-
-    [Benchmark]
-    public TiktokenTokenizer LoadTokenizer() => TiktokenTokenizer.CreateForEncoding(Encoding);
 }

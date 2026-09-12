@@ -43,6 +43,13 @@ jobs:
           dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start \
             | tee artifacts/benchmarks/cold-start.txt
 
+      - name: Measure tokenizer vocabulary load
+        run: |
+          mkdir -p artifacts/benchmarks
+          dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- tokenizer-load \
+            > artifacts/benchmarks/tokenizer-load.txt
+          cat artifacts/benchmarks/tokenizer-load.txt
+
       - name: Upload results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

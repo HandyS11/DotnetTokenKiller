@@ -121,15 +121,26 @@ regression and shows up earlier.
 |---|---|---|
 | `FilterBenchmarks` | `IOutputFilter.Apply` across all six filters × three tiers | A new regex or per-line pass turning a filter quadratic |
 | `AnsiStripBenchmarks` | `AnsiStrip.Strip` on escape-laden and clean input | Whether the common no-escape case still allocates a full copy |
-| `TokenEstimatorBenchmarks` | `TokenEstimator.Estimate` per tier, `cl100k_base` vs `o200k_base`, plus `TiktokenTokenizer.CreateForEncoding` cold load | Cost of the one-time vocab load, and of tokenizing twice per run |
+| `TokenEstimatorBenchmarks` | `TokenEstimator.Estimate` per tier, `cl100k_base` vs `o200k_base`, on a warmed tokenizer | Cost of tokenizing twice per run |
 | `PipelineBenchmarks` | `FilteredOutputPipeline.ProcessAsync` end to end with an in-memory writer | The combined real cost of one dtk invocation |
-| `TrackerBenchmarks` | `SqliteTracker.RecordAsync`, and `GainReportUseCase` aggregation at 100 and 10 000 rows | `dtk gain` degrading as command history accumulates |
-| `StartupBenchmarks` | DI container build, `JsonConfigProvider.LoadAsync` | Startup creep as registrations are added |
+| `TrackerReadBenchmarks`, `TrackerWriteBenchmarks` | `SqliteTracker.RecordAsync`, and `GetSummaryAsync` aggregation at 100 and 10 000 rows | `dtk gain` degrading as command history accumulates |
+| `StartupBenchmarks` | DI container build, `JsonConfigProvider.LoadAsync` against a populated config file | Startup creep as registrations and settings are added |
 
-`TokenEstimator` caches tokenizers in a `private static readonly ConcurrentDictionary`
-(`TokenEstimator.cs:10`) that cannot be cleared from outside the type. The cold-load cost is
-therefore measured by benchmarking `TiktokenTokenizer.CreateForEncoding` directly, which performs
-the same underlying work.
+**The vocabulary cold load is measured out of process too**, by a `tokenizer-load` mode, and not
+by BenchmarkDotNet. This was originally specified as an in-process benchmark of
+`TiktokenTokenizer.CreateForEncoding`, on the reasoning that `TokenEstimator`'s own
+`ConcurrentDictionary` cache (`TokenEstimator.cs:10`) cannot be cleared from outside the type but
+the underlying construction could still be timed directly. That was wrong: the resulting benchmark
+reported microseconds for a load that really costs about 113 ms, and it reported them in the
+direction that argues the reader out of the optimization.
+`Microsoft.ML.Tokenizers` 2.0.0 caches the *parsed vocabulary* in its own internal
+static state, so only the first `CreateForEncoding` call in a process pays for it; the cache is
+internal, so no `[IterationSetup]` or `RunStrategy.ColdStart` can clear it, and BenchmarkDotNet's
+own jitting and warmup invocations populate it before the first measured iteration. One fresh
+process per sample is the only honest measurement: `tokenizer-load` spawns the runner's own
+executable with an internal `tokenizer-load-probe <encoding>` verb, 3 warmup + 10 measured times
+per encoding, each child timing exactly one `CreateForEncoding` and printing the milliseconds.
+Like `cold-start`, it fails loudly if a child exits non-zero or prints anything it cannot parse.
 
 **Cold start is measured out of process.** A `cold-start` mode spawns the published `dtk`
 binary as `dtk pipe build --exit-code 0` with a fixture on stdin. `PipeCommand`
@@ -147,10 +158,13 @@ median and p95 of raw wall-clock is the honest metric for process startup. The m
 explicit error if the `dtk` binary cannot be located — a benchmark reporting a fast number because
 it measured nothing is worse than one that errors.
 
-The executable dispatches on a single bare verb, so the three entry points stay
-distinguishable: no arguments runs BenchmarkDotNet's `BenchmarkSwitcher`, `cold-start` runs the
-out-of-process timing loop, and `update-baseline` regenerates the savings baseline. Any unknown
-argument is rejected with a usage message listing the three.
+The executable dispatches on a single bare verb, so the entry points stay distinguishable: no
+arguments runs BenchmarkDotNet's `BenchmarkSwitcher`, `cold-start` runs the out-of-process timing
+loop, `tokenizer-load` times the vocabulary load, and `update-baseline` regenerates the savings
+baseline. Any unknown argument is rejected with a usage message listing them. A BenchmarkDotNet run
+that produced no summary at all — a `--filter` matching nothing, most likely a typo in the
+workflow's dispatch input — exits non-zero rather than leaving a green run with an empty artifact;
+`--list`, `--help`, `--version` and `--info` legitimately produce none and still exit 0.
 
 ### The savings gate
 
@@ -274,8 +288,12 @@ immediately confirm or refute:
 1. **Double tokenization.** `TrackIfEnabledAsync` tokenizes the full raw log and the filtered
    output on every invocation to record one statistic. If `TokenEstimatorBenchmarks` shows this
    dominating `PipelineBenchmarks`, a cheaper raw-side estimate or sampling is a large, safe win.
-2. **Tokenizer cold load.** The one-time `cl100k_base` vocabulary load may dominate a small-log
-   invocation outright. Visible only in the cold-start numbers.
+2. **Tokenizer cold load.** Confirmed, and it is the largest single target the suite surfaced.
+   Measured by `tokenizer-load` (2026-09-12, one fresh process per sample): `cl100k_base` median
+   **112.7 ms** (p95 114.8), `o200k_base` median **173.6 ms** (p95 179.9). Against a `cold-start`
+   median of 287.9 ms measured on the same machine in the same session, the default encoding's
+   one-time vocabulary load is about 39% of everything a dtk invocation does. Lazily skipping tokenization, or counting without a full vocabulary load,
+   is the optimization with the most headroom in the project.
 3. **`AnsiStrip` on clean input.** Most piped output contains no escape sequences. If `Strip`
    allocates a full copy regardless, a fast path is free.
 4. **Per-invocation SQLite open**, and `dtk gain` aggregation cost as history accumulates.
