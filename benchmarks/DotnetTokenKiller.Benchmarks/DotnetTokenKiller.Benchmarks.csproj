@@ -14,4 +14,7 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet"/>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DotnetTokenKiller.Benchmarks.Corpus/DotnetTokenKiller.Benchmarks.Corpus.csproj"/>
+  </ItemGroup>
 </Project>
