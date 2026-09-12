@@ -19,22 +19,63 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     private static readonly string CountedInSavingsSqlList =
         string.Join(", ", RunOutcomes.CountedInSavings.Select(o => $"'{o}'"));
 
-    private readonly SqliteConnection _connection = new(connectionString);
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private SqliteConnection? _connection;
+    private bool _disposed;
     private bool _initialized;
 
     /// <summary>Asynchronously releases managed resources.</summary>
+    /// <remarks>
+    /// Takes the semaphore first, so an initialization still running on a background thread (a
+    /// warm-up that outlived its run) finishes before its connection is disposed.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        await _semaphore.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            _disposed = true;
+            if (_connection is not null)
+            {
+                await _connection.DisposeAsync().ConfigureAwait(false);
+                _connection = null;
+            }
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+
         _semaphore.Dispose();
-        await _connection.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>Releases managed resources.</summary>
+    /// <remarks>Waits for an in-flight initialization, as <see cref="DisposeAsync"/> does.</remarks>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _semaphore.Wait();
+        try
+        {
+            _disposed = true;
+            _connection?.Dispose();
+            _connection = null;
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+
         _semaphore.Dispose();
-        _connection.Dispose();
     }
 
     /// <inheritdoc/>
@@ -47,7 +88,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = _connection.CreateCommand();
+            await using var cmd = CreateCommand();
 #pragma warning restore CA2007
             cmd.CommandText = """
                               INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
@@ -67,6 +108,20 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             cmd.Parameters.AddWithValue("@outcome", record.Outcome.ToString());
             cmd.Parameters.AddWithValue("@source", record.Source.ToString());
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task WarmUpAsync(CancellationToken cancellationToken = default)
+    {
+        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -170,7 +225,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = _connection.CreateCommand();
+            await using var cmd = CreateCommand();
 #pragma warning restore CA2007
             cmd.CommandText = "DELETE FROM commands";
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -211,26 +266,55 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 
     private async Task EnsureInitializedAsync(CancellationToken ct)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         if (_initialized)
         {
             return;
         }
 
-        EnsureDataDirectory(connectionString);
-        await _connection.OpenAsync(ct).ConfigureAwait(false);
-        await InitializeSchemaAsync(ct).ConfigureAwait(false);
+        try
+        {
+            EnsureDataDirectory(connectionString);
 
-        // A one-shot CLI runs as a single process with a single tracker instance, so purge
-        // expired rows once here at startup. A single delete per process is cheap and replaces
-        // the old per-insert counter cleanup that could never fire during a one-command run.
-        await CleanupCoreAsync(defaultRetentionDays, ct).ConfigureAwait(false);
-        _initialized = true;
+            // Created here rather than in a field initializer: SqliteConnection's static initializer
+            // loads the native SQLite library, about 23 ms, which a tracker that is built but never
+            // used (tracking disabled) should not pay.
+            _connection = new SqliteConnection(connectionString);
+            await _connection.OpenAsync(ct).ConfigureAwait(false);
+            await InitializeSchemaAsync(ct).ConfigureAwait(false);
+
+            // A one-shot CLI runs as a single process with a single tracker instance, so purge
+            // expired rows once here at startup. A single delete per process is cheap and replaces
+            // the old per-insert counter cleanup that could never fire during a one-command run.
+            await CleanupCoreAsync(defaultRetentionDays, ct).ConfigureAwait(false);
+            _initialized = true;
+        }
+        catch
+        {
+            // A failed attempt leaves nothing behind, so the next call (a RecordAsync after a
+            // background warm-up failed) starts again from a fresh connection instead of reopening
+            // a half-initialized one.
+            if (_connection is not null)
+            {
+                await _connection.DisposeAsync().ConfigureAwait(false);
+                _connection = null;
+            }
+
+            throw;
+        }
     }
+
+    /// <summary>Creates a command on the connection <see cref="EnsureInitializedAsync"/> opened.</summary>
+    /// <exception cref="InvalidOperationException">Called before initialization succeeded.</exception>
+    private SqliteCommand CreateCommand() =>
+        (_connection ?? throw new InvalidOperationException("The tracker was used before it was initialized."))
+        .CreateCommand();
 
     private async Task InitializeSchemaAsync(CancellationToken ct)
     {
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var createCmd = _connection.CreateCommand();
+        await using var createCmd = CreateCommand();
 #pragma warning restore CA2007
         createCmd.CommandText = """
                                 CREATE TABLE IF NOT EXISTS commands (
@@ -266,7 +350,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     private async Task EnsureColumnAsync(string columnName, string columnDefinition, CancellationToken ct)
     {
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var checkCmd = _connection.CreateCommand();
+        await using var checkCmd = CreateCommand();
 #pragma warning restore CA2007
         checkCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('commands') WHERE name = @name";
         checkCmd.Parameters.AddWithValue("@name", columnName);
@@ -279,7 +363,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         try
         {
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var alterCmd = _connection.CreateCommand();
+            await using var alterCmd = CreateCommand();
 #pragma warning restore CA2007
 #pragma warning disable CA2100, S2077 // columnName and columnDefinition are caller-supplied constant literals
             alterCmd.CommandText = $"ALTER TABLE commands ADD COLUMN {columnName} {columnDefinition}";
@@ -309,7 +393,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             var since = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = _connection.CreateCommand();
+            await using var cmd = CreateCommand();
 #pragma warning restore CA2007
 #pragma warning disable CA2100 // sql is a caller-supplied constant literal; no user input reaches this parameter
             cmd.CommandText = sql;
@@ -498,7 +582,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     {
         var cutoff = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var cmd = _connection.CreateCommand();
+        await using var cmd = CreateCommand();
 #pragma warning restore CA2007
         cmd.CommandText = "DELETE FROM commands WHERE timestamp < @cutoff";
         cmd.Parameters.AddWithValue("@cutoff", cutoff);

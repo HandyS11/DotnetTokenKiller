@@ -12,6 +12,8 @@ internal sealed class NullTracker : ITracker
     public Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    public Task WarmUpAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
     public Task<GainSummary> GetSummaryAsync(
         int days, string? projectPath, string? commandFilter = null,
         CancellationToken cancellationToken = default) =>
