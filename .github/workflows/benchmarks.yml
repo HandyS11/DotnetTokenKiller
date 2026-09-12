@@ -30,9 +30,11 @@ jobs:
         run: dotnet restore
 
       - name: Run benchmarks
+        env:
+          BENCHMARK_FILTER: ${{ inputs.filter }}
         run: >
           dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks
-          -- --filter '${{ inputs.filter }}' --artifacts artifacts/benchmarks
+          -- --filter "$BENCHMARK_FILTER" --artifacts artifacts/benchmarks
 
       - name: Measure cold start
         run: |
