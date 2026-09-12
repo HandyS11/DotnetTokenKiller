@@ -19,8 +19,7 @@ internal static class Program
         switch (args)
         {
             case ["cold-start", ..]:
-                await Console.Error.WriteLineAsync("cold-start is not implemented yet.").ConfigureAwait(false);
-                return 1;
+                return await ColdStartCommand.RunAsync(args).ConfigureAwait(false);
 
             case ["update-baseline", ..]:
                 return UpdateBaselineCommand.Run();
@@ -36,7 +35,6 @@ internal static class Program
                 }
 
                 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
-                await Task.CompletedTask.ConfigureAwait(false);
                 return 0;
         }
     }
