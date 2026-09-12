@@ -126,7 +126,7 @@ public static class LogCorpusGenerator
                     random.Next(1, 400),
                     random.Next(1, 900),
                     random.Next(1, 80))
-                .AppendLine();
+                .Append('\n');
             index++;
         } while (builder.Length < bodyTarget);
 
