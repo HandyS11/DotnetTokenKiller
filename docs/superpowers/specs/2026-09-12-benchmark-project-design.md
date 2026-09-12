@@ -1,4 +1,6 @@
 **Status:** Designed — implementation plan pending
+**Amended:** 2026-09-12 — split into Benchmarks.Corpus + Benchmarks to preserve the
+repository's one-to-one test layering
 
 ## Problem
 
@@ -27,9 +29,10 @@ that dominates the tax, or is noise beside process start, is currently unknowabl
 
 ## Solution
 
-One new project, `benchmarks/DotnetTokenKiller.Benchmarks/`, added to `DotnetTokenKiller.slnx`
-under a new `/benchmarks/` solution folder. It owns the corpus, the timing benchmarks, the savings
-engine, and the committed savings baseline.
+Two new projects under a new `/benchmarks/` solution folder in `DotnetTokenKiller.slnx`:
+`DotnetTokenKiller.Benchmarks.Corpus`, a plain library owning the corpus, the savings engine and
+the committed baseline; and `DotnetTokenKiller.Benchmarks`, the BenchmarkDotNet executable owning
+the timing benchmarks.
 
 The two dimensions get deliberately different enforcement, because they have different
 determinism. Savings measurement is exactly reproducible — the same fixture through the same
@@ -41,18 +44,36 @@ Hard-gating a noisy metric produces flaky-red CI, which trains everyone to ignor
 
 The hard gate must run inside CI's existing `dotnet test` step rather than introduce a second
 gating surface. So the assertions live in one new test class,
-`tests/DotnetTokenKiller.Application.Tests/Benchmarks/SavingsBaselineTests.cs`, which
-`ProjectReference`s the benchmarks project. It sits beside `ExamplesBindingTests`, which already
-binds a committed artifact to real filter output; this is the same shape applied to a different
-artifact.
+`tests/DotnetTokenKiller.Application.Tests/Benchmarks/SavingsBaselineTests.cs`. It sits beside
+`ExamplesBindingTests`, which already binds a committed artifact to real filter output; this is
+the same shape applied to a different artifact.
 
-Net cost: one new project, one new test class, zero CI YAML changes for the gate.
+That test needs the corpus and the savings engine, which constrains how the projects are split.
+This repository enforces a strict one-to-one onion layering: every test project references exactly
+one src project and nothing else — Application.Tests to Application, Domain.Tests to Domain,
+Infrastructure.Tests to Infrastructure, Cli.IntegrationTests to Cli. Four for four. Having
+Application.Tests reference the BenchmarkDotNet executable would drag Infrastructure, Cli,
+Spectre.Console and BenchmarkDotNet into it transitively, making it the one test project that can
+see the whole stack, with nothing preventing a future Application test from depending on
+Infrastructure.
 
-The dependency direction — test project to benchmarks project — is unusual but sound: the
-benchmarks project is the library owning the corpus and the savings engine, and the test asserts
-against it. The rejected alternative was a hybrid xunit + BenchmarkDotNet executable using
-`GenerateProgramFile=false`, which keeps everything in one folder at the cost of depending on
-fragile csproj mechanics.
+The split follows the actual dependency need. The savings engine requires only Application — the
+six filters, `TokenEstimator`, and the fixtures. Nothing in it touches Infrastructure or Cli; only
+the benchmark classes do.
+
+```
+Benchmarks.Corpus  → Application                              (library, no benchmark machinery)
+Benchmarks         → Benchmarks.Corpus, Application, Infrastructure, Cli   (BenchmarkDotNet exe)
+Application.Tests  → Application, Benchmarks.Corpus
+```
+
+Application.Tests gains one reference, to a project that itself references only Application, so
+the layering holds and BenchmarkDotNet stays out of the test run entirely.
+
+Two rejected alternatives: source-linking the savings-engine files into Application.Tests with
+`<Compile Link>`, which avoids the second project but compiles the same types into two assemblies;
+and a hybrid xunit + BenchmarkDotNet executable using `GenerateProgramFile=false`, which keeps
+everything in one project at the cost of depending on fragile csproj mechanics.
 
 ### Hermetic execution
 
@@ -68,8 +89,10 @@ required.
 Two sources behind one interface, serving different purposes.
 
 **Real fixtures drive the savings baselines.** The 16 files in
-`tests/DotnetTokenKiller.Application.Tests/Fixtures/` are consumed via an MSBuild `Link` glob, so
-exactly one copy exists in git and the two projects cannot drift.
+`tests/DotnetTokenKiller.Application.Tests/Fixtures/` are already `EmbeddedResource` items in that
+test project, read back through `GetManifestResourceNames`. Benchmarks.Corpus embeds the same
+files via an `EmbeddedResource` glob pointing at that directory, so exactly one copy exists in git
+and the two projects cannot drift.
 
 **A seeded generator drives throughput and scaling.** `LogCorpusGenerator` emits realistic
 MSBuild and VSTest line shapes — `CS####`/`CA####` diagnostics with file, line and column;
@@ -182,40 +205,52 @@ while unchanged data reports "3 scenarios drifted on unchanged tokenizer — inv
 
 ### Build friction
 
-`TreatWarningsAsErrors` with `AnalysisLevel=latest-all` applies to the new project. Three
+`TreatWarningsAsErrors` with `AnalysisLevel=latest-all` applies to both new projects. Three
 conflicts, handled at the narrowest scope that works:
 
 1. `GenerateDocumentationFile` is `true` in `Directory.Build.props`, so CS1591 demands XML
-   documentation on every public BenchmarkDotNet member. The benchmark csproj sets it to `false`
-   with a comment recording why — a localized exception to the repository's documentation
-   discipline, justified by the volume of public benchmark members that document nothing.
+   documentation on every public member. The Benchmarks executable sets it to `false`, with a
+   comment recording why — justified by the volume of public BenchmarkDotNet members that document
+   nothing. Benchmarks.Corpus keeps it `true`: it is real consumed code with a public API that
+   Application.Tests depends on, so it holds to the repository's documentation discipline.
 2. `[Params]` declared as public mutable fields trips CA1051 and S1104. This is avoided
    outright rather than suppressed: BenchmarkDotNet accepts public properties with setters.
 3. CA1822 fires on benchmark methods that touch no instance state. A scoped `.editorconfig`
-   section for `benchmarks/**` handles the residue, each rule carrying a one-line reason rather
-   than a blanket `NoWarn`.
+   section for `benchmarks/DotnetTokenKiller.Benchmarks/**` handles the residue, each rule carrying
+   a one-line reason rather than a blanket `NoWarn`. The scope deliberately excludes
+   Benchmarks.Corpus, which has no reason to need the relaxation.
 
-`BenchmarkDotNet` is added to `Directory.Packages.props`, per the repository's central package
-management. BenchmarkDotNet artifacts are written to `artifacts/benchmarks/`; `.gitignore` already
-covers both `artifacts/` (line 93) and `BenchmarkDotNet.Artifacts/` (line 88), so no change is
-needed there.
+`BenchmarkDotNet` 0.15.8 is added to `Directory.Packages.props`, per the repository's central
+package management. Its highest `lib` target is `net8.0`, consumed without issue from `net10.0`.
+
+**Toolchain risk.** BenchmarkDotNet's default toolchain generates and compiles a throwaway project
+targeting the benchmark project's framework. A BenchmarkDotNet release predating a given TFM
+cannot generate a valid project for it, and the failure appears only at run time, not build time.
+Whether 0.15.8 handles `net10.0` is therefore the first thing the implementation verifies, with a
+single trivial benchmark, before any real benchmark code is written. If it fails, the fallback is
+`[SimpleJob(RuntimeMoniker.Net80)]` or an in-process toolchain, and the savings gate — which has
+no BenchmarkDotNet dependency at all — is unaffected either way.
+
+BenchmarkDotNet artifacts are written to `artifacts/benchmarks/`; `.gitignore` already covers both
+`artifacts/` (line 93) and `BenchmarkDotNet.Artifacts/` (line 88), so no change is needed there.
 
 ### CI wiring
 
 - **The gate** rides the existing `dotnet test` step in `ci.yml`. No YAML change.
-- **The benchmark project compiles on every pull request** as part of the solution build. This is
+- **Both new projects compile on every pull request** as part of the solution build. This is
   deliberate: benchmark suites overwhelmingly die by quietly failing to compile.
 - **Timings** get `.github/workflows/benchmarks.yml`, `workflow_dispatch` only, ubuntu-only, with
   an optional filter-glob input, uploading BenchmarkDotNet's `*.md`, `*.csv` and `*.json` results
   as artifacts. Never on pull requests: no gating, no noise, no runner minutes.
 
-Two exclusions follow from the test-to-benchmarks reference:
+Two exclusions keep the new projects from distorting existing reporting:
 
 - `sonarqube.yml`: add `benchmarks/**/*` to both `sonar.exclusions` and
   `sonar.coverage.exclusions`. Otherwise a project with no tests covering it drags the reported
   coverage percentage down.
-- `stryker-config.json`: exclude `benchmarks/**` from mutation, since the project reference would
-  otherwise pull the benchmark code into Stryker's mutation set.
+- `stryker-config.json`: exclude `benchmarks/**` from mutation. Application.Tests referencing
+  Benchmarks.Corpus would otherwise pull the generator and savings engine into Stryker's mutation
+  set, where surviving mutants in a corpus generator are noise rather than signal.
 
 ### Testing the benchmark code
 
