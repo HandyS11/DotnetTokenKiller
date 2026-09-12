@@ -78,13 +78,18 @@ hand-written `StubTracker` classes in `DotnetTokenKiller.Cli.IntegrationTests` a
 #### Infrastructure: `SqliteTracker`
 
 - The connection is created inside `EnsureInitializedAsync`, not in a field initializer, so
-  constructing a tracker loads nothing. `Dispose`/`DisposeAsync` handle a connection that was never
-  created.
+  constructing a tracker loads nothing.
 - `WarmUpAsync` takes the existing semaphore and calls `EnsureInitializedAsync`. A `RecordAsync`
   that arrives mid-warm-up waits on the semaphore.
-- `EnsureInitializedAsync` opens the connection only when it is not already open, so a warm-up that
-  failed after `Open` (for example during the schema step) can be retried by `RecordAsync` instead
-  of throwing "connection already open".
+- When any step of `EnsureInitializedAsync` throws, it disposes the connection it created and
+  clears it before rethrowing. The next call (a `RecordAsync` after a failed warm-up) starts again
+  from nothing, rather than reopening a half-initialized connection and throwing "connection
+  already open".
+- `Dispose`/`DisposeAsync` take the semaphore before disposing the connection, so an initialization
+  still running on a background thread (a warm-up that outlived its run, for example when the child
+  failed to launch) is never disposed underneath. They tolerate a connection that was never created
+  and a second call. An initialization that acquires the semaphore after disposal throws
+  `ObjectDisposedException`, which the warm-up discards.
 - Schema, migrations and retention are otherwise unchanged; see Out of scope.
 
 #### Application: `TokenEstimator`
@@ -94,19 +99,29 @@ mode (`ExecutionAndPublication`) is thread-safe: an `Estimate` call made while t
 progress blocks on the same `Lazy`, so the vocabulary loads once and counts are exact. `Estimate`
 itself is unchanged, including returning 0 for empty text without loading anything.
 
+#### Application: `TrackingWarmUp`
+
+Shared by the pipeline and the passthrough use case, so the two cannot start or observe setup
+differently.
+
+- `static TrackingWarmUp Start(ITracker tracker, TokenizerModel? tokenizer, CancellationToken
+  cancellationToken)` starts `Task.Run(() => tracker.WarmUpAsync(cancellationToken))` and, when
+  `tokenizer` is not null, `Task.Run(() => TokenEstimator.WarmUp(tokenizer))`. `Task.Run` matters for
+  the tracker: the 23 ms native load inside the connection's static initializer is synchronous and
+  would otherwise run on the calling thread. Each task catches and discards its own exceptions.
+- `static TrackingWarmUp None` is already complete, for runs that do not track.
+- `Task WhenReadyAsync()` completes when both tasks have finished and **never throws**.
+
 #### Application: `FilteredOutputPipeline`
 
 - New `Task<PreparedRun> BeginAsync(CancellationToken cancellationToken = default)`. It loads the
-  config once. When `config.Tracking.Enabled`, it starts
-  `Task.Run(() => TokenEstimator.WarmUp(config.Tracking.Tokenizer))` and
-  `Task.Run(() => tracker.WarmUpAsync(cancellationToken))`; otherwise it starts nothing.
-  `Task.Run` matters for the tracker: the 23 ms native load inside the connection's static
-  initializer is synchronous and would otherwise run on the calling thread.
-- `PreparedRun` carries the loaded `DtkConfig` and exposes `WhenReadyAsync()`, which awaits both
-  tasks and **never throws**: faults and cancellations are observed and discarded.
+  config once and, when `config.Tracking.Enabled`, calls
+  `TrackingWarmUp.Start(tracker, config.Tracking.Tokenizer, cancellationToken)`; otherwise it uses
+  `TrackingWarmUp.None`.
+- `PreparedRun` is a record carrying the loaded `DtkConfig` and its `TrackingWarmUp`.
 - New overload `ProcessAsync(FilteredOutputRequest request, ITeeSession session, PreparedRun
   prepared, CancellationToken cancellationToken = default)` uses `prepared.Config` instead of
-  loading config again. `TrackIfEnabledAsync` awaits `prepared.WhenReadyAsync()` and then proceeds
+  loading config again. `TrackIfEnabledAsync` awaits `prepared.WarmUp.WhenReadyAsync()` and then proceeds
   exactly as today, so any real failure resurfaces in `Estimate` or `RecordAsync` and is swallowed at
   the existing single catch site.
 - The existing `ProcessAsync(request, session, cancellationToken)` stays, defined as
@@ -122,8 +137,8 @@ itself is unchanged, including returning 0 for empty text without loading anythi
 - **`PassthroughRunUseCase`:** already receives the loaded config and has no pipeline. When
   `tracker` is not null and tracking is enabled, it starts the tracker warm-up at the top of
   `RunAsync`, and the tokenizer warm-up only on the measured branch (the interactive branch records
-  zero tokens and never estimates). `TrackAsync` awaits the started tasks the same never-throwing
-  way before recording.
+  zero tokens and never estimates), both through `TrackingWarmUp.Start`. `TrackAsync` awaits
+  `WhenReadyAsync()` before recording.
 
 **Accepted consequence:** config is now read before the child runs rather than after. A
 `dtk config set` made while a build is running applies from the next run.
@@ -230,8 +245,13 @@ Test-first, in `DotnetTokenKiller.Application.Tests` and `DotnetTokenKiller.Infr
     synchronously and asynchronously. Whether construction still loads the native library is not
     observable from a unit test; the tracking-off timing check covers it.
   - `WarmUpAsync` then `RecordAsync` persists exactly one row.
-  - A warm-up that fails because the database path is unusable, followed by the path becoming
-    usable, lets `RecordAsync` succeed.
+  - A warm-up that fails before opening (the database's directory cannot be created), followed by
+    the path becoming usable, lets `RecordAsync` succeed.
+  - A warm-up that fails after opening (the file is not a SQLite database), followed by the file
+    being removed, lets `RecordAsync` succeed.
+  - Disposing a tracker while its warm-up is still running does not throw.
+- **`TrackingWarmUp`:** `WhenReadyAsync` completes without throwing when the tracker's warm-up
+  throws; `Start` calls `WarmUpAsync` exactly once.
 - **`TokenEstimator`:** `WarmUp` running concurrently with `Estimate` on the same text returns the
   same count as an `Estimate` with no warm-up.
 
