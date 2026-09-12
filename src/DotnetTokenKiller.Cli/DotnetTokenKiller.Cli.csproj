@@ -8,6 +8,12 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ToolCommandName>dtk</ToolCommandName>
+    <!--
+      A dtk process lives for a single command, too briefly for dynamic PGO's instrumented tier to
+      pay for itself: DOTNET_TieredPGO=0 measured 9 ms faster per run on a JIT build (2026-09-12).
+      Set here rather than in Directory.Build.props so test and benchmark processes keep the default.
+    -->
+    <TieredPGO>false</TieredPGO>
     <PackageId>DotnetTokenKiller</PackageId>
     <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
