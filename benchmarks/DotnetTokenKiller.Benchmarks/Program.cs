@@ -23,8 +23,7 @@ internal static class Program
                 return 1;
 
             case ["update-baseline", ..]:
-                await Console.Error.WriteLineAsync("update-baseline is not implemented yet.").ConfigureAwait(false);
-                return 1;
+                return UpdateBaselineCommand.Run();
 
             default:
                 // Anything else, including no arguments, belongs to BenchmarkDotNet: it owns
