@@ -58,15 +58,23 @@ public sealed class PassthroughRunUseCase(
 
         if (!PassthroughSubcommands.IsMeasurable(dotnetArgs))
         {
+            // Interactive runs record zero tokens and never estimate, so only the tracker needs
+            // setting up while the child runs.
+            var interactiveWarmUp = StartWarmUp(config.Tracking, tokenizer: null, cancellationToken);
+
             // Interactive: stdio stays attached, so there is no output to capture or tee.
             var passthroughExit = await commandRunner.RunPassthroughAsync(command, dotnetArgs, cancellationToken)
                 .ConfigureAwait(false);
             stopwatch.Stop();
+            await interactiveWarmUp.WhenReadyAsync().ConfigureAwait(false);
             await TrackAsync(commandName, null, config.Tracking, stopwatch.Elapsed, passthroughExit,
                     RunOutcome.PassthroughUnmeasured, cancellationToken)
                 .ConfigureAwait(false);
             return passthroughExit;
         }
+
+        // Before the log and the child, so setup runs while the child does rather than after it.
+        var warmUp = StartWarmUp(config.Tracking, config.Tracking.Tokenizer, cancellationToken);
 
         var provisional = new TeeLogHeader(
             $"{command} {string.Join(' ', dotnetArgs)}",
@@ -99,11 +107,25 @@ public sealed class PassthroughRunUseCase(
         // here on — including from stripping/tokenizing a very large captured output — cannot alter
         // what dtk returns; TrackAsync's try/catch covers stripping and estimation as well as the
         // store write.
+        // Never throws; a failed setup resurfaces inside TrackAsync's catch.
+        await warmUp.WhenReadyAsync().ConfigureAwait(false);
         await TrackAsync(commandName, result.StdOut + result.StdErr, config.Tracking,
                 stopwatch.Elapsed, result.ExitCode, RunOutcome.PassthroughMeasured, cancellationToken)
             .ConfigureAwait(false);
 
         return result.ExitCode;
+    }
+
+    /// <summary>Starts tracking setup for this run, or nothing when the run will not be recorded.</summary>
+    /// <param name="trackingConfig">The tracking configuration, checked for whether recording happens.</param>
+    /// <param name="tokenizer">The tokenizer to load, or <see langword="null"/> when no tokens are counted.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private TrackingWarmUp StartWarmUp(
+        TrackingConfig trackingConfig, TokenizerModel? tokenizer, CancellationToken cancellationToken)
+    {
+        return tracker is null || !trackingConfig.Enabled
+            ? TrackingWarmUp.None
+            : TrackingWarmUp.Start(tracker, tokenizer, cancellationToken);
     }
 
     /// <summary>
@@ -160,8 +182,8 @@ public sealed class PassthroughRunUseCase(
         RunOutcome outcome,
         CancellationToken cancellationToken)
     {
-        // A null tracker and a disabled config both mean the same thing — nothing to record — and
-        // this is the single place either one is checked.
+        // A null tracker and a disabled config both mean the same thing — nothing to record. This
+        // and StartWarmUp are the only two places either one is checked.
         if (tracker is null || !trackingConfig.Enabled)
         {
             return;
