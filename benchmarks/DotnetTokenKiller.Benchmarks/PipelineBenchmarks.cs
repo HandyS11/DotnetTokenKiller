@@ -28,6 +28,11 @@ public class PipelineBenchmarks
     [GlobalSetup]
     public void Setup()
     {
+        // Deliberately no config file: HermeticState only points DTK_CONFIG_PATH at an empty temp
+        // directory, so JsonConfigProvider returns DtkConfig.Default without a read or a parse.
+        // That is the fresh-install case, which is what most invocations of a new install are, and
+        // it keeps this number about the pipeline rather than about config size. StartupBenchmarks
+        // writes a populated config and measures the parse on its own.
         _state = HermeticState.Enter();
 
         var raw = LogCorpusGenerator.Generate(FilterKeys.Build, Tier);
