@@ -14,6 +14,9 @@
     <Project Path="src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj"/>
     <Project Path="src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj"/>
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/DotnetTokenKiller.Benchmarks/DotnetTokenKiller.Benchmarks.csproj"/>
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DotnetTokenKiller.Application.Tests/DotnetTokenKiller.Application.Tests.csproj"/>
     <Project Path="tests/DotnetTokenKiller.Cli.IntegrationTests/DotnetTokenKiller.Cli.IntegrationTests.csproj"/>

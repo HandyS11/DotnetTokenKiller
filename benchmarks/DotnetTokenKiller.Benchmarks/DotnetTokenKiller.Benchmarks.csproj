@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DotnetTokenKiller.Benchmarks</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!--
+      BenchmarkDotNet requires public benchmark classes and public benchmark methods, none of
+      which document anything a reader needs. Requiring XML comments on all of them would add
+      noise without information, so CS1591 is switched off here only. The Benchmarks.Corpus
+      library keeps documentation on, because it has a real public API that other projects call.
+    -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet"/>
+  </ItemGroup>
+</Project>

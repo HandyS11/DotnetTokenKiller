@@ -9,6 +9,7 @@
          SQLitePCLRaw.lib.e_sqlite3 2.1.11 (via Microsoft.Data.Sqlite) -> GHSA-2m69-gcr7-jv3q. -->
     <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.9"/>
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3"/>
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8"/>
     <PackageVersion Include="coverlet.collector" Version="10.0.1"/>
     <PackageVersion Include="FluentAssertions" Version="8.10.0"/>
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12"/>
