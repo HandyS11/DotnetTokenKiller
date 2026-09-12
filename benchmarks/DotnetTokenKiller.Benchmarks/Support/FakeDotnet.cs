@@ -16,6 +16,8 @@ namespace DotnetTokenKiller.Benchmarks.Support;
 /// </remarks>
 internal sealed class FakeDotnet
 {
+    private const string OutputFileName = "output.txt";
+
     private FakeDotnet(string directoryPath)
     {
         DirectoryPath = directoryPath;
@@ -29,8 +31,7 @@ internal sealed class FakeDotnet
     internal string ScriptPath { get; }
 
     /// <summary>Writes the script and the output it prints into <paramref name="directoryPath"/>.</summary>
-    /// <param name="directoryPath">A directory to create and hold both files; must not contain a
-    /// single quote, which the script uses to quote the output path.</param>
+    /// <param name="directoryPath">A directory to create and hold both files.</param>
     /// <param name="output">The text the script prints to stdout.</param>
     /// <param name="exitCode">The code the script exits with.</param>
     /// <param name="delay">How long the script sleeps before printing; <see cref="TimeSpan.Zero"/>
@@ -44,15 +45,20 @@ internal sealed class FakeDotnet
         Directory.CreateDirectory(directoryPath);
         var fake = new FakeDotnet(directoryPath);
 
-        var outputPath = Path.Combine(directoryPath, "output.txt");
-        File.WriteAllText(outputPath, output);
+        File.WriteAllText(Path.Combine(directoryPath, OutputFileName), output);
 
         var sleep = delay > TimeSpan.Zero
             ? string.Create(CultureInfo.InvariantCulture, $"sleep {delay.TotalSeconds:0.###}\n")
             : string.Empty;
+
+        // The output path is resolved from the script's own location at run time rather than
+        // embedded, so no character in the temp directory (a quote in TMPDIR, say) can break the
+        // script's syntax. Both callers exec it by absolute path — dtk after resolving it through
+        // PATH, the child-alone run directly — so $0 always carries its directory, and the
+        // parameter expansion strips the file name without spawning a dirname process.
         var script = string.Create(
             CultureInfo.InvariantCulture,
-            $"#!/bin/sh\n{sleep}cat '{outputPath}'\nexit {exitCode}\n");
+            $"#!/bin/sh\n{sleep}cat \"${{0%/*}}/{OutputFileName}\"\nexit {exitCode}\n");
 
         File.WriteAllText(fake.ScriptPath, script);
         File.SetUnixFileMode(
