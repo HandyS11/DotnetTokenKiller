@@ -36,7 +36,7 @@ public class AnsiStripBenchmarks
     public string StripDecoratedInput() => AnsiStrip.Strip(_decorated);
 
     /// <summary>Wraps every line in a colour sequence, as a TTY-attached dotnet run would.</summary>
-    /// <param name="text"></param>
+    /// <param name="text">The lines to decorate.</param>
     private static string Decorate(string text) => string.Join(
         '\n',
         text.Split('\n').Select(line => $"{Escape}[32m{line}{Escape}[0m"));
