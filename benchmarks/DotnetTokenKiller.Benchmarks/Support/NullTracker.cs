@@ -4,7 +4,8 @@ namespace DotnetTokenKiller.Benchmarks.Support;
 
 /// <summary>
 /// A tracker that records nothing, so the pipeline benchmark can separate filtering and token
-/// counting from database cost. SQLite is measured on its own in TrackerBenchmarks.
+/// counting from database cost. SQLite is measured on its own in TrackerReadBenchmarks and
+/// TrackerWriteBenchmarks.
 /// </summary>
 internal sealed class NullTracker : ITracker
 {

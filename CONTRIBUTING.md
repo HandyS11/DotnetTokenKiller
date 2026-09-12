@@ -75,8 +75,10 @@ To add filtering support for a new `dotnet` subcommand (e.g., `dotnet publish`):
 2. **Register the filter** — add a keyed registration in `src/DotnetTokenKiller.Application/DependencyInjection.cs`.
 3. **Add a CLI command** — create a new command class in `src/DotnetTokenKiller.Cli/Commands/` following the existing pattern (e.g., `DotnetBuildCommand`). Wire it up in `Program.cs`.
 4. **Add tests** — create a test class in `tests/DotnetTokenKiller.Application.Tests/Filters/` with representative input/output scenarios. Use embedded resources for large test fixtures.
-5. **Add a sample project** (optional) — if the new command benefits from a reproducible fixture, add one under `samples/`.
-6. **Update documentation** — add the new command to the Usage Guide, Architecture filters table, and Output Examples.
+5. **Register the fixture with the savings gate** — every fixture under `tests/DotnetTokenKiller.Application.Tests/Fixtures/` is also embedded into `benchmarks/DotnetTokenKiller.Benchmarks.Corpus` and has to be one scenario there, so adding one means three more edits: bump the hardcoded count in `FixtureCorpusTests.Names_ExposesEveryEmbeddedFixture`, add a `SavingsScenarios.All` entry for it, and regenerate the baseline (see [Savings Baseline](#savings-baseline) below). `SavingsEngineTests.All_CoversEveryFixtureExactlyOnce` fails until the scenario exists.
+6. **Add the filter to the benchmarks** — `FilterBenchmarks`' `[Params]` list, `LogCorpusGenerator`'s template table and `LogCorpusGeneratorTests`' `FilterKeysUnderTest` all hardcode the six filter keys. A seventh filter is invisible to the timing suite until it is in all three, and `LogCorpusGenerator.Generate` throws for a key with no line templates.
+7. **Add a sample project** (optional) — if the new command benefits from a reproducible fixture, add one under `samples/`.
+8. **Update documentation** — add the new command to the Usage Guide, Architecture filters table, and Output Examples.
 
 ## Savings Baseline
 

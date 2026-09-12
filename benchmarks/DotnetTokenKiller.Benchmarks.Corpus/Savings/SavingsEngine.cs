@@ -44,6 +44,15 @@ public static class SavingsEngine
         var filtered = SavingsScenarios.FilterFor(scenario.FilterKey)
             .Apply(stripped, scenario.ExitCode);
 
+        // Counted from the fixture text exactly as it was checked out, with no line-ending
+        // normalisation, because FilteredOutputPipeline counts the real captured output the same
+        // way. That makes an LF checkout load-bearing: `.gitattributes` sets `eol=lf` globally, and
+        // without it a CRLF working tree would add a token to every line and move all 16 scenarios
+        // at once — which the gate would then report as "the tokenizer is unchanged, so 16
+        // scenarios moved because filtering changed", a confidently wrong diagnosis. Do not
+        // "fix" this by normalising here; that would make the gate measure something the pipeline
+        // does not. (ExamplesBindingTests.ParseExamples does normalise, for the opposite reason:
+        // it compares against markdown a Windows editor may legitimately have rewritten.)
         var rawTokens = TokenEstimator.Estimate(stripped, Tokenizer);
         var filteredTokens = TokenEstimator.Estimate(filtered, Tokenizer);
         var saved = rawTokens - filteredTokens;

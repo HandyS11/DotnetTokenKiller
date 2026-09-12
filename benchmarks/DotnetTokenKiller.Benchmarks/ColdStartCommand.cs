@@ -55,8 +55,9 @@ internal static class ColdStartCommand
         using var state = HermeticState.Enter();
 
         await Console.Out.WriteLineAsync($"Cold start: {binary}").ConfigureAwait(false);
-        await Console.Out.WriteLineAsync(
-            $"Input: {Fixture} ({input.Length} chars), exit code 1").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Input: {Fixture} ({input.Length} chars), exit code {ExpectedExitCode}")).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(
             $"Runs: {WarmupRuns} warmup + {MeasuredRuns} measured").ConfigureAwait(false);
         await Console.Out.WriteLineAsync().ConfigureAwait(false);
@@ -72,30 +73,8 @@ internal static class ColdStartCommand
             samples.Add(await TimeOnceAsync(binary, input).ConfigureAwait(false));
         }
 
-        samples.Sort();
-        await ReportAsync("median", Percentile(samples, 0.50)).ConfigureAwait(false);
-        await ReportAsync("p95", Percentile(samples, 0.95)).ConfigureAwait(false);
-        await ReportAsync("min", samples[0]).ConfigureAwait(false);
-        await ReportAsync("max", samples[^1]).ConfigureAwait(false);
+        await TimingReport.WriteAsync(samples).ConfigureAwait(false);
         return 0;
-    }
-
-    private static Task ReportAsync(string label, double milliseconds) => Console.Out.WriteLineAsync(
-        string.Create(CultureInfo.InvariantCulture, $"  {label,-8} {milliseconds,8:F1} ms"));
-
-    /// <summary>Nearest-rank percentile over the sorted samples.</summary>
-    /// <param name="sorted">The samples, already sorted ascending.</param>
-    /// <param name="fraction">The percentile to compute, in the range [0, 1].</param>
-    /// <exception cref="ArgumentException"><paramref name="sorted"/> is empty.</exception>
-    private static double Percentile(List<double> sorted, double fraction)
-    {
-        if (sorted.Count == 0)
-        {
-            throw new ArgumentException("Cannot compute a percentile of an empty sample set.", nameof(sorted));
-        }
-
-        var rank = (int)Math.Ceiling(fraction * sorted.Count) - 1;
-        return sorted[Math.Clamp(rank, 0, sorted.Count - 1)];
     }
 
     private static async Task<double> TimeOnceAsync(string binary, string input)
@@ -109,7 +88,7 @@ internal static class ColdStartCommand
         info.ArgumentList.Add("pipe");
         info.ArgumentList.Add("build");
         info.ArgumentList.Add("--exit-code");
-        info.ArgumentList.Add("1");
+        info.ArgumentList.Add(ExpectedExitCode.ToString(CultureInfo.InvariantCulture));
 
         var started = Stopwatch.GetTimestamp();
         using var process = Process.Start(info)
