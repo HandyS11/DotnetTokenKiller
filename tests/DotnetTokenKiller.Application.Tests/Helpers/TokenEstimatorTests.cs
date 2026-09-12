@@ -55,4 +55,21 @@ public class TokenEstimatorTests
 
         result.Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData(TokenizerModel.Cl100kBase)]
+    [InlineData(TokenizerModel.O200kBase)]
+    public async Task WarmUp_RacingEstimate_ReturnsTheSameCount(TokenizerModel model)
+    {
+        // Materialized before awaiting so the warm-ups and estimates really run concurrently.
+        var warmUps = Enumerable.Range(0, 4).Select(_ => Task.Run(() => TokenEstimator.WarmUp(model))).ToArray();
+        var estimates = Enumerable.Range(0, 4)
+            .Select(_ => Task.Run(() => TokenEstimator.Estimate("Hello world", model)))
+            .ToArray();
+
+        await Task.WhenAll(warmUps);
+        var counts = await Task.WhenAll(estimates);
+
+        counts.Should().AllBeEquivalentTo(2);
+    }
 }
