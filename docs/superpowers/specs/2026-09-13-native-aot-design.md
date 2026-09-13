@@ -1,4 +1,5 @@
-**Status:** Design approved 2026-09-13; implementation plan to follow
+**Status:** Design approved 2026-09-13. Amended the same day by the probes run while writing
+[the plan](../plans/2026-09-13-native-aot.md); see "Amendments" at the end.
 
 ## Context
 
@@ -110,7 +111,8 @@ AOT removes most of it, but three things stand in the way:
   (System.CommandLine, ConsoleAppFramework) would rewrite every command, settings class, help text,
   completion script and generated doc page, more work than the rest of this sub-project. Staying on
   ReadyToRun instead (~219 ms against ~65 ms) forgoes most of the gain. The exception is limited to
-  one call site and one assembly's publish warnings, and it is guarded by tests (see 1.3).
+  two call sites at the Spectre.Console.Cli boundary and one assembly's publish warnings, and it is
+  guarded by tests (see 1.3).
 - **AOT RIDs:** `linux-x64`, `linux-arm64`, `osx-arm64`, `win-x64`. Everything else gets the
   framework-dependent `any` fallback. Rule: a RID ships only if CI runs its binary natively on every
   PR.
@@ -154,40 +156,48 @@ AOT removes most of it, but three things stand in the way:
   Both `RtkHookCoexistence` call sites use
   `TomlSerializer.TryDeserialize(text, RtkTomlContext.Default, out TomlTable? model)`. Parsing
   behaviour is unchanged.
-- **`TypeRegistrar.Register`:**
-  - It stops calling `services.AddSingleton(Type, Type)`, and so registers nothing itself.
-  - Every command class is registered once in DI with a generic `AddSingleton<TCommand>()`, from a
-    single method beside `CliConfigurator` that lists all fifteen commands.
-  - Types Spectre registers that are not in DI (settings classes, `DefaultPairDeconstructor`) fall
-    back to Spectre's own `Activator.CreateInstance`, which the rooting covers; they are all
-    parameterless.
-  - `RegisterInstance` and `RegisterLazy` are unchanged, since neither uses reflection.
-  - The XML doc on `Register` says why it no longer registers.
+- **`TypeRegistrar.Register` keeps `services.AddSingleton(service, implementation)`.** Registering
+  nothing there instead (generic registrations for dtk's commands, Spectre's activator for the rest)
+  was probed and rejected. Spectre.Console.Cli's hidden built-in commands (`dtk cli version`,
+  `dtk cli explain`, `dtk cli opencli`, and the `--help-dump-opencli` option) take Spectre-internal
+  services in their constructors, and only this reflective call can register them. Without it they
+  fail with "Could not resolve type" in the JIT build as well as the AOT build. With it, the rooted
+  AOT build runs them correctly. The IL2067 it raises is part of the contained exception below.
 
 #### 1.3 The contained exception
 
-- **The suppression.** `new CommandApp(registrar)` moves into a single factory method
-  `SpectreCommandApp.Create(ITypeRegistrar registrar)` in `DotnetTokenKiller.Cli.Infrastructure`. It
-  carries the repository's only trim or AOT suppression:
-  `[UnconditionalSuppressMessage("AotAnalysis", "IL3050", Justification = …)]`. The justification
-  names what makes it safe: the two rooted assemblies, the settings-type guard and the parity tests.
+- **The two suppressions**, both in `DotnetTokenKiller.Cli.Infrastructure`, at the
+  Spectre.Console.Cli boundary. They are the repository's only trim or AOT suppressions:
+  - `new CommandApp(registrar)` moves into a single factory method
+    `SpectreCommandApp.Create(ITypeRegistrar registrar)`, which carries
+    `[UnconditionalSuppressMessage("AotAnalysis", "IL3050:…")]`.
+  - `TypeRegistrar.Register` carries `[UnconditionalSuppressMessage("Trimming", "IL2067:…")]`.
+  - Each justification names what makes it safe: the two rooted assemblies, the settings-type guard,
+    the parity tests and the built-in command tests.
 - **Settings-type guard.** A test reflects over every `CommandSettings` subclass in the `dtk`
-  assembly. It fails if any property is not `bool`, `int`, `string` or `string[]`, or if a settings
-  class or property carries `[TypeConverter]` or `[PairDeconstructor]`. Those are the Spectre paths
-  proven under AOT; adding another means extending the parity tests first.
-- **DI guard.** A test builds the real `CommandApp` configuration and checks that every command type
-  in the configured tree resolves from the service collection. A command added to `CliConfigurator`
-  without a registration fails here, not at a user's prompt.
+  assembly. It fails if any option or argument property is not `bool`, `int`, `string` or
+  `string[]`, or if a settings class or property carries `[TypeConverter]` or `[PairDeconstructor]`.
+  Those are the Spectre paths proven under AOT; adding another means extending the parity tests
+  first.
+- **Built-in command tests.** An integration test runs `cli version`, `cli explain`, `cli opencli`
+  and `--help-dump-opencli` and requires exit code 0 and their expected output. Parity tests cannot
+  catch a break that hits both builds alike; this can. It runs against the AOT binary wherever the
+  integration suite does (see 3.1).
 - **Publish warnings.**
   - The AOT publish emits IL2104, IL3053 and IL3000, all from `Spectre.Console.Cli`. With
     `TreatWarningsAsErrors` they fail the publish.
-  - The CLI project keeps exactly those three codes as warnings (not errors) for the publish step
-    only. Normal builds keep treating IL3000 in dtk's own code as an error, through the single-file
-    analyzer.
-  - The plan settles the MSBuild mechanism with a probe: `WarningsNotAsErrors` scoped to publish, or
-    the ILCompiler's own switch. The chosen mechanism must leave any other IL warning an error.
-  - A CI script (`eng/check-aot-warnings.ps1`) reads the pack log and fails unless the IL warnings
-    are exactly those three codes, each attributed to `Spectre.Console.Cli`.
+  - The CLI csproj adds those three codes to `WarningsNotAsErrors` inside a target that runs
+    `BeforeTargets="WriteIlcRspFileForCompilation"`. The ILCompiler passes `WarningsNotAsErrors` as
+    `--nowarnaserr` while still passing `--warnaserror`, and the Roslyn compile has already finished
+    by then. So only the native compile is affected, any other IL warning stays an error, and IL3000
+    in dtk's own code stays an error in every build through the single-file analyzer. Probed: the
+    RID pack succeeds with exactly the three warnings.
+  - `AotWarningLogTests` in the integration test project holds a parser for MSBuild logs, with unit
+    tests. A test gated on `DTK_AOT_PACK_LOG` reads the RID pack's log and fails unless its IL
+    diagnostics are exactly those three codes, as warnings, each originating in
+    `Spectre.Console.Cli`. It also fails if any of the three is missing, because then the native
+    compile did not run. A C# test replaces the PowerShell script first planned: it runs on all four
+    runners and on the development machine, which has no `pwsh`.
 
 ### 2. Packaging
 
@@ -211,9 +221,13 @@ Facts this relies on (verified by pack-and-install experiments on SDK 10.0.400):
 - **Symbols.** `IncludeSymbols=true` with `SymbolPackageFormat=snupkg`, which the csproj sets today,
   makes the pointer and AOT RID packs fail with NU5017. Hence `-p:IncludeSymbols=false` on those
   packs; the `any` pack keeps symbols.
-- **What a RID pack carries by default.** It includes the stripped-symbols file (`.dbg`). The
-  publish output also contains `.pdb`, `.xml` documentation and `libe_sqlite3.a`. The plan settles by
-  probe how to exclude them all from the RID packages.
+- **What a RID pack carries by default.** Tool packing globs the whole publish directory, so a
+  default RID package (56 MB unpacked) holds the stripped-symbols file (`.dbg`), every `.pdb`, the
+  `.xml` documentation and `libe_sqlite3.a`. For AOT RID-specific builds only, the CLI csproj sets
+  `CopyOutputSymbolsToPublishDirectory=false`. A target `AfterTargets="ComputeResolvedFilesToPublishList"`
+  removes `.pdb`, `.xml` and `.a` items from `ResolvedFileToPublish`. Probed: the linux-x64 package
+  then holds exactly `dtk`, `libe_sqlite3.so` and the tool settings file (9.5 MB), and the `any`
+  package is unchanged (42.5 MB, against 40.6 MB for the published 0.7.2).
 - **Installing.** `dotnet tool install -g DotnetTokenKiller` on a listed RID installs the pointer and
   that RID's package. The shim is a symlink to the native binary on Unix, and no .NET runtime is
   needed to run it.
@@ -225,7 +239,8 @@ Facts this relies on (verified by pack-and-install experiments on SDK 10.0.400):
 - **SDK 8 and 9** cannot install the hybrid package ("Format version is higher than supported").
   They already cannot install today's `net10.0` package, so no user loses anything.
 
-Native symbols (`.dbg` on Linux, `.pdb` on Windows, `.dSYM` on macOS) are zipped per RID as
+Native symbols (`.dbg` on Linux, `.pdb` on Windows, `.dSYM` on macOS) stay in
+`src/DotnetTokenKiller.Cli/bin/Release/net10.0/<rid>/native/`. They are zipped per RID as
 `dtk-<version>-<rid>-symbols.zip` and attached to the GitHub Release.
 
 A plain `dotnet pack` now builds only the pointer. CLAUDE.md documents the full sequence.
@@ -240,10 +255,12 @@ A `workflow_call` workflow with inputs `rid`, `runner` and `version`. Steps:
    runner lacks. The plan checks each image: Linux needs `clang` and `zlib1g-dev`; Windows needs the
    MSVC toolset, present on `windows-latest`; macOS needs Xcode command-line tools, present on
    `macos-latest`.
-2. `dotnet build -c Release` of the solution: the parity tests need the JIT `dtk.dll`.
+2. `dotnet build -c Release -p:Version=<version>` of the solution: the parity tests need the JIT
+   build. The version must match the packs', or `--version` differs between the two builds.
 3. `dotnet pack -c Release -r <rid> -p:IncludeSymbols=false -p:Version=<version>` and the pointer
-   pack, both into a local feed directory, with the RID pack's output captured to a log.
-4. `pwsh eng/check-aot-warnings.ps1 <log>` (see 1.3).
+   pack, both into a local feed directory. The RID pack writes an MSBuild file log
+   (`-flp:LogFile=…;Verbosity=minimal`).
+4. `AotWarningLogTests` with `DTK_AOT_PACK_LOG` set to that log (see 1.3).
 5. `dotnet tool install --tool-path <tmp>/tools DotnetTokenKiller --version <version>` against a
    `nuget.config` whose only source is the local feed. The step asserts that the tool store
    contains `dotnettokenkiller.<rid>`, so a silent fallback to `any` fails the job.
@@ -271,16 +288,24 @@ The existing `build` job is unchanged. Two jobs are added:
 - **`IntegrationTestHelper`:** when `DTK_TEST_BINARY` is set and not blank, every dtk invocation
   starts that executable directly instead of `dotnet dtk.dll`. `StartDetached` follows the same
   rule. Nothing else about the spawned process changes (environment, isolation, timeouts).
-- **`AotParityTests`:**
-  - Every test is skipped unless `DTK_AOT_BINARY` is set, through a `Fact` attribute subclass that
-    sets `Skip` when the variable is absent. Local `dotnet test` runs and the `build` job are
+- **`AotParityTests`** (in `Aot/`):
+  - Every test is skipped unless `DTK_AOT_BINARY` is set, through `Theory` attribute subclasses that
+    set `Skip` when the variable is absent. Local `dotnet test` runs and the `build` job are
     unaffected.
-  - Each case runs the same deterministic input through `dotnet dtk.dll` and through
-    `DTK_AOT_BINARY`, each with its own hermetic `DTK_CONFIG_PATH`, `DTK_DB_PATH`, `DTK_TEE_DIR`,
+  - Each case runs the same deterministic input through the JIT build's `dtk` apphost and through
+    `DTK_AOT_BINARY`, with hermetic `DTK_CONFIG_PATH`, `DTK_DB_PATH`, `DTK_TEE_DIR`,
     `HOME`/`USERPROFILE` and `XDG_CONFIG_HOME`.
-  - It asserts equal exit codes; equal stdout and stderr after normalizing the hermetic root,
+  - **Why the apphost and not `dotnet dtk.dll`.** On Unix, `Process.Start` looks for a bare file
+    name beside the running executable before searching `PATH`. Under the `dotnet` muxer, dtk would
+    start the real SDK instead of the fake `dotnet` (probed). The apphost is also what the `any`
+    package runs.
+  - **Same path for both sides.** The two sides run one after the other in the same sandbox path;
+    the first side's directory is moved aside before the second starts. Spectre tables wrap long
+    paths across lines, which no text normalization can rejoin (probed with `log --list`).
+  - It asserts equal exit codes; equal combined output after normalizing the sandbox root,
     timestamps, durations and tee-log file names; equal tracking rows, with token counts exact and
-    elapsed time ignored; and byte-identical files written under the hermetic root.
+    id, timestamp and elapsed time ignored; and equal normalized files written under the sandbox.
+    The SDK's own first-run state is ignored.
   - Cases:
     - `--version` and `--help`
     - `pipe` over one fixture per filter (build, test, restore, clean, format, list package), plus
@@ -292,19 +317,27 @@ The existing `build` job is unchanged. Two jobs are added:
     - `completion` for bash, zsh, fish and powershell
     - `integrate` for all eight providers into a project directory, a repeated `claude`, and
       `--global` for `claude` and `copilot-cli` with an rtk hook and an rtk TOML config present
+    - Spectre's built-ins: `cli version`, `cli explain`, `cli opencli`, `--help-dump-opencli`
     - passthrough and an unknown command
     - one wrapped command per filter against a fake `dotnet` that prints a fixture and exits with a
       set code
     - `reset --force --all`
-  - **The fake `dotnet`.** On Linux and macOS it is a generated POSIX shell script on the child's
-    `PATH`, like `cold-start`'s. `Process.Start` on Windows does not run a `.cmd` found on `PATH`
-    as `dotnet`. The plan settles by probe whether a Windows substitute exists without new build
-    artifacts; if none does, the wrapped cases are skipped on Windows. The win-x64 integration-suite
-    run in 3.1 covers wrapped commands there against real `dotnet`.
+  - **Unix-only cases.** The fake `dotnet` is a generated POSIX shell script on the child's `PATH`,
+    like `cold-start`'s; `Process.Start` on Windows does not run a script found on `PATH` as
+    `dotnet`. `integrate --global` needs a home directory the test can move, and on Windows
+    `USERPROFILE` does not move `Environment.SpecialFolder.UserProfile`. Both cases are skipped on
+    Windows. The win-x64 integration-suite run in 3.1 covers wrapped commands there against real
+    `dotnet`.
   - Real builds stay out of parity tests: their output depends on restore and build state, as the
     probe showed.
+  - **Probed:** 20 cases pass against the installed linux-x64 AOT tool and against the installed
+    `any` fallback. Against an unrooted AOT build, 18 of the 19 cases that existed then failed; the
+    one that passed was passthrough, which never reaches Spectre.
+- **`AotWarningLogTests`** (in `Aot/`): the log parser from 1.3 with its unit tests, plus the
+  `DTK_AOT_PACK_LOG` gated check.
 - **`CommandSettingsAotGuardTests`:** the settings-type guard from 1.3. Always on.
-- **`CommandRegistrationTests`:** the DI guard from 1.3. Always on.
+- **`SpectreBuiltInCommandTests`:** the built-in command tests from 1.3. Always on, through
+  `IntegrationTestHelper`, so they also run against `DTK_TEST_BINARY`.
 
 ### 4. Release workflow (`publish.yml`, `v*` tags)
 
@@ -345,8 +378,8 @@ Failure semantics:
   - the AOT publish command for local use
   - `DTK_TEST_BINARY` and `DTK_AOT_BINARY`, and how to run the parity tests locally against a
     linux-x64 publish
-  - the contained Spectre exception and its guards, so nobody "fixes" the suppression or adds a
-    dictionary option without extending the parity tests
+  - the contained Spectre exception and its guards, so nobody "fixes" the two suppressions or adds
+    a dictionary option without extending the parity tests
 - **`README.md`, `src/DotnetTokenKiller.Cli/README.md` (the package readme),
   `docfx/articles/getting-started.md`:** which platforms get a native binary that needs no .NET
   runtime, and that everything else runs on the .NET 10 runtime. The install command is unchanged.
@@ -394,24 +427,29 @@ starting setup from `Program.cs`. Report only; do not implement.
   - With tracking disabled, `LD_DEBUG=files` on the AOT binary shows no `e_sqlite3`.
 - **Code:**
   - The normal JIT build is clean with `IsAotCompatible` on all three libraries.
-  - The repository contains exactly one trim or AOT suppression (1.3).
+  - The repository contains exactly two trim or AOT suppressions, both at the Spectre.Console.Cli
+    boundary (1.3).
+  - `dtk cli version`, `cli explain`, `cli opencli` and `--help-dump-opencli` still work in both
+    builds.
 
 ## Testing
 
 Test-first where the change is code:
 
-- **`CommandSettingsAotGuardTests`:** passes on the current settings. A settings class with a
-  `Dictionary<string, int>` property, a `[TypeConverter]` or an `int[]` fails it. Checked with
-  temporary test-local types, not by changing real settings.
-- **`CommandRegistrationTests`:** passes with the new registration list. Removing one command from
-  it fails the test.
+- **`CommandSettingsAotGuardTests`:** passes on the current settings. Test-local settings types
+  with a `Dictionary<string, int>`, an `int[]`, an `int?`, a `[TypeConverter]` on a property or a
+  class, or a `[PairDeconstructor]` each produce exactly one violation.
+- **`SpectreBuiltInCommandTests`:** passes today and after every change, in both builds.
+- **`AotWarningLogTests`:** the accepted warnings, repeated as MSBuild's summary repeats them, report
+  nothing. A dtk warning, an accepted code from another assembly, an accepted code raised as an error,
+  and a log with no native compile are each reported.
 - **`RtkHookCoexistence`:** the existing tests pass unchanged with the source-generated context.
   They already cover a config without `dotnet`, with it, and invalid TOML.
 - **Integrators:** the existing `IntegratorHelpers` and `CopilotCliIntegrator` tests pass unchanged,
   so the JSON output is unchanged.
-- **`IntegrationTestHelper`:** with `DTK_TEST_BINARY` unset, behaviour is unchanged (the existing
-  suite). A test in the parity class, running only when `DTK_AOT_BINARY` is set, proves the helper
-  honours the variable by running `--version` through both paths.
+- **`IntegrationTestHelper`:** the choice lives in a pure `DtkLauncher.Resolve(testBinary, dllPath)`
+  with unit tests (unset, empty and blank give `dotnet` plus the DLL; a path, trimmed, gives the
+  binary alone). With `DTK_TEST_BINARY` unset, behaviour is unchanged (the existing suite).
 - **Local verification:**
   - The layer test projects run per project, as usual.
   - The parity tests and the integration suite run locally against a linux-x64 publish on the
@@ -433,3 +471,31 @@ Test-first where the change is code:
   meaningless.
 - **The rewrite hook's double-prefix bug** in `.claude/hooks/dotnet-to-dtk.py` and
   `HookScriptTemplates.cs`. It is unrelated, has been reported, and gets its own change.
+
+## Amendments (2026-09-13, while writing the plan)
+
+The plan's author prototyped every code change in a throwaway copy and ran it end to end on
+linux-x64: build, RID and pointer packs, install from a local feed, parity, warning-log and guard
+tests, and the process-spawning integration classes against the installed AOT tool (50 AOT-related
+tests passing). That settled the spec's open mechanics and changed three decisions, all recorded
+above:
+
+- **Two suppressions, not one.** A no-op `TypeRegistrar.Register` broke Spectre's hidden built-in
+  commands in both builds. The user chose to keep the reflective registration under a second
+  contained suppression (IL2067), dropped the explicit command list and its DI guard, and added
+  `SpectreBuiltInCommandTests` plus a parity case.
+- **The warning check is a C# test** (`AotWarningLogTests`, gated on `DTK_AOT_PACK_LOG`), not
+  `eng/check-aot-warnings.ps1`.
+- **Parity runs the JIT side through the apphost**, with both sides at the same sandbox path, and
+  `integrate --global` joins the wrapped commands as a Unix-only case.
+
+Settled mechanics: the `BeforeTargets="WriteIlcRspFileForCompilation"` target for the three accepted
+warnings, `CopyOutputSymbolsToPublishDirectory=false` plus a `ResolvedFileToPublish` filter for RID
+package contents, native symbols under `bin/…/<rid>/native/`, the tool store layout
+`.store/dotnettokenkiller/<version>/dotnettokenkiller.<rid>/`, and the requirement that CI build the
+solution with the same `-p:Version` as the packs.
+
+Also observed: ILC reports that Spectre.Console.Cli's `OpenCliParser.Parse` "will always throw",
+because Spectre.Console.Cli 0.55.0 references NJsonSchema without declaring the dependency
+(spectreconsole/spectre.console.cli#84). The JIT build has the same gap. dtk never parses OpenCLI
+documents; `cli opencli` generates one, and works in both builds.
