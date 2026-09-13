@@ -17,6 +17,11 @@ internal static class IntegrationTestHelper
     private static readonly string DllPath =
         Path.Combine(AppContext.BaseDirectory, "dtk.dll");
 
+    /// <summary>How every dtk invocation starts: the JIT build, or the binary named by
+    /// <c>DTK_TEST_BINARY</c> (CI points it at the installed Native AOT tool).</summary>
+    private static readonly (string Executable, string[] PrefixArguments) Launcher =
+        DtkLauncher.Resolve(Environment.GetEnvironmentVariable(DtkLauncher.TestBinaryVariable), DllPath);
+
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
@@ -58,7 +63,7 @@ internal static class IntegrationTestHelper
 
     internal static Task<(string Output, int ExitCode)> RunDtkAsync(params string[] args)
     {
-        return RunProcessAsync("dotnet", [DllPath, .. args]);
+        return RunProcessAsync(Launcher.Executable, [.. Launcher.PrefixArguments, .. args]);
     }
 
     internal static Task<(string Output, int ExitCode)> RunDotnetAsync(params string[] args)
@@ -74,7 +79,7 @@ internal static class IntegrationTestHelper
     {
         var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
         var dbPath = Path.Combine(isolatedDir, "tracking.db");
-        var (output, exitCode) = await RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir);
+        var (output, exitCode) = await RunProcessAsync(Launcher.Executable, [.. Launcher.PrefixArguments, .. args], isolatedDir);
         return (output, exitCode, dbPath);
     }
 
@@ -87,7 +92,7 @@ internal static class IntegrationTestHelper
     {
         var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
         var dbPath = Path.Combine(isolatedDir, "tracking.db");
-        var (output, exitCode) = await RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir, stdin);
+        var (output, exitCode) = await RunProcessAsync(Launcher.Executable, [.. Launcher.PrefixArguments, .. args], isolatedDir, stdin);
         return (output, exitCode, dbPath);
     }
 
@@ -123,7 +128,7 @@ internal static class IntegrationTestHelper
     /// <param name="args">The arguments to pass to dtk.</param>
     internal static Task<(string Output, int ExitCode)> RunDtkInDirAsync(
         string isolatedDir, params string[] args) =>
-        RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir);
+        RunProcessAsync(Launcher.Executable, [.. Launcher.PrefixArguments, .. args], isolatedDir);
 
     /// <summary>Runs dtk against an explicit isolated directory, with <c>HOME</c>/<c>USERPROFILE</c>
     /// also redirected there. Use this only for tests whose result depends on global-scope state
@@ -136,7 +141,7 @@ internal static class IntegrationTestHelper
     /// <param name="args">The arguments to pass to dtk.</param>
     internal static Task<(string Output, int ExitCode)> RunDtkInDirAsync(
         string isolatedDir, bool isolateHome, params string[] args) =>
-        RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir, isolateHome: isolateHome);
+        RunProcessAsync(Launcher.Executable, [.. Launcher.PrefixArguments, .. args], isolatedDir, isolateHome: isolateHome);
 
     /// <summary>Runs dtk against an explicit isolated directory with stdin piped in.</summary>
     /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>.</param>
@@ -144,7 +149,7 @@ internal static class IntegrationTestHelper
     /// <param name="args">The arguments to pass to dtk.</param>
     internal static Task<(string Output, int ExitCode)> RunDtkWithStdinInDirAsync(
         string isolatedDir, string stdin, params string[] args) =>
-        RunProcessAsync("dotnet", [DllPath, .. args], isolatedDir, stdin);
+        RunProcessAsync(Launcher.Executable, [.. Launcher.PrefixArguments, .. args], isolatedDir, stdin);
 
     internal static double CalculateSavings(string rawOutput, string filteredOutput)
     {
@@ -170,14 +175,13 @@ internal static class IntegrationTestHelper
         var teeDir = Path.Combine(isolatedDir, "tee");
         Directory.CreateDirectory(isolatedDir);
 
-        var psi = new ProcessStartInfo("dotnet")
+        var psi = new ProcessStartInfo(Launcher.Executable)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false
         };
-        psi.ArgumentList.Add(DllPath);
-        foreach (var arg in args)
+        foreach (var arg in Launcher.PrefixArguments.Concat(args))
         {
             psi.ArgumentList.Add(arg);
         }
