@@ -54,3 +54,34 @@ jobs:
           name: coverage-reports
           path: ./coverage/**/coverage.cobertura.xml
           retention-days: 14
+
+  aot:
+    name: AOT (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-latest
+            run-integration-suite: true
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+            run-integration-suite: false
+          - rid: osx-arm64
+            runner: macos-latest
+            run-integration-suite: false
+          - rid: win-x64
+            runner: windows-latest
+            run-integration-suite: true
+    uses: ./.github/workflows/aot-package.yml
+    with:
+      rid: ${{ matrix.rid }}
+      runner: ${{ matrix.runner }}
+      version: 0.0.0-ci
+      run-integration-suite: ${{ matrix.run-integration-suite }}
+
+  fallback:
+    name: Fallback (any)
+    uses: ./.github/workflows/fallback-package.yml
+    with:
+      version: 0.0.0-ci
