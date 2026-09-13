@@ -14,6 +14,13 @@
       Set here rather than in Directory.Build.props so test and benchmark processes keep the default.
     -->
     <TieredPGO>false</TieredPGO>
+    <!--
+      Native AOT: installed tools on the RIDs in ToolPackageRuntimeIdentifiers run a native binary (see
+      docs/superpowers/specs/2026-09-13-native-aot-design.md). PublishAot also runs the AOT, trim and
+      single-file analyzers in every normal build. The `any` package is packed with
+      -p:PublishAot=false, stays framework-dependent, and keeps TieredPGO above.
+    -->
+    <PublishAot>true</PublishAot>
     <PackageId>DotnetTokenKiller</PackageId>
     <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
@@ -41,4 +48,26 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DotnetTokenKiller.Cli.IntegrationTests"/>
   </ItemGroup>
+  <!--
+    Spectre.Console.Cli binds commands and settings by reflection and does not support trimming or
+    Native AOT. Rooting both assemblies keeps every constructor and property it reflects over. The
+    exception is contained and tested: see SpectreCommandApp, TypeRegistrar.Register,
+    CommandSettingsAotGuardTests, SpectreBuiltInCommandTests and AotParityTests.
+  -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="dtk"/>
+    <TrimmerRootAssembly Include="Spectre.Console.Cli"/>
+  </ItemGroup>
+  <!--
+    The native compile reports three warnings from inside Spectre.Console.Cli (IL2104, IL3053 and IL3000),
+    which TreatWarningsAsErrors would turn into errors. This target keeps them warnings for the
+    ILCompiler only: it runs after the Roslyn compile, so IL3000 in dtk's own code is still an error, and
+    any other IL warning still fails the publish. AotWarningLogTests checks a pack log holds exactly these
+    three.
+  -->
+  <Target Name="AllowSpectreCliAotWarnings" BeforeTargets="WriteIlcRspFileForCompilation">
+    <PropertyGroup>
+      <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2104;IL3053;IL3000</WarningsNotAsErrors>
+    </PropertyGroup>
+  </Target>
 </Project>

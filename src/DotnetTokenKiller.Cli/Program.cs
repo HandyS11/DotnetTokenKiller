@@ -50,7 +50,7 @@ try
     services.AddSingleton<IWorkingDirectory, ProcessWorkingDirectory>();
 
     var registrar = new DtkTypeRegistrar(services);
-    var app = new CommandApp(registrar);
+    var app = SpectreCommandApp.Create(registrar);
 
     app.Configure(config => CliConfigurator.Configure(config, CliConfigurator.DefaultVersion));
 
