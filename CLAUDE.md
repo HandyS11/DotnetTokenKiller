@@ -82,21 +82,26 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
 - `cold-start` times the built `dtk` binary end to end in three scenarios, 55 dtk spawns each (the
   wrapped scenarios also spawn the fake child alone 55 times): `dtk pipe build` with a fixture on
   stdin, and `dtk dotnet build` wrapping a generated shell-script `dotnet` on the child's `PATH`
-  that either exits at once or sleeps 1000 ms first. The wrapped scenarios run the fake child alone
-  and then dtk around it on every iteration, and report the paired difference as dtk's overhead. The
-  instant child is the worst case (nothing for background setup to overlap with); the sleeping child
-  is the best case (an idle CPU). For output this fixture's size (2.6 KB), a real build's cost lies
-  between them; dtk's per-line tee flush and token counting grow with output size, so this bracket
-  says nothing about a much larger build log. Every sample must print the build filter's summary
-  line, because the real SDK found on `PATH` by mistake also exits 1. Needs a POSIX shell. Measured
-  2026-09-12: pipe 287.2 ms; wrapped overhead 285.8 ms (instant child) and 288.4 ms (1000 ms child,
-  wall-clock 1291.0 ms).
+  that either exits at once or sleeps 1000 ms first. The wrapped scenarios pair a run of the fake
+  child alone with a run of dtk around it on every iteration, alternating which goes first, and
+  report the paired difference as dtk's overhead. The instant child is the worst case (background
+  setup can overlap only dtk's own work); the sleeping child is the best case (an idle CPU). For
+  output this fixture's size (2.6 KB), a real build's cost lies between them; dtk's per-line tee
+  flush and token counting grow with output size, so this bracket says nothing about a much larger
+  build log. Every sample must print the build filter's summary line, because the real SDK found on
+  `PATH` by mistake also exits 1. The header prints any `DOTNET_*`/`COMPlus_*` variables and the
+  binary's `runtimeconfig.json` properties, since both move the figures. The tracking database
+  lives under the temp root, tmpfs on the measuring machine, so the ~5.6 ms fsync a tracking
+  `INSERT` costs on ext4 is not in these figures. Needs a POSIX shell. Measured 2026-09-13, before
+  → after starting tracking setup in the background and turning `TieredPGO` off: pipe
+  295.9 → 230.2 ms; wrapped overhead 286.6 → 228.2 ms (instant child) and 288.4 → 185.5 ms (1000 ms
+  child, wall-clock 1188.0 ms).
 - `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
   `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
   in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
   Do not "simplify" this back into a `[Benchmark]`; there is no in-process form of it that is not
   a lie. Measured 2026-09-12: `cl100k_base` median 112.7 ms, `o200k_base` median 173.6 ms, against
-  a 287.9 ms pipe cold-start median on the same machine.
+  a 287.9 ms pipe cold-start median (before the tracking-path changes) on the same machine.
 
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in

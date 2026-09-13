@@ -367,6 +367,89 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_MeasurableSubcommand_StartsTrackerSetupBeforeTheCommandFinishes()
+    {
+        var warmUpStarted = SignalWhenWarmUpStarts();
+        var startedWhileChildRan = false;
+        _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
+                Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                // Captured into a local: VSTHRD003 flags awaiting a Task read directly from a property.
+                var pending = warmUpStarted.Task;
+                var first = await Task.WhenAny(pending, Task.Delay(TimeSpan.FromSeconds(5)));
+                startedWhileChildRan = first == pending;
+                return new CommandResult("publish output", "", 0);
+            });
+
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+
+        startedWhileChildRan.Should().BeTrue();
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_NonMeasurableSubcommand_StartsTrackerSetupBeforeTheCommandFinishes()
+    {
+        var warmUpStarted = SignalWhenWarmUpStarts();
+        var startedWhileChildRan = false;
+        _runner.RunPassthroughAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                // Captured into a local: VSTHRD003 flags awaiting a Task read directly from a property.
+                var pending = warmUpStarted.Task;
+                var first = await Task.WhenAny(pending, Task.Delay(TimeSpan.FromSeconds(5)));
+                startedWhileChildRan = first == pending;
+                return 0;
+            });
+
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", RunArgs);
+
+        startedWhileChildRan.Should().BeTrue();
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_TrackingOffButTeeOn_DoesNotWarmTheTracker()
+    {
+        var config = DtkConfig.Default with { Tracking = new TrackingConfig(Enabled: false) };
+        _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
+                Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("publish output", "", 0));
+
+        await _sut.RunAsync(config, "dotnet", PublishArgs);
+
+        await _tracker.DidNotReceive().WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_TrackerWarmUpThrows_StillRecordsAndKeepsTheExitCode()
+    {
+        _tracker.WarmUpAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("db locked"));
+        _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
+                Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("publish output", "", 4));
+
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+
+        exitCode.Should().Be(4);
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Makes the tracker's warm-up signal the returned source when it starts.</summary>
+    private TaskCompletionSource SignalWhenWarmUpStarts()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _tracker.WarmUpAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                started.TrySetResult();
+                return Task.CompletedTask;
+            });
+        return started;
+    }
+
+    [Fact]
     public async Task RunAsync_FansStdErrToTerminalAndSession()
     {
         // Same proof as RunAsync_FansStdOutToTerminalAndSession, for the stderr sink.

@@ -950,4 +950,125 @@ public class SqliteTrackerTests : IAsyncDisposable
         summary.TotalCommands.Should().Be(2);
         summary.TotalSavedTokens.Should().Be(1700);
     }
+
+    [Fact]
+    public async Task WarmUpAsync_ThenRecordAsync_PersistsExactlyOneRowAsync()
+    {
+        await _sut.WarmUpAsync();
+        await _sut.RecordAsync(MakeRecord());
+
+        var history = await _sut.GetHistoryAsync(1, null);
+
+        history.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Dispose_TrackerNeverUsed_DoesNotThrowEvenTwiceAsync()
+    {
+        // A tracker built for a run with tracking disabled never creates its connection.
+        var syncTracker = new SqliteTracker("Data Source=:memory:");
+        var asyncTracker = new SqliteTracker("Data Source=:memory:");
+
+        var disposeSync = () =>
+        {
+            syncTracker.Dispose();
+            syncTracker.Dispose();
+        };
+        var disposeAsync = async () =>
+        {
+            await asyncTracker.DisposeAsync();
+            await asyncTracker.DisposeAsync();
+        };
+
+        disposeSync.Should().NotThrow();
+        await disposeAsync.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task RecordAsync_AfterWarmUpFailedBeforeOpening_RecoversAsync()
+    {
+        // A file sits where the database's directory must go, so creating the directory throws
+        // before any connection exists. Once it is gone, recording must work.
+        var root = Directory.CreateTempSubdirectory("dtk-warmup-").FullName;
+        var blocker = Path.Combine(root, "blocker");
+        await File.WriteAllTextAsync(blocker, "not a directory");
+        try
+        {
+            await using var tracker =
+                new SqliteTracker($"Data Source={Path.Combine(blocker, "tracking.db")};Pooling=False");
+
+            var warmUp = () => tracker.WarmUpAsync();
+            await warmUp.Should().ThrowAsync<IOException>();
+
+            File.Delete(blocker);
+            await tracker.RecordAsync(MakeRecord());
+
+            (await tracker.GetHistoryAsync(1, null)).Should().ContainSingle();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RecordAsync_AfterWarmUpFailedOnAnOpenedConnection_RecoversAsync()
+    {
+        // A file that is not a SQLite database fails during setup, after the connection was
+        // created. The retry must start from a fresh connection, not reopen the failed one.
+        var root = Directory.CreateTempSubdirectory("dtk-warmup-").FullName;
+        var dbPath = Path.Combine(root, "tracking.db");
+        await File.WriteAllTextAsync(dbPath, new string('x', 4096));
+        try
+        {
+            await using var tracker = new SqliteTracker($"Data Source={dbPath};Pooling=False");
+
+            var warmUp = () => tracker.WarmUpAsync();
+            await warmUp.Should().ThrowAsync<SqliteException>();
+
+            File.Delete(dbPath);
+            await tracker.RecordAsync(MakeRecord());
+
+            (await tracker.GetHistoryAsync(1, null)).Should().ContainSingle();
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task DisposeAsync_WhileWarmUpIsRunning_DoesNotThrowAsync()
+    {
+        // A warm-up can outlive its run (the child failed to launch and the tracker is disposed on
+        // the way out). Disposal runs on the user's path and must be clean; the warm-up itself may
+        // lose the race and see ObjectDisposedException, which TrackingWarmUp discards. Looped
+        // because the race is timing-dependent: this guards the fix but cannot prove its absence.
+        var root = Directory.CreateTempSubdirectory("dtk-warmup-").FullName;
+        try
+        {
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                var dbPath = Path.Combine(root, $"race-{attempt}.db");
+                var tracker = new SqliteTracker($"Data Source={dbPath};Pooling=False");
+                var warmUp = Task.Run(() => tracker.WarmUpAsync());
+
+                var dispose = async () => await tracker.DisposeAsync();
+
+                await dispose.Should().NotThrowAsync();
+                try
+                {
+                    await warmUp;
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Expected when disposal won the race; see the comment above.
+                }
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

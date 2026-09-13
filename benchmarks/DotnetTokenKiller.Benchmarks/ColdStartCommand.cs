@@ -1,5 +1,7 @@
+using System.Collections;
 using System.Globalization;
 using System.Runtime.Versioning;
+using System.Text.Json;
 using DotnetTokenKiller.Benchmarks.Corpus;
 using DotnetTokenKiller.Benchmarks.Corpus.Savings;
 using DotnetTokenKiller.Benchmarks.Support;
@@ -27,9 +29,9 @@ namespace DotnetTokenKiller.Benchmarks;
 /// best case: an idle CPU to overlap with). A real build competes for cores, so for output this
 /// fixture's size (2.6 KB) its cost lies between the two; dtk's per-line tee flush and token
 /// counting grow with output size, so this bracket does not say anything about a much larger build
-/// log. Each iteration times the fake child alone and then dtk wrapping it, and records
-/// the difference: pairing adjacent runs cancels machine drift, which subtracting two separately
-/// collected medians would not.
+/// log. Each iteration times the fake child alone and dtk wrapping it, alternating which runs
+/// first, and records the difference: pairing adjacent runs cancels machine drift, which
+/// subtracting two separately collected medians would not.
 /// </para>
 /// <para>
 /// Hand-written rather than a BenchmarkDotNet job: BenchmarkDotNet would measure its own harness
@@ -93,6 +95,10 @@ internal static class ColdStartCommand
             $"Input: {Fixture} ({input.Length} chars), exit code {ExpectedExitCode}")).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(
             $"Runs per scenario: {WarmupRuns} warmup + {MeasuredRuns} measured").ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"Runtime environment: {DescribeRuntimeEnvironment()}")
+            .ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"Runtime config: {DescribeRuntimeConfig(binary)}")
+            .ConfigureAwait(false);
 
         await MeasurePipeAsync(binary, state, input, summaryLine).ConfigureAwait(false);
 
@@ -143,7 +149,7 @@ internal static class ColdStartCommand
 
     /// <summary>
     /// Scenarios 2 and 3: <c>dtk dotnet build</c> wrapping a <see cref="FakeDotnet"/>, sampled in
-    /// pairs of child alone then dtk wrapping it.
+    /// pairs of child alone and dtk wrapping it, in alternating order.
     /// </summary>
     /// <param name="binary">The dtk binary.</param>
     /// <param name="state">The hermetic state the fake child is written under.</param>
@@ -177,13 +183,21 @@ internal static class ColdStartCommand
 
         for (var i = 0; i < WarmupRuns + MeasuredRuns; i++)
         {
-            var child = await TimedProcess.RunAsync(fake.ScriptPath, []).ConfigureAwait(false);
-            EnsureFakeChildRan(child, fake, input);
-
-            var wrapped = await TimedProcess
-                .RunAsync(binary, arguments, prependToPath: fake.DirectoryPath)
-                .ConfigureAwait(false);
-            EnsureDtkFiltered(wrapped, binary, summaryLine);
+            // Alternate which process runs first. dtk always running straight after an idle child
+            // inflated the sleeping-child scenario by 2-4 ms; alternating cancels that order effect
+            // while keeping each pair adjacent.
+            TimedRun child;
+            TimedRun wrapped;
+            if (i % 2 == 0)
+            {
+                child = await RunFakeChildAsync(fake, input).ConfigureAwait(false);
+                wrapped = await RunWrappedDtkAsync(binary, arguments, fake, summaryLine).ConfigureAwait(false);
+            }
+            else
+            {
+                wrapped = await RunWrappedDtkAsync(binary, arguments, fake, summaryLine).ConfigureAwait(false);
+                child = await RunFakeChildAsync(fake, input).ConfigureAwait(false);
+            }
 
             if (i >= WarmupRuns)
             {
@@ -202,10 +216,88 @@ internal static class ColdStartCommand
         await TimingReport.WriteAsync(wall).ConfigureAwait(false);
     }
 
+    /// <summary>Runs the fake child alone and validates it.</summary>
+    /// <param name="fake">The fake child.</param>
+    /// <param name="input">The fixture text it must print.</param>
+    private static async Task<TimedRun> RunFakeChildAsync(FakeDotnet fake, string input)
+    {
+        var child = await TimedProcess.RunAsync(fake.ScriptPath, []).ConfigureAwait(false);
+        EnsureFakeChildRan(child, fake, input);
+        return child;
+    }
+
+    /// <summary>Runs dtk wrapping the fake child and validates it.</summary>
+    /// <param name="binary">The dtk binary.</param>
+    /// <param name="arguments">dtk's arguments.</param>
+    /// <param name="fake">The fake child, whose directory is prepended to dtk's PATH.</param>
+    /// <param name="summaryLine">The line dtk must print.</param>
+    private static async Task<TimedRun> RunWrappedDtkAsync(
+        string binary, string[] arguments, FakeDotnet fake, string summaryLine)
+    {
+        var wrapped = await TimedProcess
+            .RunAsync(binary, arguments, prependToPath: fake.DirectoryPath)
+            .ConfigureAwait(false);
+        EnsureDtkFiltered(wrapped, binary, summaryLine);
+        return wrapped;
+    }
+
     private static async Task WriteHeadingAsync(string heading)
     {
         await Console.Out.WriteLineAsync().ConfigureAwait(false);
         await Console.Out.WriteLineAsync(heading).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The <c>DOTNET_*</c> and <c>COMPlus_*</c> variables in this process's environment, which every
+    /// spawned dtk inherits. Settings such as <c>DOTNET_TieredPGO</c> or <c>DOTNET_TieredCompilation</c>
+    /// move these timings by tens of milliseconds, so a figure printed without them is not comparable.
+    /// </summary>
+    private static string DescribeRuntimeEnvironment()
+    {
+        var variables = Environment.GetEnvironmentVariables()
+            .Cast<DictionaryEntry>()
+            .Select(entry => (Name: (string)entry.Key, Value: entry.Value as string))
+            .Where(entry => entry.Name.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase)
+                            || entry.Name.StartsWith("COMPlus_", StringComparison.OrdinalIgnoreCase))
+            .Select(entry => $"{entry.Name}={entry.Value}")
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        return variables.Count == 0 ? "none" : string.Join(' ', variables);
+    }
+
+    /// <summary>
+    /// The <c>configProperties</c> of the measured binary's <c>runtimeconfig.json</c>, which carries
+    /// project-level runtime settings such as <c>System.Runtime.TieredPGO</c>.
+    /// </summary>
+    /// <param name="binary">The dtk binary; its runtimeconfig sits beside it.</param>
+    private static string DescribeRuntimeConfig(string binary)
+    {
+        var fullPath = Path.GetFullPath(binary);
+        var path = Path.Combine(
+            Path.GetDirectoryName(fullPath) ?? ".",
+            Path.GetFileNameWithoutExtension(fullPath) + ".runtimeconfig.json");
+
+        if (!File.Exists(path))
+        {
+            // An installed tool's shim on PATH has no runtimeconfig beside it.
+            return "no runtimeconfig.json beside the binary";
+        }
+
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        if (!document.RootElement.TryGetProperty("runtimeOptions", out var options)
+            || !options.TryGetProperty("configProperties", out var properties))
+        {
+            return "no configProperties";
+        }
+
+        var pairs = properties.EnumerateObject()
+            // GetRawText, not ToString: JsonElement.ToString prints a JSON false as "False".
+            .Select(property => $"{property.Name}={property.Value.GetRawText()}")
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        return pairs.Count == 0 ? "no configProperties" : string.Join(' ', pairs);
     }
 
     /// <summary>

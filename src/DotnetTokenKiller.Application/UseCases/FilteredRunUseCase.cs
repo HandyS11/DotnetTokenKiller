@@ -40,6 +40,11 @@ public sealed class FilteredRunUseCase(
 
         var options = new OutputOptions(verbosityLevel, showLogHint, quiet).Normalized();
         var startTimestamp = Stopwatch.GetTimestamp();
+
+        // Before the tee session and the child, so the tokenizer load and the SQLite setup run while
+        // the child does rather than after it exits. After the timestamp, so the recorded elapsed
+        // time still includes the configuration load, as it did when the pipeline loaded it.
+        var prepared = await pipeline.BeginAsync(cancellationToken).ConfigureAwait(false);
         var commandSlug = ResolveCommandSlug(command, args);
         var displayCommandLine = args.Count > 0 ? $"{command} {string.Join(' ', args)}" : command;
 
@@ -79,7 +84,7 @@ public sealed class FilteredRunUseCase(
             options,
             startTimestamp);
 
-        return await pipeline.ProcessAsync(request, session, cancellationToken).ConfigureAwait(false);
+        return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Resolves the name a run is recorded and tee'd under.</summary>

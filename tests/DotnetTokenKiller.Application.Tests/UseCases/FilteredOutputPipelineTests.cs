@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Filters;
@@ -188,5 +189,95 @@ public class FilteredOutputPipelineTests
         await _sut.ProcessAsync(request, session);
 
         await session.Received(1).FinalizeAsync(request.ExitCode, Arg.Any<CancellationToken>());
+    }
+
+    private static DtkConfig TrackingOff =>
+        DtkConfig.Default with { Tracking = DtkConfig.Default.Tracking with { Enabled = false } };
+
+    [Fact]
+    public async Task BeginAsync_TrackingDisabled_DoesNotWarmTheTracker()
+    {
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(TrackingOff);
+
+        var prepared = await _sut.BeginAsync();
+        await prepared.WarmUp.WhenReadyAsync();
+
+        await _tracker.DidNotReceive().WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task BeginAsync_TrackingEnabled_WarmsTheTrackerOnce()
+    {
+        var prepared = await _sut.BeginAsync();
+        await prepared.WarmUp.WhenReadyAsync();
+
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithPreparedRun_DoesNotLoadConfigAgain()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        var prepared = await _sut.BeginAsync();
+        _configProvider.ClearReceivedCalls();
+
+        await _sut.ProcessAsync(Request(), NullTeeSession.Instance, prepared);
+
+        await _configProvider.DidNotReceive().LoadAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithPreparedRun_TracksUnderThePreparedConfig()
+    {
+        // A run is tracked under the settings it started with, whatever the file says by the end.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(TrackingOff);
+        var prepared = new PreparedRun(DtkConfig.Default, TrackingWarmUp.None);
+
+        await _sut.ProcessAsync(Request(), NullTeeSession.Instance, prepared);
+
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_TrackerWarmUpThrows_KeepsOutputAndExitCodeAndStillRecords()
+    {
+        _tracker.WarmUpAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("db locked"));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var prepared = await sut.BeginAsync();
+
+        var exitCode = await sut.ProcessAsync(Request(exitCode: 3), NullTeeSession.Instance, prepared);
+
+        exitCode.Should().Be(3);
+        writer.ToString().Should().Be("filtered");
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WaitsForTheTrackerWarmUpBeforeRecording()
+    {
+        // Loaded up front so a pipeline that skipped the wait would reach RecordAsync well inside
+        // the delay below, instead of being held up by the vocabulary load and passing by accident.
+        TokenEstimator.WarmUp();
+        var warmUp = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _tracker.WarmUpAsync(Arg.Any<CancellationToken>()).Returns(warmUp.Task);
+        var warmUpFinishedWhenRecorded = false;
+        _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                warmUpFinishedWhenRecorded = warmUp.Task.IsCompleted;
+                return Task.CompletedTask;
+            });
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        var prepared = await _sut.BeginAsync();
+
+        var processing = _sut.ProcessAsync(Request(), NullTeeSession.Instance, prepared);
+        await Task.Delay(200);
+        warmUp.SetResult();
+        await processing;
+
+        warmUpFinishedWhenRecorded.Should().BeTrue();
     }
 }

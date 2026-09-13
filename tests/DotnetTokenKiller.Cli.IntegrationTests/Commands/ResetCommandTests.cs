@@ -132,6 +132,11 @@ public class ResetCommandTests
             return Task.CompletedTask;
         }
 
+        public Task WarmUpAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task<GainSummary> GetSummaryAsync(int days, string? projectPath,
             string? commandFilter = null, CancellationToken cancellationToken = default)
         {

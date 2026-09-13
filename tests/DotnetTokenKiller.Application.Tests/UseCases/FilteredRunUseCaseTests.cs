@@ -1064,4 +1064,35 @@ public class FilteredRunUseCaseTests
             Arg.Is<CommandRecord>(r => r.Command == "list package"),
             Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task RunAsync_StartsTrackingSetupBeforeTheCommandFinishes()
+    {
+        // The overlap with the child is the whole saving. The fake child waits (bounded) for the
+        // warm-up to start, so a use case that starts it only after the child exits fails here.
+        var warmUpStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _tracker.WarmUpAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                warmUpStarted.TrySetResult();
+                return Task.CompletedTask;
+            });
+        var startedWhileChildRan = false;
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                // Captured into a local: VSTHRD003 flags awaiting a Task read directly from a property.
+                var pending = warmUpStarted.Task;
+                var first = await Task.WhenAny(pending, Task.Delay(TimeSpan.FromSeconds(5)));
+                startedWhileChildRan = first == pending;
+                return new CommandResult("out", "", 0);
+            });
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        startedWhileChildRan.Should().BeTrue();
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
+    }
 }
