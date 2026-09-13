@@ -34,11 +34,13 @@ dtk dotnet list package --outdated
 # Run the benchmark suite (Release only; the full run takes tens of minutes)
 dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- --filter '*FilterBenchmarks*'
 
-# Measure the end-to-end cold-start cost of the Release build (piped, and wrapping a fake dotnet; ~3 min, Linux/macOS).
-# It carries the AOT feature switches (PublishAot=true in the csproj), so it is neither the shipped `any` fallback nor
-# the AOT binary; for those, pass an installed tool's binary path to `cold-start`.
+# Measure the end-to-end cold-start cost of the Release build (piped, and wrapping a fake dotnet, the
+# fourth scenario printing a 1024 KB generated log; ~4 min, Linux/macOS). It carries the AOT feature
+# switches (PublishAot=true in the csproj), so it is neither the shipped `any` fallback nor the AOT
+# binary; for those, pass an installed tool's binary path to `cold-start`. `--state-dir <dir>` puts the
+# hermetic state (and its tracking database) on a real disk instead of the temp root's default tmpfs.
 dotnet build src/DotnetTokenKiller.Cli -c Release
-dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start
+dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start [dtk] [--state-dir <dir>]
 
 # Measure the one-time tiktoken vocabulary load (one fresh process per sample, ~10s)
 dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- tokenizer-load
@@ -101,23 +103,32 @@ Performance here has two dimensions, gated differently:
 
 Two costs cannot be measured in process and have their own verbs instead of BenchmarkDotNet jobs:
 
-- `cold-start` times the built `dtk` binary end to end in three scenarios, 55 dtk spawns each (the
+- `cold-start` times the built `dtk` binary end to end in four scenarios, 55 dtk spawns each (the
   wrapped scenarios also spawn the fake child alone 55 times): `dtk pipe build` with a fixture on
   stdin, and `dtk dotnet build` wrapping a generated shell-script `dotnet` on the child's `PATH`
-  that either exits at once or sleeps 1000 ms first. The wrapped scenarios pair a run of the fake
-  child alone with a run of dtk around it on every iteration, alternating which goes first, and
-  report the paired difference as dtk's overhead. The instant child is the worst case (background
-  setup can overlap only dtk's own work); the sleeping child is the best case (an idle CPU). For
-  output this fixture's size (2.6 KB), a real build's cost lies between them; dtk's per-line tee
-  flush and token counting grow with output size, so this bracket says nothing about a much larger
-  build log. Every sample must print the build filter's summary line, because the real SDK found on
-  `PATH` by mistake also exits 1. The header prints any `DOTNET_*`/`COMPlus_*` variables and the
-  binary's `runtimeconfig.json` properties, since both move the figures. The tracking database
-  lives under the temp root, tmpfs on the measuring machine, so the ~5.6 ms fsync a tracking
-  `INSERT` costs on ext4 is not in these figures. Needs a POSIX shell. Measured 2026-09-13, before
-  → after starting tracking setup in the background and turning `TieredPGO` off: pipe
-  295.9 → 230.2 ms; wrapped overhead 286.6 → 228.2 ms (instant child) and 288.4 → 185.5 ms (1000 ms
-  child, wall-clock 1188.0 ms).
+  that either exits at once, sleeps 1000 ms first, or sleeps 1000 ms first and prints a 1024 KB
+  generated build log. The wrapped scenarios pair a run of the fake child alone with a run of dtk
+  around it on every iteration, alternating which goes first, and report the paired difference as
+  dtk's overhead. The instant child is the worst case (background setup can overlap only dtk's own
+  work); the sleeping child is the best case (an idle CPU). For output this fixture's size (2.6 KB),
+  a real build's cost lies between them; dtk's per-line tee flush and token counting grow with
+  output size, so that bracket says nothing about a much larger build log — the fourth scenario
+  keeps the same idle-CPU sleeping child but swaps in the 1024 KB log, isolating the counting-and-
+  tee cost at that size from process-spawn overhead. Every sample must print the build filter's
+  summary line, because the real SDK found on `PATH` by mistake also exits 1. The header prints any
+  `DOTNET_*`/`COMPlus_*` variables, the binary's `runtimeconfig.json` properties, and a
+  `State: <root> (<filesystem>)` line, since all three move the figures: state defaults to the temp
+  root (tmpfs on the measuring machine) or, with `--state-dir <dir>`, a caller-chosen directory on a
+  real disk. Needs a POSIX shell. Measured 2026-09-13, before → after starting tracking setup in the
+  background and turning `TieredPGO` off: pipe 295.9 → 230.2 ms; wrapped overhead 286.6 → 228.2 ms
+  (instant child) and 288.4 → 185.5 ms (1000 ms child, wall-clock 1188.0 ms). Measured 2026-09-14,
+  tmpfs → ext4, both against the same local AOT publish (host toolchain, SQLite linked in): pipe
+  63.9 → 75.5 ms; wrapped overhead 61.9 → 74.9 ms (instant child), 28.8 → 179.1 ms (1000 ms child),
+  and 185.7 → 307.1 ms (1000 ms child, 1 MB log). The medians show every scenario costing more on
+  disk than on tmpfs, with the 1000 ms-child scenario rising far more (150.3 ms) than pipe or the
+  instant child (11.6 ms and 13.0 ms) — more than the ext4 fsync cost alone accounts for — and the
+  disk run's variance was much wider throughout (e.g. 1000 ms-child p95 571.4 ms, max 981.8 ms,
+  against tmpfs's 25.6–31.8 ms full range).
 - `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
   `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
   in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
