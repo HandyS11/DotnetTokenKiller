@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- Trim, AOT and single-file analyzers in every build: the CLI ships as Native AOT. -->
+    <IsAotCompatible>true</IsAotCompatible>
     <RootNamespace>DotnetTokenKiller.Domain</RootNamespace>
   </PropertyGroup>
   <ItemGroup>

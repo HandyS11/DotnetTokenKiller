@@ -134,8 +134,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
             ["version"] = 1,
             ["hooks"] = new JsonObject
             {
-                ["preToolUse"] = new JsonArray
-                {
+                ["preToolUse"] = new JsonArray(
                     new JsonObject
                     {
                         ["type"] = "command",
@@ -143,8 +142,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
                         ["bash"] = $"python3 {HookScriptName}",
                         ["cwd"] = cwd,
                         ["timeoutSec"] = 10
-                    }
-                }
+                    })
             }
         };
 

@@ -83,7 +83,7 @@ internal sealed partial class RtkHookCoexistence
             }
 
             var text = await File.ReadAllTextAsync(_rtkConfigPath, cancellationToken).ConfigureAwait(false);
-            if (!TomlSerializer.TryDeserialize<TomlTable>(text, out var model))
+            if (!TomlSerializer.TryDeserialize(text, RtkTomlContext.Default, out TomlTable? model))
             {
                 return new RtkReconcileOutcome(null, null, [AdviceNote()]);
             }
@@ -141,7 +141,7 @@ internal sealed partial class RtkHookCoexistence
     /// <param name="text">The candidate rtk config TOML text to check.</param>
     private static bool ConfigTextExcludesDotnet(string text)
     {
-        if (!TomlSerializer.TryDeserialize<TomlTable>(text, out var model))
+        if (!TomlSerializer.TryDeserialize(text, RtkTomlContext.Default, out TomlTable? model))
         {
             return false;
         }

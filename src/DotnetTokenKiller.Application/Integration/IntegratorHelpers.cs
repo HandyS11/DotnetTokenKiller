@@ -294,14 +294,12 @@ internal static class IntegratorHelpers
             new JsonObject
             {
                 ["matcher"] = spec.Matcher,
-                ["hooks"] = new JsonArray
-                {
+                ["hooks"] = new JsonArray(
                     new JsonObject
                     {
                         ["type"] = "command",
                         ["command"] = spec.Command
-                    }
-                }
+                    })
             },
             spec.Command,
             context,
@@ -383,7 +381,8 @@ internal static class IntegratorHelpers
         }
         else
         {
-            hookArray.Add(hookEntry);
+            // The JsonNode overload: Add<JsonObject> is neither trim- nor AOT-safe.
+            hookArray.Add((JsonNode)hookEntry);
         }
 
         hooks[hookEventKey] = hookArray;
