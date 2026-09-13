@@ -1,4 +1,4 @@
-**Status:** Designed; the implementation plan follows.
+**Status:** Implemented — see [the plan](../plans/2026-09-13-linux-windows-aot.md).
 
 ## Context
 
