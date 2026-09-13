@@ -33,6 +33,27 @@ public sealed class AotWarningLogTests
     }
 
     [Fact]
+    public void FindProblems_WindowsDriveLetterPaths_AreParsedWhole()
+    {
+        // The origin group is lazy, so it first stops at the drive letter's colon; the match only
+        // succeeds once it extends to the colon before "warning", keeping the whole path.
+        const string windowsAccepted =
+            @"C:\Users\runneradmin\.nuget\packages\spectre.console.cli\0.55.0\lib\net10.0\Spectre.Console.Cli.dll : warning IL2104: Assembly 'Spectre.Console.Cli' produced trim warnings. [D:\a\repo\src\DotnetTokenKiller.Cli\DotnetTokenKiller.Cli.csproj]"
+            + "\n"
+            + @"C:\Users\runneradmin\.nuget\packages\spectre.console.cli\0.55.0\lib\net10.0\Spectre.Console.Cli.dll : warning IL3053: Assembly 'Spectre.Console.Cli' produced AOT analysis warnings. [D:\a\repo\src\DotnetTokenKiller.Cli\DotnetTokenKiller.Cli.csproj]"
+            + "\n"
+            + SpectreSingleFile
+            + "\n";
+        const string ours =
+            @"D:\a\repo\src\DotnetTokenKiller.Application\Integration\IntegratorHelpers.cs(386): Trim analysis warning IL2026: DotnetTokenKiller.Application.Integration.IntegratorHelpers.MergeJsonSettingsAsync(): Using member 'System.Text.Json.Nodes.JsonArray.Add<JsonObject>(JsonObject)' [D:\a\repo\src\DotnetTokenKiller.Cli\DotnetTokenKiller.Cli.csproj]";
+
+        AotWarningLog.FindProblems(windowsAccepted).Should().BeEmpty(
+            "Spectre's warnings with Windows paths are still the accepted ones");
+        AotWarningLog.FindProblems(windowsAccepted + ours).Should().ContainSingle().Which.Should().Contain(
+            @"IL2026 from D:\a\repo\src\DotnetTokenKiller.Application\Integration\IntegratorHelpers.cs(386)");
+    }
+
+    [Fact]
     public void FindProblems_AcceptedCodeFromAnotherAssembly_IsReported()
     {
         const string other =

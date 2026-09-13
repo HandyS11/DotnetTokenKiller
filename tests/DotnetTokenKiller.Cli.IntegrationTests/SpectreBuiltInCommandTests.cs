@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 using Xunit;
 
@@ -21,7 +22,10 @@ public sealed class SpectreBuiltInCommandTests
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync(arguments);
 
-        exitCode.Should().Be(0, output);
-        output.Should().Contain(expected).And.NotContain("Could not resolve type");
+        // Spectre colours its output when it detects a CI service such as GitHub Actions, and
+        // `cli version` colours the library name apart from the word after it.
+        var text = AnsiStrip.Strip(output);
+        exitCode.Should().Be(0, text);
+        text.Should().Contain(expected).And.NotContain("Could not resolve type");
     }
 }
