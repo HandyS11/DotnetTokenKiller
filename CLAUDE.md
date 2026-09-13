@@ -115,10 +115,11 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
   a lie. Measured 2026-09-12: `cl100k_base` median 112.7 ms, `o200k_base` median 173.6 ms, against
   a 287.9 ms pipe cold-start median (before the tracking-path changes) on the same machine.
 
-Native AOT, measured 2026-09-13, JIT (`bin/Release`) → AOT (linux-x64 tool package installed from a
-local feed; the shim is a symlink to the binary): pipe 224.6 → 65.0 ms; wrapped overhead 217.7 → 63.6 ms
-(instant child) and 182.5 → 29.4 ms (1000 ms child); `dtk --version` 109.1 → 12.5 ms; tracking off
-203.9 → 14.4 ms. Under AOT, tracking (tokenizer load, counting, SQLite) is 50.6 ms of the pipe figure.
+Native AOT, measured 2026-09-13, JIT (the `any` fallback package installed from a local feed) → AOT
+(linux-x64 tool package installed from a local feed; the shim is a symlink to the binary): pipe
+238.9 → 65.0 ms; wrapped overhead 225.5 → 63.6 ms (instant child) and 186.8 → 29.4 ms (1000 ms child);
+`dtk --version` 112.9 → 12.5 ms; tracking off 207.2 → 14.4 ms. Under AOT, tracking (tokenizer load,
+counting, SQLite) is 50.6 ms of the pipe figure.
 
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in
@@ -129,7 +130,10 @@ the workflow's `filter` input cannot go green with an empty artifact.
 The tool ships as RID-specific packages: native AOT for linux-x64, linux-arm64, osx-arm64 and win-x64,
 and the framework-dependent `any` package everywhere else (`ToolPackageRuntimeIdentifiers` in the CLI
 csproj). CI's `aot-package.yml` packs each RID on its own OS, installs the tool from a local feed and runs
-`AotParityTests` against it; `publish.yml` pushes the RID packages before the pointer.
+`AotParityTests` against it; `publish.yml` pushes the RID packages before the pointer. A local Release
+build of the CLI now carries the AOT feature switches in its runtimeconfig (`PublishAot=true` in the
+csproj), so `cold-start` on `bin/Release` measures an AOT-like JIT build, not the shipped fallback;
+measure the installed `any` package for fallback figures.
 
 Spectre.Console.Cli does not support Native AOT. dtk keeps it under a contained exception
 (docs/superpowers/specs/2026-09-13-native-aot-design.md): both `dtk` and `Spectre.Console.Cli` are

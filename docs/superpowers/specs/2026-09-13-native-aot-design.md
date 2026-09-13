@@ -405,7 +405,10 @@ compared only with its own baseline.
 
 1. **Baseline, before any change under `src/`:** `dotnet build src/DotnetTokenKiller.Cli -c Release`
    on `perf/native-aot` at the spec commit.
-2. **Final JIT:** the same build after all code changes. This is what the `any` fallback runs.
+2. **Final JIT:** the `any` fallback package packed at the final commit and installed from a local
+   feed. A plain Release build is not equivalent: with `PublishAot=true` in the csproj, its
+   runtimeconfig carries the AOT feature switches, while the `any` pack (`-p:PublishAot=false`)
+   keeps the original three properties.
 3. **Final AOT:** the linux-x64 RID package packed and installed from a local feed. `cold-start`
    points at the installed binary, which on Linux is what the shim links to.
 
@@ -499,3 +502,10 @@ Also observed: ILC reports that Spectre.Console.Cli's `OpenCliParser.Parse` "wil
 because Spectre.Console.Cli 0.55.0 references NJsonSchema without declaring the dependency
 (spectreconsole/spectre.console.cli#84). The JIT build has the same gap. dtk never parses OpenCLI
 documents; `cli opencli` generates one, and works in both builds.
+
+- **Found during Task 10's execution (review).** A plain `bin/Release` build is not the shipped
+  fallback: `PublishAot=true` in the csproj means its runtimeconfig now carries the AOT feature
+  switches, the same ones the linux-x64 tool's ILC compile applies. The `any` pack
+  (`-p:PublishAot=false`) keeps the original three properties instead. Task 10's final JIT figures
+  and the Measurement protocol above were corrected to measure the installed `any` package rather
+  than `bin/Release`.
