@@ -24,7 +24,11 @@ while IFS= read -r file; do
     fi
     elf_count=$((elf_count + 1))
     name=${file#"$work/package/"}
-    highest=$(readelf --version-info -W "$file" | grep -o 'GLIBC_[0-9][0-9.]*' | sed 's/^GLIBC_//' | sort -uV | tail -n 1)
+    if ! readelf --version-info -W "$file" > "$work/version-info"; then
+        echo "::error::readelf failed on $name"
+        exit 1
+    fi
+    highest=$(grep -o 'GLIBC_[0-9][0-9.]*' "$work/version-info" | sed 's/^GLIBC_//' | sort -uV | tail -n 1)
     if [ -z "$highest" ]; then
         echo "$name: needs no versioned glibc symbol"
         continue

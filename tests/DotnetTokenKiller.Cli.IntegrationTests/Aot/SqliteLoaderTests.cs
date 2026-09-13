@@ -35,7 +35,10 @@ public sealed class SqliteLoaderTests
         }
         finally
         {
-            Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
         }
     }
 

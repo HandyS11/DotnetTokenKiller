@@ -147,7 +147,7 @@ The tool ships as RID-specific packages: native AOT for linux-x64, linux-arm64, 
 linux-musl-arm64 and osx-arm64, and the framework-dependent `any` package everywhere else, Windows included
 (`ToolPackageRuntimeIdentifiers` in the CLI csproj). Windows has no AOT package because the SDK's shim for a
 native tool is a `dtk.cmd` batch file: Git Bash, Claude Code's shell on Windows, cannot run it, and cmd
-re-parses `| & ^ %` in arguments from pwsh (docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md).
+re-parses `| & ^ %` in arguments from pwsh and Git Bash (docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md).
 The musl RIDs must stay listed: the SDK's RID graph maps them to the glibc RIDs, so Alpine would otherwise
 install a binary that cannot run there.
 
@@ -166,9 +166,11 @@ linux-x64 and linux-arm64 link SQLite statically (`DtkLinkSqliteStatically` in t
 SQLitePCLRaw's `libe_sqlite3.so` needs GLIBC_2.34 (ericsink/SQLitePCL.raw#674). glibc 2.27 has no `fcntl64`,
 so the `CompileFcntl64Shim` target compiles `Native/fcntl64.c` and passes the object as a `LinkerArg`. Do not
 turn it into a `NativeLibrary` item (it is added after the ILC targets copy those into the link, which then
-fails with "undefined symbol: fcntl64") or a `-Wl,--defsym` alias (lld rejects it). `-p:DtkLinkSqliteStatically=false`
-packs a dynamic build for comparisons. A local publish without `-p:SysRoot` compiles the shim with the host's
-clang and needs the host's glibc; only `pack-linux.sh` packs carry the 2.27 floor. The `any` package still
+fails with "undefined symbol: fcntl64") or a `-Wl,--defsym` alias (lld rejects it). `LinkNative` does not list
+the shim object as an input, so after editing only `Native/fcntl64.c` delete `obj/` before publishing again.
+`-p:DtkLinkSqliteStatically=false` packs a dynamic build for comparisons. A local publish without `-p:SysRoot`
+compiles the shim with the host's C compiler (clang, or gcc through the ILC fallback) and needs the host's
+glibc; only `pack-linux.sh` packs carry the 2.27 floor. The `any` package still
 cannot track on glibc < 2.34. With SQLite linked in, `LD_DEBUG=files` no longer shows whether tracking off
 loads SQLite; `SqliteLoaderTests` checks that on macOS with `DYLD_PRINT_LIBRARIES`.
 

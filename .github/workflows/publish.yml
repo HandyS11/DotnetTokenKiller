@@ -67,6 +67,7 @@ jobs:
             test-image: ''
             glibc: true
             run-integration-suite: false
+          # The musl test jobs build with the Alpine image's SDK, which must satisfy global.json.
           - rid: linux-musl-x64
             pack-runner: ubuntu-latest
             test-runner: ubuntu-latest

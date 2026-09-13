@@ -1875,7 +1875,7 @@ cannot be started from Git Bash and re-parses `|`, `&`, `^` and `%` in arguments
 `dotnet tool update`, tool manifests and `dnx` all pick the right package for the machine.
 ```
 
-In `README.md` only, add after that paragraph:
+In all three files, add after that paragraph:
 
 ```markdown
 The framework-dependent build cannot record token savings on glibc older than 2.34, because its SQLite

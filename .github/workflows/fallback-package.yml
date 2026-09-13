@@ -153,6 +153,8 @@ jobs:
           DTK_DB_PATH: ${{ runner.temp }}\smoke\tracking.db
           DTK_TEE_DIR: ${{ runner.temp }}\smoke\logs
         run: |
+          # dtk's expected error goes to stderr; with 2>&1 it must not become a terminating error.
+          $ErrorActionPreference = 'Continue'
           $env:PATH = "$env:DTK_TOOLS;$env:PATH"
           (Get-Command dtk).Source
           dtk --version

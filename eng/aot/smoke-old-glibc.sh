@@ -25,7 +25,7 @@ if [ "${1:-}" = "--in-container" ]; then
     fi
 
     /tools/dtk gain --json > "$state/gain.json"
-    if ! grep -q '"TotalCommands":1,' "$state/gain.json"; then
+    if ! grep -Eq '"TotalCommands": ?1[,}]' "$state/gain.json"; then
         cat "$state/gain.json"
         echo "::error::the pipe run was not recorded in the tracking database"
         exit 1
