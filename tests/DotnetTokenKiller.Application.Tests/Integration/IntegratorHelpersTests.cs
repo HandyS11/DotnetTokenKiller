@@ -1353,6 +1353,71 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
+    public async Task MergeJsonSettingsAsync_VariantRegisteredBeforeIdenticalCommand_KeepsTheIdenticalEntry()
+    {
+        // Reviewer-caught bug (PR #148): the multi-match branch used to upgrade matches[0] in place
+        // and drop the rest, so which registration survived depended on array order. With the variant
+        // ahead of the already-identical command, that deleted the identical entry — and the extra
+        // "timeout" property living on it — keeping the variant's entry instead. The already-identical
+        // registration must survive regardless of position.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string currentCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        const string wholePathQuotedVariant = "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py\"";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = wholePathQuotedVariant,
+                                ["timeout"] = 5
+                            }
+                        }
+                    },
+                    new JsonObject
+                    {
+                        ["matcher"] = "Bash",
+                        [HooksProperty] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["type"] = "command",
+                                ["command"] = currentCommand,
+                                ["timeout"] = 30
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(currentCommand), currentCommand, context, CancellationToken.None);
+
+        var written = await File.ReadAllTextAsync(path);
+        var root = (JsonObject)JsonNode.Parse(written)!;
+        var outerEntries = root[HooksProperty]!["PreToolUse"]!.AsArray();
+        var innerHooks = outerEntries.SelectMany(entry => entry![HooksProperty]!.AsArray()).ToList();
+
+        outerEntries.Should().ContainSingle("the variant's outer entry must be dropped entirely, not just downgraded");
+        innerHooks.Should().ContainSingle().Which!["command"]!.GetValue<string>().Should().Be(currentCommand);
+        innerHooks[0]!["timeout"]!.GetValue<int>().Should()
+            .Be(30, "the already-identical registration survived, carrying its own extra properties with it");
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+    }
+
+    [Fact]
     public async Task MergeJsonSettingsAsync_NewFile_EscapesEmbeddedQuotesAsBackslashQuoteNotUnicodeEscape()
     {
         // dtk's own hook command embeds literal quotes around the env var, so every merge writes at

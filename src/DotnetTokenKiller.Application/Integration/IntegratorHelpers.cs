@@ -410,13 +410,17 @@ internal static class IntegratorHelpers
         }
         else
         {
-            // Upgrade the first match in place — a no-op if it already held the identical command —
-            // then drop every other equivalent/legacy match so exactly one registration survives.
-            matches[0]["command"] = hookCommand;
+            // Prefer an already-identical registration when one exists — keeping it (rather than
+            // whichever match happens to be first) preserves any extra properties it carries (e.g.
+            // "timeout") and minimizes churn. Otherwise upgrade the first match in place. Every
+            // other equivalent/legacy match is then dropped so exactly one registration survives.
+            var survivor = matches.Find(match => match["command"]!.GetValue<string>() == hookCommand) ?? matches[0];
+            survivor["command"] = hookCommand;
 
-            if (matches.Count > 1)
+            var toRemove = matches.FindAll(match => !ReferenceEquals(match, survivor));
+            if (toRemove.Count > 0)
             {
-                RemoveEntries(hookArray, [.. matches.Skip(1)]);
+                RemoveEntries(hookArray, toRemove);
             }
         }
 
