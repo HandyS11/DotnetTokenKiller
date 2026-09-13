@@ -536,8 +536,9 @@ documents; `cli opencli` generates one, and works in both builds.
 3. **Pre-existing, independent of AOT:** SQLitePCLRaw.lib.e_sqlite3 3.53.3's `libe_sqlite3.so` needs
    GLIBC_2.34 (ericsink/SQLitePCL.raw#674), so tracking already fails on those distros in the
    released framework-dependent tool. Statically linking `libe_sqlite3.a` fixed it in the probe.
-4. **Status:** not fixed on this branch; no release tag until the user decides. Options: cross-sysroot
-   and musl RID jobs; Linux through `any` for now; or accept and document.
+4. **Status:** addressed by [the Linux and Windows AOT spec](2026-09-13-linux-windows-aot-design.md):
+   cross-sysroot and musl RID packages, SQLite linked into the glibc binaries, and Windows on the `any`
+   package.
 
 Probe recipe, recorded here because the throwaway probe directory was deleted:
 

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
@@ -80,19 +79,23 @@ internal static partial class ParityRunner
     private static async Task<(string Output, int ExitCode)> RunStepAsync(
         string executable, ParitySandbox sandbox, ParityStep step)
     {
-        var psi = new ProcessStartInfo(executable)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            WorkingDirectory = sandbox.Project,
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
+        var stdin = step.StdinFixture is null ? null : await File.ReadAllTextAsync(FixturePath(step.StdinFixture));
+        var output = await ParityProcess.RunAsync(CreateStartInfo(executable, sandbox, step.Arguments), stdin);
+        return (output.Stdout + output.Stderr, output.ExitCode);
+    }
 
-        foreach (var argument in step.Arguments)
+    /// <summary>
+    /// A start for <paramref name="executable"/> confined to <paramref name="sandbox"/>: dtk's config, database
+    /// and tee logs, the home directories and the fake <c>dotnet</c>, if any, all point into it.
+    /// </summary>
+    /// <param name="executable">The dtk binary to run.</param>
+    /// <param name="sandbox">The sandbox to run in.</param>
+    /// <param name="arguments">Arguments for dtk; <c>{project}</c> is replaced with the sandbox's project directory.</param>
+    internal static ProcessStartInfo CreateStartInfo(string executable, ParitySandbox sandbox, IEnumerable<string> arguments)
+    {
+        var psi = new ProcessStartInfo(executable) { WorkingDirectory = sandbox.Project };
+
+        foreach (var argument in arguments)
         {
             psi.ArgumentList.Add(argument.Replace("{project}", sandbox.Project, StringComparison.Ordinal));
         }
@@ -112,21 +115,7 @@ internal static partial class ParityRunner
             psi.Environment["PATH"] = sandbox.FakeDotnetDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
         }
 
-        using var process = Process.Start(psi)
-                            ?? throw new InvalidOperationException($"Failed to start '{executable}'.");
-
-        if (step.StdinFixture is not null)
-        {
-            await process.StandardInput.WriteAsync(await File.ReadAllTextAsync(FixturePath(step.StdinFixture)));
-        }
-
-        process.StandardInput.Close();
-
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-        await Task.WhenAll(stdout, stderr);
-        await process.WaitForExitAsync();
-        return (await stdout + await stderr, process.ExitCode);
+        return psi;
     }
 
     private static Dictionary<string, string> ReadFiles(ParitySandbox sandbox)

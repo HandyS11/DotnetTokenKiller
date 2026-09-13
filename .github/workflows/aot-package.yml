@@ -2,23 +2,38 @@ name: AOT package
 
 # Packs, installs and tests the Native AOT tool package for one runtime identifier. Called by CI on
 # every push and pull request, and by Publish for a release, so a release is built and checked
-# exactly the way every PR is.
+# exactly the way every PR is. Linux RIDs pack in Microsoft's cross-build images against old
+# sysroots (eng/aot/pack-linux.sh) and are tested on a runner of their own architecture.
 
 on:
   workflow_call:
     inputs:
       rid:
-        description: Runtime identifier to pack, e.g. linux-x64. Must be native to the runner's OS.
-        required: true
-        type: string
-      runner:
-        description: GitHub-hosted runner label that runs the RID's binary natively.
+        description: Runtime identifier to pack, e.g. linux-x64.
         required: true
         type: string
       version:
-        description: Package version, passed to the build and to both packs.
+        description: Package version, passed to the builds and to every pack.
         required: true
         type: string
+      pack-runner:
+        description: Runner that packs. ubuntu-latest for Linux RIDs (cross-build images), macos-latest for osx-arm64.
+        required: true
+        type: string
+      test-runner:
+        description: Runner whose OS and architecture run the RID's binary natively.
+        required: true
+        type: string
+      test-image:
+        description: Container image the tests run in (the musl RIDs); empty to run them on the runner.
+        required: false
+        type: string
+        default: ''
+      glibc:
+        description: Check the package's glibc floor and smoke-test the installed tool on Rocky Linux 8.
+        required: false
+        type: boolean
+        default: false
       run-integration-suite:
         description: Also run the whole CLI integration suite against the installed binary.
         required: false
@@ -29,9 +44,10 @@ permissions:
   contents: read
 
 jobs:
-  package:
-    name: ${{ inputs.rid }}
-    runs-on: ${{ inputs.runner }}
+  pack:
+    name: pack
+    runs-on: ${{ inputs.pack-runner }}
+    timeout-minutes: 45
     env:
       DOTNET_NOLOGO: '1'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
@@ -51,92 +67,29 @@ jobs:
           cache: true
           cache-dependency-path: Directory.Packages.props
 
-      - name: Install Native AOT prerequisites
+      # Each cross-build image is about 7 GB; the runner's preinstalled Android, GHC and CodeQL
+      # toolchains are not needed here.
+      - name: Free disk space
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
 
-      # The parity tests compare against this JIT build, so it must carry the packs' version or
-      # `--version` differs between the two.
-      - name: Build
-        run: dotnet build DotnetTokenKiller.slnx -c Release -p:Version="$VERSION"
+      - name: Pack the AOT package in the cross-build image
+        if: runner.os == 'Linux'
+        run: sh eng/aot/pack-linux.sh "$RID" "$VERSION" artifacts/feed "artifacts/pack-$RID.log"
 
       - name: Pack the AOT package
+        if: runner.os == 'macOS'
         run: >-
           dotnet pack src/DotnetTokenKiller.Cli -c Release -r "$RID"
           -p:IncludeSymbols=false -p:Version="$VERSION" -o artifacts/feed
           "-flp:LogFile=artifacts/pack-$RID.log;Verbosity=minimal"
 
-      - name: Pack the pointer package
-        run: dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false -p:Version="$VERSION" -o artifacts/feed
-
-      - name: Install the tool from the local feed
-        run: |
-          # A relative source resolves against the config file's directory. An absolute "$(pwd)" path
-          # would be POSIX-style (/d/a/...) under Git Bash on Windows, which NuGet cannot read.
-          # nuget.org stays reachable for everything except dtk's own packages: on an arm64 Mac the SDK
-          # downloads microsoft.netcore.app.host.osx-x64 while installing a tool whose pointer targets
-          # `any`, and the mapping keeps DotnetTokenKiller* coming from the local feed only.
-          cat > artifacts/feed.nuget.config <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <configuration>
-            <packageSources>
-              <clear />
-              <add key="local" value="feed" />
-              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
-            </packageSources>
-            <packageSourceMapping>
-              <packageSource key="local">
-                <package pattern="DotnetTokenKiller*" />
-              </packageSource>
-              <packageSource key="nuget.org">
-                <package pattern="*" />
-              </packageSource>
-            </packageSourceMapping>
-          </configuration>
-          EOF
-          tools="$RUNNER_TEMP/dtk-tools"
-          dotnet tool install --tool-path "$tools" --configfile artifacts/feed.nuget.config DotnetTokenKiller --version "$VERSION"
-
-          version_lower="$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')"
-          store="$tools/.store/dotnettokenkiller/$version_lower/dotnettokenkiller.$RID"
-          if [ ! -d "$store" ]; then
-            echo "::error::Expected $store: the install did not pick the $RID package."
-            ls -R "$tools/.store"
-            exit 1
-          fi
-
-          binary="$tools/dtk"
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            # On Windows the SDK's shim for a native tool is dtk.cmd, a batch file forwarding to the
-            # package's dtk.exe. cmd re-parses arguments, so the tests run the exe it forwards to.
-            if [ ! -f "$tools/dtk.cmd" ]; then
-              echo "::error::Expected the shim $tools/dtk.cmd."
-              ls "$tools"
-              exit 1
-            fi
-            binary="$store/$version_lower/tools/any/$RID/dtk.exe"
-          fi
-          if [ ! -f "$binary" ]; then
-            echo "::error::Expected the installed binary $binary."
-            ls -R "$tools"
-            exit 1
-          fi
-          echo "DTK_INSTALLED=$binary" >> "$GITHUB_ENV"
-
-      # DTK_AOT_REQUIRED=1 makes a missing binary or pack log fail these tests instead of skipping them.
-      - name: Check the AOT warnings and parity
-        env:
-          DTK_AOT_REQUIRED: '1'
-        run: >-
-          DTK_AOT_PACK_LOG="$(pwd)/artifacts/pack-$RID.log" DTK_AOT_BINARY="$DTK_INSTALLED"
-          dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build
-          --filter "FullyQualifiedName~DotnetTokenKiller.Cli.IntegrationTests.Aot" --verbosity normal
-
-      - name: Run the integration suite against the installed binary
-        if: inputs.run-integration-suite
-        run: >-
-          DTK_TEST_BINARY="$DTK_INSTALLED"
-          dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build --verbosity normal
+      - name: Check the glibc floor
+        if: inputs.glibc
+        run: sh eng/aot/check-glibc-floor.sh "artifacts/feed/DotnetTokenKiller.$RID.$VERSION.nupkg"
 
       - name: Upload the package
         uses: actions/upload-artifact@v7
@@ -146,13 +99,77 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload the pack log
+        uses: actions/upload-artifact@v7
+        with:
+          name: packlog-${{ inputs.rid }}
+          path: artifacts/pack-${{ inputs.rid }}.log
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload the native symbols
         uses: actions/upload-artifact@v7
         with:
           name: symbols-${{ inputs.rid }}
           path: |
             src/DotnetTokenKiller.Cli/bin/Release/net10.0/${{ inputs.rid }}/native/dtk.dbg
-            src/DotnetTokenKiller.Cli/bin/Release/net10.0/${{ inputs.rid }}/native/dtk.pdb
             src/DotnetTokenKiller.Cli/bin/Release/net10.0/${{ inputs.rid }}/native/dtk.dSYM
           if-no-files-found: error
           retention-days: 14
+
+  test:
+    name: test
+    needs: pack
+    runs-on: ${{ inputs.test-runner }}
+    timeout-minutes: 60
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      VERSION: ${{ inputs.version }}
+      RID: ${{ inputs.rid }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # With a test image, the SDK comes from the image instead.
+      - name: Setup .NET
+        if: inputs.test-image == ''
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Download the package
+        uses: actions/download-artifact@v8
+        with:
+          name: package-${{ inputs.rid }}
+          path: artifacts/feed
+
+      - name: Download the pack log
+        uses: actions/download-artifact@v8
+        with:
+          name: packlog-${{ inputs.rid }}
+          path: artifacts
+
+      - name: Install and test the package
+        env:
+          TEST_IMAGE: ${{ inputs.test-image }}
+          RUN_INTEGRATION_SUITE: ${{ inputs.run-integration-suite }}
+        run: |
+          set --
+          if [ -n "$TEST_IMAGE" ]; then
+            set -- --image "$TEST_IMAGE"
+          fi
+          set -- "$@" "$RID" "$VERSION" artifacts/feed "artifacts/pack-$RID.log" artifacts/tools
+          if [ "$RUN_INTEGRATION_SUITE" = "true" ]; then
+            set -- "$@" --integration-suite
+          fi
+          sh eng/aot/test-package.sh "$@"
+
+      - name: Smoke-test on Rocky Linux 8
+        if: inputs.glibc
+        run: sh eng/aot/smoke-old-glibc.sh artifacts/tools

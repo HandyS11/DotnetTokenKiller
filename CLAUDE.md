@@ -43,14 +43,22 @@ dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-
 # Measure the one-time tiktoken vocabulary load (one fresh process per sample, ~10s)
 dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- tokenizer-load
 
-# Publish the CLI as Native AOT for this machine (linux-x64 here; the native compile cannot cross OSes)
+# Publish the CLI as Native AOT for this machine (linux-x64 here; the native compile cannot cross OSes).
+# Without a sysroot the binary needs this machine's glibc; the shipped packs use eng/aot/pack-linux.sh.
 dotnet publish src/DotnetTokenKiller.Cli -c Release -r linux-x64 -o artifacts/aot
 
-# Pack the tool as CI does: the RID package (on its own OS), the pointer, and the framework-dependent fallback.
-# A plain `dotnet pack` now builds only the pointer; IncludeSymbols=true breaks the pointer and RID packs.
-dotnet pack src/DotnetTokenKiller.Cli -c Release -r linux-x64 -p:IncludeSymbols=false -o artifacts/feed
+# Pack the tool as CI does. Linux RIDs pack in Docker, in Microsoft's cross-build image for the RID (~7 GB
+# each); osx-arm64 packs natively with `dotnet pack -r osx-arm64 -p:IncludeSymbols=false`. A plain
+# `dotnet pack` builds only the pointer; IncludeSymbols=true breaks the pointer and RID packs.
+sh eng/aot/pack-linux.sh linux-x64 0.0.0-local artifacts/aot/feed artifacts/aot/pack-linux-x64.log
 dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false -o artifacts/feed
 dotnet pack src/DotnetTokenKiller.Cli -c Release -r any -p:PublishAot=false -o artifacts/feed
+
+# Check a glibc package's floor, install and test a packed RID package (musl: put
+# `--image mcr.microsoft.com/dotnet/sdk:10.0-alpine` first), and smoke-test the installed tool on Rocky Linux 8
+sh eng/aot/check-glibc-floor.sh artifacts/aot/feed/DotnetTokenKiller.linux-x64.0.0.0-local.nupkg
+sh eng/aot/test-package.sh linux-x64 0.0.0-local artifacts/aot/feed artifacts/aot/pack-linux-x64.log artifacts/aot/tools/linux-x64
+sh eng/aot/smoke-old-glibc.sh artifacts/aot/tools/linux-x64
 
 # Compare an AOT binary with the JIT build, and check a pack log's trim/AOT warnings (skipped unless set)
 DTK_AOT_BINARY=/abs/path/to/dtk DTK_AOT_PACK_LOG=/abs/path/to/pack.log dtk dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests --filter "FullyQualifiedName~DotnetTokenKiller.Cli.IntegrationTests.Aot"
@@ -123,19 +131,48 @@ Native AOT, measured 2026-09-13, JIT (the `any` fallback package installed from 
 `dtk --version` 112.9 → 12.5 ms; tracking off 207.2 → 14.4 ms. Under AOT, tracking (tokenizer load,
 counting, SQLite) is 50.6 ms of the pipe figure.
 
+Static SQLite, measured 2026-09-13, three linux-x64 AOT tools installed from a local feed: host-built with a
+dynamic `libe_sqlite3.so` (the package before the cross-sysroot work) → cross-built against the glibc 2.27
+sysroot, still dynamic (`-p:DtkLinkSqliteStatically=false`) → cross-built with SQLite linked in (what ships):
+pipe 65.0 → 65.7 → 65.2 ms; wrapped overhead 62.7 → 62.8 → 63.9 ms (instant child) and 29.3 → 29.5 → 29.2 ms
+(1000 ms child); `dtk --version` 12.5 → 12.7 → 12.5 ms; tracking off 14.3 → 14.6 → 14.6 ms.
+
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in
 the workflow's `filter` input cannot go green with an empty artifact.
 
 ## Native AOT
 
-The tool ships as RID-specific packages: native AOT for linux-x64, linux-arm64, osx-arm64 and win-x64,
-and the framework-dependent `any` package everywhere else (`ToolPackageRuntimeIdentifiers` in the CLI
-csproj). CI's `aot-package.yml` packs each RID on its own OS, installs the tool from a local feed and runs
-`AotParityTests` against it; `publish.yml` pushes the RID packages before the pointer. A local Release
-build of the CLI now carries the AOT feature switches in its runtimeconfig (`PublishAot=true` in the
-csproj), so `cold-start` on `bin/Release` measures an AOT-like JIT build, not the shipped fallback;
-measure the installed `any` package for fallback figures.
+The tool ships as RID-specific packages: native AOT for linux-x64, linux-arm64, linux-musl-x64,
+linux-musl-arm64 and osx-arm64, and the framework-dependent `any` package everywhere else, Windows included
+(`ToolPackageRuntimeIdentifiers` in the CLI csproj). Windows has no AOT package because the SDK's shim for a
+native tool is a `dtk.cmd` batch file: Git Bash, Claude Code's shell on Windows, cannot run it, and cmd
+re-parses `| & ^ %` in arguments from pwsh and Git Bash (docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md).
+The musl RIDs must stay listed: the SDK's RID graph maps them to the glibc RIDs, so Alpine would otherwise
+install a binary that cannot run there.
+
+CI's `aot-package.yml` packs each Linux RID in Microsoft's cross-build image against its sysroot
+(`eng/aot/pack-linux.sh`: glibc 2.27, the floor .NET supports, or musl 1.2.3) and osx-arm64 on macOS, then
+installs and tests every package on a runner of its own architecture (`eng/aot/test-package.sh`, inside
+`mcr.microsoft.com/dotnet/sdk:10.0-alpine` for musl). The glibc packages must also pass
+`eng/aot/check-glibc-floor.sh` (no symbol above GLIBC_2.27) and `eng/aot/smoke-old-glibc.sh` (start, filter
+and track on Rocky Linux 8). `fallback-package.yml` tests `any` on Linux and on Windows, where it also runs the
+integration suite and a smoke test from Git Bash, pwsh and cmd. `publish.yml` pushes the RID packages before
+the pointer. A local Release build of the CLI carries the AOT feature switches in its runtimeconfig
+(`PublishAot=true` in the csproj), so `cold-start` on `bin/Release` measures an AOT-like JIT build, not the
+shipped fallback; measure the installed `any` package for fallback figures.
+
+linux-x64 and linux-arm64 link SQLite statically (`DtkLinkSqliteStatically` in the CLI csproj), because
+SQLitePCLRaw's `libe_sqlite3.so` needs GLIBC_2.34 (ericsink/SQLitePCL.raw#674). glibc 2.27 has no `fcntl64`,
+so the `CompileFcntl64Shim` target compiles `Native/fcntl64.c` and passes the object as a `LinkerArg`. Do not
+turn it into a `NativeLibrary` item (it is added after the ILC targets copy those into the link, which then
+fails with "undefined symbol: fcntl64") or a `-Wl,--defsym` alias (lld rejects it). `LinkNative` does not list
+the shim object as an input, so after editing only `Native/fcntl64.c` delete `obj/` before publishing again.
+`-p:DtkLinkSqliteStatically=false` packs a dynamic build for comparisons. A local publish without `-p:SysRoot`
+compiles the shim with the host's C compiler (clang, or gcc through the ILC fallback) and needs the host's
+glibc; only `pack-linux.sh` packs carry the 2.27 floor. The `any` package still
+cannot track on glibc < 2.34. With SQLite linked in, `LD_DEBUG=files` no longer shows whether tracking off
+loads SQLite; `SqliteLoaderTests` checks that on macOS with `DYLD_PRINT_LIBRARIES`.
 
 Spectre.Console.Cli does not support Native AOT. dtk keeps it under a contained exception
 (docs/superpowers/specs/2026-09-13-native-aot-design.md): both `dtk` and `Spectre.Console.Cli` are

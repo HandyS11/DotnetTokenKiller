@@ -44,6 +44,16 @@ internal static class AotParitySkip
             : null;
     }
 
+    /// <summary>Returns the skip reason for a macOS-only AOT test, or <see langword="null"/> when it should run.</summary>
+    /// <param name="aotBinary">The value of <c>DTK_AOT_BINARY</c>.</param>
+    /// <param name="required">The value of <c>DTK_AOT_REQUIRED</c>.</param>
+    /// <param name="isMacOS">Whether the tests run on macOS.</param>
+    /// <returns>The reason to skip, or <see langword="null"/>.</returns>
+    internal static string? MacOSReason(string? aotBinary, string? required, bool isMacOS) =>
+        isMacOS
+            ? Reason(unixOnly: false, aotBinary, required, isWindows: false)
+            : "macOS only: needs dyld's DYLD_PRINT_LIBRARIES and a dynamically loaded SQLite.";
+
     /// <summary>Whether <c>DTK_AOT_REQUIRED</c> demands the AOT inputs.</summary>
     /// <param name="required">The value of <c>DTK_AOT_REQUIRED</c>.</param>
     /// <returns><see langword="true"/> when the value is <c>1</c>.</returns>
@@ -84,6 +94,23 @@ public sealed class AotParityUnixTheoryAttribute : TheoryAttribute
     public AotParityUnixTheoryAttribute()
     {
         Skip = AotParitySkip.Reason(unixOnly: true);
+        Timeout = IntegrationTestHelper.DefaultTimeoutMs;
+    }
+}
+
+/// <summary>
+/// A fact that runs only on macOS, and there only when <c>DTK_AOT_BINARY</c> is set or <c>DTK_AOT_REQUIRED</c>
+/// is <c>1</c>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public sealed class AotMacOSFactAttribute : FactAttribute
+{
+    public AotMacOSFactAttribute()
+    {
+        Skip = AotParitySkip.MacOSReason(
+            Environment.GetEnvironmentVariable(AotParitySkip.AotBinaryVariable),
+            Environment.GetEnvironmentVariable(AotParitySkip.RequiredVariable),
+            OperatingSystem.IsMacOS());
         Timeout = IntegrationTestHelper.DefaultTimeoutMs;
     }
 }

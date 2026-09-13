@@ -62,22 +62,44 @@ jobs:
       matrix:
         include:
           - rid: linux-x64
-            runner: ubuntu-latest
+            pack-runner: ubuntu-latest
+            test-runner: ubuntu-latest
+            test-image: ''
+            glibc: true
             run-integration-suite: true
           - rid: linux-arm64
-            runner: ubuntu-24.04-arm
+            pack-runner: ubuntu-latest
+            test-runner: ubuntu-24.04-arm
+            test-image: ''
+            glibc: true
+            run-integration-suite: false
+          # The musl test jobs build with the Alpine image's SDK, which must satisfy global.json.
+          - rid: linux-musl-x64
+            pack-runner: ubuntu-latest
+            test-runner: ubuntu-latest
+            test-image: mcr.microsoft.com/dotnet/sdk:10.0-alpine
+            glibc: false
+            run-integration-suite: false
+          - rid: linux-musl-arm64
+            pack-runner: ubuntu-latest
+            test-runner: ubuntu-24.04-arm
+            test-image: mcr.microsoft.com/dotnet/sdk:10.0-alpine
+            glibc: false
             run-integration-suite: false
           - rid: osx-arm64
-            runner: macos-latest
+            pack-runner: macos-latest
+            test-runner: macos-latest
+            test-image: ''
+            glibc: false
             run-integration-suite: false
-          - rid: win-x64
-            runner: windows-latest
-            run-integration-suite: true
     uses: ./.github/workflows/aot-package.yml
     with:
       rid: ${{ matrix.rid }}
-      runner: ${{ matrix.runner }}
       version: 0.0.0-ci
+      pack-runner: ${{ matrix.pack-runner }}
+      test-runner: ${{ matrix.test-runner }}
+      test-image: ${{ matrix.test-image }}
+      glibc: ${{ matrix.glibc }}
       run-integration-suite: ${{ matrix.run-integration-suite }}
 
   fallback:

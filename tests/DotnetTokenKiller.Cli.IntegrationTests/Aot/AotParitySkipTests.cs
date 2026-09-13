@@ -44,4 +44,33 @@ public sealed class AotParitySkipTests
     {
         AotParitySkip.Reason(unixOnly: true, Binary, required: null, isWindows: false).Should().BeNull();
     }
+
+    [Theory]
+    [InlineData(Binary, null)]
+    [InlineData(null, "1")]
+    public void MacOSReason_NotMacOS_Skips(string? aotBinary, string? required)
+    {
+        AotParitySkip.MacOSReason(aotBinary, required, isMacOS: false).Should().Contain("macOS only",
+            "Linux and Windows CI set DTK_AOT_REQUIRED=1 too, and must not run a dyld check");
+    }
+
+    [Fact]
+    public void MacOSReason_MacOSWithBinary_Runs()
+    {
+        AotParitySkip.MacOSReason(Binary, required: null, isMacOS: true).Should().BeNull();
+    }
+
+    [Fact]
+    public void MacOSReason_MacOSBinaryBlankAndNotRequired_Skips()
+    {
+        AotParitySkip.MacOSReason(aotBinary: null, required: null, isMacOS: true)
+            .Should().Contain(AotParitySkip.AotBinaryVariable);
+    }
+
+    [Fact]
+    public void MacOSReason_MacOSBinaryBlankAndRequired_Runs()
+    {
+        AotParitySkip.MacOSReason(aotBinary: null, required: "1", isMacOS: true).Should().BeNull(
+            "a missing binary must fail the macOS job, not skip it, when DTK_AOT_REQUIRED is 1");
+    }
 }

@@ -1,14 +1,14 @@
 name: Fallback package
 
-# Packs the framework-dependent `any` tool package, the one every runtime identifier without a
-# Native AOT package installs, then installs and tests it. Also packs the pointer package Publish
-# pushes. Called by CI and by Publish.
+# Packs the framework-dependent `any` tool package, the one Windows and every runtime identifier without
+# a Native AOT package install, then installs and tests it on Linux and Windows. Also packs the pointer
+# package Publish pushes. Called by CI and by Publish.
 
 on:
   workflow_call:
     inputs:
       version:
-        description: Package version, passed to the build and to both packs.
+        description: Package version, passed to the build and to every pack.
         required: true
         type: string
 
@@ -17,8 +17,13 @@ permissions:
 
 jobs:
   package:
-    name: any
-    runs-on: ubuntu-latest
+    name: any (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
     env:
       DOTNET_NOLOGO: '1'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
@@ -45,10 +50,11 @@ jobs:
 
       # The real pointer, listing every RID, that Publish pushes. Packed here so the privileged publish job builds nothing.
       - name: Pack the pointer package
+        if: runner.os == 'Linux'
         run: dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false -p:Version="$VERSION" -o artifacts/pointer
 
-      # The real pointer lists all five RIDs, so on this linux-x64 runner it would install the AOT
-      # package. A check-only pointer that lists just `any` forces the fallback. It is never uploaded.
+      # The real pointer lists the AOT RIDs, so on a linux-x64 runner it would install the AOT package. A
+      # check-only pointer that lists just `any` forces the fallback. It is never uploaded.
       - name: Pack a check-only pointer that lists only the fallback
         run: >-
           dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false
@@ -57,8 +63,9 @@ jobs:
       - name: Install the fallback from the local feed
         run: |
           cp artifacts/feed/DotnetTokenKiller.any.*.nupkg artifacts/check-feed/
-          # A relative source resolves against the config file's directory, and nuget.org serves
-          # everything except dtk's own packages, as in aot-package.yml.
+          # A relative source resolves against the config file's directory. An absolute "$(pwd)" path
+          # would be POSIX-style (/d/a/...) under Git Bash on Windows, which NuGet cannot read.
+          # nuget.org serves everything except dtk's own packages.
           cat > artifacts/check-feed.nuget.config <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
@@ -88,7 +95,12 @@ jobs:
             exit 1
           fi
 
-          echo "DTK_INSTALLED=$tools/dtk" >> "$GITHUB_ENV"
+          # On Windows the `any` package's shim is dtk.exe, an apphost; on Unix it is dtk.
+          binary="$tools/dtk"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            binary="$tools/dtk.exe"
+          fi
+          echo "DTK_INSTALLED=$binary" >> "$GITHUB_ENV"
 
       # DTK_AOT_REQUIRED=1 makes a missing binary fail the parity tests instead of skipping them.
       - name: Check parity
@@ -99,7 +111,88 @@ jobs:
           dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build
           --filter "FullyQualifiedName~DotnetTokenKiller.Cli.IntegrationTests.Aot.AotParityTests" --verbosity normal
 
+      # Windows installs this package, so the whole suite runs against it there.
+      - name: Run the integration suite against the installed binary
+        if: runner.os == 'Windows'
+        run: >-
+          DTK_TEST_BINARY="$DTK_INSTALLED"
+          dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build --verbosity normal
+
+      # The shells a Windows user or agent runs dtk from. `dtk config set` echoes the value it received, so
+      # a `|` that a shell or shim re-parsed shows up as a missing or mangled value.
+      - name: Smoke-test the installed tool from Git Bash
+        if: runner.os == 'Windows'
+        env:
+          DTK_TOOLS: ${{ runner.temp }}\dtk-tools
+          DTK_CONFIG_PATH: ${{ runner.temp }}\smoke\config.json
+          DTK_DB_PATH: ${{ runner.temp }}\smoke\tracking.db
+          DTK_TEE_DIR: ${{ runner.temp }}\smoke\logs
+        run: |
+          tools_posix="$(cygpath -u "$DTK_TOOLS")"
+          export PATH="$tools_posix:$PATH"
+          command -v dtk
+          dtk --version
+          status=0
+          output="$(dtk config set tracking.enabled 'Name~A|Name~B' 2>&1)" || status=$?
+          echo "$output"
+          if [ "$status" -ne 1 ]; then
+            echo "::error::Git Bash: expected exit 1, got $status"
+            exit 1
+          fi
+          case "$output" in
+            *"'Name~A|Name~B'"*) ;;
+            *) echo "::error::Git Bash: the argument did not reach dtk verbatim"; exit 1 ;;
+          esac
+
+      - name: Smoke-test the installed tool from pwsh
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          DTK_TOOLS: ${{ runner.temp }}\dtk-tools
+          DTK_CONFIG_PATH: ${{ runner.temp }}\smoke\config.json
+          DTK_DB_PATH: ${{ runner.temp }}\smoke\tracking.db
+          DTK_TEE_DIR: ${{ runner.temp }}\smoke\logs
+        run: |
+          # dtk's expected error goes to stderr; with 2>&1 it must not become a terminating error.
+          $ErrorActionPreference = 'Continue'
+          $env:PATH = "$env:DTK_TOOLS;$env:PATH"
+          (Get-Command dtk).Source
+          dtk --version
+          if ($LASTEXITCODE -ne 0) { throw "pwsh: dtk --version exited $LASTEXITCODE" }
+          $output = dtk config set tracking.enabled 'Name~A|Name~B' 2>&1 | Out-String
+          $status = $LASTEXITCODE
+          $output
+          if ($status -ne 1) { throw "pwsh: expected exit 1, got $status" }
+          if (-not $output.Contains("'Name~A|Name~B'")) { throw 'pwsh: the argument did not reach dtk verbatim' }
+          # The runner exits with the last native exit code, which is the expected 1.
+          exit 0
+
+      - name: Smoke-test the installed tool from cmd
+        if: runner.os == 'Windows'
+        shell: cmd
+        env:
+          DTK_TOOLS: ${{ runner.temp }}\dtk-tools
+          DTK_CONFIG_PATH: ${{ runner.temp }}\smoke\config.json
+          DTK_DB_PATH: ${{ runner.temp }}\smoke\tracking.db
+          DTK_TEE_DIR: ${{ runner.temp }}\smoke\logs
+        run: |
+          set "PATH=%DTK_TOOLS%;%PATH%"
+          where dtk || exit /b 1
+          dtk --version || exit /b 1
+          dtk config set tracking.enabled "Name~A|Name~B" > "%RUNNER_TEMP%\smoke-cmd.txt" 2>&1
+          set status=%ERRORLEVEL%
+          type "%RUNNER_TEMP%\smoke-cmd.txt"
+          if not "%status%"=="1" (
+            echo ::error::cmd: expected exit 1, got %status%
+            exit /b 1
+          )
+          findstr /C:"'Name~A|Name~B'" "%RUNNER_TEMP%\smoke-cmd.txt" > nul || (
+            echo ::error::cmd: the argument did not reach dtk verbatim
+            exit /b 1
+          )
+
       - name: Upload the package
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
           name: package-any
@@ -110,6 +203,7 @@ jobs:
           retention-days: 14
 
       - name: Upload the pointer package
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v7
         with:
           name: package-pointer
