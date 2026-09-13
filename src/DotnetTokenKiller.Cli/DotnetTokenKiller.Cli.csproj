@@ -56,6 +56,11 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console"/>
     <PackageReference Include="Spectre.Console.Cli"/>
+    <!--
+      Already a transitive dependency through Microsoft.Data.Sqlite, and pinned in Directory.Packages.props.
+      Referenced directly for $(PkgSQLitePCLRaw_lib_e_sqlite3), the static library's location below.
+    -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" GeneratePathProperty="true"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj"/>
@@ -65,10 +70,10 @@
     <InternalsVisibleTo Include="DotnetTokenKiller.Cli.IntegrationTests"/>
   </ItemGroup>
   <!--
-    An AOT RID package carries the native dtk and libe_sqlite3 only. Tool packing globs the whole publish
-    directory, so symbols (released as GitHub Release assets instead), managed .pdb and .xml files, and
-    SQLitePCLRaw's static libe_sqlite3.a are kept out of it here. The `any` package is unaffected, and
-    keeps its .pdb files for its .snupkg.
+    An AOT RID package carries the native dtk and, where SQLite is not linked in, libe_sqlite3. Tool packing globs
+    the whole publish directory, so symbols (released as GitHub Release assets instead), managed .pdb and .xml files,
+    and SQLitePCLRaw's static libe_sqlite3.a are kept out of it here. The `any` package is unaffected, and keeps its
+    .pdb files for its .snupkg.
   -->
   <PropertyGroup Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
@@ -78,6 +83,41 @@
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
                              Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb' or '%(ResolvedFileToPublish.Extension)' == '.xml' or '%(ResolvedFileToPublish.Extension)' == '.a'"/>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'$(DtkLinkSqliteStatically)' == 'true' and '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'libe_sqlite3.so'"/>
+    </ItemGroup>
+  </Target>
+  <!--
+    The glibc AOT binaries link SQLite statically. SQLitePCLRaw.lib.e_sqlite3 3.53.3's libe_sqlite3.so needs
+    GLIBC_2.34 (ericsink/SQLitePCL.raw#674), while CI builds these RIDs against a glibc 2.27 sysroot, the floor
+    .NET itself supports; downgrading the package would bring back GHSA-2m69-gcr7-jv3q. musl, macOS and the
+    `any` package keep loading the shared library. See docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md.
+  -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true' and ('$(RuntimeIdentifier)' == 'linux-x64' or '$(RuntimeIdentifier)' == 'linux-arm64')">
+    <DtkLinkSqliteStatically>true</DtkLinkSqliteStatically>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(DtkLinkSqliteStatically)' == 'true'">
+    <DirectPInvoke Include="e_sqlite3"/>
+    <NativeLibrary Include="$(PkgSQLitePCLRaw_lib_e_sqlite3)/runtimes/$(RuntimeIdentifier)/native/libe_sqlite3.a"/>
+  </ItemGroup>
+  <!--
+    The static SQLite calls fcntl64, which glibc only added in 2.28; Native/fcntl64.c supplies it. The object is
+    compiled after SetupOSSpecificProps, which sets TargetTriple for cross builds, and passed as a LinkerArg:
+    SetupOSSpecificProps has already copied NativeLibrary items into LinkerArg by then, so a NativeLibrary item
+    added here is silently dropped and the link fails with "undefined symbol: fcntl64". -Wl,defsym cannot alias
+    it either: lld needs fcntl defined, and it only exists in libc.so.
+  -->
+  <Target Name="CompileFcntl64Shim" AfterTargets="SetupOSSpecificProps" BeforeTargets="LinkNative"
+          Condition="'$(DtkLinkSqliteStatically)' == 'true'">
+    <PropertyGroup>
+      <_DtkFcntl64Object>$(IntermediateOutputPath)native/fcntl64.o</_DtkFcntl64Object>
+      <_DtkShimSysRootArg Condition="'$(SysRoot)' != ''">--sysroot=&quot;$(SysRoot)&quot;</_DtkShimSysRootArg>
+      <_DtkShimTargetArg Condition="'$(TargetTriple)' != ''">--target=$(TargetTriple)</_DtkShimTargetArg>
+    </PropertyGroup>
+    <MakeDir Directories="$(IntermediateOutputPath)native"/>
+    <Exec Command="&quot;$(CppCompilerAndLinker)&quot; $(_DtkShimSysRootArg) $(_DtkShimTargetArg) -O2 -fPIC -c &quot;$(MSBuildProjectDirectory)/Native/fcntl64.c&quot; -o &quot;$(_DtkFcntl64Object)&quot;"/>
+    <ItemGroup>
+      <LinkerArg Include="&quot;$(_DtkFcntl64Object)&quot;"/>
     </ItemGroup>
   </Target>
   <!--
