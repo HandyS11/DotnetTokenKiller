@@ -196,11 +196,12 @@ int fcntl64(int fd, int cmd, ...)
 **Scripts in `eng/aot/`.** POSIX `sh` with `set -eu` and no bash-isms, runnable locally with the same
 arguments as in CI:
 
-- **`pack-linux.sh <rid> <version>`** runs the RID's cross image through `docker run`, with the
-  checkout, a NuGet package cache and the host's SDK mounted, as the invoking user
+- **`pack-linux.sh <rid> <version> <feed-dir> <pack-log> [extra MSBuild arguments]`** runs the RID's
+  cross image through `docker run`, with the checkout, a NuGet package cache, the feed, the log directory
+  and the host's SDK mounted at their host paths, as the invoking user
   (`--user $(id -u):$(id -g)`). In CI the host SDK comes from `actions/setup-dotnet`, pinned by
-  `global.json`, so no image is built. If the mounted SDK does not work in the image, the fallback is
-  the probe's pattern: a two-line Dockerfile that copies the SDK in. The script maps the RID to its
+  `global.json`, so no image is built (verified while planning: the mounted SDK packs in all four
+  images). The script maps the RID to its
   image (`-cross-amd64`, `-cross-arm64`, `-cross-amd64-musl`, `-cross-arm64-musl`) and sysroot
   (`/crossrootfs/x64` or `/crossrootfs/arm64`), and packs with `-p:SysRoot=… -p:LinkerFlavor=lld
   -p:IncludeSymbols=false -p:Version=<version>`, writing the MSBuild file log that `AotWarningLogTests`
@@ -209,8 +210,8 @@ arguments as in CI:
 - **`check-glibc-floor.sh <nupkg> [max]`** (max defaults to 2.27) unzips the package and runs
   `readelf --version-info` on every ELF file in it. It prints the highest `GLIBC_` version found and
   exits non-zero if that is above the max. A package with no ELF file is an error.
-- **`test-package.sh <rid> <version> [--integration-suite]`**, given a feed directory that holds the RID
-  package, does the following:
+- **`test-package.sh [--image <image>] <rid> <version> <feed-dir> <pack-log> <tools-dir> [--integration-suite]`**,
+  given a feed directory that holds the RID package, does the following:
   1. Builds the solution at that version.
   2. Packs the pointer into the feed and installs the tool with `--tool-path`, through a generated
      `nuget.config` that maps `DotnetTokenKiller*` to the feed and everything else to nuget.org.
@@ -219,9 +220,12 @@ arguments as in CI:
      `DTK_AOT_BINARY` and `DTK_AOT_PACK_LOG` set.
   5. With the flag, runs the whole integration suite with `DTK_TEST_BINARY` set.
 
-  It runs natively on glibc Linux and macOS, and inside `docker run mcr.microsoft.com/dotnet/sdk:10.0-alpine`
-  for musl. That image is multi-arch, so musl arm64 runs natively on an arm64 runner.
-- **`smoke-old-glibc.sh <tools-dir>`** runs inside `docker run rockylinux:8`. It installs `libicu`, then
+  It runs natively on glibc Linux and macOS. With `--image mcr.microsoft.com/dotnet/sdk:10.0-alpine`
+  (the musl RIDs) it re-runs itself in that image as the invoking user, with the checkout and NuGet cache
+  mounted at their host paths. That image is multi-arch, so musl arm64 runs natively on an arm64 runner.
+  It deletes the package's ID and version from the NuGet cache before installing, since a cached package
+  would be installed instead of the feed's.
+- **`smoke-old-glibc.sh <tools-dir>`** runs itself inside `docker run rockylinux:8`. It installs `libicu`, then
   runs the installed `dtk` with hermetic state: `--version`, then `pipe build --exit-code 1` over
   `dotnet_build_errors.txt` with tracking on. `gain --json` must then report `TotalCommands` of 1.
 
@@ -295,19 +299,21 @@ cross image of about 7 GB.
     1. With tracking on, stderr must mention `libe_sqlite3`. This is the positive control.
     2. After `config set tracking.enabled false`, stderr must not mention `libe_sqlite3`.
 - **`ParityRunner`:**
-  - The hermetic environment set-up in `RunStepAsync` becomes a helper that takes extra variables and
-    can keep stderr separate, which the loader test uses.
+  - The hermetic start info moves into `ParityRunner.CreateStartInfo`, and the process handling into
+    `ParityProcess.RunAsync`, which returns stdout and stderr separately. The loader test uses both,
+    adding its own environment variable.
   - The runner starts draining stdout and stderr before writing stdin. Today it writes all of stdin
-    first, a latent deadlock above about 64 KB. A regression test pipes a fixture larger than 64 KB
-    through `pipe build`; it fails (times out) before the fix and passes after.
+    first, a latent deadlock above about 64 KB for a child that writes while reading. dtk is not such a
+    child (`pipe` reads all input first), so the regression test runs `cat` over about 900 KB of input
+    through `ParityProcess`: it times out before the fix and passes after.
   - Parity output is unchanged.
 - **Unchanged:** `AotParityTests`, `AotWarningLogTests`, `CommandSettingsAotGuardTests` and
   `SpectreBuiltInCommandTests`.
 - **Scripts, red then green**, in the plan's tasks:
   - `check-glibc-floor.sh` fails on a linux-x64 package packed from `develop` on the host (GLIBC_2.34)
     and passes on the cross-built one.
-  - `smoke-old-glibc.sh` fails on that `develop` package, which does not start on Rocky 8, and passes on
-    the static-SQLite one.
+  - `smoke-old-glibc.sh` fails on a `dtk` published without a sysroot, which needs the host's glibc and
+    does not start on Rocky 8, and passes on the installed static-SQLite package.
   - `test-package.sh` passes locally for linux-x64 natively and for linux-musl-x64 in the Alpine image.
 - **Local verification:**
   - The library test projects run one at a time.
@@ -384,3 +390,27 @@ to step 3, work stops and the user decides.
 - Fixing the `any` package's SQLite on glibc < 2.34.
 - Tokenizer spooling (sub-project 4), filter changes, and replacing Spectre.Console.Cli.
 - The `dtk integrate claude` settings-merge bug, fixed on its own branch.
+
+## Amendments (2026-09-13, while writing the plan)
+
+The plan's author prototyped every change in a throwaway clone before writing
+[the plan](../plans/2026-09-13-linux-windows-aot.md), and the sections above were corrected to match:
+
+- **Script signatures.** `pack-linux.sh` and `test-package.sh` take explicit feed, log and tools paths,
+  and `test-package.sh` takes `--image` to run itself in the Alpine SDK image. `pack-linux.sh` passes
+  extra MSBuild arguments through, which the measurement protocol uses for `-p:DtkLinkSqliteStatically=false`.
+- **The deadlock regression test uses `cat`**, because dtk's `pipe` reads all input before writing and
+  so cannot reproduce it.
+- **The red smoke run uses a no-sysroot publish**, which needs the host's glibc (GLIBC_2.38 here).
+- **Verified in the prototype:**
+  - all four Linux packs through the mounted host SDK, as the invoking user, with the commit SHA intact;
+    linux-arm64 needs at most GLIBC_2.17
+  - the floor check red on today's host-built package and on a cross-built dynamic one (its
+    `libe_sqlite3.so`), green on the static one
+  - the Rocky 8 smoke red and green
+  - `test-package.sh` for linux-x64 natively and for linux-musl-x64 in Alpine (43 passed, the macOS loader
+    test skipped), with no root-owned files
+  - the loader test's logic, with `LD_DEBUG=files` swapped in on Linux: it passed against a dynamic build,
+    and its control failed against the static one
+  - a local no-sysroot publish tracking with SQLite linked in
+  - actionlint and shellcheck on every workflow and script
