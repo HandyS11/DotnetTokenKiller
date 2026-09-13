@@ -218,9 +218,10 @@ Every release produces six packages with the same version:
 
 Facts this relies on (verified by pack-and-install experiments on SDK 10.0.400):
 
-- **Symbols.** `IncludeSymbols=true` with `SymbolPackageFormat=snupkg`, which the csproj sets today,
-  makes the pointer and AOT RID packs fail with NU5017. Hence `-p:IncludeSymbols=false` on those
-  packs; the `any` pack keeps symbols.
+- **Symbols.** `IncludeSymbols=true` with `SymbolPackageFormat=snupkg`, which the csproj set before
+  this work, makes the pointer and AOT RID packs fail with NU5017. The csproj now sets
+  `IncludeSymbols` only when `RuntimeIdentifier` is `any`, so the `any` pack keeps its `.snupkg` and
+  the other packs need no flag; the workflows still pass `-p:IncludeSymbols=false` explicitly.
 - **What a RID pack carries by default.** Tool packing globs the whole publish directory, so a
   default RID package (56 MB unpacked) holds the stripped-symbols file (`.dbg`), every `.pdb`, the
   `.xml` documentation and `libe_sqlite3.a`. For AOT RID-specific builds only, the CLI csproj sets
@@ -284,6 +285,8 @@ The existing `build` job is unchanged. Two jobs are added:
     apply)
   - installs it from a local feed and asserts the store contains `dotnettokenkiller.any`
   - runs the parity tests against the installed shim
+  - packs the real pointer (listing every RID) and uploads it as `package-pointer`, which the
+    release's `publish` job pushes, so that privileged job never restores or builds
 
 #### 3.3 Test changes (`tests/DotnetTokenKiller.Cli.IntegrationTests`)
 
@@ -293,7 +296,8 @@ The existing `build` job is unchanged. Two jobs are added:
 - **`AotParityTests`** (in `Aot/`):
   - Every test is skipped unless `DTK_AOT_BINARY` is set, through `Theory` attribute subclasses that
     set `Skip` when the variable is absent. Local `dotnet test` runs and the `build` job are
-    unaffected.
+    unaffected. CI sets `DTK_AOT_REQUIRED=1`, which turns a missing `DTK_AOT_BINARY` (or, for the
+    pack-log check, `DTK_AOT_PACK_LOG`) into a failure instead of a skip.
   - Each case runs the same deterministic input through the JIT build's `dtk` apphost and through
     `DTK_AOT_BINARY`, with hermetic `DTK_CONFIG_PATH`, `DTK_DB_PATH`, `DTK_TEE_DIR`,
     `HOME`/`USERPROFILE` and `XDG_CONFIG_HOME`.
@@ -332,7 +336,8 @@ The existing `build` job is unchanged. Two jobs are added:
     `dotnet`.
   - Real builds stay out of parity tests: their output depends on restore and build state, as the
     probe showed.
-  - **Probed:** 20 cases pass against the installed linux-x64 AOT tool and against the installed
+  - **Probed:** 20 cases (21 once the final review added an O200kBase tokenizer case) pass against
+    the installed linux-x64 AOT tool and against the installed
     `any` fallback. Against an unrooted AOT build, 18 of the 19 cases that existed then failed; the
     one that passed was passthrough, which never reaches Spectre.
 - **`AotWarningLogTests`** (in `Aot/`): the log parser from 1.3 with its unit tests, plus the
@@ -477,7 +482,8 @@ Test-first where the change is code:
 - Statically linking `e_sqlite3` into the binary. It would make the tracking-off loader probe
   meaningless.
 - **The rewrite hook's double-prefix bug** in `.claude/hooks/dotnet-to-dtk.py` and
-  `HookScriptTemplates.cs`. It is unrelated, has been reported, and gets its own change.
+  `HookScriptTemplates.cs`. It is unrelated to AOT. At the user's request it was fixed on this
+  branch as its own commit, before the pull request was opened.
 
 ## Amendments (2026-09-13, while writing the plan)
 
@@ -532,3 +538,41 @@ documents; `cli opencli` generates one, and works in both builds.
    released framework-dependent tool. Statically linking `libe_sqlite3.a` fixed it in the probe.
 4. **Status:** not fixed on this branch; no release tag until the user decides. Options: cross-sysroot
    and musl RID jobs; Linux through `any` for now; or accept and document.
+
+Probe recipe, recorded here because the throwaway probe directory was deleted:
+
+- **Build image.** `FROM mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64`
+  plus `COPY --from=mcr.microsoft.com/dotnet/sdk:10.0 /usr/share/dotnet /usr/share/dotnet` (the
+  pattern in dotnet/runtime `src/coreclr/nativeaot/docs/containers.md`). The `-cross-arm64`,
+  `-cross-amd64-musl` and `-cross-arm64-musl` tags work the same way. They carry an Ubuntu 18.04
+  (glibc 2.27) or Alpine 3.17 (musl 1.2.3) sysroot at `/crossrootfs/<arch>`, are amd64-only, and are
+  about 6.5 GB each.
+- **Pack.** `dotnet pack src/DotnetTokenKiller.Cli -c Release -r linux-x64 -p:IncludeSymbols=false
+  -p:SysRoot=/crossrootfs/x64 -p:LinkerFlavor=lld` (for musl: `-r linux-musl-x64`, same sysroot path in
+  the musl image). The binary needs ICU on the target (`libicu`, `icu-libs`).
+- **Static SQLite, for issue 3.** In the CLI csproj, for Linux RIDs: `<DirectPInvoke Include="e_sqlite3"/>`,
+  `<NativeLibrary Include="$(NuGetPackageRoot)sqlitepclraw.lib.e_sqlite3/<version>/runtimes/$(RuntimeIdentifier)/native/libe_sqlite3.a"/>`,
+  remove `libe_sqlite3.so` from `ResolvedFileToPublish`, and link a shim object built with
+  `clang --sysroot=/crossrootfs/x64 -O2 -fPIC -c fcntl64.c`, because glibc 2.27 has no `fcntl64`:
+
+  ```c
+  /* glibc < 2.28 has no fcntl64; on 64-bit Linux it is the same call as fcntl. */
+  #include <stdarg.h>
+  extern int fcntl(int fd, int cmd, ...);
+  int fcntl64(int fd, int cmd, ...)
+  {
+      va_list ap;
+      va_start(ap, cmd);
+      void *arg = va_arg(ap, void *);
+      va_end(ap);
+      return fcntl(fd, cmd, arg);
+  }
+  ```
+
+  Statically linking SQLite also makes the sub-project 2 tracking-off loader probe
+  (`LD_DEBUG=files`, no `e_sqlite3`) meaningless; a replacement check would be needed.
+- **CI shape.** glibc x64: a job-level `container:` with the cross image. musl x64: a
+  `container: mcr.microsoft.com/dotnet/sdk:10.0-alpine` job (JavaScript actions work in Alpine
+  containers on x64 runners only; `apk add bash clang build-base zlib-dev icu-libs` first). arm64:
+  cross-build on `ubuntu-latest`, then install and test on `ubuntu-24.04-arm` (musl arm64 via
+  `docker run`). Add a guard that fails if `dtk` or any packaged `.so` needs a `GLIBC_` above 2.27.

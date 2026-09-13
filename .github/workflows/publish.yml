@@ -92,12 +92,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Only `dotnet nuget push` runs here; nothing restores, so no NuGet cache.
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-          cache: true
-          cache-dependency-path: Directory.Packages.props
 
       - name: Download the pointer, RID and fallback packages
         uses: actions/download-artifact@v8
