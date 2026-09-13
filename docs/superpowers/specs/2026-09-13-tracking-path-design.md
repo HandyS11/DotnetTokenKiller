@@ -141,7 +141,11 @@ differently.
   `WhenReadyAsync()` before recording.
 
 **Accepted consequence:** config is now read before the child runs rather than after. A
-`dtk config set` made while a build is running applies from the next run.
+`dtk config set` made while a build is running applies from the next run. An interactive
+passthrough (for example `dtk dotnet watch` or `dtk dotnet run`) now opens the tracking database
+when it starts and keeps a pooled connection for the whole session instead of opening it after the
+child exits. No lock is held between statements, so other dtk processes are unaffected; on Windows
+the file cannot be deleted or moved while such a session runs.
 
 #### Timing
 

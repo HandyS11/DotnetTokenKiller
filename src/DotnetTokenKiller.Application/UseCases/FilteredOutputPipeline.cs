@@ -46,7 +46,8 @@ public sealed class FilteredOutputPipeline(
     /// <summary>Filters the request's output, writes it, and records the run, preparing it first.</summary>
     /// <remarks>
     /// For callers with no earlier point to start setup at: the configuration load and tracking setup
-    /// run here, serially, exactly as they did before <see cref="BeginAsync"/> existed.
+    /// start here, so they overlap only this call's own filtering and output, not a child process or
+    /// a stdin read.
     /// </remarks>
     /// <param name="request">The output and metadata to process.</param>
     /// <param name="session">
@@ -243,8 +244,9 @@ public sealed class FilteredOutputPipeline(
 
         try
         {
-            // Setup started in BeginAsync has usually finished while the child ran. This never
-            // throws; a failed setup resurfaces in Estimate or RecordAsync below, inside this catch.
+            // Setup started in BeginAsync has usually finished while the child ran or stdin was
+            // read. This never throws; a failed setup resurfaces in Estimate or RecordAsync below,
+            // inside this catch.
             await prepared.WarmUp.WhenReadyAsync().ConfigureAwait(false);
 
             var inputTokens = TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);

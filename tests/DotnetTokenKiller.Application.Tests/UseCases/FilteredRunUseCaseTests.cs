@@ -1093,5 +1093,6 @@ public class FilteredRunUseCaseTests
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         startedWhileChildRan.Should().BeTrue();
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
     }
 }

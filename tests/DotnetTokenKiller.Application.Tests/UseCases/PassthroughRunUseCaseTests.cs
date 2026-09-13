@@ -385,6 +385,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
 
         startedWhileChildRan.Should().BeTrue();
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -405,6 +406,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         await _sut.RunAsync(DtkConfig.Default, "dotnet", RunArgs);
 
         startedWhileChildRan.Should().BeTrue();
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -12,6 +12,12 @@ public interface ITracker
     /// Performs the one-time setup the first call would otherwise do, so it can run early (in the
     /// background, while a child process runs) and leave only the record itself for later.
     /// </summary>
+    /// <remarks>
+    /// <see cref="WarmUpAsync"/> may run on a background thread concurrently with the other members
+    /// and with disposal. A failed <see cref="WarmUpAsync"/> must not prevent a later call (such as
+    /// <see cref="RecordAsync"/>) from attempting the setup again; implementations must not cache the
+    /// failure.
+    /// </remarks>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task WarmUpAsync(CancellationToken cancellationToken = default);
 

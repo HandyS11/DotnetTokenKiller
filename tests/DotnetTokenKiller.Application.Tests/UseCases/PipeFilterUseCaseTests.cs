@@ -126,6 +126,7 @@ public class PipeFilterUseCaseTests
             .RunAsync(_filter, "build", 0, new OutputOptions());
 
         reader.WarmUpStartedBeforeRead.Should().BeTrue();
+        await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
     }
 
     /// <summary>A stdin stand-in that records whether tracking setup had started when it was read.</summary>

@@ -294,11 +294,14 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         {
             // A failed attempt leaves nothing behind, so the next call (a RecordAsync after a
             // background warm-up failed) starts again from a fresh connection instead of reopening
-            // a half-initialized one.
-            if (_connection is not null)
+            // a half-initialized one. The field is cleared before disposing so a throwing
+            // DisposeAsync cannot mask the original setup exception or leave a disposed connection
+            // behind in the field.
+            var failed = _connection;
+            _connection = null;
+            if (failed is not null)
             {
-                await _connection.DisposeAsync().ConfigureAwait(false);
-                _connection = null;
+                await failed.DisposeAsync().ConfigureAwait(false);
             }
 
             throw;
