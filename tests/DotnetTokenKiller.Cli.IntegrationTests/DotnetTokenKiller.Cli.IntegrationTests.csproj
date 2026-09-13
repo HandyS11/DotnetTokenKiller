@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest"/>
+    <None Include="../DotnetTokenKiller.Application.Tests/Fixtures/*.txt" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj"/>
