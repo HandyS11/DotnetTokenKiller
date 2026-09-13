@@ -57,7 +57,8 @@ dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false -p:Vers
 # A package already in the NuGet cache at this ID and version is installed from the cache, not the feed.
 rm -rf "$nuget/dotnettokenkiller/$version_lower" "$nuget/dotnettokenkiller.$rid/$version_lower"
 
-config=$(mktemp)
+# An explicit template: older BSD mktemp (macOS before 10.11) and some minimal implementations require one.
+config=$(mktemp "${TMPDIR:-/tmp}/dtk-nuget-config.XXXXXX")
 trap 'rm -f "$config"' EXIT
 cat > "$config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
