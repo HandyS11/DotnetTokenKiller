@@ -61,6 +61,15 @@ public sealed class PendingRecordJournalTests : IDisposable
         Journal.Count().Should().Be(0);
     }
 
+    [Fact]
+    public async Task WriteAsync_LeavesNoTemporaryFile()
+    {
+        await Journal.WriteAsync(MakeRecord());
+
+        Directory.GetFiles(PendingDir, "*.json").Should().HaveCount(1);
+        Directory.GetFiles(PendingDir, "*.tmp").Should().BeEmpty();
+    }
+
     private static Task<bool> NeverCommittedAsync(string id, CancellationToken ct) => Task.FromResult(false);
 
     [Fact]
@@ -182,6 +191,30 @@ public sealed class PendingRecordJournalTests : IDisposable
     }
 
     [Fact]
+    public async Task FoldAsync_IgnoresAFreshTemporaryFileAndDeletesAStaleOne()
+    {
+        var journal = Journal;
+        await journal.WriteAsync(MakeRecord());
+        var freshTemp = Path.Combine(PendingDir, "x.tmp");
+        var staleTemp = Path.Combine(PendingDir, "y.tmp");
+        await File.WriteAllTextAsync(freshTemp, string.Empty);
+        await File.WriteAllTextAsync(staleTemp, string.Empty);
+        File.SetLastWriteTimeUtc(staleTemp, DateTime.UtcNow.AddHours(-2));
+        var committed = new List<CommandRecord>();
+
+        var outcome = await journal.FoldAsync(NeverCommittedAsync, (_, records, _) =>
+        {
+            committed.AddRange(records);
+            return Task.CompletedTask;
+        }, wait: true);
+
+        outcome.Records.Should().Be(1);
+        committed.Should().ContainSingle();
+        File.Exists(freshTemp).Should().BeTrue();
+        File.Exists(staleTemp).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task FoldAsync_HandsRecordsToCommitInFileNameOrder()
     {
         var journal = Journal;
@@ -191,8 +224,8 @@ public sealed class PendingRecordJournalTests : IDisposable
 
         var oldClaim = Path.Combine(PendingDir, "folding-old");
         Directory.CreateDirectory(oldClaim);
-        var firstFile = Directory.GetFiles(PendingDir, "*.json").OrderBy(f => f, StringComparer.Ordinal).First();
-        File.Move(firstFile, Path.Combine(oldClaim, Path.GetFileName(firstFile)));
+        var lastFile = Directory.GetFiles(PendingDir, "*.json").OrderBy(f => f, StringComparer.Ordinal).Last();
+        File.Move(lastFile, Path.Combine(oldClaim, Path.GetFileName(lastFile)));
 
         var committed = new List<CommandRecord>();
 

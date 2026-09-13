@@ -12,16 +12,20 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 /// <remarks>
 /// One file per run rather than one appended file: no two processes ever hold the same handle, so
 /// neither POSIX append atomicity nor Windows share modes are relied on, and a process killed
-/// mid-write can only leave a truncated file of its own, which a fold deletes.
+/// mid-write can only leave a truncated file of its own, which a fold deletes. A write lands under
+/// a temporary name and is renamed to its final name only once it is complete, so a fold never
+/// opens, moves, or reads a file that a writer still has open.
 /// </remarks>
 /// <param name="root">The journal directory.</param>
 /// <param name="lockWait">How long a waiting fold retries for the lock; 2 s unless a test shortens it.</param>
 internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = null)
 {
     private const string FileExtension = ".json";
+    private const string TempExtension = ".tmp";
     private const string LockFileName = ".lock";
     private const string ClaimPrefix = "folding-";
     private static readonly TimeSpan LockRetry = TimeSpan.FromMilliseconds(25);
+    private static readonly TimeSpan StaleTempAge = TimeSpan.FromHours(1);
     private readonly TimeSpan _lockWait = lockWait ?? TimeSpan.FromSeconds(2);
 
     /// <summary>The journal directory, created on the first write.</summary>
@@ -42,6 +46,18 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
         var name = string.Create(
             CultureInfo.InvariantCulture,
             $"{DateTime.UtcNow.Ticks:D19}-{Environment.ProcessId}-{Guid.NewGuid():N}{FileExtension}");
+        var finalPath = Path.Combine(Root, name);
+        var tempPath = finalPath + TempExtension;
+
+        await WriteTempFileAsync(tempPath, record, cancellationToken).ConfigureAwait(false);
+
+        // Renamed only once the file is closed and complete, so a fold can never see a half-written
+        // file under its final ".json" name.
+        File.Move(tempPath, finalPath);
+    }
+
+    private static async Task WriteTempFileAsync(string tempPath, CommandRecord record, CancellationToken cancellationToken)
+    {
         var options = new FileStreamOptions
         {
             Mode = FileMode.CreateNew,
@@ -50,7 +66,7 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
         };
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var stream = new FileStream(Path.Combine(Root, name), options);
+        await using var stream = new FileStream(tempPath, options);
 #pragma warning restore CA2007
         await JsonSerializer.SerializeAsync(
                 stream, PendingRecord.From(record), PendingRecordJsonContext.Default.PendingRecord, cancellationToken)
@@ -65,13 +81,15 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
     /// Folds every waiting run into the database exactly once, whatever process dies when.
     /// </summary>
     /// <remarks>
-    /// Under an exclusive lock: leftover claim directories are deleted if <paramref name="committed"/>
-    /// knows their id (a fold that died after its commit) or refolded if not (one that died before);
-    /// then every pending file is moved into a new claim directory, parsed, and handed to
-    /// <paramref name="commit"/> together with every claim id involved, in one call, ordered by file
-    /// name across every claimed directory (file names start with UTC ticks, so this keeps run
-    /// order). The claim directories are deleted only after the commit returns. A commit that throws
-    /// leaves them for the next fold; a process that dies releases the lock with its handle.
+    /// Under an exclusive lock: stale (over an hour old) <c>*.tmp</c> files left by a writer killed
+    /// between create and rename are deleted first; leftover claim directories are then deleted if
+    /// <paramref name="committed"/> knows their id (a fold that died after its commit) or refolded
+    /// if not (one that died before); then every pending file is moved into a new claim directory,
+    /// parsed, and handed to <paramref name="commit"/> together with every claim id involved, in one
+    /// call, ordered by file name across every claimed directory together (file names start with
+    /// UTC ticks, so this keeps run order). The claim directories are deleted only after the commit
+    /// returns. A commit that throws leaves them for the next fold; a process that dies releases the
+    /// lock with its handle.
     /// </remarks>
     /// <param name="committed">Whether the database already holds the fold with this id.</param>
     /// <param name="commit">Inserts the records and every fold id in one transaction.</param>
@@ -98,6 +116,8 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
         {
             return new FoldOutcome(false, 0, 0);
         }
+
+        DeleteStaleTempFiles();
 
         var claimIds = new List<string>();
         var claimDirs = new List<string>();
@@ -176,6 +196,10 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
     }
 
     /// <summary>Deletes every pending file and claim directory. The lock file stays; it is never deleted.</summary>
+    /// <remarks>
+    /// Does not take the journal lock: a fold running concurrently in another process may fail, or
+    /// insert records it had already claimed. Acceptable because a reset is user-initiated and rare.
+    /// </remarks>
     public void Clear()
     {
         if (!Directory.Exists(Root))
@@ -188,9 +212,26 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
             File.Delete(file);
         }
 
+        foreach (var file in Directory.EnumerateFiles(Root, "*" + TempExtension).ToList())
+        {
+            File.Delete(file);
+        }
+
         foreach (var dir in Directory.EnumerateDirectories(Root, ClaimPrefix + "*").ToList())
         {
             Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>Deletes <c>*.tmp</c> files older than <see cref="StaleTempAge"/>: a writer killed between create and rename.</summary>
+    private void DeleteStaleTempFiles()
+    {
+        var staleBefore = DateTime.UtcNow - StaleTempAge;
+        foreach (var file in Directory.EnumerateFiles(Root, "*" + TempExtension)
+                     .Where(file => File.GetLastWriteTimeUtc(file) < staleBefore)
+                     .ToList())
+        {
+            File.Delete(file);
         }
     }
 
