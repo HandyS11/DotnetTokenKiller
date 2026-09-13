@@ -73,13 +73,25 @@ jobs:
         run: |
           # A relative source resolves against the config file's directory. An absolute "$(pwd)" path
           # would be POSIX-style (/d/a/...) under Git Bash on Windows, which NuGet cannot read.
+          # nuget.org stays reachable for everything except dtk's own packages: on an arm64 Mac the SDK
+          # downloads microsoft.netcore.app.host.osx-x64 while installing a tool whose pointer targets
+          # `any`, and the mapping keeps DotnetTokenKiller* coming from the local feed only.
           cat > artifacts/feed.nuget.config <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <packageSources>
               <clear />
               <add key="local" value="feed" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
             </packageSources>
+            <packageSourceMapping>
+              <packageSource key="local">
+                <package pattern="DotnetTokenKiller*" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="*" />
+              </packageSource>
+            </packageSourceMapping>
           </configuration>
           EOF
           tools="$RUNNER_TEMP/dtk-tools"
@@ -94,7 +106,21 @@ jobs:
           fi
 
           binary="$tools/dtk"
-          if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # On Windows the SDK's shim for a native tool is dtk.cmd, a batch file forwarding to the
+            # package's dtk.exe. cmd re-parses arguments, so the tests run the exe it forwards to.
+            if [ ! -f "$tools/dtk.cmd" ]; then
+              echo "::error::Expected the shim $tools/dtk.cmd."
+              ls "$tools"
+              exit 1
+            fi
+            binary="$store/$version_lower/tools/any/$RID/dtk.exe"
+          fi
+          if [ ! -f "$binary" ]; then
+            echo "::error::Expected the installed binary $binary."
+            ls -R "$tools"
+            exit 1
+          fi
           echo "DTK_INSTALLED=$binary" >> "$GITHUB_ENV"
 
       # DTK_AOT_REQUIRED=1 makes a missing binary or pack log fail these tests instead of skipping them.

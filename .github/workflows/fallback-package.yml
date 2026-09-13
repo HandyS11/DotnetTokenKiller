@@ -57,14 +57,24 @@ jobs:
       - name: Install the fallback from the local feed
         run: |
           cp artifacts/feed/DotnetTokenKiller.any.*.nupkg artifacts/check-feed/
-          # A relative source resolves against the config file's directory, as in aot-package.yml.
+          # A relative source resolves against the config file's directory, and nuget.org serves
+          # everything except dtk's own packages, as in aot-package.yml.
           cat > artifacts/check-feed.nuget.config <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <packageSources>
               <clear />
               <add key="local" value="check-feed" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
             </packageSources>
+            <packageSourceMapping>
+              <packageSource key="local">
+                <package pattern="DotnetTokenKiller*" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="*" />
+              </packageSource>
+            </packageSourceMapping>
           </configuration>
           EOF
           tools="$RUNNER_TEMP/dtk-tools"
