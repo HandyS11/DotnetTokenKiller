@@ -57,7 +57,7 @@ public sealed class AotWarningLogTests
     [AotPackLogFact]
     public async Task PackLog_HasOnlyTheAcceptedSpectreWarningsAsync()
     {
-        var log = await File.ReadAllTextAsync(Environment.GetEnvironmentVariable(AotPackLogFactAttribute.PackLogVariable)!.Trim());
+        var log = await File.ReadAllTextAsync(AotParitySkip.ReadRequired(AotPackLogFactAttribute.PackLogVariable));
 
         AotWarningLog.FindProblems(log).Should().BeEmpty(
             "Spectre.Console.Cli's IL2104, IL3053 and IL3000 are the only accepted trim or AOT warnings");

@@ -34,7 +34,7 @@ internal static partial class ParityRunner
     /// <param name="parityCase">The case to run.</param>
     internal static async Task<(ParityResult Jit, ParityResult Aot)> RunBothAsync(ParityCase parityCase)
     {
-        var aotBinary = Environment.GetEnvironmentVariable(AotParitySkip.AotBinaryVariable)!.Trim();
+        var aotBinary = AotParitySkip.ReadRequired(AotParitySkip.AotBinaryVariable);
         var caseRoot = Path.Combine(Path.GetTempPath(), $"dtk-parity-{Guid.NewGuid():N}");
         var sandboxRoot = Path.Combine(caseRoot, "sandbox");
         try
