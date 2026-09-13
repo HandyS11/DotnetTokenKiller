@@ -43,6 +43,14 @@ internal static class ParityCases
             new ParityStep(["gain", "--export", "csv"]),
             new ParityStep(["gain", "--days", "7", "--command", "build"]),
         ]),
+        // The second tokenizer loads a different vocabulary; its counts differ from cl100k_base's on this
+        // fixture (707 input tokens against 710), so the tracking rows prove which one ran.
+        ["tokenizer-o200k"] = new ParityCase(
+        [
+            new ParityStep(["config", "set", "tracking.tokenizer", "O200kBase"]),
+            new ParityStep(["pipe", "build", "--exit-code", "1"], "dotnet_build_errors.txt"),
+            new ParityStep(["gain", "--json"]),
+        ]),
         ["log"] = new ParityCase(
         [
             new ParityStep(["pipe", "test", "--exit-code", "1"], "dotnet_test_failures.txt"),
