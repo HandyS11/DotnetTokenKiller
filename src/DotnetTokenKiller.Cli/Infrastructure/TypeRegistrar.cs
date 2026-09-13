@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console.Cli;
 
@@ -14,6 +15,16 @@ internal sealed class TypeRegistrar(IServiceCollection services) : ITypeRegistra
     }
 
     /// <inheritdoc/>
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2067:Target parameter argument does not satisfy 'DynamicallyAccessedMembersAttribute' in call to target method",
+        Justification = "Spectre.Console.Cli passes the command, settings and built-in command types it registers "
+                        + "(including its hidden 'cli version', 'cli explain' and 'cli opencli' commands, whose "
+                        + "constructors take its internal services), and ITypeRegistrar carries no trimming "
+                        + "annotations. dtk and Spectre.Console.Cli are rooted (TrimmerRootAssembly), so every "
+                        + "constructor survives; AotParityTests and SpectreBuiltInCommandTests run these types "
+                        + "through the AOT binary. One of the two trim or AOT suppressions at the Spectre.Console.Cli "
+                        + "boundary; see the native AOT design spec.")]
     public void Register(Type service, Type implementation)
     {
         services.AddSingleton(service, implementation);

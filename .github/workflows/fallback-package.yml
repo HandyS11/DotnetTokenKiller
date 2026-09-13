@@ -1,0 +1,118 @@
+name: Fallback package
+
+# Packs the framework-dependent `any` tool package, the one every runtime identifier without a
+# Native AOT package installs, then installs and tests it. Also packs the pointer package Publish
+# pushes. Called by CI and by Publish.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Package version, passed to the build and to both packs.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: any
+    runs-on: ubuntu-latest
+    env:
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      VERSION: ${{ inputs.version }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: Directory.Packages.props
+
+      - name: Build
+        run: dotnet build DotnetTokenKiller.slnx -c Release -p:Version="$VERSION"
+
+      - name: Pack the fallback package
+        run: dotnet pack src/DotnetTokenKiller.Cli -c Release -r any -p:PublishAot=false -p:Version="$VERSION" -o artifacts/feed
+
+      # The real pointer, listing every RID, that Publish pushes. Packed here so the privileged publish job builds nothing.
+      - name: Pack the pointer package
+        run: dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false -p:Version="$VERSION" -o artifacts/pointer
+
+      # The real pointer lists all five RIDs, so on this linux-x64 runner it would install the AOT
+      # package. A check-only pointer that lists just `any` forces the fallback. It is never uploaded.
+      - name: Pack a check-only pointer that lists only the fallback
+        run: >-
+          dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false
+          -p:ToolPackageRuntimeIdentifiers=any -p:Version="$VERSION" -o artifacts/check-feed
+
+      - name: Install the fallback from the local feed
+        run: |
+          cp artifacts/feed/DotnetTokenKiller.any.*.nupkg artifacts/check-feed/
+          # A relative source resolves against the config file's directory, and nuget.org serves
+          # everything except dtk's own packages, as in aot-package.yml.
+          cat > artifacts/check-feed.nuget.config <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="check-feed" />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+            </packageSources>
+            <packageSourceMapping>
+              <packageSource key="local">
+                <package pattern="DotnetTokenKiller*" />
+              </packageSource>
+              <packageSource key="nuget.org">
+                <package pattern="*" />
+              </packageSource>
+            </packageSourceMapping>
+          </configuration>
+          EOF
+          tools="$RUNNER_TEMP/dtk-tools"
+          dotnet tool install --tool-path "$tools" --configfile artifacts/check-feed.nuget.config DotnetTokenKiller --version "$VERSION"
+
+          version_lower="$(echo "$VERSION" | tr '[:upper:]' '[:lower:]')"
+          store="$tools/.store/dotnettokenkiller/$version_lower/dotnettokenkiller.any"
+          if [ ! -d "$store" ]; then
+            echo "::error::Expected $store: the install did not pick the any package."
+            ls -R "$tools/.store"
+            exit 1
+          fi
+
+          echo "DTK_INSTALLED=$tools/dtk" >> "$GITHUB_ENV"
+
+      # DTK_AOT_REQUIRED=1 makes a missing binary fail the parity tests instead of skipping them.
+      - name: Check parity
+        env:
+          DTK_AOT_REQUIRED: '1'
+        run: >-
+          DTK_AOT_BINARY="$DTK_INSTALLED"
+          dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build
+          --filter "FullyQualifiedName~DotnetTokenKiller.Cli.IntegrationTests.Aot.AotParityTests" --verbosity normal
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-any
+          path: |
+            artifacts/feed/DotnetTokenKiller.any.*.nupkg
+            artifacts/feed/DotnetTokenKiller.any.*.snupkg
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the pointer package
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-pointer
+          path: artifacts/pointer/DotnetTokenKiller.*.nupkg
+          if-no-files-found: error
+          retention-days: 14

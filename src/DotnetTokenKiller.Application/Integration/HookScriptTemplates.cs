@@ -82,6 +82,10 @@ internal static class HookScriptTemplates
         # path, a string literal, or another word — do not rewrite.
         _BOUNDARY_CHARS = " \t;&|({`\n"
 
+        # Splits the text before `dotnet` into words at those same boundaries, so the word that
+        # runs `dotnet` is found even when an operator is glued to it: `dtk, (dtk, $(dtk, ;dtk.
+        _WORD_SEPARATORS = re.compile("[" + re.escape(_BOUNDARY_CHARS) + "]+")
+
 
         def _inside_quotes(command: str, index: int) -> bool:
             """Whether `index` falls inside a shell quote region, honoring nesting and backslash escapes.
@@ -115,9 +119,12 @@ internal static class HookScriptTemplates
                     return match.group(0)  # path like /usr/lib64/dotnet/dotnet or ./dotnet
                 if _inside_quotes(command, start):
                     return match.group(0)  # e.g. git commit -m "fix dotnet build"
+                # The word that runs this `dotnet`, with any directory dropped, so a path-qualified
+                # dtk (~/.dotnet/tools/dtk, C:\tools\dtk.exe) counts as a prefix too. When an operator
+                # ends the preceding text (`echo dtk; dotnet build`), that word is empty.
                 preceding = command[:start].rstrip()
-                last_token = preceding.split()[-1] if preceding else ""
-                if last_token in ("dtk", "dtk.exe"):
+                program = re.split(r"[\\/]", _WORD_SEPARATORS.split(preceding)[-1])[-1]
+                if program in ("dtk", "dtk.exe"):
                     return match.group(0)
                 return f"dtk dotnet {match.group(1)}"
 
