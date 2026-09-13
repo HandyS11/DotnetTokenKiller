@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace DotnetTokenKiller.Benchmarks.Support;
 
 /// <summary>
@@ -16,9 +18,13 @@ internal sealed class HermeticState : IDisposable
     private readonly string? _previousDbPath;
     private readonly string? _previousTeeDir;
 
-    private HermeticState()
+    private HermeticState(string? root)
     {
-        _root = Directory.CreateTempSubdirectory("dtk-bench-");
+        _root = root is null
+            ? Directory.CreateTempSubdirectory("dtk-bench-")
+            : Directory.CreateDirectory(Path.Combine(
+                Path.GetFullPath(root),
+                string.Create(CultureInfo.InvariantCulture, $"dtk-bench-{Guid.NewGuid():N}")));
         _previousConfigPath = Environment.GetEnvironmentVariable("DTK_CONFIG_PATH");
         _previousDbPath = Environment.GetEnvironmentVariable("DTK_DB_PATH");
         _previousTeeDir = Environment.GetEnvironmentVariable("DTK_TEE_DIR");
@@ -42,7 +48,13 @@ internal sealed class HermeticState : IDisposable
 
     internal string TeeDir { get; }
 
-    internal static HermeticState Enter() => new();
+    /// <summary>Redirects dtk's state into a fresh directory, under <paramref name="root"/> when given.</summary>
+    /// <param name="root">
+    /// A directory to create the hermetic state under, or <see langword="null"/> for the temp root.
+    /// The temp root is tmpfs on some machines, where a tracking write costs no fsync; passing a
+    /// directory on a real disk makes <c>cold-start</c> pay what users pay.
+    /// </param>
+    internal static HermeticState Enter(string? root = null) => new(root);
 
     public void Dispose()
     {

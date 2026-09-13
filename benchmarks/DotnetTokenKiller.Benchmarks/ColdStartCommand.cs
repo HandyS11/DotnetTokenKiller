@@ -67,7 +67,20 @@ internal static class ColdStartCommand
             return 1;
         }
 
-        var binary = ResolveBinary(args);
+        (string? Binary, string? StateDir) parsed;
+        try
+        {
+            parsed = ParseArguments(args);
+        }
+        catch (ArgumentException ex)
+        {
+            await Console.Error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            await Console.Error.WriteLineAsync(
+                "Usage: cold-start [/path/to/dtk] [--state-dir <directory>]").ConfigureAwait(false);
+            return 1;
+        }
+
+        var binary = ResolveBinary(parsed.Binary);
 
         if (binary is null)
         {
@@ -84,7 +97,7 @@ internal static class ColdStartCommand
 
         var input = FixtureCorpus.Load(Fixture);
         var summaryLine = FilteredSummaryLine(input);
-        using var state = HermeticState.Enter();
+        using var state = HermeticState.Enter(parsed.StateDir);
 
         await Console.Out.WriteLineAsync($"Cold start: {binary}").ConfigureAwait(false);
         await Console.Out.WriteLineAsync(string.Create(
@@ -98,6 +111,8 @@ internal static class ColdStartCommand
         await Console.Out.WriteLineAsync($"Runtime environment: {DescribeRuntimeEnvironment()}")
             .ConfigureAwait(false);
         await Console.Out.WriteLineAsync($"Runtime config: {DescribeRuntimeConfig(binary)}")
+            .ConfigureAwait(false);
+        await Console.Out.WriteLineAsync($"State: {state.RootPath} ({DescribeFileSystem(state.RootPath)})")
             .ConfigureAwait(false);
 
         await MeasurePipeAsync(binary, state, input, summaryLine).ConfigureAwait(false);
@@ -421,13 +436,62 @@ internal static class ColdStartCommand
     }
 
     /// <summary>
+    /// Splits the verb's arguments: <c>--state-dir &lt;dir&gt;</c> and at most one binary path.
+    /// </summary>
+    /// <param name="args">The command line after the verb.</param>
+    /// <exception cref="ArgumentException">An unknown option or a second positional argument.</exception>
+    internal static (string? Binary, string? StateDir) ParseArguments(string[] args)
+    {
+        string? binary = null;
+        string? stateDir = null;
+
+        var i = 1;
+        while (i < args.Length)
+        {
+            switch (args[i])
+            {
+                case "--state-dir" when i + 1 < args.Length:
+                    stateDir = args[i + 1];
+                    i += 2;
+                    break;
+                case "--state-dir":
+                    throw new ArgumentException("--state-dir needs a directory.", nameof(args));
+                case var option when option.StartsWith("--", StringComparison.Ordinal):
+                    throw new ArgumentException($"Unknown option '{option}'.", nameof(args));
+                case var path when binary is null:
+                    binary = path;
+                    i++;
+                    break;
+                default:
+                    throw new ArgumentException($"Unexpected argument '{args[i]}'.", nameof(args));
+            }
+        }
+
+        return (binary, stateDir);
+    }
+
+    /// <summary>The filesystem type under <paramref name="path"/>, for the header.</summary>
+    /// <param name="path">A directory that exists.</param>
+    private static string DescribeFileSystem(string path)
+    {
+        try
+        {
+            return new DriveInfo(Path.GetFullPath(path)).DriveFormat;
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            return "unknown filesystem";
+        }
+    }
+
+    /// <summary>
     /// Resolves the binary from an explicit argument, then the Release build output, then whatever
     /// <c>dtk</c> is installed on PATH.
     /// </summary>
-    /// <param name="args">The command-line arguments, checked for an explicit binary path.</param>
-    private static string? ResolveBinary(string[] args)
+    /// <param name="explicitPath">An explicit binary path, or null to search.</param>
+    private static string? ResolveBinary(string? explicitPath)
     {
-        if (args is [_, var explicitPath, ..])
+        if (explicitPath is not null)
         {
             return File.Exists(explicitPath) ? explicitPath : null;
         }
