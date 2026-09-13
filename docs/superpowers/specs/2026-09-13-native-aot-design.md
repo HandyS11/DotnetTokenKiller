@@ -231,7 +231,9 @@ Facts this relies on (verified by pack-and-install experiments on SDK 10.0.400):
 - **Installing.** `dotnet tool install -g DotnetTokenKiller` on a listed RID installs the pointer and
   that RID's package. The shim is a symlink to the native binary on Unix, and no .NET runtime is
   needed to run it.
-- **Unlisted RIDs** install `any`, which needs the .NET 10 runtime, as today.
+- **Unlisted RIDs** install `any`, which needs the .NET 10 runtime, as today — except musl: the
+  SDK's RID graph maps `linux-musl-x64`/`linux-musl-arm64` to `linux-x64`/`linux-arm64`, so Alpine
+  machines would install the glibc AOT package, which cannot run there (open issue, see Amendments).
 - **Updating and `dnx`.** `dotnet tool update` from a framework-dependent install to the hybrid
   package works, and `dnx` / `dotnet tool exec` pick the RID package the same way.
 - **Missing RID package.** If the package for the machine's RID is absent at the pointer's version,
@@ -469,7 +471,9 @@ Test-first where the change is code:
 - `InvariantGlobalization`: about 2 ms, and it changes culture-sensitive formatting.
 - Replacing Spectre.Console.Cli.
 - More RIDs (`osx-x64`, `win-arm64`, `linux-musl-x64`). Each is later one
-  `ToolPackageRuntimeIdentifiers` entry and one matrix row, under the same native-runner rule.
+  `ToolPackageRuntimeIdentifiers` entry and one matrix row in both `ci.yml` and `publish.yml`, under
+  the same native-runner rule; the release derives its push list from the pointer and fails if a
+  listed package is missing.
 - Statically linking `e_sqlite3` into the binary. It would make the tracking-off loader probe
   meaningless.
 - **The rewrite hook's double-prefix bug** in `.claude/hooks/dotnet-to-dtk.py` and
@@ -509,3 +513,22 @@ documents; `cli opencli` generates one, and works in both builds.
   (`-p:PublishAot=false`) keeps the original three properties instead. Task 10's final JIT figures
   and the Measurement protocol above were corrected to measure the installed `any` package rather
   than `bin/Release`.
+
+### Open issues found by the final review
+
+1. **musl machines resolve the glibc AOT package.** The SDK's RID graph maps `linux-musl-x64` and
+   `linux-musl-arm64` to `linux-x64` and `linux-arm64`, so `dotnet tool install` on Alpine picks the
+   glibc AOT package, which cannot run there, instead of `any`. Confirmed in SDK 10.0.400's
+   `RuntimeIdentifierGraph.json` and by a Docker install test.
+2. **The Linux AOT `dtk` built on `ubuntu-latest` needs GLIBC_2.34.** It does not start on the glibc
+   2.27–2.33 distros .NET 10 supports (RHEL/Rocky/Alma 8, Ubuntu 20.04, Debian 11), where today's
+   framework-dependent tool starts. A probe built it in
+   `mcr.microsoft.com/dotnet-buildtools/prereqs:azurelinux-3.0-net10.0-cross-amd64` with
+   `-p:SysRoot=/crossrootfs/x64 -p:LinkerFlavor=lld`: `dtk` then needs GLIBC_2.16 and runs on Rocky 8,
+   Ubuntu 20.04 and 18.04. musl RIDs build in `…-cross-amd64-musl` or
+   `mcr.microsoft.com/dotnet/sdk:10.0-alpine` and pass on Alpine 3.17–3.21.
+3. **Pre-existing, independent of AOT:** SQLitePCLRaw.lib.e_sqlite3 3.53.3's `libe_sqlite3.so` needs
+   GLIBC_2.34 (ericsink/SQLitePCL.raw#674), so tracking already fails on those distros in the
+   released framework-dependent tool. Statically linking `libe_sqlite3.a` fixed it in the probe.
+4. **Status:** not fixed on this branch; no release tag until the user decides. Options: cross-sysroot
+   and musl RID jobs; Linux through `any` for now; or accept and document.

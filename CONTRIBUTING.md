@@ -63,9 +63,10 @@ Package versions are managed centrally in `Directory.Packages.props`. Add versio
 
 `Directory.Build.props` carries a `<Version>` placeholder for local builds; it is not the source of
 truth. When a maintainer pushes a release tag (`vX.Y.Z`), the `Publish` workflow
-(`.github/workflows/publish.yml`) rewrites `Directory.Build.props` from the tag name before restoring,
-building, and packing, so the version NuGet actually publishes always comes from the tag. You do not
-need to bump the placeholder as part of a pull request.
+(`.github/workflows/publish.yml`) passes the tag's version to every build and pack as `-p:Version`, so
+the version NuGet actually publishes always comes from the tag, and the `<Version>` in
+`Directory.Build.props` is only a local placeholder. You do not need to bump it as part of a pull
+request.
 
 ## How to Add a New Filter
 

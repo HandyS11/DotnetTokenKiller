@@ -34,7 +34,9 @@ dtk dotnet list package --outdated
 # Run the benchmark suite (Release only; the full run takes tens of minutes)
 dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- --filter '*FilterBenchmarks*'
 
-# Measure the end-to-end cold-start cost of the built binary (piped, and wrapping a fake dotnet; ~3 min, Linux/macOS)
+# Measure the end-to-end cold-start cost of the Release build (piped, and wrapping a fake dotnet; ~3 min, Linux/macOS).
+# It carries the AOT feature switches (PublishAot=true in the csproj), so it is neither the shipped `any` fallback nor
+# the AOT binary; for those, pass an installed tool's binary path to `cold-start`.
 dotnet build src/DotnetTokenKiller.Cli -c Release
 dotnet run -c Release --project benchmarks/DotnetTokenKiller.Benchmarks -- cold-start
 
@@ -145,7 +147,8 @@ dictionary, value-type array, nullable or converter option without first extendi
 `CommandSettingsAotGuardTests` fails until you do.
 
 `DTK_TEST_BINARY` runs the CLI integration suite against any dtk binary; `DTK_AOT_BINARY` enables the
-parity tests; `DTK_AOT_PACK_LOG` checks a pack log's warnings. `IsAotCompatible` is on for the three
+parity tests; `DTK_AOT_PACK_LOG` checks a pack log's warnings. CI also sets `DTK_AOT_REQUIRED=1`, which
+makes those tests fail instead of skip when either variable is missing. `IsAotCompatible` is on for the three
 libraries, so a trim- or AOT-unsafe call fails the normal build.
 
 ## Architecture & Stack

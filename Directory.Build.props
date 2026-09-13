@@ -9,7 +9,7 @@
     <!--
       Placeholder for local builds only. The Publish workflow (.github/workflows/publish.yml) passes
       the pushed release tag's version (`v1.2.3` -> `-p:Version=1.2.3`) to every build and pack,
-      and CI passes `0.0.0-ci`, so a published package's version always comes from the tag.
+      and CI's AOT and fallback package jobs pass `0.0.0-ci`, so a published package's version always comes from the tag.
     -->
     <Version>0.5.0</Version>
     <IsPackable>false</IsPackable>
