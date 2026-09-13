@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -14,6 +15,23 @@ internal sealed record HookSpec(
 internal static class IntegratorHelpers
 {
     private const string HooksKey = "hooks";
+
+    /// <summary>
+    /// Serializer options for settings files merged by <see cref="MergeJsonSettingsAsync"/>.
+    /// <see cref="JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/> still escapes what JSON requires
+    /// (<c>"</c> as <c>\"</c>, <c>\</c>, control characters), so the output stays valid JSON; it just
+    /// stops also escaping <c>&lt; &gt; &amp; ' +</c> and non-ASCII characters to <c>\uXXXX</c>, which
+    /// the default encoder does because it assumes the JSON might be embedded in HTML. These settings
+    /// files are read directly by the Claude and Gemini CLIs, never rendered as HTML, so the relaxed
+    /// escaping is safe and keeps a command's own quotes (and any existing entry's characters) legible
+    /// instead of rewriting them on every merge. Cached in a <see langword="static readonly"/> field
+    /// because constructing <see cref="JsonSerializerOptions"/> per call is itself flagged (CA1869).
+    /// </summary>
+    private static readonly JsonSerializerOptions SettingsJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     /// <summary>
     /// Writes a whole-file artifact, refreshing it whenever there is something to change and
@@ -309,18 +327,36 @@ internal static class IntegratorHelpers
     /// <summary>
     /// Merges a hook entry into a JSON settings file under
     /// <c>hooks[<paramref name="hookEventKey"/>]</c>.
-    /// Existing content is preserved; the entry is only added if not already present
-    /// (detected by matching <paramref name="hookCommand"/> in the "command" field). When the
-    /// entry is already present and no legacy entry needs replacing, nothing is written and the
-    /// path is reported <see cref="IntegrationContext.Unchanged"/> — this branch is
-    /// force-independent (there is nothing to write and <c>--force</c> would not change that), so
-    /// it must never be reported as a <see cref="IntegrationContext.Skipped"/> file, which implies
-    /// re-running with <c>--force</c> would help.
-    /// If an entry carrying the pre-<c>$..._PROJECT_DIR</c> relative form of
-    /// <paramref name="hookCommand"/> is found (see <see cref="DeriveLegacyCommand"/>), that stale
-    /// entry is replaced in place instead of appending a duplicate alongside it — otherwise a
-    /// project integrated before the hook command was rooted at an env var would keep the old,
-    /// broken entry registered forever, even across repeated <c>--force</c> runs.
+    /// Existing content is preserved; registration is detected by matching
+    /// <paramref name="hookCommand"/> against each entry's <c>"command"</c> field, treating two
+    /// commands as the same hook when they are equal after removing every <c>"</c> character (see
+    /// <see cref="AreEquivalentIgnoringQuotes"/>) — so a settings file hand-edited to quote the whole
+    /// path instead of just the env-var segment (e.g. <c>python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py"</c>)
+    /// is still recognized as dtk's own hook — or when it matches the pre-<c>$..._PROJECT_DIR</c>
+    /// relative legacy form (see <see cref="DeriveLegacyCommand"/>).
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     Only the identical current command is registered: nothing is written, and the path is
+    ///     reported <see cref="IntegrationContext.Unchanged"/> — this branch is force-independent
+    ///     (there is nothing to write and <c>--force</c> would not change that), so it must never be
+    ///     reported as <see cref="IntegrationContext.Skipped"/>, which implies re-running with
+    ///     <c>--force</c> would help.
+    ///   </description></item>
+    ///   <item><description>
+    ///     An equivalent-but-not-identical variant (quote difference or legacy relative form) is
+    ///     registered: it is upgraded in place to the current command and the file is reported
+    ///     <see cref="IntegrationContext.Updated"/>.
+    ///   </description></item>
+    ///   <item><description>
+    ///     The identical current command and one or more equivalent/legacy variants are all
+    ///     registered (possible when an in-between build appended the new one alongside the old): the
+    ///     variants are removed, leaving exactly one registration, and the file is reported
+    ///     <see cref="IntegrationContext.Updated"/>.
+    ///   </description></item>
+    ///   <item><description>Nothing equivalent is registered: the entry is appended.</description></item>
+    /// </list>
+    /// Every other hook in the array — one that is not equivalent to <paramref name="hookCommand"/> —
+    /// is left untouched.
     /// </summary>
     /// <param name="path">Path to the settings.json file.</param>
     /// <param name="hookEventKey">Key of the hook event array within the hooks object (e.g. "PreToolUse").</param>
@@ -358,31 +394,30 @@ internal static class IntegratorHelpers
                 $"The settings file '{path}' has a '{HooksKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
         };
 
-        var newAlreadyRegistered = FindRegisteredCommandEntry(hookArray, hookCommand) is not null;
         var legacyCommand = DeriveLegacyCommand(hookCommand);
-        var legacyEntry = legacyCommand is null ? null : FindRegisteredCommandEntry(hookArray, legacyCommand);
+        var matches = FindEquivalentEntries(hookArray, hookCommand, legacyCommand);
 
-        if (newAlreadyRegistered)
-        {
-            if (legacyEntry is null)
-            {
-                context.Unchanged.Add(path);
-                return;
-            }
-
-            // Both the new command and a stale legacy relative command are registered (possible when
-            // an in-between build appended the new one alongside the old). Drop the legacy duplicate
-            // so the broken relative entry can't keep firing, leaving exactly one registration.
-            RemoveRegisteredCommandEntry(hookArray, legacyCommand!);
-        }
-        else if (legacyEntry is not null)
-        {
-            legacyEntry["command"] = hookCommand;
-        }
-        else
+        if (matches.Count == 0)
         {
             // The JsonNode overload: Add<JsonObject> is neither trim- nor AOT-safe.
             hookArray.Add((JsonNode)hookEntry);
+        }
+        else if (matches.Count == 1 && matches[0]["command"]!.GetValue<string>() == hookCommand)
+        {
+            // The only registration is already the identical current command: nothing to write.
+            context.Unchanged.Add(path);
+            return;
+        }
+        else
+        {
+            // Upgrade the first match in place — a no-op if it already held the identical command —
+            // then drop every other equivalent/legacy match so exactly one registration survives.
+            matches[0]["command"] = hookCommand;
+
+            if (matches.Count > 1)
+            {
+                RemoveEntries(hookArray, [.. matches.Skip(1)]);
+            }
         }
 
         hooks[hookEventKey] = hookArray;
@@ -391,11 +426,10 @@ internal static class IntegratorHelpers
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(
             path,
-            // WriteIndented emits '\r\n' on Windows; normalize so the written JSON is identical everywhere.
-            root.ToJsonString(new JsonSerializerOptions
-            {
-                WriteIndented = true
-            }).ReplaceLineEndings("\n"),
+            // WriteIndented emits '\r\n' on Windows; normalize so the written JSON is identical
+            // everywhere, and add the single trailing '\n' ToJsonString never emits, matching
+            // .editorconfig's insert_final_newline.
+            root.ToJsonString(SettingsJsonOptions).ReplaceLineEndings("\n") + "\n",
             cancellationToken).ConfigureAwait(false);
 
         (exists ? context.Updated : context.Created).Add(path);
@@ -443,11 +477,23 @@ internal static class IntegratorHelpers
             $"The settings file '{path}' must contain a JSON object at the root, but found '{actualType}'.");
     }
 
-    /// <summary>Finds the inner hook object whose <c>"command"</c> field equals <paramref name="command"/>, if any.</summary>
+    /// <summary>
+    /// Finds every registered inner hook object whose <c>"command"</c> is equivalent to
+    /// <paramref name="hookCommand"/> — identical, equal after removing every <c>"</c> character (see
+    /// <see cref="AreEquivalentIgnoringQuotes"/>), or equal to <paramref name="legacyCommand"/> (the
+    /// pre-<c>$..._PROJECT_DIR</c> relative form <see cref="DeriveLegacyCommand"/> derives) — in the
+    /// array's traversal order.
+    /// </summary>
     /// <param name="hookArray">The hook event array (e.g. <c>hooks.PreToolUse</c>) to search.</param>
-    /// <param name="command">The command string to match.</param>
-    private static JsonObject? FindRegisteredCommandEntry(JsonArray hookArray, string command)
+    /// <param name="hookCommand">The current command dtk registers.</param>
+    /// <param name="legacyCommand">
+    /// The derived legacy relative command, or <see langword="null"/> when <paramref name="hookCommand"/>
+    /// doesn't have that shape.
+    /// </param>
+    private static List<JsonObject> FindEquivalentEntries(JsonArray hookArray, string hookCommand, string? legacyCommand)
     {
+        var matches = new List<JsonObject>();
+
         foreach (var item in hookArray)
         {
             if (item is not JsonObject entry)
@@ -463,25 +509,48 @@ internal static class IntegratorHelpers
 
             foreach (var inner in innerHooks)
             {
-                if (inner is JsonObject innerEntry &&
-                    innerEntry["command"]?.GetValue<string>() == command)
+                if (inner is not JsonObject innerEntry)
                 {
-                    return innerEntry;
+                    continue;
+                }
+
+                var command = innerEntry["command"]?.GetValue<string>();
+                if (command is not null
+                    && (AreEquivalentIgnoringQuotes(command, hookCommand) || command == legacyCommand))
+                {
+                    matches.Add(innerEntry);
                 }
             }
         }
 
-        return null;
+        return matches;
     }
 
     /// <summary>
-    /// Removes every registered hook whose <c>"command"</c> equals <paramref name="command"/>,
-    /// dropping any outer entry whose inner <c>hooks</c> list becomes empty as a result.
+    /// True when two hook commands register the same hook once quoting differences are ignored —
+    /// e.g. <c>python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py</c> (the env var quoted)
+    /// and <c>python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py"</c> (the whole path quoted,
+    /// as a hand-edit might write it) are the same hook.
+    /// </summary>
+    /// <param name="first">The first command to compare.</param>
+    /// <param name="second">The second command to compare.</param>
+    private static bool AreEquivalentIgnoringQuotes(string first, string second) =>
+        string.Equals(StripQuotes(first), StripQuotes(second), StringComparison.Ordinal);
+
+    /// <summary>Removes every <c>"</c> character from <paramref name="command"/>.</summary>
+    /// <param name="command">The command to strip.</param>
+    private static string StripQuotes(string command) => command.Replace("\"", string.Empty, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Removes the given inner hook objects from <paramref name="hookArray"/> by reference, dropping
+    /// any outer entry whose inner <c>hooks</c> list becomes empty as a result.
     /// </summary>
     /// <param name="hookArray">The hook event array (e.g. <c>hooks.PreToolUse</c>) to prune.</param>
-    /// <param name="command">The command string whose registrations should be removed.</param>
-    private static void RemoveRegisteredCommandEntry(JsonArray hookArray, string command)
+    /// <param name="entriesToRemove">The specific inner hook objects to remove.</param>
+    private static void RemoveEntries(JsonArray hookArray, IReadOnlyCollection<JsonObject> entriesToRemove)
     {
+        var toRemove = new HashSet<JsonObject>(entriesToRemove);
+
         for (var outer = hookArray.Count - 1; outer >= 0; outer--)
         {
             if (hookArray[outer] is not JsonObject entry)
@@ -497,8 +566,7 @@ internal static class IntegratorHelpers
 
             for (var inner = innerHooks.Count - 1; inner >= 0; inner--)
             {
-                if (innerHooks[inner] is JsonObject innerEntry &&
-                    innerEntry["command"]?.GetValue<string>() == command)
+                if (innerHooks[inner] is JsonObject innerEntry && toRemove.Contains(innerEntry))
                 {
                     innerHooks.RemoveAt(inner);
                 }

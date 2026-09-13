@@ -316,6 +316,7 @@ public sealed class IntegratorHelpersTests : IDisposable
                 ]
               }
             }
+
             """);
         context.Created.Should().ContainSingle();
     }
@@ -1016,6 +1017,7 @@ public sealed class IntegratorHelpersTests : IDisposable
                 ]
               }
             }
+
             """);
         context.Created.Should().HaveCount(2);
     }
@@ -1088,6 +1090,7 @@ public sealed class IntegratorHelpersTests : IDisposable
                 ]
               }
             }
+
             """);
         context.Updated.Should().ContainSingle();
     }
@@ -1286,6 +1289,163 @@ public sealed class IntegratorHelpersTests : IDisposable
         var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
         innerCommands.Should().ContainSingle().Which.Should().Be(command);
         context.Created.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_WholePathQuotedVariantRegistered_UpgradesInPlaceToCurrentCommand()
+    {
+        // A user hand-editing settings.json might quote the whole path instead of just the env-var
+        // segment (see #120). That registers the same hook and must be recognized as such — the two
+        // commands are equal once every '"' is stripped — so it is upgraded in place rather than
+        // appended as a duplicate.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string currentCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        const string wholePathQuotedVariant = "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py\"";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray { HookEntry(wholePathQuotedVariant) }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(currentCommand), currentCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(currentCommand);
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_IdenticalCommandAndWholePathQuotedVariantBothRegistered_KeepsOnlyOneEntry()
+    {
+        // When the current command AND an equivalent variant are both already registered (possible
+        // when a hand-edit introduced the variant alongside dtk's own entry), the variant must be
+        // dropped and exactly one registration — the identical one — must survive.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string currentCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        const string wholePathQuotedVariant = "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py\"";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    HookEntry(currentCommand),
+                    HookEntry(wholePathQuotedVariant)
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(currentCommand), currentCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().ContainSingle().Which.Should().Be(currentCommand);
+        context.Updated.Should().ContainSingle().Which.Should().Be(path);
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_NewFile_EscapesEmbeddedQuotesAsBackslashQuoteNotUnicodeEscape()
+    {
+        // dtk's own hook command embeds literal quotes around the env var, so every merge writes at
+        // least one embedded quote. The default WriteIndented encoder would rewrite it as a Unicode
+        // escape sequence; the fix must keep it as a plain, JSON-required backslash-quote instead.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        const string command = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(command), command, context, CancellationToken.None);
+
+        var raw = await File.ReadAllTextAsync(path);
+        raw.Should().Contain(
+            "\\\"$CLAUDE_PROJECT_DIR\\\"", "the embedded quotes must be escaped with a backslash, not \\u0022");
+        raw.Should().NotContain("\\u0022", "quotes must never be rewritten as \\u0022 escapes");
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_ExistingFileWithHtmlSensitiveAndNonAsciiCharacters_KeepsThemVerbatim()
+    {
+        // UnsafeRelaxedJsonEscaping leaves '< > & \'' and non-ASCII characters unescaped, unlike the
+        // default encoder, which treats them as HTML-sensitive. That is safe here: these are local
+        // settings files read directly by the Claude/Gemini CLIs, never rendered as HTML.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path,
+            """
+            {
+              "permissions": {
+                "allow": [
+                  "Bash(npm run test && echo 'ok' > out.txt)"
+                ]
+              },
+              "description": "café"
+            }
+            """);
+        const string command = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(command), command, context, CancellationToken.None);
+
+        var raw = await File.ReadAllTextAsync(path);
+        raw.Should().Contain("Bash(npm run test && echo 'ok' > out.txt)");
+        raw.Should().Contain("café");
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_WrittenFile_EndsWithExactlyOneNewline()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        const string command = "python3 hook.py";
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(command), command, context, CancellationToken.None);
+
+        var raw = await File.ReadAllTextAsync(path);
+        raw.Should().EndWith("}\n");
+        raw.Should().NotEndWith("\n\n");
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_UnrelatedHookInSameEventArray_IsLeftUntouchedWhenVariantUpgraded()
+    {
+        // PreToolUse is a shared array; another tool's hook (e.g. rtk's coexistence entry) sitting
+        // alongside the variant being upgraded must survive untouched.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string currentCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
+        const string wholePathQuotedVariant = "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py\"";
+        const string unrelatedCommand = "rtk hook claude";
+        var initialRoot = new JsonObject
+        {
+            [HooksProperty] = new JsonObject
+            {
+                ["PreToolUse"] = new JsonArray
+                {
+                    HookEntry(unrelatedCommand),
+                    HookEntry(wholePathQuotedVariant)
+                }
+            }
+        };
+        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
+
+        await IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", HookEntry(currentCommand), currentCommand, context, CancellationToken.None);
+
+        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
+        innerCommands.Should().BeEquivalentTo(unrelatedCommand, currentCommand);
+        context.Updated.Should().ContainSingle();
     }
 
     private const string HooksProperty = "hooks";

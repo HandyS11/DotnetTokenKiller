@@ -318,6 +318,45 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_ExistingSettingsWithWholePathQuotedHookVariant_UpgradesToSingleEntry()
+    {
+        // Same fix as ClaudeCodeIntegrator's equivalent test: MergeJsonSettingsAsync is shared, so a
+        // hand-edited whole-path-quoted variant of Gemini's hook command must be recognized as the
+        // same hook and upgraded in place rather than appended as a duplicate.
+        Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath)!);
+        await File.WriteAllTextAsync(SettingsPath,
+            """
+            {
+              "hooks": {
+                "BeforeTool": [
+                  {
+                    "matcher": "run_shell_command",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "python3 \"$GEMINI_PROJECT_DIR/.gemini/hooks/dotnet-to-dtk.py\""
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+
+            """);
+
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(SettingsPath);
+        var root = JsonNode.Parse(json) as JsonObject;
+        var beforeTool = root!["hooks"]!["BeforeTool"]!.AsArray();
+
+        beforeTool.Should().ContainSingle();
+        beforeTool[0]!["hooks"]!.AsArray().Should().ContainSingle();
+        beforeTool[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should()
+            .Be("""python3 "$GEMINI_PROJECT_DIR"/.gemini/hooks/dotnet-to-dtk.py""");
+    }
+
+    [Fact]
     public async Task IntegrateGlobalAsync_RegistersHomeRootedHookCommand()
     {
         await _sut.IntegrateGlobalAsync(false, CancellationToken.None);

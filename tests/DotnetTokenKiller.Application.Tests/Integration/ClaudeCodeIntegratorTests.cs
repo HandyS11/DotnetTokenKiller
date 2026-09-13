@@ -385,6 +385,48 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_ReposCommittedSettingsWithWholePathQuotedHookVariant_UpgradesToSingleEntry()
+    {
+        // Exactly this repo's own committed .claude/settings.json, whose hook command was
+        // hand-edited in #120 to quote the whole path instead of just the env-var segment. This is
+        // the real-world file that exposed the duplicate-entry, \uXXXX-escaping and
+        // missing-final-newline bugs when 'dtk integrate claude' merged into it.
+        var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+        await File.WriteAllTextAsync(settingsPath,
+            """
+            {
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": "Bash",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py\""
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+
+            """);
+
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var json = await File.ReadAllTextAsync(settingsPath);
+        var root = JsonNode.Parse(json) as JsonObject;
+        var preToolUse = root!["hooks"]!["PreToolUse"]!.AsArray();
+
+        preToolUse.Should().ContainSingle();
+        preToolUse[0]!["hooks"]!.AsArray().Should().ContainSingle();
+        preToolUse[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should()
+            .Be("""python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""");
+        json.Should().EndWith("\n").And.NotEndWith("\n\n");
+    }
+
+    [Fact]
     public void ImplementsIGlobalIntegrator()
     {
         _sut.Should().BeAssignableTo<DotnetTokenKiller.Domain.Integration.IGlobalIntegrator>();
