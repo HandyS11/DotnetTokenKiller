@@ -99,22 +99,42 @@ jobs:
           cache: true
           cache-dependency-path: Directory.Packages.props
 
-      - name: Pack the pointer package
-        run: dotnet pack src/DotnetTokenKiller.Cli --configuration Release -p:IncludeSymbols=false -p:Version="$VERSION" --output ./artifacts
-
-      - name: Download the RID and fallback packages
+      - name: Download the pointer, RID and fallback packages
         uses: actions/download-artifact@v8
         with:
           path: ./downloads
 
+      # The pointer is the source of truth for which RID packages exist: a RID it lists but this
+      # release lacks would break every install on that RID, so a missing one fails here.
       - name: Gather packages and native symbols
         run: |
           set -euo pipefail
-          for rid in linux-x64 linux-arm64 osx-arm64 win-x64 any; do
-            cp "downloads/package-$rid/"* artifacts/
-          done
-          for rid in linux-x64 linux-arm64 osx-arm64 win-x64; do
-            (cd "downloads/symbols-$rid" && zip -qr "$GITHUB_WORKSPACE/artifacts/dtk-$VERSION-$rid-symbols.zip" .)
+          mkdir -p artifacts
+          cp downloads/package-pointer/* artifacts/
+          rids="$(unzip -p "artifacts/DotnetTokenKiller.$VERSION.nupkg" tools/any/any/DotnetToolSettings.xml | grep -o 'RuntimeIdentifier="[^"]*"' | cut -d'"' -f2 | tr '\n' ' ' || true)"
+          if [ -z "${rids// /}" ]; then
+            echo "::error::The pointer package lists no RuntimeIdentifier."
+            exit 1
+          fi
+          echo "RIDS=$rids" >> "$GITHUB_ENV"
+          echo "RIDs listed by the pointer: $rids"
+
+          # $rids is a space-separated list; unquoted word splitting is intended.
+          for rid in $rids; do
+            if [ -d "downloads/package-$rid" ]; then
+              cp "downloads/package-$rid/"* artifacts/
+            fi
+            if [ ! -f "artifacts/DotnetTokenKiller.$rid.$VERSION.nupkg" ]; then
+              echo "::error::The pointer lists $rid, but DotnetTokenKiller.$rid.$VERSION.nupkg was not built."
+              exit 1
+            fi
+            if [ "$rid" != "any" ]; then
+              if [ ! -d "downloads/symbols-$rid" ]; then
+                echo "::error::The pointer lists $rid, but its native symbols (symbols-$rid) were not uploaded."
+                exit 1
+              fi
+              (cd "downloads/symbols-$rid" && zip -qr "$GITHUB_WORKSPACE/artifacts/dtk-$VERSION-$rid-symbols.zip" .)
+            fi
           done
           ls -la artifacts
 
@@ -131,7 +151,8 @@ jobs:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: |
           set -euo pipefail
-          for rid in linux-x64 linux-arm64 osx-arm64 win-x64 any; do
+          # $RIDS comes from the pointer (see the gather step); unquoted word splitting is intended.
+          for rid in $RIDS; do
             dotnet nuget push "artifacts/DotnetTokenKiller.$rid.$VERSION.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
           done
           dotnet nuget push "artifacts/DotnetTokenKiller.$VERSION.nupkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
@@ -143,7 +164,8 @@ jobs:
         run: |
           set -euo pipefail
           source="https://nuget.pkg.github.com/$OWNER/index.json"
-          for rid in linux-x64 linux-arm64 osx-arm64 win-x64 any; do
+          # $RIDS comes from the pointer (see the gather step); unquoted word splitting is intended.
+          for rid in $RIDS; do
             dotnet nuget push "artifacts/DotnetTokenKiller.$rid.$VERSION.nupkg" --source "$source" --api-key "$GITHUB_PACKAGES_TOKEN" --skip-duplicate
           done
           dotnet nuget push "artifacts/DotnetTokenKiller.$VERSION.nupkg" --source "$source" --api-key "$GITHUB_PACKAGES_TOKEN" --skip-duplicate
@@ -157,4 +179,4 @@ jobs:
             artifacts/*-symbols.zip
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(needs.version.outputs.version, '-') }}

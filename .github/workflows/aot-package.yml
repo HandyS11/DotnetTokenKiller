@@ -71,13 +71,14 @@ jobs:
 
       - name: Install the tool from the local feed
         run: |
-          feed="$(pwd)/artifacts/feed"
+          # A relative source resolves against the config file's directory. An absolute "$(pwd)" path
+          # would be POSIX-style (/d/a/...) under Git Bash on Windows, which NuGet cannot read.
           cat > artifacts/feed.nuget.config <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <configuration>
             <packageSources>
               <clear />
-              <add key="local" value="$feed" />
+              <add key="local" value="feed" />
             </packageSources>
           </configuration>
           EOF
@@ -96,7 +97,10 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
           echo "DTK_INSTALLED=$binary" >> "$GITHUB_ENV"
 
+      # DTK_AOT_REQUIRED=1 makes a missing binary or pack log fail these tests instead of skipping them.
       - name: Check the AOT warnings and parity
+        env:
+          DTK_AOT_REQUIRED: '1'
         run: >-
           DTK_AOT_PACK_LOG="$(pwd)/artifacts/pack-$RID.log" DTK_AOT_BINARY="$DTK_INSTALLED"
           dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build
