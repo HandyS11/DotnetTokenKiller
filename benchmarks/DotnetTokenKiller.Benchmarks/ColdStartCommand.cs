@@ -12,7 +12,7 @@ using DotnetTokenKiller.Infrastructure.Tracking;
 namespace DotnetTokenKiller.Benchmarks;
 
 /// <summary>
-/// Times the real <c>dtk</c> binary end to end, out of process, in three scenarios.
+/// Times the real <c>dtk</c> binary end to end, out of process, in four scenarios.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -45,17 +45,38 @@ internal static class ColdStartCommand
     private const string Fixture = "dotnet_build_errors.txt";
 
     /// <summary>
-    /// The exit code dtk must reproduce for <see cref="Fixture"/>, a real captured failing build,
-    /// in every scenario. Anything else means the child did not run the pipeline this harness
-    /// intends to measure, so the sample is not trustworthy.
-    /// </summary>
-    private const int ExpectedExitCode = 1;
-
-    /// <summary>
     /// How long the delayed fake child sleeps: longer than the tiktoken vocabulary load and the
     /// SQLite setup combined, so setup started in the background can overlap it completely.
     /// </summary>
     private static readonly TimeSpan DelayedChildSleep = TimeSpan.FromMilliseconds(1000);
+
+    /// <summary>What a scenario's child prints, the code it exits with, and the line dtk must then print.</summary>
+    /// <param name="Text">The child's stdout.</param>
+    /// <param name="ExitCode">The child's exit code, which dtk must reproduce.</param>
+    /// <param name="SummaryLine">The build filter's first non-empty line for <paramref name="Text"/>.</param>
+    private sealed record ChildOutput(string Text, int ExitCode, string SummaryLine)
+    {
+        /// <summary>
+        /// Computes the summary line through the same filter dtk runs, so a sample counts only if dtk
+        /// really filtered this text: the real SDK found on PATH by mistake also exits 1 for a missing
+        /// project, and prints something else.
+        /// </summary>
+        /// <param name="text">The child's stdout.</param>
+        /// <param name="exitCode">The child's exit code.</param>
+        /// <exception cref="InvalidOperationException">The filter printed nothing for this text.</exception>
+        internal static ChildOutput From(string text, int exitCode)
+        {
+            var summary = SavingsScenarios.FilterFor(FilterKeys.Build)
+                .Apply(AnsiStrip.Strip(text), exitCode)
+                .Split('\n')
+                .Select(line => line.TrimEnd('\r'))
+                .FirstOrDefault(line => !string.IsNullOrWhiteSpace(line))
+                ?? throw new InvalidOperationException(
+                    $"The build filter printed nothing for a {text.Length}-char input with exit code {exitCode}, "
+                    + "so no sample could be validated against it.");
+            return new ChildOutput(text, exitCode, summary);
+        }
+    }
 
     internal static async Task<int> RunAsync(string[] args)
     {
@@ -95,8 +116,8 @@ internal static class ColdStartCommand
             return 1;
         }
 
-        var input = FixtureCorpus.Load(Fixture);
-        var summaryLine = FilteredSummaryLine(input);
+        var fixture = ChildOutput.From(FixtureCorpus.Load(Fixture), exitCode: 1);
+        var largeLog = ChildOutput.From(LogCorpusGenerator.Generate(FilterKeys.Build, CorpusTier.Large), exitCode: 0);
         using var state = HermeticState.Enter(parsed.StateDir);
 
         await Console.Out.WriteLineAsync($"Cold start: {binary}").ConfigureAwait(false);
@@ -105,7 +126,11 @@ internal static class ColdStartCommand
             $"Built: {File.GetLastWriteTime(binary):yyyy-MM-dd HH:mm:ss} (local)")).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(string.Create(
             CultureInfo.InvariantCulture,
-            $"Input: {Fixture} ({input.Length} chars), exit code {ExpectedExitCode}")).ConfigureAwait(false);
+            $"Input: {Fixture} ({fixture.Text.Length} chars), exit code {fixture.ExitCode}")).ConfigureAwait(false);
+        await Console.Out.WriteLineAsync(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Large log: generated {FilterKeys.Build} tier {CorpusTier.Large} ({largeLog.Text.Length} chars), "
+            + $"exit code {largeLog.ExitCode}")).ConfigureAwait(false);
         await Console.Out.WriteLineAsync(
             $"Runs per scenario: {WarmupRuns} warmup + {MeasuredRuns} measured").ConfigureAwait(false);
         await Console.Out.WriteLineAsync($"Runtime environment: {DescribeRuntimeEnvironment()}")
@@ -115,17 +140,25 @@ internal static class ColdStartCommand
         await Console.Out.WriteLineAsync($"State: {state.RootPath} ({DescribeFileSystem(state.RootPath)})")
             .ConfigureAwait(false);
 
-        await MeasurePipeAsync(binary, state, input, summaryLine).ConfigureAwait(false);
+        await MeasurePipeAsync(binary, state, fixture).ConfigureAwait(false);
 
         await MeasureWrappedAsync(
-            binary, state, input, summaryLine, TimeSpan.Zero,
+            binary, state, fixture, TimeSpan.Zero,
             "dotnet build, instant child (worst case: nothing for setup to overlap with)").ConfigureAwait(false);
 
         await MeasureWrappedAsync(
-            binary, state, input, summaryLine, DelayedChildSleep,
+            binary, state, fixture, DelayedChildSleep,
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"dotnet build, child sleeping {DelayedChildSleep.TotalMilliseconds:0} ms (best case: an idle CPU to overlap with)"))
+            .ConfigureAwait(false);
+
+        await MeasureWrappedAsync(
+            binary, state, largeLog, DelayedChildSleep,
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"dotnet build, child sleeping {DelayedChildSleep.TotalMilliseconds:0} ms, "
+                + $"{largeLog.Text.Length / 1024} KB generated log (counting and tee at size)"))
             .ConfigureAwait(false);
 
         return 0;
@@ -135,20 +168,19 @@ internal static class ColdStartCommand
     /// <param name="binary">The dtk binary.</param>
     /// <param name="state">The hermetic state holding the tracking database this scenario's dtk
     /// runs must each record a row in.</param>
-    /// <param name="input">The fixture text.</param>
-    /// <param name="summaryLine">The line every dtk run must print.</param>
-    private static async Task MeasurePipeAsync(string binary, HermeticState state, string input, string summaryLine)
+    /// <param name="fixture">The child output every dtk run must reproduce and filter.</param>
+    private static async Task MeasurePipeAsync(string binary, HermeticState state, ChildOutput fixture)
     {
         await WriteHeadingAsync("pipe build, fixture on stdin (wall-clock)").ConfigureAwait(false);
 
-        string[] arguments = ["pipe", "build", "--exit-code", ExpectedExitCode.ToString(CultureInfo.InvariantCulture)];
+        string[] arguments = ["pipe", "build", "--exit-code", fixture.ExitCode.ToString(CultureInfo.InvariantCulture)];
         var samples = new List<double>(MeasuredRuns);
         var before = await ReadTrackingCountsAsync(state.DbPath).ConfigureAwait(false);
 
         for (var i = 0; i < WarmupRuns + MeasuredRuns; i++)
         {
-            var run = await TimedProcess.RunAsync(binary, arguments, standardInput: input).ConfigureAwait(false);
-            EnsureDtkFiltered(run, binary, summaryLine);
+            var run = await TimedProcess.RunAsync(binary, arguments, standardInput: fixture.Text).ConfigureAwait(false);
+            EnsureDtkFiltered(run, binary, fixture);
 
             if (i >= WarmupRuns)
             {
@@ -168,16 +200,14 @@ internal static class ColdStartCommand
     /// </summary>
     /// <param name="binary">The dtk binary.</param>
     /// <param name="state">The hermetic state the fake child is written under.</param>
-    /// <param name="input">The fixture text the fake child prints.</param>
-    /// <param name="summaryLine">The line every dtk run must print.</param>
+    /// <param name="output">The child output the fake child prints and dtk must reproduce and filter.</param>
     /// <param name="childSleep">How long the fake child sleeps before printing.</param>
     /// <param name="heading">The section heading.</param>
     [UnsupportedOSPlatform("windows")]
     private static async Task MeasureWrappedAsync(
         string binary,
         HermeticState state,
-        string input,
-        string summaryLine,
+        ChildOutput output,
         TimeSpan childSleep,
         string heading)
     {
@@ -187,8 +217,8 @@ internal static class ColdStartCommand
             Path.Combine(
                 state.RootPath,
                 string.Create(CultureInfo.InvariantCulture, $"fake-dotnet-{childSleep.TotalMilliseconds:0}ms")),
-            input,
-            ExpectedExitCode,
+            output.Text,
+            output.ExitCode,
             childSleep);
 
         string[] arguments = ["dotnet", "build"];
@@ -205,13 +235,13 @@ internal static class ColdStartCommand
             TimedRun wrapped;
             if (i % 2 == 0)
             {
-                child = await RunFakeChildAsync(fake, input).ConfigureAwait(false);
-                wrapped = await RunWrappedDtkAsync(binary, arguments, fake, summaryLine).ConfigureAwait(false);
+                child = await RunFakeChildAsync(fake, output).ConfigureAwait(false);
+                wrapped = await RunWrappedDtkAsync(binary, arguments, fake, output).ConfigureAwait(false);
             }
             else
             {
-                wrapped = await RunWrappedDtkAsync(binary, arguments, fake, summaryLine).ConfigureAwait(false);
-                child = await RunFakeChildAsync(fake, input).ConfigureAwait(false);
+                wrapped = await RunWrappedDtkAsync(binary, arguments, fake, output).ConfigureAwait(false);
+                child = await RunFakeChildAsync(fake, output).ConfigureAwait(false);
             }
 
             if (i >= WarmupRuns)
@@ -233,11 +263,11 @@ internal static class ColdStartCommand
 
     /// <summary>Runs the fake child alone and validates it.</summary>
     /// <param name="fake">The fake child.</param>
-    /// <param name="input">The fixture text it must print.</param>
-    private static async Task<TimedRun> RunFakeChildAsync(FakeDotnet fake, string input)
+    /// <param name="output">The output it must print.</param>
+    private static async Task<TimedRun> RunFakeChildAsync(FakeDotnet fake, ChildOutput output)
     {
         var child = await TimedProcess.RunAsync(fake.ScriptPath, []).ConfigureAwait(false);
-        EnsureFakeChildRan(child, fake, input);
+        EnsureFakeChildRan(child, fake, output);
         return child;
     }
 
@@ -245,14 +275,14 @@ internal static class ColdStartCommand
     /// <param name="binary">The dtk binary.</param>
     /// <param name="arguments">dtk's arguments.</param>
     /// <param name="fake">The fake child, whose directory is prepended to dtk's PATH.</param>
-    /// <param name="summaryLine">The line dtk must print.</param>
+    /// <param name="output">The output dtk must reproduce and filter.</param>
     private static async Task<TimedRun> RunWrappedDtkAsync(
-        string binary, string[] arguments, FakeDotnet fake, string summaryLine)
+        string binary, string[] arguments, FakeDotnet fake, ChildOutput output)
     {
         var wrapped = await TimedProcess
             .RunAsync(binary, arguments, prependToPath: fake.DirectoryPath)
             .ConfigureAwait(false);
-        EnsureDtkFiltered(wrapped, binary, summaryLine);
+        EnsureDtkFiltered(wrapped, binary, output);
         return wrapped;
     }
 
@@ -315,71 +345,58 @@ internal static class ColdStartCommand
         return pairs.Count == 0 ? "no configProperties" : string.Join(' ', pairs);
     }
 
-    /// <summary>
-    /// The first non-empty line the build filter produces for <paramref name="input"/>: its summary.
-    /// It carries the fixture's own counts and elapsed time and no file paths, so it is the same
-    /// whatever directory dtk runs in, which the rest of the filtered output is not.
-    /// </summary>
-    /// <param name="input">The raw fixture text.</param>
-    private static string FilteredSummaryLine(string input) =>
-        SavingsScenarios.FilterFor(FilterKeys.Build)
-            .Apply(AnsiStrip.Strip(input), ExpectedExitCode)
-            .Split('\n')
-            .Select(line => line.TrimEnd('\r'))
-            .First(line => !string.IsNullOrWhiteSpace(line));
-
-    /// <summary>Throws unless dtk exited as expected and printed the filtered fixture's summary.</summary>
+    /// <summary>Throws unless dtk exited as expected and printed the filtered output's summary.</summary>
     /// <param name="run">The timed dtk run.</param>
     /// <param name="binary">The dtk binary, for the message.</param>
-    /// <param name="summaryLine">The line from <see cref="FilteredSummaryLine"/>.</param>
+    /// <param name="output">The child output dtk must have reproduced and filtered.</param>
     /// <exception cref="InvalidOperationException">Either check failed.</exception>
-    private static void EnsureDtkFiltered(TimedRun run, string binary, string summaryLine)
+    private static void EnsureDtkFiltered(TimedRun run, string binary, ChildOutput output)
     {
-        if (run.ExitCode != ExpectedExitCode)
+        if (run.ExitCode != output.ExitCode)
         {
             // A binary that starts and exits with the wrong code (a crash, a bad argument, a
             // missing filter registration) would otherwise still produce a plausible-looking
             // timing sample. Fail loudly instead, with enough of the child's own output to
             // diagnose it.
             throw new InvalidOperationException(
-                $"{binary} exited with code {run.ExitCode}, expected {ExpectedExitCode}. "
+                $"{binary} exited with code {run.ExitCode}, expected {output.ExitCode}. "
                 + $"Output:\n{run.Diagnostic}");
         }
 
-        if (!run.StdOut.Contains(summaryLine, StringComparison.Ordinal))
+        if (!run.StdOut.Contains(output.SummaryLine, StringComparison.Ordinal))
         {
-            // The exit code alone cannot prove the pipeline ran over this fixture. On a wrapped
+            // The exit code alone cannot prove the pipeline ran over this input. On a wrapped
             // scenario whose PATH wiring broke, the real SDK runs `dotnet build` with no project,
             // which also exits 1, and dtk would then filter that output instead.
             throw new InvalidOperationException(
-                $"{binary} exited with code {ExpectedExitCode} but did not print the build filter's "
-                + $"summary line for {Fixture}:\n  {summaryLine}\nso it did not filter that fixture. "
-                + "On a wrapped scenario, the real dotnet SDK most likely ran instead of the fake one; "
-                + "otherwise the dtk binary's build filter differs from this source tree (a stale "
-                + "Release build, or an installed dtk found on PATH). "
+                $"{binary} exited with code {output.ExitCode} but did not print the build filter's "
+                + $"summary line for this {output.Text.Length}-char input:\n  {output.SummaryLine}\nso it "
+                + "did not filter that input. On a wrapped scenario, the real dotnet SDK most likely ran "
+                + "instead of the fake one; otherwise the dtk binary's build filter differs from this "
+                + "source tree (a stale Release build, or an installed dtk found on PATH). "
                 + $"Output:\n{run.StdOut}");
         }
     }
 
     /// <summary>
-    /// Throws unless the fake child, run alone, reproduced the fixture and its exit code. Timing dtk
+    /// Throws unless the fake child, run alone, reproduced its output and exit code. Timing dtk
     /// against a child that prints something else would measure the wrong pipeline.
     /// </summary>
     /// <param name="run">The timed fake-child run.</param>
     /// <param name="fake">The fake child, for the message.</param>
-    /// <param name="input">The fixture text it must print verbatim.</param>
+    /// <param name="output">The output it must print verbatim.</param>
     /// <exception cref="InvalidOperationException">Either check failed.</exception>
-    private static void EnsureFakeChildRan(TimedRun run, FakeDotnet fake, string input)
+    private static void EnsureFakeChildRan(TimedRun run, FakeDotnet fake, ChildOutput output)
     {
-        if (run.ExitCode == ExpectedExitCode && string.Equals(run.StdOut, input, StringComparison.Ordinal))
+        if (run.ExitCode == output.ExitCode && string.Equals(run.StdOut, output.Text, StringComparison.Ordinal))
         {
             return;
         }
 
         throw new InvalidOperationException(
-            $"The fake dotnet at {fake.ScriptPath} did not reproduce {Fixture}: exit code {run.ExitCode} "
-            + $"(expected {ExpectedExitCode}), {run.StdOut.Length} chars on stdout (expected {input.Length}). "
-            + $"Stderr:\n{run.StdErr}");
+            $"The fake dotnet at {fake.ScriptPath} did not reproduce its expected {output.Text.Length}-char "
+            + $"output: exit code {run.ExitCode} (expected {output.ExitCode}), {run.StdOut.Length} chars on "
+            + $"stdout. Stderr:\n{run.StdErr}");
     }
 
     /// <summary>
