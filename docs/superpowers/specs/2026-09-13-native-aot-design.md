@@ -1,5 +1,5 @@
-**Status:** Design approved 2026-09-13. Amended the same day by the probes run while writing
-[the plan](../plans/2026-09-13-native-aot.md); see "Amendments" at the end.
+**Status:** Implemented — see [the plan](../plans/2026-09-13-native-aot.md). Amended while planning;
+see "Amendments" at the end.
 
 ## Context
 

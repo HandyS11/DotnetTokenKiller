@@ -17,6 +17,10 @@ Install DTK as a global .NET tool:
 dotnet tool install -g DotnetTokenKiller
 ```
 
+On Linux (x64 and arm64), macOS on Apple silicon and Windows x64, this installs a natively compiled
+`dtk` that starts in milliseconds and needs no .NET runtime to run. Other platforms get the
+framework-dependent build, which runs on the .NET 10 runtime.
+
 To update an existing installation:
 
 ```sh
