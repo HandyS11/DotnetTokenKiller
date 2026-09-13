@@ -26,6 +26,12 @@
     -->
     <PublishAot>true</PublishAot>
     <!--
+      `dotnet pack` sets _IsPublishing, and with PublishAot the SDK then turns the apphost off. The
+      pointer pack builds without a RID into bin/<Configuration>/net10.0, so IncrementalClean would
+      delete the apphost an earlier build left there. RID-specific builds keep the SDK's choice.
+    -->
+    <UseAppHost Condition="'$(UseAppHost)' == '' and '$(RuntimeIdentifier)' == ''">true</UseAppHost>
+    <!--
       One tool package per RID below plus the pointer package that lists them; `any` is the
       framework-dependent fallback for every other platform. Set here, not with -p:, because a
       semicolon list on the command line collapses into one RID. The pack sequence is in CLAUDE.md.
