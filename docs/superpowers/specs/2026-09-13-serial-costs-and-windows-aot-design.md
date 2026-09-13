@@ -152,21 +152,23 @@ where a record waits between the run and the report changes.
   the same handle and Windows needs no append semantics. Creating the directory is part of the
   write.
 - `Count()`: the number of `*.json` files, zero when the directory is missing.
-- `FoldAsync(Func<string, IReadOnlyList<PendingRecord>, CancellationToken, Task> commit, bool wait,
-  CancellationToken)` folds exactly once under any interruption:
+- `FoldAsync(committed, commit, wait, CancellationToken)`, where `committed(id)` asks the tracker
+  whether a fold id is in the database and `commit(ids, records)` inserts, folds exactly once under
+  any interruption:
   1. Takes `pending/.lock` with `FileShare.None` (an exclusive `flock` on Unix). With `wait`, it
      retries for up to two seconds and then throws, so a reader never silently reports rows another
      process is inserting as missing; without `wait` (the writer's background fold) a busy lock means
      another process is folding, and it returns at once.
-  2. Recovers leftovers: for every `pending/folding-<id>/` directory, `commit`'s caller is asked
-     through `committed(id)` whether fold `<id>` is in the database (the `folds` table below); if it
-     is, the directory is deleted (a fold that died after its commit); if not, its files join this
-     fold (a fold that died before it).
+  2. Recovers leftovers: for every `pending/folding-<id>/` directory, `committed(id)` says whether
+     fold `<id>` is in the database (the `folds` table below); if it is, the directory is deleted (a
+     fold that died after its commit); if not, its files join this fold (a fold that died before it).
   3. Claims: moves every `pending/*.json` into a new `pending/folding-<id>/` with `File.Move`, so
      a writer creating a file at that instant is never half-read.
   4. Parses the claimed files, deleting one that does not parse (a process killed mid-write leaves a
-     truncated file; nothing else can) and counting it, and calls `commit(id, records)` once. The
-     tracker's commit is one transaction: the `INSERT`s, `INSERT INTO folds (id)`, and retention.
+     truncated file; nothing else can) and counting it, and calls `commit(ids, records)` once, with
+     the new id and every recovered claim's id. The tracker's commit is one transaction: the
+     `INSERT`s, one `INSERT INTO folds (id)` per id (so a recovered claim that dies after this commit
+     is recognised by its own id next time), and retention.
   5. Deletes the claimed directories and releases the lock.
 
   A `commit` that throws leaves the claimed directory, which step 2 folds next time. A process that
@@ -216,11 +218,13 @@ for the same raw text, where raw is stdout followed by stderr, as today.
   chars, the counter looks for the last **safe cut** in it; if one exists, the text before the cut
   becomes a chunk, `Task.Run(() => TokenEstimator.Estimate(AnsiStrip.Strip(chunk), model))` is
   started for it, and the buffer keeps the rest. Tasks are collected, never awaited here.
-- `Task<int> FinishAsync(string trailing)` counts the buffer plus `trailing` as the final chunk,
-  awaits every chunk task, and returns the sum. It throws if any
-  chunk did; the caller's existing catch turns that into "no row", as a failed estimate does today.
-- The counter is fed stdout only. `FinishAsync(stderr)` appends stderr to the last chunk, so the sum
-  is the count of stdout followed by stderr, and no cut has to be justified across the seam.
+- `Finish(string trailing)` starts counting the buffer plus `trailing` as the final chunk;
+  `Task<int> TotalAsync()` awaits every chunk task and returns the sum. It throws if any chunk did;
+  the caller's existing catch turns that into "no row", as a failed estimate does today. (Two
+  members rather than one returning a task: a task read back from a request property would trip
+  VSTHRD003 when awaited.)
+- The counter is fed stdout only. `Finish(stderr)` appends stderr to the last chunk, so the sum is
+  the count of stdout followed by stderr, and no cut has to be justified across the seam.
 
 **Safe cut.** A cut at index `p` of the pending text is safe when all of these hold:
 
@@ -249,12 +253,12 @@ see Testing.
   `FlushAsync` and `NewLine` to an inner writer and appends each line plus the inner writer's
   `NewLine` to a counter. `FilteredRunUseCase` wraps the stdout sink in it when tracking is enabled
   (`prepared.Config`); stderr keeps the plain tee writer. `ProcessCommandRunner` does not change.
-- `FilteredOutputRequest` gains `Task<int>? InputTokenCount`. `FilteredRunUseCase` sets it to
-  `counter.FinishAsync(result.StdErr)`; `PipeFilterUseCase` reads stdin in 64 K-char blocks into
-  both a `StringBuilder` and the counter instead of `ReadToEndAsync`, and sets it to
-  `counter.FinishAsync(string.Empty)`. Neither awaits it.
-- `FilteredOutputPipeline.TrackIfEnabledAsync` awaits `request.InputTokenCount` when present, else
-  calls `Estimate(stripped)` as today. The output count is unchanged (the filtered text is small).
+- `FilteredOutputRequest` gains `ChunkedTokenCounter? InputTokenCounter`. `FilteredRunUseCase`
+  calls `counter.Finish(result.StdErr)` and passes the counter; `PipeFilterUseCase` reads stdin in
+  64 K-char blocks into both a `StringBuilder` and the counter instead of `ReadToEndAsync`, calls
+  `counter.Finish(string.Empty)`, and passes it. Neither awaits the total.
+- `FilteredOutputPipeline.TrackIfEnabledAsync` awaits `request.InputTokenCounter.TotalAsync()` when
+  the counter is present, else calls `Estimate(stripped)` as today. The output count is unchanged (the filtered text is small).
   Both stay inside the existing catch.
 - The chunk tasks block on the tokenizer `Lazy` until the warm-up has loaded it; that is the
   existing `ExecutionAndPublication` behaviour and needs nothing new.
@@ -279,14 +283,16 @@ directly. `dotnet tool run dtk`, tool manifests and `dnx` run `dtk.dll` on the r
 - A `UseNativeBinaryAsPackagedShim` target, `AfterTargets="GenerateShimsAssets"`, active when
   `$(DtkPackagedShim)` is set: copies that file over
   `$(PackagedShimOutputRootDirectory)shims/$(_ToolPackShortTargetFrameworkName)/$(RuntimeIdentifier)/$(ToolCommandName).exe`
-  and errors if the source is missing or is smaller than 1 MB (an apphost is about 160 KB; a wrong
-  path must not ship a launcher for a dll the shim cannot find).
+  and errors if the source or the generated shim is missing. MSBuild cannot read a file's size, so
+  `eng/aot/pack-windows.sh` compares the packed shim with the published exe byte for byte (an
+  apphost is about 160 KB; a wrong path must not ship a launcher for a dll the shim cannot find).
 - `CopyOutputSymbolsToPublishDirectory=false` and no `.xml` files for this RID, as for the AOT RIDs;
   the managed `.pdb`s belong to the `any` symbols package, not here.
 - **SQLite.** `DotnetTokenKiller.Infrastructure` references `Microsoft.Data.Sqlite.Core` instead of
   `Microsoft.Data.Sqlite`, so the bundle is chosen by the application: the CLI references
-  `SQLitePCLRaw.bundle_e_sqlite3` unless `PublishAot` is true and the RID starts with `win`, where
-  it references `SQLitePCLRaw.bundle_winsqlite3`. The test and benchmark projects that open a
+  `SQLitePCLRaw.bundle_e_sqlite3` (2.1.12, what `Microsoft.Data.Sqlite` 10.0.12 resolves today)
+  unless `PublishAot` is true and the RID is `win-x64`, where it references
+  `SQLitePCLRaw.bundle_winsqlite3` (2.1.11, the newest published). The test and benchmark projects that open a
   database reference `bundle_e_sqlite3` directly. The Linux static link and `fcntl64` shim are
   untouched. The native `dtk.exe` therefore needs no file beside it; `dtk.dll` keeps
   `e_sqlite3.dll` in the package.
@@ -384,18 +390,19 @@ Test-first, in the library test projects (the CLI integration tests are gated by
   filter, and a hand-written set (runs of spaces, tabs and newlines; punctuation before newlines;
   `/` after newlines; CRLF; CSI and OSC sequences spanning lines; `<|endoftext|>`; text with no
   newline at all; empty text), with the minimum chunk size forced down to 64 chars so hundreds of
-  cuts happen, `FinishAsync(trailing)` equals `Estimate(Strip(text + trailing))` for both
+  cuts happen, `Finish(trailing)` then `TotalAsync()` equals `Estimate(Strip(text + trailing))` for both
   `Cl100kBase` and `O200kBase`. A failing input tightens the rule; the rule never loosens.
 - **`CountingTextWriter`:** forwards lines and flushes to the inner writer unchanged; feeds the
   counter each line plus the inner `NewLine`; `NewLine` is the inner writer's.
 - **`FilteredRunUseCase`:** with tracking on, the stdout sink handed to the runner is a
-  `CountingTextWriter` over the session writer and the request carries a count task; with tracking
-  off, the session writer is passed unchanged and the request carries none.
+  `CountingTextWriter` over the session writer, the recorded input count equals the whole-text
+  estimate of what the runner wrote plus its stderr, and the request carries the counter; with
+  tracking off, the session writer is passed unchanged and the request carries none.
 - **`PipeFilterUseCase`:** block reading yields the same raw text as `ReadToEndAsync` for an input
-  larger than one block; the request carries a count task with tracking on.
-- **`FilteredOutputPipeline`:** a request with a count task records that count; a faulted count
-  task records nothing and leaves output and exit code intact; a request without one estimates as
-  today.
+  larger than one block; with tracking on the recorded count equals the whole-text estimate.
+- **`FilteredOutputPipeline`:** a request with a counter records its total; a counter whose
+  estimate throws records nothing and leaves output and exit code intact; a request without one
+  estimates as today.
 - **`SqliteLoaderTests`:** the positive control runs `gain`.
 - **`AotWarningLogTests`:** unchanged; fed the Windows publish log in CI.
 - **Harness:** run by hand per the measurement protocol; the fourth scenario's summary-line check is
