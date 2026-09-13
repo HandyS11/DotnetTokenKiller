@@ -7,9 +7,9 @@
     <Nullable>enable</Nullable>
 
     <!--
-      Placeholder for local builds only. The Publish workflow (.github/workflows/publish.yml)
-      overwrites this value from the pushed release tag (`VERSION=${GITHUB_REF_NAME#v}`) before
-      packing, so the published package version always comes from the tag, not from this number.
+      Placeholder for local builds only. The Publish workflow (.github/workflows/publish.yml) passes
+      the pushed release tag's version (`v1.2.3` -> `-p:Version=1.2.3`) to every build and pack,
+      and CI passes `0.0.0-ci`, so a published package's version always comes from the tag.
     -->
     <Version>0.5.0</Version>
     <IsPackable>false</IsPackable>
