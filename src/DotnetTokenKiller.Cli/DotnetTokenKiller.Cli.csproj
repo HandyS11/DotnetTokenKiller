@@ -33,10 +33,12 @@
     <UseAppHost Condition="'$(UseAppHost)' == '' and '$(RuntimeIdentifier)' == ''">true</UseAppHost>
     <!--
       One tool package per RID below plus the pointer package that lists them; `any` is the
-      framework-dependent fallback for every other platform. Set here, not with -p:, because a
-      semicolon list on the command line collapses into one RID. The pack sequence is in CLAUDE.md.
+      framework-dependent fallback for every other platform. The musl RIDs must be listed: the
+      SDK's RID graph maps them to linux-x64 and linux-arm64, so Alpine would otherwise install
+      the glibc package. Set here, not with -p:, because a semicolon list on the command line
+      collapses into one RID. The pack sequence is in CLAUDE.md.
     -->
-    <ToolPackageRuntimeIdentifiers>linux-x64;linux-arm64;osx-arm64;win-x64;any</ToolPackageRuntimeIdentifiers>
+    <ToolPackageRuntimeIdentifiers>linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-arm64;win-x64;any</ToolPackageRuntimeIdentifiers>
     <PackageId>DotnetTokenKiller</PackageId>
     <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
