@@ -21,6 +21,12 @@
       -p:PublishAot=false, stays framework-dependent, and keeps TieredPGO above.
     -->
     <PublishAot>true</PublishAot>
+    <!--
+      One tool package per RID below plus the pointer package that lists them; `any` is the
+      framework-dependent fallback for every other platform. Set here, not with -p:, because a
+      semicolon list on the command line collapses into one RID. The pack sequence is in CLAUDE.md.
+    -->
+    <ToolPackageRuntimeIdentifiers>linux-x64;linux-arm64;osx-arm64;win-x64;any</ToolPackageRuntimeIdentifiers>
     <PackageId>DotnetTokenKiller</PackageId>
     <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
@@ -48,6 +54,22 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DotnetTokenKiller.Cli.IntegrationTests"/>
   </ItemGroup>
+  <!--
+    An AOT RID package carries the native dtk and libe_sqlite3 only. Tool packing globs the whole publish
+    directory, so symbols (released as GitHub Release assets instead), managed .pdb and .xml files, and
+    SQLitePCLRaw's static libe_sqlite3.a are kept out of it here. The `any` package is unaffected, and
+    keeps its .pdb files for its .snupkg.
+  -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+  </PropertyGroup>
+  <Target Name="KeepAotToolPackageRuntimeOnly" AfterTargets="ComputeResolvedFilesToPublishList"
+          Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb' or '%(ResolvedFileToPublish.Extension)' == '.xml' or '%(ResolvedFileToPublish.Extension)' == '.a'"/>
+    </ItemGroup>
+  </Target>
   <!--
     Spectre.Console.Cli binds commands and settings by reflection and does not support trimming or
     Native AOT. Rooting both assemblies keeps every constructor and property it reflects over. The
