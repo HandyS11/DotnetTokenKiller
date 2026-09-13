@@ -70,6 +70,59 @@ public sealed class HookScriptExecutionTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("`dtk dotnet build`")]
+    [InlineData("(dtk dotnet build)")]
+    [InlineData("$(dtk dotnet build)")]
+    [InlineData("echo hi;dtk dotnet build")]
+    [InlineData("true&&dtk dotnet test")]
+    [InlineData("ls|dtk dotnet format")]
+    [InlineData("~/.dotnet/tools/dtk dotnet build")]
+    [InlineData(@"C:\tools\dtk.exe dotnet restore")]
+    public void GeneratedHook_DotnetAlreadyPrefixedWithDtk_IsLeftUnchanged(string command)
+    {
+        var output = RunClaudeHook(command);
+
+        output?.Should().BeEmpty(
+            "dtk already runs this dotnet command; rewriting it again would produce 'dtk dtk dotnet …'");
+    }
+
+    [Theory]
+    [InlineData("`dotnet build`", "`dtk dotnet build`")]
+    [InlineData("echo dtk; dotnet build", "echo dtk; dtk dotnet build")]
+    [InlineData("cd /tmp/dtk && dotnet test", "cd /tmp/dtk && dtk dotnet test")]
+    public void GeneratedHook_DotnetNotPrefixedWithDtk_IsRewritten(string command, string expected)
+    {
+        var output = RunClaudeHook(command);
+        if (output is null)
+        {
+            return;
+        }
+
+        JsonNode.Parse(output)?["hookSpecificOutput"]?["updatedInput"]?["command"]?.GetValue<string>()
+            .Should().Be(expected, "a 'dtk' that ends an earlier command or a path does not prefix this one");
+    }
+
+    /// <summary>Runs <paramref name="command"/> through the stamped Claude hook and returns its stdout, or
+    /// <see langword="null"/> when no Python is available outside CI.</summary>
+    /// <param name="command">The Bash command the hook receives.</param>
+    private string? RunClaudeHook(string command)
+    {
+        var interpreter = FindPython();
+        if (interpreter is null)
+        {
+            Environment.GetEnvironmentVariable("CI").Should().BeNullOrEmpty(
+                "CI runners ship Python, so a missing interpreter there means the probe silently stopped running");
+            return null;
+        }
+
+        var scriptPath = Path.Combine(_tempDir, $"claude-hook-{Guid.NewGuid():N}.py");
+        File.WriteAllText(scriptPath, ArtifactStamping.Apply(HookScriptTemplates.ClaudeHook, StampStyle.HashComment));
+
+        var payload = new JsonObject { ["tool_input"] = new JsonObject { ["command"] = command } };
+        return Run(interpreter, scriptPath, payload.ToJsonString());
+    }
+
     private static string Run(string interpreter, string scriptPath, string payload)
     {
         var psi = new ProcessStartInfo(interpreter)
