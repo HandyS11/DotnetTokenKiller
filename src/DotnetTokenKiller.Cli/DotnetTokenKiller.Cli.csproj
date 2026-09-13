@@ -5,7 +5,11 @@
     <AssemblyName>dtk</AssemblyName>
     <PackAsTool>true</PackAsTool>
     <IsPackable>true</IsPackable>
-    <IncludeSymbols>true</IncludeSymbols>
+    <!--
+      A .snupkg for the framework-dependent `any` package only: the pointer and AOT RID packs fail with
+      NU5017 when symbols are on.
+    -->
+    <IncludeSymbols Condition="'$(RuntimeIdentifier)' == 'any'">true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ToolCommandName>dtk</ToolCommandName>
     <!--
