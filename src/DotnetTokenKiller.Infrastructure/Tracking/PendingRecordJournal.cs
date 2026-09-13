@@ -14,14 +14,9 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 /// mid-write can only leave a truncated file of its own, which a fold deletes.
 /// </remarks>
 /// <param name="root">The journal directory.</param>
-/// <param name="lockWait">How long a waiting fold retries for the lock; the spec's 2 s unless a test shortens it.</param>
-internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = null)
+internal sealed class PendingRecordJournal(string root)
 {
     private const string FileExtension = ".json";
-
-#pragma warning disable CA1823, RCS1213, S1144 // Unused field; will be used in Task 5 (fold)
-    private readonly TimeSpan _lockWait = lockWait ?? TimeSpan.FromSeconds(2);
-#pragma warning restore CA1823, RCS1213, S1144
 
     /// <summary>The journal directory, created on the first write.</summary>
     public string Root { get; } = root;

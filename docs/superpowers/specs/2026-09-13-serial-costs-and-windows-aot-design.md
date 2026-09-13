@@ -147,7 +147,7 @@ where a record waits between the run and the report changes.
 
 - `WriteAsync(CommandRecord)`: serializes one `PendingRecord` (the flat fields of `CommandRecord`,
   execution time in milliseconds, enums as strings, plus `"Version": 1`) with a source-generated
-  `JsonSerializerContext`, and writes it to `<utc ticks>-<pid>-<8 hex>.json` with
+  `JsonSerializerContext`, and writes it to `<utc ticks>-<pid>-<32 hex>.json` with
   `FileMode.CreateNew`. One file per run: no shared file, so concurrent dtk processes never write to
   the same handle and Windows needs no append semantics. Creating the directory is part of the
   write.
