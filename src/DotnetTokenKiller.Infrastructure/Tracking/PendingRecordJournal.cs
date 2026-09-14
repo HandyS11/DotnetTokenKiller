@@ -93,8 +93,9 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
     /// parsed, and handed to <paramref name="commit"/> together with every claim id involved, in one
     /// call, ordered by file name across every claimed directory together (file names start with
     /// UTC ticks, so this keeps run order). The claim directories are deleted only after the commit
-    /// returns. A commit that throws leaves them for the next fold; a process that dies releases the
-    /// lock with its handle.
+    /// returns, and a failure to delete one then is ignored, since the next fold deletes it by its
+    /// committed id. A commit that throws leaves them for the next fold; a process that dies releases
+    /// the lock with its handle.
     /// </remarks>
     /// <param name="committed">Whether the database already holds the fold with this id.</param>
     /// <param name="commit">Inserts the records and every fold id in one transaction.</param>
@@ -194,7 +195,17 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
 
         foreach (var dir in claimDirs)
         {
-            Directory.Delete(dir, recursive: true);
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Safe to leave: the records and this claim's id are committed, so the next fold
+                // finds the id in the database and deletes the directory without refolding it. A
+                // delete-pending handle or an antivirus scan on Windows, or a racing reset, must not
+                // fail a fold whose data is already in.
+            }
         }
 
         return new FoldOutcome(true, records.Count, corrupt);

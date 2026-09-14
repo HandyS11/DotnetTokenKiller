@@ -134,6 +134,59 @@ public sealed class PendingRecordJournalTests : IDisposable
     }
 
     [Fact]
+    public async Task FoldAsync_ClaimDeleteFailsAfterTheCommit_ReturnsTheOutcomeAndTheNextFoldRemovesTheClaim()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // POSIX permission bits (used below to make the post-commit delete fail) are not
+            // meaningful on Windows, where the same failure is a delete-pending or scanned file.
+            return;
+        }
+
+        // The records are committed once commit returns, and their claim's id with them, so the
+        // claim directory is only garbage: the next fold deletes it. Failing the caller there would
+        // turn a tracked run's successful fold, or a gain that already has its rows, into an error.
+        // A recovered claim (one an earlier fold left uncommitted) is deleted after the commit like
+        // a new one, and unlike a new one it can be made read-only before the fold starts: reading
+        // and committing its record still work, only removing its file does not.
+        var journal = Journal;
+        await journal.WriteAsync(MakeRecord());
+        var claim = Path.Combine(PendingDir, "folding-old");
+        Directory.CreateDirectory(claim);
+        var record = Directory.GetFiles(PendingDir, "*.json").Should().ContainSingle().Subject;
+        File.Move(record, Path.Combine(claim, Path.GetFileName(record)));
+        var committedIds = new List<string>();
+
+        File.SetUnixFileMode(claim, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var outcome = await journal.FoldAsync(NeverCommittedAsync, (foldIds, _, _) =>
+            {
+                committedIds.AddRange(foldIds);
+                return Task.CompletedTask;
+            }, wait: true);
+
+            outcome.Should().Be(new FoldOutcome(true, 1, 0));
+            committedIds.Should().Equal("old");
+            Directory.Exists(claim).Should().BeTrue("its delete failed");
+        }
+        finally
+        {
+            File.SetUnixFileMode(claim, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var commits = 0;
+        var next = await journal.FoldAsync(
+            (id, _) => Task.FromResult(committedIds.Contains(id)),
+            (_, _, _) => { commits++; return Task.CompletedTask; },
+            wait: true);
+
+        next.Should().Be(new FoldOutcome(true, 0, 0));
+        commits.Should().Be(0);
+        Directory.Exists(claim).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task FoldAsync_ClaimAlreadyCommitted_IsDeletedWithoutASecondCommit()
     {
         var claim = Path.Combine(PendingDir, "folding-abc");

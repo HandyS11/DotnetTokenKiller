@@ -1,6 +1,7 @@
 using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Tracking;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace DotnetTokenKiller.Infrastructure.Tests.Tracking;
@@ -165,6 +166,67 @@ public sealed class SqliteTrackerJournalTests : IDisposable
 
         PendingFiles.Should().Be(0);
         (await sut.GetHistoryAsync(days: 3650, projectPath: null)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ResetAsync_JournalClearFails_DeletesNoRowsAndNeverRefoldsACommittedClaim()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // POSIX permission bits (used below to make Clear fail) are not meaningful on Windows,
+            // where the same failure is a sharing violation on a file in the claim directory.
+            return;
+        }
+
+        // A fold that committed claim X and died before deleting folding-X/ leaves the directory
+        // behind; the folds table is what tells the next fold not to refold it. If a reset deleted
+        // the folds rows and only then failed to clear the journal, folding-X/ would survive with
+        // its id forgotten, and the next read would refold X into the table the user just reset.
+        await using var sut = Create();
+        await sut.RecordAsync(PendingRecordJournalTests.MakeRecord());
+        var pendingRecord = Directory.GetFiles(PendingDir, "*.json").Should().ContainSingle().Subject;
+        var recordJson = await File.ReadAllTextAsync(pendingRecord);
+        (await sut.GetSummaryAsync(days: 3650, projectPath: null)).TotalCommands.Should().Be(1);
+
+        var committedFold = await ReadTablesAsync();
+        committedFold.Folds.Should().Be(1);
+        var claim = Path.Combine(PendingDir, "folding-" + committedFold.LastFoldId);
+        Directory.CreateDirectory(claim);
+        await File.WriteAllTextAsync(Path.Combine(claim, Path.GetFileName(pendingRecord)), recordJson);
+
+        File.SetUnixFileMode(claim, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var reset = () => sut.ResetAsync();
+
+            await reset.Should().ThrowAsync<Exception>()
+                .Where(ex => ex is IOException || ex is UnauthorizedAccessException);
+            (await ReadTablesAsync()).Should().Be(committedFold, "a reset whose journal clear failed must delete nothing");
+        }
+        finally
+        {
+            File.SetUnixFileMode(claim, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var summary = await sut.GetSummaryAsync(days: 3650, projectPath: null);
+
+        summary.TotalCommands.Should().Be(1, "the leftover claim's id is still in folds, so it is deleted, not refolded");
+        Directory.Exists(claim).Should().BeFalse();
+    }
+
+    /// <summary>Reads the database directly, bypassing the tracker and so its fold.</summary>
+    private async Task<(long Commands, long Folds, string LastFoldId)> ReadTablesAsync()
+    {
+        await using var connection = new SqliteConnection($"Data Source={DbPath};Pooling=False");
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+                              SELECT (SELECT COUNT(*) FROM commands), (SELECT COUNT(*) FROM folds),
+                                     COALESCE((SELECT MAX(id) FROM folds), '')
+                              """;
+        await using var reader = await command.ExecuteReaderAsync();
+        await reader.ReadAsync();
+        return (reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2));
     }
 
     [Fact]

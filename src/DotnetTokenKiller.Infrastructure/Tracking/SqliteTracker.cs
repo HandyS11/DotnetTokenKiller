@@ -252,19 +252,24 @@ public sealed class SqliteTracker(
     }
 
     /// <inheritdoc/>
-    /// <remarks>Also deletes the runs still waiting in the journal and the record of past folds.</remarks>
+    /// <remarks>
+    /// Also deletes the runs still waiting in the journal and the record of past folds. The journal
+    /// is cleared first, so a clear that fails aborts the reset before any row is deleted: a claim
+    /// directory left by a fold that died after its commit is only recognised by its id in the folds
+    /// table, and deleting that row while the directory survived would refold its runs next time.
+    /// </remarks>
     public async Task ResetAsync(CancellationToken cancellationToken = default)
     {
         await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            _journal?.Clear();
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
             await using var cmd = CreateCommand();
 #pragma warning restore CA2007
             cmd.CommandText = "DELETE FROM commands; DELETE FROM folds";
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-            _journal?.Clear();
         }
         finally
         {
