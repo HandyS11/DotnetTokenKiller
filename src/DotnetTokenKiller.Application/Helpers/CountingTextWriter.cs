@@ -10,8 +10,9 @@ namespace DotnetTokenKiller.Application.Helpers;
 /// Like <see cref="FanOutTextWriter"/>, only <see cref="WriteLineAsync(ReadOnlyMemory{char}, CancellationToken)"/>
 /// and <see cref="FlushAsync(CancellationToken)"/> are routed, because the output pump calls nothing
 /// else. Unlike it, nothing is swallowed: a counter that cannot append is a bug, not a broken tee.
-/// The counter receives each line plus the inner writer's <see cref="NewLine"/>, which is what the
-/// pump accumulates for the filter, so the counted text is the filtered text.
+/// The counter receives each line plus the inner writer's <see cref="NewLine"/>, which is exactly the raw
+/// stdout the pump accumulates and hands to the filter, so the counted text is the filter's raw input,
+/// never its output (the filtered text is counted separately, after filtering).
 /// </remarks>
 /// <param name="inner">The tee session's writer.</param>
 /// <param name="counter">The run's counter.</param>
