@@ -218,9 +218,9 @@ for the same raw text, where raw is stdout followed by stderr, as today.
 
 **`ChunkedTokenCounter`** (Application, `Helpers/`):
 
-- `Append(ReadOnlySpan<char>)` adds text to a pending buffer. When the buffer holds at least 64 K
-  chars, the counter looks for the last **safe cut** in it; if one exists, the text before the cut
-  becomes a chunk, `Task.Run(() => TokenEstimator.Estimate(AnsiStrip.Strip(chunk), model))` is
+- `Append(ReadOnlySpan<char>)` adds text to a pending buffer. Each time the buffer has grown by at
+  least 64 K chars since the last search or cut, the counter looks for the last **safe cut** in it;
+  if one exists, the text before the cut becomes a chunk, `Task.Run(() => TokenEstimator.Estimate(AnsiStrip.Strip(chunk), model))` is
   started for it, and the buffer keeps the rest. Tasks are collected, never awaited here.
 - `Finish(string trailing)` starts counting the buffer plus `trailing` as the final chunk;
   `Task<int> TotalAsync()` awaits every chunk task and returns the sum. It throws if any chunk did;
@@ -258,7 +258,12 @@ pre-token can contain a newline only through `(?>\s+)$`, `\s*[\r\n]`, `\s+(?!\S)
 whitespace run holding the `\n` at `p-1` is matched in the whole text by `\s*[\r\n]` or
 `\s*[\r\n]+`, which end at the run's last newline, `p-1` under rule 2, so a new pre-token starts at
 `p`; in the first chunk the run ends at `p` too (`(?>\s+)$` or the same pattern), with the same
-characters. The punctuation pattern stops at `p` because `text[p]` is
+characters. This overstates it for `cl100k_base` next to a special token: the pre-tokenizer splits
+text at special tokens first and matches each segment on its own, so in `"a\n  <|endoftext|>b"` the
+pre-token `"\n  "` spans the safe cut at 2 instead of splitting there. The count is still exact
+because no `cl100k_base` vocabulary token joins a line break with following non-newline whitespace
+(verified by a vocabulary scan and brute force during review); `o200k_base` is unaffected, since its
+`\s*[\r\n]+` pattern always ends at the run's last line break. The punctuation pattern stops at `p` because `text[p]` is
 no newline and, in `o200k_base`, no `/` it could reach: rule 4 leaves whitespace, a letter or a
 number before the newline run in the stripped text. Byte-pair merges never cross pre-tokens. Rules 2
 and 4 let cuts land before indented lines and `/path` lines, which are most lines of `dotnet`

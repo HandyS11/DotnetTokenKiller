@@ -17,6 +17,15 @@ namespace DotnetTokenKiller.Application.Helpers;
 /// fixture corpus, adversarial strings and seeded random strings, for both encodings.
 /// </para>
 /// <para>
+/// That "no pre-token spans a cut" claim overstates it for <c>cl100k_base</c> next to a special
+/// token: the pre-tokenizer splits text at special tokens first and matches each segment on its
+/// own, so in <c>"a\n  &lt;|endoftext|&gt;b"</c> the pre-token <c>"\n  "</c> spans the safe cut
+/// after the line break. The count is still exact there because no <c>cl100k_base</c> vocabulary
+/// token joins a line break with following non-newline whitespace (verified by a vocabulary scan
+/// and brute force during review); <c>o200k_base</c> is unaffected, since its <c>\s*[\r\n]+</c>
+/// pattern always ends at the run's last line break.
+/// </para>
+/// <para>
 /// Fed with stdout only; <see cref="Finish"/> takes the stderr text, so the total is the count of
 /// stdout followed by stderr, as <see cref="TokenEstimator.Estimate"/> over the concatenation was.
 /// </para>
