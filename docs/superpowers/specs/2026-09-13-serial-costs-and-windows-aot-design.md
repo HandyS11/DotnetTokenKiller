@@ -143,11 +143,14 @@ Each was taken without the owner. Overrule any of them before the plan runs.
 where a record waits between the run and the report changes.
 
 **`PendingRecordJournal`** (Infrastructure, `Tracking/`), owned by `SqliteTracker`, rooted at
-`<database directory>/pending/`:
+`<database file>.pending/` in the database's directory (by default `tracking.db.pending/`). The name
+is derived from the database file, as SQLite's own `-journal` is, because the database path is
+configurable: a generic name such as `pending/` could be someone else's folder, whose files dtk
+would then fold, delete as corrupt, and clear on `reset`.
 
 - `WriteAsync(CommandRecord)`: serializes one `PendingRecord` (the flat fields of `CommandRecord`,
   execution time in milliseconds, enums as strings, plus `"Version": 1`) with a source-generated
-  `JsonSerializerContext`, and writes it to `<utc ticks>-<pid>-<8 hex>.json` with
+  `JsonSerializerContext`, and writes it to `<utc ticks>-<pid>-<32 hex>.json` with
   `FileMode.CreateNew`. One file per run: no shared file, so concurrent dtk processes never write to
   the same handle and Windows needs no append semantics. Creating the directory is part of the
   write.
@@ -155,15 +158,16 @@ where a record waits between the run and the report changes.
 - `FoldAsync(committed, commit, wait, CancellationToken)`, where `committed(id)` asks the tracker
   whether a fold id is in the database and `commit(ids, records)` inserts, folds exactly once under
   any interruption:
-  1. Takes `pending/.lock` with `FileShare.None` (an exclusive `flock` on Unix). With `wait`, it
-     retries for up to two seconds and then throws, so a reader never silently reports rows another
-     process is inserting as missing; without `wait` (the writer's background fold) a busy lock means
-     another process is folding, and it returns at once.
-  2. Recovers leftovers: for every `pending/folding-<id>/` directory, `committed(id)` says whether
-     fold `<id>` is in the database (the `folds` table below); if it is, the directory is deleted (a
-     fold that died after its commit); if not, its files join this fold (a fold that died before it).
-  3. Claims: moves every `pending/*.json` into a new `pending/folding-<id>/` with `File.Move`, so
-     a writer creating a file at that instant is never half-read.
+  1. Takes `tracking.db.pending/.lock` with `FileShare.None` (an exclusive `flock` on Unix). With
+     `wait`, it retries for up to 30 seconds and then throws, so a reader never silently reports
+     rows another process is inserting as missing; without `wait` (the writer's background fold) a
+     busy lock means another process is folding, and it returns at once.
+  2. Recovers leftovers: for every `tracking.db.pending/folding-<id>/` directory, `committed(id)`
+     says whether fold `<id>` is in the database (the `folds` table below); if it is, the directory
+     is deleted (a fold that died after its commit); if not, its files join this fold (a fold that
+     died before it).
+  3. Claims: moves every `tracking.db.pending/*.json` into a new `tracking.db.pending/folding-<id>/`
+     with `File.Move`, so a writer creating a file at that instant is never half-read.
   4. Parses the claimed files, deleting one that does not parse (a process killed mid-write leaves a
      truncated file; nothing else can) and counting it, and calls `commit(ids, records)` once, with
      the new id and every recovered claim's id. The tracker's commit is one transaction: the
@@ -214,9 +218,9 @@ for the same raw text, where raw is stdout followed by stderr, as today.
 
 **`ChunkedTokenCounter`** (Application, `Helpers/`):
 
-- `Append(ReadOnlySpan<char>)` adds text to a pending buffer. When the buffer holds at least 64 K
-  chars, the counter looks for the last **safe cut** in it; if one exists, the text before the cut
-  becomes a chunk, `Task.Run(() => TokenEstimator.Estimate(AnsiStrip.Strip(chunk), model))` is
+- `Append(ReadOnlySpan<char>)` adds text to a pending buffer. Each time the buffer has grown by at
+  least 64 K chars since the last search or cut, the counter looks for the last **safe cut** in it;
+  if one exists, the text before the cut becomes a chunk, `Task.Run(() => TokenEstimator.Estimate(AnsiStrip.Strip(chunk), model))` is
   started for it, and the buffer keeps the rest. Tasks are collected, never awaited here.
 - `Finish(string trailing)` starts counting the buffer plus `trailing` as the final chunk;
   `Task<int> TotalAsync()` awaits every chunk task and returns the sum. It throws if any chunk did;
@@ -226,26 +230,47 @@ for the same raw text, where raw is stdout followed by stderr, as today.
 - The counter is fed stdout only. `Finish(stderr)` appends stderr to the last chunk, so the sum is
   the count of stdout followed by stderr, and no cut has to be justified across the seam.
 
-**Safe cut.** A cut at index `p` of the pending text is safe when all of these hold:
+**Safe cut.** A cut at index `p` of the pending text (`0 < p < text.Length`) is safe when all of
+these hold:
 
-1. `text[p-1]` is `\n` and `p < text.Length`.
-2. `text[p]` is not whitespace and not `/`.
-3. The text before `p` does not end inside an escape sequence: its last `\x1b`, if any, begins a
-   CSI or OSC match that ends at or before `p` (`AnsiStrip.EndsInsideEscapeSequence`, new, using
-   the existing generated regexes).
+1. `text[p-1]` is `\n`.
+2. The first index `q ≥ p` with a non-whitespace character exists in the text, and `text[p..q)`
+   holds no `\r` and no `\n` (`p == q` is allowed).
+3. `text[q]` is not `\x1b`.
+4. `o200k_base` only: if `p == q` and `text[p]` is `/`, the last character before `p` that is not
+   `\r` or `\n` exists and is whitespace, a letter or a number, and is not an ASCII letter right
+   after `[`, `;`, an ASCII digit, BEL or `\` (such a letter may end a CSI sequence that `Strip`
+   removes, which would put punctuation before the newlines). In `cl100k_base` a `/` at `p` is fine.
+5. `text[..p]` does not end inside an escape sequence (`AnsiStrip.EndsInsideEscapeSequence`): its
+   last `\x1b`, if any, begins a CSI or OSC match that ends before `p`.
 
 Why this is exact, from the pre-tokenizer patterns in Microsoft.ML.Tokenizers 2.0.0
-(`TiktokenTokenizer.cs`): a pre-token can span a newline only through
-`(?>\s+)$`, `\s*[\r\n]`, `\s+(?!\S)`, `\s` and ` ?[^\s\p{L}\p{N}]+[\r\n]*` in `cl100k_base`, and
-`\s*[\r\n]+`, `\s+(?!\S)`, `\s+` and ` ?[^\s\p{L}\p{N}]+[\r\n/]*` in `o200k_base`. Every one of them
-ends at the end of a newline run when a non-whitespace character follows, except the last, which
-also swallows a following `/` in `o200k_base`; rule 2 excludes both. The letter, number and
-contraction patterns cannot contain a newline (`[^\r\n\p{L}\p{N}]?` is the only prefix they take).
-Special tokens contain no newline. A whitespace run that ends at the chunk boundary is matched by
-`(?>\s+)$` in the chunk and by `\s*[\r\n]` in the whole text, both as one pre-token of the same
-characters, so its BPE is the same. Rule 3 keeps `AnsiStrip` chunk-local: only an OSC sequence can
-span lines, and only an unterminated one could be cut. The proof is a test, not this paragraph:
-see Testing.
+(`TiktokenTokenizer.cs`). Rules 1 and 5 keep `AnsiStrip` chunk-local: no sequence spans `p`, and the
+CSI pattern cannot match across the `\n` at `p-1`, so the stripped chunks concatenate to the
+stripped whole, and the first ends with that `\n`. Rules 2 and 3 make the second begin with
+`text[p..q]` unchanged: whitespace without a newline, then a non-whitespace character that `Strip`
+cannot remove and join whitespace across the cut. No pattern looks behind, so the second chunk
+pre-tokenizes like the whole from `p` on, provided the whole has a pre-token boundary at `p`. A
+pre-token can contain a newline only through `(?>\s+)$`, `\s*[\r\n]`, `\s+(?!\S)`, `\s` and
+` ?[^\s\p{L}\p{N}]+[\r\n]*` in `cl100k_base`, and `\s*[\r\n]+`, `\s+(?!\S)`, `\s+` and
+` ?[^\s\p{L}\p{N}]+[\r\n/]*` in `o200k_base`; the letter, number and contraction patterns cannot
+(`[^\r\n\p{L}\p{N}]?` is the only prefix they take), and special tokens contain no newline. A
+whitespace run holding the `\n` at `p-1` is matched in the whole text by `\s*[\r\n]` or
+`\s*[\r\n]+`, which end at the run's last newline, `p-1` under rule 2, so a new pre-token starts at
+`p`; in the first chunk the run ends at `p` too (`(?>\s+)$` or the same pattern), with the same
+characters. This overstates it for `cl100k_base` next to a special token: the pre-tokenizer splits
+text at special tokens first and matches each segment on its own, so in `"a\n  <|endoftext|>b"` the
+pre-token `"\n  "` spans the safe cut at 2 instead of splitting there. The count is still exact
+because no `cl100k_base` vocabulary token joins a line break with following non-newline whitespace
+(verified by a vocabulary scan and brute force during review); `o200k_base` is unaffected, since its
+`\s*[\r\n]+` pattern always ends at the run's last line break. The punctuation pattern stops at `p` because `text[p]` is
+no newline and, in `o200k_base`, no `/` it could reach: rule 4 leaves whitespace, a letter or a
+number before the newline run in the stripped text. Byte-pair merges never cross pre-tokens. Rules 2
+and 4 let cuts land before indented lines and `/path` lines, which are most lines of `dotnet`
+output. The proof is a test, not this paragraph: `ChunkedTokenCounterTests` checks, for every cut
+`IsSafeCut` accepts in the fixture corpus, the generated small tiers, adversarial strings and seeded
+random strings, under both encodings, that the chunks' counts sum to the whole's and their token ids
+concatenate to the whole's (see Testing).
 
 **Wiring:**
 

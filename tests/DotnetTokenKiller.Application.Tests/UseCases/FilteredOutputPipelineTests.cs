@@ -256,6 +256,40 @@ public class FilteredOutputPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_RecordsTheCountersTotalWhenPresent()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        var counter = new ChunkedTokenCounter(TokenizerModel.Cl100kBase);
+        counter.Append("raw output\nsecond line\n");
+        counter.Finish("stderr text\n");
+        var request = Request(raw: "raw output\nsecond line\nstderr text\n") with { InputTokenCounter = counter };
+
+        await _sut.ProcessAsync(request, NullTeeSession.Instance);
+
+        var expected = TokenEstimator.Estimate("raw output\nsecond line\nstderr text\n");
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.InputTokens == expected), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FaultedCounter_RecordsNothingAndKeepsOutputAndExitCode()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+        var counter = new ChunkedTokenCounter(TokenizerModel.Cl100kBase, 64,
+            static (_, _) => throw new InvalidOperationException("no vocabulary"));
+        counter.Finish(string.Empty);
+        var output = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, output, _configProvider);
+        var request = Request(exitCode: 3) with { InputTokenCounter = counter };
+
+        var exitCode = await sut.ProcessAsync(request, NullTeeSession.Instance);
+
+        exitCode.Should().Be(3);
+        output.ToString().Should().Be("filtered");
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_WaitsForTheTrackerWarmUpBeforeRecording()
     {
         // Loaded up front so a pipeline that skipped the wait would reach RecordAsync well inside

@@ -76,7 +76,7 @@ internal sealed class ParitySandbox
     {
         string[] ignoredPrefixes =
         [
-            "home/tracking.db", // compared row by row instead; the file itself holds timestamps
+            "home/tracking.db", // compared row by row instead (holds timestamps); covers tracking.db.pending/ too
             "home/.dotnet/", "home/.nuget/", "home/.local/", "home/.templateengine/", // the SDK's own first-run state
             FakeDotnetDirectoryName + "/",
         ];

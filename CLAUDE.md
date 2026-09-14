@@ -111,10 +111,11 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
   around it on every iteration, alternating which goes first, and report the paired difference as
   dtk's overhead. The instant child is the worst case (background setup can overlap only dtk's own
   work); the sleeping child is the best case (an idle CPU). For output this fixture's size (2.6 KB),
-  a real build's cost lies between them; dtk's per-line tee flush and token counting grow with
-  output size, so that bracket says nothing about a much larger build log — the fourth scenario
-  keeps the same idle-CPU sleeping child but swaps in the 1024 KB log, isolating the counting-and-
-  tee cost at that size from process-spawn overhead. Every sample must print the build filter's
+  a real build's cost lies between them; dtk's per-line tee write and flush still run in the pump
+  and grow with output size, while token counting now overlaps the child except for the last chunk
+  (under 64 K chars) and stderr, so that bracket says nothing about a much larger build log's tee
+  cost — the fourth scenario keeps the same idle-CPU sleeping child but swaps in the 1024 KB log,
+  isolating the tee-and-final-chunk cost at that size from process-spawn overhead. Every sample must print the build filter's
   summary line, because the real SDK found on `PATH` by mistake also exits 1. The header prints any
   `DOTNET_*`/`COMPlus_*` variables, the binary's `runtimeconfig.json` properties, and a
   `State: <root> (<filesystem>)` line, since all three move the figures: state defaults to the temp
@@ -128,7 +129,20 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
   disk than on tmpfs, with the 1000 ms-child scenario rising far more (150.3 ms) than pipe or the
   instant child (11.6 ms and 13.0 ms) — more than the ext4 fsync cost alone accounts for — and the
   disk run's variance was much wider throughout (e.g. 1000 ms-child p95 571.4 ms, max 981.8 ms,
-  against tmpfs's 25.6–31.8 ms full range).
+  against tmpfs's 25.6–31.8 ms full range). Journal, measured 2026-09-14, baseline → a tracked run
+  writing a journal file instead of SQLite, both local AOT publishes: on tmpfs, pipe 63.9 → 65.6 ms;
+  wrapped overhead 61.9 → 63.3 ms (instant child), 28.8 → 26.5 ms (1000 ms child), and
+  185.7 → 186.9 ms (1000 ms child, 1 MB log); on ext4, pipe 75.5 → 63.4 ms; wrapped overhead
+  74.9 → 63.7 ms (instant child), 179.1 → 26.5 ms (1000 ms child), and 307.1 → 188.6 ms (1000 ms
+  child, 1 MB log). With no SQLite write left in the run, the ext4 medians sit within 2 ms of tmpfs
+  and the ext4 spread closed (1000 ms-child p95 30.8 ms, max 31.8 ms). Streaming count, measured
+  2026-09-14, journal → counting stdout in chunks while the child runs, both local AOT publishes: on
+  tmpfs, pipe 65.6 → 63.9 ms; wrapped overhead 63.3 → 62.5 ms (instant child), 26.5 → 25.5 ms (1000 ms
+  child), and 186.9 → 158.9 ms (1000 ms child, 1 MB log); on ext4, pipe 63.4 → 64.9 ms; wrapped
+  overhead 63.7 → 62.7 ms (instant child), 26.5 → 25.8 ms (1000 ms child), and 188.6 → 160.6 ms
+  (1000 ms child, 1 MB log). The three unchanged scenarios moved by at most 1.7 ms either way, well
+  under the 3 ms ceiling; the 1 MB scenario's overhead dropped 28.0 ms on both filesystems, 2.0 ms
+  short of the 30 ms target the spec set for it.
 - `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
   `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
   in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
@@ -181,9 +195,10 @@ fails with "undefined symbol: fcntl64") or a `-Wl,--defsym` alias (lld rejects i
 the shim object as an input, so after editing only `Native/fcntl64.c` delete `obj/` before publishing again.
 `-p:DtkLinkSqliteStatically=false` packs a dynamic build for comparisons. A local publish without `-p:SysRoot`
 compiles the shim with the host's C compiler (clang, or gcc through the ILC fallback) and needs the host's
-glibc; only `pack-linux.sh` packs carry the 2.27 floor. The `any` package still
-cannot track on glibc < 2.34. With SQLite linked in, `LD_DEBUG=files` no longer shows whether tracking off
-loads SQLite; `SqliteLoaderTests` checks that on macOS with `DYLD_PRINT_LIBRARIES`.
+glibc; only `pack-linux.sh` packs carry the 2.27 floor. The `any` package
+records runs on glibc < 2.34 but cannot read them there (`gain`, `reset`, retention). With SQLite linked in,
+`LD_DEBUG=files` no longer shows whether a tracked run or tracking off loads SQLite; `SqliteLoaderTests`
+checks that on macOS with `DYLD_PRINT_LIBRARIES`.
 
 Spectre.Console.Cli does not support Native AOT. dtk keeps it under a contained exception
 (docs/superpowers/specs/2026-09-13-native-aot-design.md): both `dtk` and `Spectre.Console.Cli` are
@@ -198,6 +213,15 @@ dictionary, value-type array, nullable or converter option without first extendi
 parity tests; `DTK_AOT_PACK_LOG` checks a pack log's warnings. CI also sets `DTK_AOT_REQUIRED=1`, which
 makes those tests fail instead of skip when either variable is missing. `IsAotCompatible` is on for the three
 libraries, so a trim- or AOT-unsafe call fails the normal build.
+
+## Tracking
+
+A tracked run writes one JSON file to `<database file>.pending/` beside the tracking database (by default
+`tracking.db.pending/`) and opens no SQLite connection. Readers (`gain`, with `--coverage` and `--export`;
+`reset`; retention) fold the journal first under `<database file>.pending/.lock`, claiming files into
+`folding-<id>/` and recording the id in the `folds` table, so a fold interrupted at any point is neither lost
+nor duplicated. A warm-up folds in the background when 64 or more files wait. `SqliteLoaderTests` uses `gain`
+as its positive control for that reason. `:memory:` data sources insert directly.
 
 ## Architecture & Stack
 

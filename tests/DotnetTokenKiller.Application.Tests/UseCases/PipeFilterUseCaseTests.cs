@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Filters;
@@ -107,6 +108,30 @@ public class PipeFilterUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_ReadsInputLargerThanOneBlockUnchanged()
+    {
+        var big = string.Concat(Enumerable.Repeat("a line of piped output\n", 20_000));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await Create(big).RunAsync(_filter, "build", 0, new OutputOptions());
+
+        _filter.Received(1).Apply(big, 0);
+    }
+
+    [Fact]
+    public async Task RunAsync_TrackingOn_RecordsTheExactCount()
+    {
+        const string stdin = "raw\nmore raw\n";
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await Create(stdin).RunAsync(_filter, "build", 0, new OutputOptions());
+
+        var expected = TokenEstimator.Estimate(stdin);
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.InputTokens == expected), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RunAsync_StartsTrackingSetupBeforeStdinIsRead()
     {
         // Setup overlaps a slow producer on the other end of the pipe. The reader waits (bounded)
@@ -131,19 +156,35 @@ public class PipeFilterUseCaseTests
 
     /// <summary>A stdin stand-in that records whether tracking setup had started when it was read.</summary>
     /// <param name="warmUpStarted">Completes once tracking setup has started.</param>
-    /// <param name="content">The content to return from <see cref="ReadToEndAsync"/>.</param>
+    /// <param name="content">The content to return from the first <see cref="ReadAsync(Memory{char}, CancellationToken)"/> call.</param>
     private sealed class WarmUpAwareReader(Task warmUpStarted, string content) : TextReader
     {
+        private bool _consumed;
+
         public bool WarmUpStartedBeforeRead { get; private set; }
 
-        public override async Task<string> ReadToEndAsync(CancellationToken cancellationToken)
+        /// <summary>
+        /// Intercepts the block read <c>PipeFilterUseCase.ReadAllAsync</c> uses (not
+        /// <see cref="ReadToEndAsync(CancellationToken)"/>), so this is the call to observe the ordering on.
+        /// </summary>
+        /// <param name="buffer">Filled with the reader's content on the first call.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        public override async ValueTask<int> ReadAsync(Memory<char> buffer, CancellationToken cancellationToken = default)
         {
+            if (_consumed)
+            {
+                return 0;
+            }
+
+            _consumed = true;
+
             // Captured into a local: VSTHRD003 flags awaiting a Task read directly from a field
             // (which is what a primary-constructor parameter becomes once captured).
             var pending = warmUpStarted;
             var first = await Task.WhenAny(pending, Task.Delay(TimeSpan.FromSeconds(5), cancellationToken));
             WarmUpStartedBeforeRead = first == pending;
-            return content;
+            content.AsSpan().CopyTo(buffer.Span);
+            return content.Length;
         }
     }
 }

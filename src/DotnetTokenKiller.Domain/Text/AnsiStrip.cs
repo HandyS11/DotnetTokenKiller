@@ -40,4 +40,37 @@ public static partial class AnsiStrip
     /// </summary>
     [GeneratedRegex(@"\x1b")]
     private static partial Regex BareEscPattern();
+
+    /// <summary>
+    /// Whether <paramref name="text"/> ends inside a CSI or OSC sequence that later text would
+    /// complete, so that stripping it alone and stripping it with what follows could differ.
+    /// </summary>
+    /// <remarks>
+    /// Only the last escape matters: the OSC pattern cannot cross an ESC, so every earlier
+    /// sequence is either complete or already a bare ESC, whatever follows. A lone trailing ESC
+    /// counts as inside, since either sequence could start there. The existing CSI and OSC
+    /// patterns can only match at the tail's start because it holds exactly one ESC at index 0.
+    /// </remarks>
+    /// <param name="text">The text so far.</param>
+    public static bool EndsInsideEscapeSequence(ReadOnlySpan<char> text)
+    {
+        var last = text.LastIndexOf('\x1b');
+        if (last < 0)
+        {
+            return false;
+        }
+
+        var tail = text[last..];
+        if (tail.Length == 1)
+        {
+            return true;
+        }
+
+        return tail[1] switch
+        {
+            '[' => !CsiPattern().IsMatch(tail),
+            ']' => !OscPattern().IsMatch(tail),
+            _ => false
+        };
+    }
 }

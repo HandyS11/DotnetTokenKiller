@@ -24,10 +24,11 @@ framework-dependent build, which runs on the .NET 10 runtime: on Windows, the SD
 cannot be started from Git Bash and re-parses `|`, `&`, `^` and `%` in arguments. The same command,
 `dotnet tool update`, tool manifests and `dnx` all pick the right package for the machine.
 
-The framework-dependent build cannot record token savings on glibc older than 2.34, because its SQLite
-library needs GLIBC_2.34 ([ericsink/SQLitePCL.raw#674](https://github.com/ericsink/SQLitePCL.raw/issues/674));
-filtering still works. Only Linux architectures without a native package (32-bit ARM, for example) get that
-build.
+The framework-dependent build records runs on any glibc, but `dtk gain` cannot report them on glibc
+older than 2.34, because its SQLite library needs GLIBC_2.34
+([ericsink/SQLitePCL.raw#674](https://github.com/ericsink/SQLitePCL.raw/issues/674)); filtering
+and recording still work, and the records are reported once the tool runs on a newer glibc. Only Linux
+architectures without a native package (32-bit ARM, for example) get that build.
 
 To update an existing installation:
 

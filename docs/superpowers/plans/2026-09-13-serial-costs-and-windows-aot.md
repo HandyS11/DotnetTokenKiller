@@ -67,7 +67,7 @@ NSubstitute, GitHub Actions (`windows-latest`), POSIX `sh` under Git Bash.
   Docker), or, when Docker is unavailable, against
   `dotnet publish src/DotnetTokenKiller.Cli -c Release -r linux-x64 -o artifacts/aot/publish` and
   say so in the numbers.
-- **Constants from the spec:** fold threshold 64 files; minimum chunk 64 K chars; lock wait 2 s.
+- **Constants from the spec:** fold threshold 64 files; minimum chunk 64 K chars; lock wait 30 s (raised from 2 s after Windows CI, ruling R27).
 - **Part C cannot be run on this machine.** Windows steps are verified by CI; `sh -n` and
   `shellcheck` (when installed) check the scripts, `actionlint` (when installed) the workflows.
 

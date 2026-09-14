@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tracking;
 
@@ -30,4 +31,12 @@ public sealed record FilteredOutputRequest(
     string DisplayCommandLine,
     RunSource Source,
     OutputOptions Options,
-    long StartTimestamp);
+    long StartTimestamp)
+{
+    /// <summary>
+    /// The counter that was fed the raw stdout as it streamed and finished with the stderr text, or
+    /// <see langword="null"/> to count <see cref="RawOutput"/> when tracking. When present, its total
+    /// is the count of the stripped <see cref="RawOutput"/>, computed mostly while the child ran.
+    /// </summary>
+    public ChunkedTokenCounter? InputTokenCounter { get; init; }
+}

@@ -18,8 +18,10 @@ namespace DotnetTokenKiller.Benchmarks;
 /// <para>
 /// <c>dtk pipe build</c> with a fixture on stdin routes through PipeFilterUseCase into the same
 /// FilteredOutputPipeline as a wrapped command, exercising process start, JIT, the DI graph, the
-/// config load, ANSI stripping, filtering, both token counts and the SQLite write. It reads stdin
-/// to the end before any of that starts, so it measures dtk as a strictly serial cost.
+/// config load, ANSI stripping, filtering, both token counts and the tracking journal write (one
+/// file; the fold into SQLite happens when this harness reads the totals after the scenario, outside
+/// the timed runs). It reads stdin to the end before any of that starts, so it measures dtk as a
+/// strictly serial cost.
 /// </para>
 /// <para>
 /// <c>dtk dotnet build</c> is the path users run, and it is shaped differently: dtk launches
@@ -46,7 +48,7 @@ internal static class ColdStartCommand
 
     /// <summary>
     /// How long the delayed fake child sleeps: longer than the tiktoken vocabulary load and the
-    /// SQLite setup combined, so setup started in the background can overlap it completely.
+    /// tracker's setup combined, so setup started in the background can overlap it completely.
     /// </summary>
     private static readonly TimeSpan DelayedChildSleep = TimeSpan.FromMilliseconds(1000);
 
@@ -402,10 +404,12 @@ internal static class ColdStartCommand
     /// <summary>
     /// Reads the running totals a scenario's tracking rows must move, straight from the tracking
     /// database rather than trusting dtk's own exit code: <c>FilteredOutputPipeline</c> swallows
-    /// every exception from tracking so a faulted tokenizer load or SQLite write never breaks a
+    /// every exception from tracking so a faulted tokenizer load or journal write never breaks a
     /// user's build, which also means dtk still exits as expected and prints its summary having
-    /// silently skipped that work. Pooling is disabled so the connection this opens is fully
-    /// released on dispose, before the next scenario's dtk children open the same file to write.
+    /// silently skipped that work. The dtk runs leave their records in the journal beside the
+    /// database; reading through the tracker folds them in first, so the totals include every run.
+    /// Pooling is disabled so the connection this opens is fully released on dispose, before the
+    /// next scenario's runs are timed.
     /// </summary>
     /// <param name="dbPath">The tracking database path, from <see cref="HermeticState.DbPath"/>.</param>
     private static async Task<(int Commands, long InputTokens)> ReadTrackingCountsAsync(string dbPath)

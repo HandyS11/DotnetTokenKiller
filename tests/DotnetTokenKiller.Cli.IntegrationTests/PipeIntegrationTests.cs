@@ -80,6 +80,7 @@ public class PipeIntegrationTests
     {
         var (_, _, dbPath) =
             await IntegrationTestHelper.RunDtkWithStdinAsync("Build succeeded.", "pipe", "build");
+        await IntegrationTestHelper.FoldTrackingJournalAsync(dbPath);
 
         var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
         await using var connection = new SqliteConnection(connectionString);

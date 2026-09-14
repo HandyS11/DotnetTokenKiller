@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using DotnetTokenKiller.Infrastructure.Tracking;
 using Microsoft.Data.Sqlite;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests.Helpers;
@@ -101,6 +102,8 @@ internal static class IntegrationTestHelper
     /// <param name="dbPath">The isolated tracking-database path returned by <see cref="RunDtkWithDbAsync"/>.</param>
     internal static async Task<IReadOnlyList<string>> ReadTrackedCommandsAsync(string dbPath)
     {
+        await FoldTrackingJournalAsync(dbPath).ConfigureAwait(false);
+
         var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync().ConfigureAwait(false);
@@ -115,6 +118,22 @@ internal static class IntegrationTestHelper
         }
 
         return commands;
+    }
+
+    /// <summary>Folds the tracking journal beside <paramref name="dbPath"/> into the database. A tracked
+    /// run leaves its record in the journal (<c>tracking.db.pending</c>) rather than in the database;
+    /// reading through the tracker folds it, so raw SQL on the database file sees it afterwards.</summary>
+    /// <param name="dbPath">The tracking-database path the dtk runs were pointed at.</param>
+    internal static async Task FoldTrackingJournalAsync(string dbPath)
+    {
+        if (!File.Exists(dbPath) && !Directory.Exists(dbPath + ".pending"))
+        {
+            return;
+        }
+
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath, Pooling = false }.ToString();
+        await using var tracker = new SqliteTracker(connectionString);
+        await tracker.GetSummaryAsync(days: 36500, projectPath: null).ConfigureAwait(false);
     }
 
     /// <summary>Allocates an isolated data directory that several dtk invocations can share, so a

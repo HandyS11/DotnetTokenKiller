@@ -25,6 +25,13 @@ public interface ICommandRunner
     /// Runs the command, writing each line of output to the given sinks as it arrives while also
     /// accumulating it, so the output can be measured without withholding it from the user.
     /// </summary>
+    /// <remarks>
+    /// The returned <see cref="CommandResult.StdOut"/> is exactly the text written to
+    /// <paramref name="stdOutSink"/>, each line followed by that sink's <see cref="TextWriter.NewLine"/>,
+    /// and <see cref="CommandResult.StdErr"/> is likewise exactly the text written to
+    /// <paramref name="stdErrSink"/>. Exact token tracking depends on this: the input tokens are
+    /// counted from what the stdout sink receives, and must equal the count of the returned text.
+    /// </remarks>
     /// <param name="command">The executable to run.</param>
     /// <param name="args">Arguments to pass to the executable.</param>
     /// <param name="stdOutSink">Receives standard output, line by line, as it is produced.</param>

@@ -249,7 +249,9 @@ public sealed class FilteredOutputPipeline(
             // inside this catch.
             await prepared.WarmUp.WhenReadyAsync().ConfigureAwait(false);
 
-            var inputTokens = TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
+            var inputTokens = request.InputTokenCounter is { } counter
+                ? await counter.TotalAsync().ConfigureAwait(false)
+                : TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
             var outputTokens = TokenEstimator.Estimate(filtered, config.Tracking.Tokenizer);
             var savedTokens = inputTokens - outputTokens;
             var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;

@@ -11,8 +11,10 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <remarks>
 /// This only moves work earlier. Every exception is discarded here, and the same failure then
 /// resurfaces where the run is recorded: <see cref="TokenEstimator.Estimate"/> rethrows a failed
-/// load and <see cref="ITracker.RecordAsync"/> retries a failed setup, both inside the catch that
-/// already keeps tracking failures away from the user.
+/// load and <see cref="ITracker.RecordAsync"/> redoes the setup it needs (the SQLite tracker's
+/// journal write creates the journal directory itself), both inside the catch that already keeps
+/// tracking failures away from the user. A background fold that fails is not retried by the run;
+/// the next read folds what it left.
 /// </remarks>
 public sealed class TrackingWarmUp
 {
@@ -37,8 +39,9 @@ public sealed class TrackingWarmUp
     {
         ArgumentNullException.ThrowIfNull(tracker);
 
-        // Task.Run rather than a direct call: SQLite setup begins with a synchronous native library
-        // load that would otherwise run on the caller's thread before the first await. The tasks
+        // Task.Run rather than a direct call: the tracker's setup begins synchronously (creating the
+        // journal directory and counting its files, or an in-memory database's native SQLite library
+        // load), which would otherwise run on the caller's thread before the first await. The tasks
         // themselves get CancellationToken.None so a cancelled run yields a completed task, never a
         // cancelled one that WhenReadyAsync would rethrow.
         var trackerSetup = Task.Run(async () =>
@@ -49,7 +52,8 @@ public sealed class TrackingWarmUp
             }
             catch
             {
-                // Intentional: RecordAsync retries a failed setup inside the tracking catch
+                // Intentional: RecordAsync redoes the setup it needs (the journal write creates its
+                // directory) inside the tracking catch; the next read folds what a failed fold left
             }
         }, CancellationToken.None);
 

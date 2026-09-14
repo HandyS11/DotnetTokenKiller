@@ -5,19 +5,26 @@ using DotnetTokenKiller.Infrastructure.Tracking;
 
 namespace DotnetTokenKiller.Benchmarks;
 
-/// <summary>Tracking write cost: a single <c>INSERT</c> against an already-populated table.</summary>
+/// <summary>
+/// Tracking write cost: what a tracked run pays to record itself, which on a file data source is
+/// one pending-record journal file, not an <c>INSERT</c>.
+/// </summary>
 /// <remarks>
-/// Deliberately carries no <c>RowCount</c> axis. BenchmarkDotNet calls a <c>[Benchmark]</c> method
-/// many times — pilot, warmup and measured iterations can add up to hundreds or thousands of calls
-/// for an operation this fast — and <see cref="RecordAsync"/> inserts a new row on every call with
-/// no reset in between, so the table grows past its seeded size well before the run ends. A
-/// <c>RowCount</c> parameter here would label that growing, uncontrolled size as if it were fixed,
-/// which is exactly the false label the original combined benchmark carried. <c>[IterationSetup]</c>
-/// is not the fix: BenchmarkDotNet's own guidance is that per-iteration setup distorts measurements
-/// in the sub-100-microsecond range this benchmark sits in, so the cure would be worse than the
-/// disease. Running with a growing table instead of a reset one is acceptable specifically because
-/// an <c>INSERT</c>'s cost is essentially independent of how many rows already exist — unlike the
-/// read side, which is why that one still carries the axis this one omits.
+/// <see cref="SqliteTracker.RecordAsync"/> opens no connection on a file data source: it writes one
+/// JSON file under <c>tracking.db.pending</c> beside the database, and the next read folds it in.
+/// This benchmark never reads or warms up, so no fold runs and every call measures that file write
+/// alone. Deliberately carries no <c>RowCount</c> axis. BenchmarkDotNet calls a <c>[Benchmark]</c>
+/// method many times — pilot, warmup and measured iterations can add up to hundreds or thousands of
+/// calls for an operation this fast — and <see cref="RecordAsync"/> adds a pending file on every
+/// call with no reset in between, so the journal grows past its seeded size well before the run
+/// ends. A <c>RowCount</c> parameter here would label that growing, uncontrolled size as if it were
+/// fixed, which is exactly the false label the original combined benchmark carried.
+/// <c>[IterationSetup]</c> is not the fix: BenchmarkDotNet's own guidance is that per-iteration
+/// setup distorts measurements in the sub-100-microsecond range this benchmark sits in, so the cure
+/// would be worse than the disease. Running with a growing journal instead of a reset one is
+/// acceptable because creating and renaming one file costs essentially the same however many
+/// files already wait beside it — unlike the read side, which is why that one still carries the
+/// axis this one omits.
 /// </remarks>
 [MemoryDiagnoser]
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
@@ -28,9 +35,9 @@ namespace DotnetTokenKiller.Benchmarks;
 public class TrackerWriteBenchmarks
 {
     /// <summary>
-    /// A modest non-empty baseline so the benchmark measures an insert into a populated table
-    /// rather than an empty one, without the run time seeding <see cref="TrackerReadBenchmarks"/>'s
-    /// 10,000-row tier would add.
+    /// A modest non-empty baseline so the benchmark measures a write into a journal that already
+    /// holds pending files rather than an empty one, without the run time seeding
+    /// <see cref="TrackerReadBenchmarks"/>'s 10,000-row tier would add.
     /// </summary>
     private const int SeedRowCount = 1_000;
 

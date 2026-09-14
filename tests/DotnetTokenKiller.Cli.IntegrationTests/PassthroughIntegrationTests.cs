@@ -36,17 +36,17 @@ public class PassthroughIntegrationTests
     {
         // The passthrough entry point exists to keep dtk's startup cost near zero for commands it
         // does not filter. With nothing to record and nothing to log it must open neither store —
-        // a database file appearing here means that fast path silently regressed.
+        // a database or journal file appearing here means that fast path silently regressed.
         var dir = IntegrationTestHelper.NewIsolatedDir();
         await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tracking.enabled", "false");
         await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tee.mode", "Never");
-        File.Delete(Path.Combine(dir, "tracking.db")); // `config set` itself is a tracked command
+        DeleteTrackingState(dir); // `config set` itself is a tracked command
 
         var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "dotnet", "--version");
 
         exitCode.Should().Be(0);
         output.Should().NotBeEmpty();
-        File.Exists(Path.Combine(dir, "tracking.db")).Should().BeFalse();
+        AssertNothingTracked(dir);
         Directory.Exists(Path.Combine(dir, "tee")).Should().BeFalse();
     }
 
@@ -54,16 +54,16 @@ public class PassthroughIntegrationTests
     public async Task Passthrough_TeeOnAndTrackingOff_WritesTheLogWithoutOpeningTheDatabaseAsync()
     {
         // Tee and tracking are independent switches. With only tee on, the log must still be
-        // written — and the database must still never be opened.
+        // written — and the run must still never be recorded, in the database or in its journal.
         var dir = IntegrationTestHelper.NewIsolatedDir();
         await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tee.mode", "Always");
         await IntegrationTestHelper.RunDtkInDirAsync(dir, "config", "set", "tracking.enabled", "false");
-        File.Delete(Path.Combine(dir, "tracking.db")); // `config set` itself is a tracked command
+        DeleteTrackingState(dir); // `config set` itself is a tracked command
 
         // A measurable subcommand: interactive ones keep their stdio attached and are never teed.
         await IntegrationTestHelper.RunDtkInDirAsync(dir, "dotnet", "tool", "list");
 
-        File.Exists(Path.Combine(dir, "tracking.db")).Should().BeFalse();
+        AssertNothingTracked(dir);
         Directory.Exists(Path.Combine(dir, "tee")).Should().BeTrue("a tee session was opened for the run");
     }
 
@@ -75,7 +75,7 @@ public class PassthroughIntegrationTests
         // needs a project — so it fails here, and a failed run must still be recorded and measured.
         var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "list", "reference");
 
-        var rows = ReadCommandRows(dbPath);
+        var rows = await ReadCommandRowsAsync(dbPath);
 
         rows.Should().ContainSingle();
         rows[0].Command.Should().Be("list reference");
@@ -88,7 +88,7 @@ public class PassthroughIntegrationTests
     {
         var (_, _, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "--version");
 
-        var rows = ReadCommandRows(dbPath);
+        var rows = await ReadCommandRowsAsync(dbPath);
 
         rows.Should().ContainSingle();
         rows[0].Command.Should().Be("--version");
@@ -116,21 +116,48 @@ public class PassthroughIntegrationTests
         dtkExit.Should().Be(dotnetExit);
     }
 
-    private static List<(string Command, string Outcome, long InputTokens)> ReadCommandRows(string dbPath)
+    private static async Task<List<(string Command, string Outcome, long InputTokens)>> ReadCommandRowsAsync(
+        string dbPath)
     {
+        await IntegrationTestHelper.FoldTrackingJournalAsync(dbPath);
+
         var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
-        using var connection = new SqliteConnection(connectionString);
-        connection.Open();
-        using var cmd = connection.CreateCommand();
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
         cmd.CommandText = "SELECT command, outcome, input_tokens FROM commands ORDER BY id";
 
         var rows = new List<(string, string, long)>();
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
         {
             rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt64(2)));
         }
 
         return rows;
+    }
+
+    /// <summary>Removes what a tracked run leaves in <paramref name="dir"/>: the database and its journal.</summary>
+    /// <param name="dir">The isolated directory the runs were pointed at.</param>
+    private static void DeleteTrackingState(string dir)
+    {
+        File.Delete(Path.Combine(dir, "tracking.db"));
+        var journal = Path.Combine(dir, "tracking.db.pending");
+        if (Directory.Exists(journal))
+        {
+            Directory.Delete(journal, recursive: true);
+        }
+    }
+
+    /// <summary>Asserts that nothing was recorded in <paramref name="dir"/>: no database and no journal file.</summary>
+    /// <param name="dir">The isolated directory the run was pointed at.</param>
+    private static void AssertNothingTracked(string dir)
+    {
+        File.Exists(Path.Combine(dir, "tracking.db")).Should().BeFalse();
+        var journal = Path.Combine(dir, "tracking.db.pending");
+        if (Directory.Exists(journal))
+        {
+            Directory.EnumerateFiles(journal, "*.json").Should().BeEmpty("tracking off must not journal the run");
+        }
     }
 }
