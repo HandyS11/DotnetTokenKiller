@@ -1,5 +1,6 @@
 using System.Text;
 using DotnetTokenKiller.Application;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Infrastructure;
 using DotnetTokenKiller.Infrastructure;
@@ -7,6 +8,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using DtkTypeRegistrar = DotnetTokenKiller.Cli.Infrastructure.TypeRegistrar;
+
+// A harness's pre-tool hook runs this on every shell tool call, so it skips everything below: encoding
+// setup, argument normalization, the service container and Spectre.
+if (args is [HookCommands.Verb, ..])
+{
+    return HookEntryPoint.Run(args[1..]);
+}
 
 Console.OutputEncoding = Encoding.UTF8;
 
