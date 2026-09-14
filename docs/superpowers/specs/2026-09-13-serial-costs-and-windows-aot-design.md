@@ -230,26 +230,42 @@ for the same raw text, where raw is stdout followed by stderr, as today.
 - The counter is fed stdout only. `Finish(stderr)` appends stderr to the last chunk, so the sum is
   the count of stdout followed by stderr, and no cut has to be justified across the seam.
 
-**Safe cut.** A cut at index `p` of the pending text is safe when all of these hold:
+**Safe cut.** A cut at index `p` of the pending text (`0 < p < text.Length`) is safe when all of
+these hold:
 
-1. `text[p-1]` is `\n` and `p < text.Length`.
-2. `text[p]` is not whitespace and not `/`.
-3. The text before `p` does not end inside an escape sequence: its last `\x1b`, if any, begins a
-   CSI or OSC match that ends at or before `p` (`AnsiStrip.EndsInsideEscapeSequence`, new, using
-   the existing generated regexes).
+1. `text[p-1]` is `\n`.
+2. The first index `q ≥ p` with a non-whitespace character exists in the text, and `text[p..q)`
+   holds no `\r` and no `\n` (`p == q` is allowed).
+3. `text[q]` is not `\x1b`.
+4. `o200k_base` only: if `p == q` and `text[p]` is `/`, the last character before `p` that is not
+   `\r` or `\n` exists and is whitespace, a letter or a number, and is not an ASCII letter right
+   after `[`, `;`, an ASCII digit, BEL or `\` (such a letter may end a CSI sequence that `Strip`
+   removes, which would put punctuation before the newlines). In `cl100k_base` a `/` at `p` is fine.
+5. `text[..p]` does not end inside an escape sequence (`AnsiStrip.EndsInsideEscapeSequence`): its
+   last `\x1b`, if any, begins a CSI or OSC match that ends before `p`.
 
 Why this is exact, from the pre-tokenizer patterns in Microsoft.ML.Tokenizers 2.0.0
-(`TiktokenTokenizer.cs`): a pre-token can span a newline only through
-`(?>\s+)$`, `\s*[\r\n]`, `\s+(?!\S)`, `\s` and ` ?[^\s\p{L}\p{N}]+[\r\n]*` in `cl100k_base`, and
-`\s*[\r\n]+`, `\s+(?!\S)`, `\s+` and ` ?[^\s\p{L}\p{N}]+[\r\n/]*` in `o200k_base`. Every one of them
-ends at the end of a newline run when a non-whitespace character follows, except the last, which
-also swallows a following `/` in `o200k_base`; rule 2 excludes both. The letter, number and
-contraction patterns cannot contain a newline (`[^\r\n\p{L}\p{N}]?` is the only prefix they take).
-Special tokens contain no newline. A whitespace run that ends at the chunk boundary is matched by
-`(?>\s+)$` in the chunk and by `\s*[\r\n]` in the whole text, both as one pre-token of the same
-characters, so its BPE is the same. Rule 3 keeps `AnsiStrip` chunk-local: only an OSC sequence can
-span lines, and only an unterminated one could be cut. The proof is a test, not this paragraph:
-see Testing.
+(`TiktokenTokenizer.cs`). Rules 1 and 5 keep `AnsiStrip` chunk-local: no sequence spans `p`, and the
+CSI pattern cannot match across the `\n` at `p-1`, so the stripped chunks concatenate to the
+stripped whole, and the first ends with that `\n`. Rules 2 and 3 make the second begin with
+`text[p..q]` unchanged: whitespace without a newline, then a non-whitespace character that `Strip`
+cannot remove and join whitespace across the cut. No pattern looks behind, so the second chunk
+pre-tokenizes like the whole from `p` on, provided the whole has a pre-token boundary at `p`. A
+pre-token can contain a newline only through `(?>\s+)$`, `\s*[\r\n]`, `\s+(?!\S)`, `\s` and
+` ?[^\s\p{L}\p{N}]+[\r\n]*` in `cl100k_base`, and `\s*[\r\n]+`, `\s+(?!\S)`, `\s+` and
+` ?[^\s\p{L}\p{N}]+[\r\n/]*` in `o200k_base`; the letter, number and contraction patterns cannot
+(`[^\r\n\p{L}\p{N}]?` is the only prefix they take), and special tokens contain no newline. A
+whitespace run holding the `\n` at `p-1` is matched in the whole text by `\s*[\r\n]` or
+`\s*[\r\n]+`, which end at the run's last newline, `p-1` under rule 2, so a new pre-token starts at
+`p`; in the first chunk the run ends at `p` too (`(?>\s+)$` or the same pattern), with the same
+characters. The punctuation pattern stops at `p` because `text[p]` is
+no newline and, in `o200k_base`, no `/` it could reach: rule 4 leaves whitespace, a letter or a
+number before the newline run in the stripped text. Byte-pair merges never cross pre-tokens. Rules 2
+and 4 let cuts land before indented lines and `/path` lines, which are most lines of `dotnet`
+output. The proof is a test, not this paragraph: `ChunkedTokenCounterTests` checks, for every cut
+`IsSafeCut` accepts in the fixture corpus, the generated small tiers, adversarial strings and seeded
+random strings, under both encodings, that the chunks' counts sum to the whole's and their token ids
+concatenate to the whole's (see Testing).
 
 **Wiring:**
 
