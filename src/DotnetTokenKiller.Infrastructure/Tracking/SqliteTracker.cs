@@ -298,7 +298,7 @@ public sealed class SqliteTracker(
         }
 
         var dataSource = new SqliteConnectionStringBuilder(cs).DataSource;
-        return string.IsNullOrWhiteSpace(dataSource) || dataSource == MemoryDataSource ? null : dataSource;
+        return string.IsNullOrWhiteSpace(dataSource) ? null : dataSource;
     }
 
     private static void EnsureDataDirectory(string cs)

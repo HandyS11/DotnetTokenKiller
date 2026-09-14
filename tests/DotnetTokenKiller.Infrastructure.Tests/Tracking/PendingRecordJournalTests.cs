@@ -310,17 +310,26 @@ public sealed class PendingRecordJournalTests : IDisposable
     }
 
     [Fact]
-    public async Task Clear_RemovesFilesAndClaimsButKeepsTheLock()
+    public async Task Clear_RemovesFilesTemporaryFilesAndClaimsButKeepsTheLock()
     {
         var journal = Journal;
         await journal.WriteAsync(MakeRecord());
         Directory.CreateDirectory(Path.Combine(PendingDir, "folding-old"));
+        await File.WriteAllTextAsync(Path.Combine(PendingDir, "x.json.tmp"), string.Empty);
         await File.WriteAllTextAsync(Path.Combine(PendingDir, ".lock"), string.Empty);
 
         journal.Clear();
 
         journal.Count().Should().Be(0);
         Directory.GetDirectories(PendingDir).Should().BeEmpty();
-        File.Exists(Path.Combine(PendingDir, ".lock")).Should().BeTrue();
+        Directory.GetFiles(PendingDir).Should().Equal(Path.Combine(PendingDir, ".lock"));
+    }
+
+    [Fact]
+    public void Clear_MissingDirectory_DoesNotCreateIt()
+    {
+        Journal.Clear();
+
+        Directory.Exists(PendingDir).Should().BeFalse();
     }
 }

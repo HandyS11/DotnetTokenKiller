@@ -705,6 +705,28 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task GetHistoryAsync_UnrecognizedSource_FallsBackToRun()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", nameof(RunOutcome.Filtered), "TotallyUnknownSource");
+
+        var history = await _sut.GetHistoryAsync(1, null, "bogus-cmd");
+
+        history.Should().ContainSingle().Which.Source.Should().Be(RunSource.Run);
+    }
+
+    [Fact]
+    public async Task GetCoverageAsync_UnrecognizedSource_FallsBackToRun()
+    {
+        await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
+        await InsertRawOutcomeRowAsync("bogus-cmd", nameof(RunOutcome.Filtered), "TotallyUnknownSource");
+
+        var coverage = await _sut.GetCoverageAsync(1, null, "bogus-cmd");
+
+        coverage.Entries.Should().ContainSingle().Which.Source.Should().Be(RunSource.Run);
+    }
+
+    [Fact]
     public async Task GetHistoryAsync_DifferentlyCasedOutcome_ParsesInsteadOfFallingBackToFiltered()
     {
         await _sut.RecordAsync(MakeRecord()); // forces schema init so `commands` already exists
@@ -733,7 +755,8 @@ public class SqliteTrackerTests : IAsyncDisposable
     /// </summary>
     /// <param name="command">The command name to store on the row.</param>
     /// <param name="outcome">The raw, possibly-unrecognized outcome string to store on the row.</param>
-    private async Task InsertRawOutcomeRowAsync(string command, string outcome)
+    /// <param name="source">The raw, possibly-unrecognized source string to store on the row.</param>
+    private async Task InsertRawOutcomeRowAsync(string command, string outcome, string source = "Run")
     {
         var connectionField = typeof(SqliteTracker)
             .GetField("_connection", BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -742,12 +765,13 @@ public class SqliteTrackerTests : IAsyncDisposable
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
                           INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                              saved_tokens, savings_percentage, execution_time_ms, success, outcome)
-                          VALUES (@ts, @cmd, '/proj', 100, 100, 0, 0.0, 10.0, 1, @outcome)
+                              saved_tokens, savings_percentage, execution_time_ms, success, outcome, source)
+                          VALUES (@ts, @cmd, '/proj', 100, 100, 0, 0.0, 10.0, 1, @outcome, @source)
                           """;
         cmd.Parameters.AddWithValue("@ts", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         cmd.Parameters.AddWithValue("@cmd", command);
         cmd.Parameters.AddWithValue("@outcome", outcome);
+        cmd.Parameters.AddWithValue("@source", source);
         await cmd.ExecuteNonQueryAsync();
     }
 

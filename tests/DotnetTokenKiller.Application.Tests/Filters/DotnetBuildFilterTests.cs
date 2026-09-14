@@ -895,6 +895,23 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
+    public void Apply_MsbuildSummaryCountOverflowsInt_IsIgnoredAndStillNotADiagnostic()
+    {
+        // A tally too large for an int cannot be trusted as a total; the parsed count stands, and the
+        // line is still consumed as the tally rather than read as a diagnostic or noise.
+        const string input = """
+                             /p/A.cs(1,1): error CS0001: msg [/p/a.csproj]
+                                 0 Warning(s)
+                                 99999999999 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("dotnet build: 1 error, 0 warnings");
+        result.Should().NotContain("99999999999");
+    }
+
+    [Fact]
     public void Apply_SucceededButSummaryReportsUnparsedWarnings_FallsBackToRawOutput()
     {
         // Nothing parsed while MSBuild declares warnings means the parser missed them (localised

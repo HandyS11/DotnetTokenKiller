@@ -84,6 +84,17 @@ public sealed class ArtifactStampingTests
     }
 
     [Fact]
+    public void TryParse_HashNotLowerCaseHex_ReturnsFalse()
+    {
+        var hash = ArtifactStamping.ComputeHash("body\n");
+        var stamped = ArtifactStamping.Apply("body\n", StampStyle.HashComment);
+        var upperCased = stamped.Replace(hash, hash.ToUpperInvariant(), StringComparison.Ordinal);
+
+        upperCased.Should().NotBe(stamped, "the digest must contain a letter for this test to mean anything");
+        ArtifactStamping.TryParse(upperCased, out _, out _).Should().BeFalse();
+    }
+
+    [Fact]
     public void TryParse_StampedContent_ReturnsBodyWithoutTheStampLine()
     {
         var stamped = ArtifactStamping.Apply("alpha\nbeta\n", StampStyle.HashComment);

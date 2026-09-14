@@ -310,11 +310,9 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
     /// project-scoped command — which refreshes the wrong installation and leaves doctor red.
     /// </summary>
     /// <param name="installation">The installation the remedy command targets.</param>
-    /// <param name="extraFlags">Additional flags to append after the scope flag, e.g. <c>--force</c>.</param>
-    private static string RemedyCommand(HookInstallation installation, string? extraFlags = null)
+    private static string RemedyCommand(HookInstallation installation)
     {
         var scopeFlag = installation.Scope == HookScope.Global ? " --global" : string.Empty;
-        var trailingFlags = string.IsNullOrEmpty(extraFlags) ? string.Empty : $" {extraFlags}";
-        return $"dtk init {installation.ProviderName}{scopeFlag}{trailingFlags}";
+        return $"dtk init {installation.ProviderName}{scopeFlag}";
     }
 }
