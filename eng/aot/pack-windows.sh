@@ -25,7 +25,7 @@ publish=$(cd "$publish" && pwd)
 log="$(cd "$(dirname "$log")" && pwd)/$(basename "$log")"
 
 # The parity tests compare against this JIT build, so it must carry the packs' version.
-dtk dotnet build DotnetTokenKiller.slnx -c Release -p:Version="$version"
+dotnet build DotnetTokenKiller.slnx -c Release -p:Version="$version"
 
 # The native binary. AotWarningLogTests reads this log: its IL warnings must be exactly Spectre's three.
 dotnet publish src/DotnetTokenKiller.Cli -c Release -r win-x64 -p:Version="$version" -o "$publish" \
