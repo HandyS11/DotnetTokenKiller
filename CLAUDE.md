@@ -175,7 +175,8 @@ measured the same way (raw medians in parentheses): `dtk --version` 5.0 ms for t
 
 `dtk hook`, measured 2026-09-14, 55 runs each, local AOT publish (linux-x64) against the Python hook it replaced, medians
 including a 1.0 ms `/bin/true` fork-and-exec baseline: `dtk hook claude` 9.5 ms (no rewrite) and 9.8 ms
-(rewrite); `python3 dotnet-to-dtk.py` 15.9 ms and 15.9 ms; `dtk --version` 12.9 ms. A harness runs the
+(rewrite); `python3 .claude/hooks/dotnet-to-dtk.py` (this repository's former hook, since deleted) 15.9 ms and
+15.9 ms; `dtk --version` 12.9 ms. A harness runs the
 hook on every shell tool call, so this is a per-call cost; on the `any` fallback it is the JIT start-up instead.
 The hook runs 2.9–3.4 ms *faster* than `--version`, because it returns before the service container and
 Spectre are built, which `--version` still constructs — meeting the spec's 3 ms ceiling on hook overhead, a
