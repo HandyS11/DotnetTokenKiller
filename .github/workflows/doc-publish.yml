@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop]
     paths:
-      - 'docfx/**'
+      - 'docs/**'
       - '**/*.md'
   workflow_dispatch:
 
@@ -35,12 +35,12 @@ jobs:
         run: dotnet tool restore
 
       - name: Build Documentation
-        run: dotnet docfx docfx/docfx.json --warningsAsErrors
+        run: dotnet docfx docs/docfx.json --warningsAsErrors
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: 'docfx/_site'
+          path: 'docs/_site'
 
   deploy:
     needs: build

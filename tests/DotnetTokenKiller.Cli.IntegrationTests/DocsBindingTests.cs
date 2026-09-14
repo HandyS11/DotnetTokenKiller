@@ -94,7 +94,7 @@ public sealed class DocsBindingTests
 
     private static string ReadArticles()
     {
-        var articlesDir = Path.Combine(FindRepoRoot(), "docfx", "articles");
+        var articlesDir = Path.Combine(FindRepoRoot(), "docs", "articles");
         return string.Join(
             "\n",
             Directory.EnumerateFiles(articlesDir, "*.md", SearchOption.AllDirectories).Select(File.ReadAllText));
