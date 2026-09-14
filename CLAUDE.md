@@ -181,9 +181,10 @@ fails with "undefined symbol: fcntl64") or a `-Wl,--defsym` alias (lld rejects i
 the shim object as an input, so after editing only `Native/fcntl64.c` delete `obj/` before publishing again.
 `-p:DtkLinkSqliteStatically=false` packs a dynamic build for comparisons. A local publish without `-p:SysRoot`
 compiles the shim with the host's C compiler (clang, or gcc through the ILC fallback) and needs the host's
-glibc; only `pack-linux.sh` packs carry the 2.27 floor. The `any` package still
-cannot track on glibc < 2.34. With SQLite linked in, `LD_DEBUG=files` no longer shows whether tracking off
-loads SQLite; `SqliteLoaderTests` checks that on macOS with `DYLD_PRINT_LIBRARIES`.
+glibc; only `pack-linux.sh` packs carry the 2.27 floor. The `any` package
+records runs on glibc < 2.34 but cannot read them there (`gain`, `reset`, retention). With SQLite linked in,
+`LD_DEBUG=files` no longer shows whether a tracked run or tracking off loads SQLite; `SqliteLoaderTests`
+checks that on macOS with `DYLD_PRINT_LIBRARIES`.
 
 Spectre.Console.Cli does not support Native AOT. dtk keeps it under a contained exception
 (docs/superpowers/specs/2026-09-13-native-aot-design.md): both `dtk` and `Spectre.Console.Cli` are
@@ -198,6 +199,15 @@ dictionary, value-type array, nullable or converter option without first extendi
 parity tests; `DTK_AOT_PACK_LOG` checks a pack log's warnings. CI also sets `DTK_AOT_REQUIRED=1`, which
 makes those tests fail instead of skip when either variable is missing. `IsAotCompatible` is on for the three
 libraries, so a trim- or AOT-unsafe call fails the normal build.
+
+## Tracking
+
+A tracked run writes one JSON file to `<database file>.pending/` beside the tracking database (by default
+`tracking.db.pending/`) and opens no SQLite connection. Readers (`gain`, with `--coverage` and `--export`;
+`reset`; retention) fold the journal first under `<database file>.pending/.lock`, claiming files into
+`folding-<id>/` and recording the id in the `folds` table, so a fold interrupted at any point is neither lost
+nor duplicated. A warm-up folds in the background when 64 or more files wait. `SqliteLoaderTests` uses `gain`
+as its positive control for that reason. `:memory:` data sources insert directly.
 
 ## Architecture & Stack
 
