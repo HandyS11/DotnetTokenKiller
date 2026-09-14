@@ -278,6 +278,20 @@ public class InitCommandTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_RemovedFiles_ArePrintedAndCountAsAChange()
+    {
+        const string dir = "/project";
+        var result = new IntegrationResult([], [], []) { RemovedFiles = [$"{dir}/.claude/hooks/dotnet-to-dtk.py"] };
+        var (command, console) = Create("claude", result);
+
+        var exitCode = await command.RunAsync(new InitCommandSettings { Provider = "claude", Directory = dir }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("removed").And.Contain(".claude/hooks/dotnet-to-dtk.py");
+        console.Output.Should().Contain("Done.").And.NotContain("Already integrated");
+    }
+
+    [Fact]
     public async Task ExecuteAsync_SomeFilesUpdated_ShowsUpdatedLinesAndDoneMessage()
     {
         const string dir = "/project";

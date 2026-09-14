@@ -12,6 +12,13 @@ internal sealed record HookSpec(
     string Matcher,
     string Command);
 
+/// <summary>A hook registration merged into a harness's settings file.</summary>
+/// <param name="SettingsPath">Path to the settings.json file.</param>
+/// <param name="EventKey">Key of the hook event array within the hooks object (e.g. "PreToolUse").</param>
+/// <param name="Matcher">The matcher value for the registered hook entry.</param>
+/// <param name="Command">The command dtk registers, and the value used to detect an existing registration.</param>
+internal sealed record HookRegistrationSpec(string SettingsPath, string EventKey, string Matcher, string Command);
+
 internal static class IntegratorHelpers
 {
     private const string HooksKey = "hooks";
@@ -56,11 +63,20 @@ internal static class IntegratorHelpers
     /// <param name="content">The full content to write.</param>
     /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    internal static async Task WriteFileAsync(
-        string path,
-        string content,
-        IntegrationContext context,
-        CancellationToken cancellationToken)
+    internal static Task WriteFileAsync(string path, string content, IntegrationContext context, CancellationToken cancellationToken)
+        => WriteOwnedFileAsync(path, content, replaceExisting: false, context, cancellationToken);
+
+    /// <summary>
+    /// <see cref="WriteFileAsync"/> for a file dtk owns outright: when <paramref name="replaceExisting"/> is
+    /// <see langword="true"/>, a differing existing copy is overwritten without <c>--force</c>.
+    /// </summary>
+    /// <param name="path">Path to the target file.</param>
+    /// <param name="content">The full content to write.</param>
+    /// <param name="replaceExisting">Whether the caller has verified the existing copy is dtk's own.</param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task WriteOwnedFileAsync(
+        string path, string content, bool replaceExisting, IntegrationContext context, CancellationToken cancellationToken)
     {
         var exists = File.Exists(path);
 
@@ -76,7 +92,7 @@ internal static class IntegratorHelpers
             }
         }
 
-        if (ShouldSkipWrite(exists, context.Force))
+        if (ShouldSkipWrite(exists, context.Force || replaceExisting))
         {
             context.Skipped.Add(path);
             return;
@@ -127,6 +143,9 @@ internal static class IntegratorHelpers
     /// copy installed by dtk 0.6.0 or earlier.
     /// </summary>
     internal const string HookLegacySignature = "_DTK_SUBCOMMANDS";
+
+    /// <summary>File name of the Python hook script dtk installed before <c>dtk hook</c> replaced it.</summary>
+    internal const string LegacyHookScriptName = "dotnet-to-dtk.py";
 
     /// <summary>
     /// Writes an artifact dtk generates in full, refreshing it when dtk can prove it wrote the
@@ -324,16 +343,81 @@ internal static class IntegratorHelpers
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Merges a hook registration into the provider's settings JSON. No script is written.</summary>
+    /// <param name="spec">Where and what to register.</param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static Task WriteHookRegistrationAsync(
+        HookRegistrationSpec spec, IntegrationContext context, CancellationToken cancellationToken) =>
+        MergeJsonSettingsAsync(
+            spec.SettingsPath,
+            spec.EventKey,
+            new JsonObject
+            {
+                ["matcher"] = spec.Matcher,
+                ["hooks"] = new JsonArray(new JsonObject { ["type"] = "command", ["command"] = spec.Command })
+            },
+            spec.Command,
+            context,
+            cancellationToken);
+
+    /// <summary>
+    /// Deletes the Python hook script dtk installed before <c>dtk hook</c>, when dtk can prove it wrote it.
+    /// </summary>
+    /// <remarks>
+    /// Proof is the same as for refreshing a generated artifact: the provenance stamp verifies, or the file is
+    /// unstamped and carries <see cref="HookLegacySignature"/>. Anything else may hold the user's own changes,
+    /// so it is kept with a note unless <c>--force</c> is set. The directory is removed when this empties it.
+    /// Call it only after the registration was written, so a settings file that fails to parse never costs
+    /// the user a working hook.
+    /// </remarks>
+    /// <param name="scriptPath">Where the Python script would be.</param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task RemoveLegacyHookScriptAsync(
+        string scriptPath, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(scriptPath))
+        {
+            return;
+        }
+
+        var existing = await TryReadExistingAsync(scriptPath, cancellationToken).ConfigureAwait(false);
+        var writtenByDtk = existing is not null
+                           && (ArtifactStamping.IsAuthentic(existing)
+                               || (!ArtifactStamping.HasStamp(existing)
+                                   && existing.Contains(HookLegacySignature, StringComparison.Ordinal)));
+
+        if (!writtenByDtk && !context.Force)
+        {
+            context.Notes.Add(
+                $"{scriptPath} is no longer used: the hook now runs dtk directly. It differs from what dtk "
+                + "wrote, so it was left in place; delete it, or re-run with --force to remove it.");
+            return;
+        }
+
+        File.Delete(scriptPath);
+        context.Removed.Add(scriptPath);
+
+        var directory = Path.GetDirectoryName(scriptPath);
+        if (directory is not null && !Directory.EnumerateFileSystemEntries(directory).Any())
+        {
+            Directory.Delete(directory);
+        }
+    }
+
     /// <summary>
     /// Merges a hook entry into a JSON settings file under
     /// <c>hooks[<paramref name="hookEventKey"/>]</c>.
     /// Existing content is preserved; registration is detected by matching
-    /// <paramref name="hookCommand"/> against each entry's <c>"command"</c> field, treating two
-    /// commands as the same hook when they are equal after removing every <c>"</c> character (see
-    /// <see cref="AreEquivalentIgnoringQuotes"/>) — so a settings file hand-edited to quote the whole
-    /// path instead of just the env-var segment (e.g. <c>python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py"</c>)
-    /// is still recognized as dtk's own hook — or when it matches the pre-<c>$..._PROJECT_DIR</c>
-    /// relative legacy form (see <see cref="DeriveLegacyCommand"/>).
+    /// <paramref name="hookCommand"/> against each entry's <c>"command"</c> field. An entry is dtk's
+    /// own when its command equals <paramref name="hookCommand"/> after removing every <c>"</c>
+    /// character (see <see cref="AreEquivalentIgnoringQuotes"/>) — so a settings file hand-edited to
+    /// quote the whole path instead of just the env-var segment (e.g.
+    /// <c>python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/dotnet-to-dtk.py"</c>) is still recognized as
+    /// dtk's own hook — or when its command runs <see cref="LegacyHookScriptName"/> (any interpreter,
+    /// any path — including a Windows user's hand edit to run <c>python</c> instead of
+    /// <c>python3</c>), the Python hook script that <c>dtk hook</c> replaces.
     /// <list type="bullet">
     ///   <item><description>
     ///     Only the identical current command is registered: nothing is written, and the path is
@@ -343,7 +427,7 @@ internal static class IntegratorHelpers
     ///     <c>--force</c> would help.
     ///   </description></item>
     ///   <item><description>
-    ///     An equivalent-but-not-identical variant (quote difference or legacy relative form) is
+    ///     An equivalent-but-not-identical variant (quote difference or legacy Python hook) is
     ///     registered: it is upgraded in place to the current command and the file is reported
     ///     <see cref="IntegrationContext.Updated"/>.
     ///   </description></item>
@@ -394,8 +478,7 @@ internal static class IntegratorHelpers
                 $"The settings file '{path}' has a '{HooksKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
         };
 
-        var legacyCommand = DeriveLegacyCommand(hookCommand);
-        var matches = FindEquivalentEntries(hookArray, hookCommand, legacyCommand);
+        var matches = FindEquivalentEntries(hookArray, hookCommand);
 
         if (matches.Count == 0)
         {
@@ -484,17 +567,13 @@ internal static class IntegratorHelpers
     /// <summary>
     /// Finds every registered inner hook object whose <c>"command"</c> is equivalent to
     /// <paramref name="hookCommand"/> — identical, equal after removing every <c>"</c> character (see
-    /// <see cref="AreEquivalentIgnoringQuotes"/>), or equal to <paramref name="legacyCommand"/> (the
-    /// pre-<c>$..._PROJECT_DIR</c> relative form <see cref="DeriveLegacyCommand"/> derives) — in the
-    /// array's traversal order.
+    /// <see cref="AreEquivalentIgnoringQuotes"/>), or running <see cref="LegacyHookScriptName"/> (the
+    /// Python hook script <c>dtk hook</c> replaces, under any interpreter or path) — in the array's
+    /// traversal order.
     /// </summary>
     /// <param name="hookArray">The hook event array (e.g. <c>hooks.PreToolUse</c>) to search.</param>
     /// <param name="hookCommand">The current command dtk registers.</param>
-    /// <param name="legacyCommand">
-    /// The derived legacy relative command, or <see langword="null"/> when <paramref name="hookCommand"/>
-    /// doesn't have that shape.
-    /// </param>
-    private static List<JsonObject> FindEquivalentEntries(JsonArray hookArray, string hookCommand, string? legacyCommand)
+    private static List<JsonObject> FindEquivalentEntries(JsonArray hookArray, string hookCommand)
     {
         var matches = new List<JsonObject>();
 
@@ -520,7 +599,8 @@ internal static class IntegratorHelpers
 
                 var command = innerEntry["command"]?.GetValue<string>();
                 if (command is not null
-                    && (AreEquivalentIgnoringQuotes(command, hookCommand) || command == legacyCommand))
+                    && (AreEquivalentIgnoringQuotes(command, hookCommand)
+                        || command.Contains(LegacyHookScriptName, StringComparison.Ordinal)))
                 {
                     matches.Add(innerEntry);
                 }
@@ -581,36 +661,5 @@ internal static class IntegratorHelpers
                 hookArray.RemoveAt(outer);
             }
         }
-    }
-
-    /// <summary>
-    /// Derives the pre-<c>$..._PROJECT_DIR</c> relative form of a hook command shaped as
-    /// <c>&lt;prefix&gt;"$XXX_PROJECT_DIR"/&lt;relative path&gt;</c> (e.g.
-    /// <c>python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py</c> becomes
-    /// <c>python3 .claude/hooks/dotnet-to-dtk.py</c>), so a settings file carrying the old, broken
-    /// relative command can be recognized and replaced regardless of which provider's env var
-    /// prefixes the current command. Derived structurally from <paramref name="hookCommand"/>
-    /// rather than a hardcoded per-provider lookup, so it keeps working for any future provider
-    /// that adopts the same env-var-rooting convention.
-    /// </summary>
-    /// <param name="hookCommand">The current, env-var-rooted hook command.</param>
-    /// <returns>The legacy relative command, or <see langword="null"/> when <paramref name="hookCommand"/> doesn't follow that shape.</returns>
-    private static string? DeriveLegacyCommand(string hookCommand)
-    {
-        var quoteStart = hookCommand.IndexOf("\"$", StringComparison.Ordinal);
-        if (quoteStart < 0)
-        {
-            return null;
-        }
-
-        var quoteEnd = hookCommand.IndexOf('"', quoteStart + 1);
-        if (quoteEnd < 0 || quoteEnd + 1 >= hookCommand.Length || hookCommand[quoteEnd + 1] != '/')
-        {
-            return null;
-        }
-
-        // Drop the opening quote/env-var/closing quote and the leading '/' of the relative path so
-        // the two prefix/suffix halves join into the legacy bare-relative form.
-        return hookCommand[..quoteStart] + hookCommand[(quoteEnd + 2)..];
     }
 }

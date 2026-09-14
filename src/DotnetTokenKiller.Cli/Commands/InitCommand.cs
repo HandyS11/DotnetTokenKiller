@@ -81,6 +81,11 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
             console.MarkupLine($"[grey]unchanged[/] {Markup.Escape(RelativePath(directory, file))}");
         }
 
+        foreach (var file in result.RemovedFiles)
+        {
+            console.MarkupLine($"[red]removed[/]  {Markup.Escape(RelativePath(directory, file))}");
+        }
+
         foreach (var file in result.SkippedFiles)
         {
             // Once --force was already passed, telling the user to "use --force" is never true:
@@ -110,7 +115,7 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
     /// <c>.aider.conf.yml</c> without the dtk <c>read:</c> key) might never have been functionally
     /// integrated — the CLI cannot tell that apart from a file that already carries dtk's exact
     /// managed content, so without <c>--force</c> it must never claim "Done" or "Already
-    /// integrated". A generated artifact (the Python hook, <c>SKILL.md</c>) that is already
+    /// integrated". A generated artifact (a generated skill file, <c>SKILL.md</c>) that is already
     /// byte-identical to the current stamped template, and a settings merge whose hook entry is
     /// already registered, both arrive in <see cref="IntegrationResult.UnchangedFiles"/> rather
     /// than <see cref="IntegrationResult.SkippedFiles"/> — dtk can prove nothing needs to change
@@ -134,7 +139,7 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
             return;
         }
 
-        if (result.CreatedFiles.Count > 0 || result.UpdatedFiles.Count > 0)
+        if (result.CreatedFiles.Count > 0 || result.UpdatedFiles.Count > 0 || result.RemovedFiles.Count > 0)
         {
             console.MarkupLine($"[green]Done.[/] dtk is now integrated with [bold]{provider}[/].");
             return;

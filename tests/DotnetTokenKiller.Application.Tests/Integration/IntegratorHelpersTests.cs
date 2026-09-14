@@ -1096,202 +1096,6 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task MergeJsonSettingsAsync_CommandStartingWithQuotedEnvVar_StillReplacesLegacyEntry()
-    {
-        // Boundary: the quoted env-var segment starts at index 0 (no interpreter prefix), so the
-        // derived legacy command is the bare relative path.
-        var context = new IntegrationContext(false);
-        var path = Path.Combine(_tempDir, "settings.json");
-        Directory.CreateDirectory(_tempDir);
-        const string legacyCommand = ".claude/hooks/dotnet-to-dtk.py";
-        const string newCommand = "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dotnet-to-dtk.py";
-        var initialRoot = new JsonObject
-        {
-            [HooksProperty] = new JsonObject
-            {
-                ["PreToolUse"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["matcher"] = "Bash",
-                        [HooksProperty] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["type"] = "command",
-                                ["command"] = legacyCommand
-                            }
-                        }
-                    }
-                }
-            }
-        };
-        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
-
-        var hookEntry = new JsonObject
-        {
-            ["matcher"] = "Bash",
-            [HooksProperty] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = newCommand
-                }
-            }
-        };
-
-        await IntegratorHelpers.MergeJsonSettingsAsync(
-            path, "PreToolUse", hookEntry, newCommand, context, CancellationToken.None);
-
-        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
-        innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
-        context.Updated.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task MergeJsonSettingsAsync_EmptyEnvVarName_StillReplacesLegacyEntry()
-    {
-        // Boundary: the closing quote sits immediately after the opening "$ — zero characters
-        // between the quotes — which is the tightest possible quoted segment.
-        var context = new IntegrationContext(false);
-        var path = Path.Combine(_tempDir, "settings.json");
-        Directory.CreateDirectory(_tempDir);
-        const string legacyCommand = "python3 hook.py";
-        const string newCommand = """python3 "$"/hook.py""";
-        var initialRoot = new JsonObject
-        {
-            [HooksProperty] = new JsonObject
-            {
-                ["PreToolUse"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["matcher"] = "Bash",
-                        [HooksProperty] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["type"] = "command",
-                                ["command"] = legacyCommand
-                            }
-                        }
-                    }
-                }
-            }
-        };
-        await File.WriteAllTextAsync(path, initialRoot.ToJsonString());
-
-        var hookEntry = new JsonObject
-        {
-            ["matcher"] = "Bash",
-            [HooksProperty] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = newCommand
-                }
-            }
-        };
-
-        await IntegratorHelpers.MergeJsonSettingsAsync(
-            path, "PreToolUse", hookEntry, newCommand, context, CancellationToken.None);
-
-        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
-        innerCommands.Should().ContainSingle().Which.Should().Be(newCommand);
-        context.Updated.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task MergeJsonSettingsAsync_CommandEndingWithClosingQuote_DerivesNoLegacyAndAppends()
-    {
-        // Boundary: the closing quote is the LAST character of the command, so there is no
-        // character after it to inspect. Legacy derivation must bail out rather than read past
-        // the end of the string.
-        var context = new IntegrationContext(false);
-        var path = Path.Combine(_tempDir, "settings.json");
-        const string command = "python3 \"$CLAUDE_PROJECT_DIR\"";
-        var hookEntry = new JsonObject
-        {
-            ["matcher"] = "Bash",
-            [HooksProperty] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = command
-                }
-            }
-        };
-
-        await IntegratorHelpers.MergeJsonSettingsAsync(
-            path, "PreToolUse", hookEntry, command, context, CancellationToken.None);
-
-        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
-        innerCommands.Should().ContainSingle().Which.Should().Be(command);
-        context.Created.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task MergeJsonSettingsAsync_UnterminatedQuotedEnvVar_DerivesNoLegacyAndAppends()
-    {
-        // Boundary: an opening "$ with no closing quote at all.
-        var context = new IntegrationContext(false);
-        var path = Path.Combine(_tempDir, "settings.json");
-        const string command = """/usr/bin/python3 "$CLAUDE_PROJECT_DIR/hook.py""";
-        var hookEntry = new JsonObject
-        {
-            ["matcher"] = "Bash",
-            [HooksProperty] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = command
-                }
-            }
-        };
-
-        await IntegratorHelpers.MergeJsonSettingsAsync(
-            path, "PreToolUse", hookEntry, command, context, CancellationToken.None);
-
-        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
-        innerCommands.Should().ContainSingle().Which.Should().Be(command);
-        context.Created.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task MergeJsonSettingsAsync_QuotedSegmentWithoutEnvVarSigil_DerivesNoLegacyAndAppends()
-    {
-        // Boundary: the command contains a quoted segment followed by '/', but the quote does not
-        // open an env var ("$). Derivation must stop at the missing "$ and never fall through to
-        // the slicing logic with a negative offset.
-        var context = new IntegrationContext(false);
-        var path = Path.Combine(_tempDir, "settings.json");
-        const string command = """python3 "/opt/dtk"/hook.py""";
-        var hookEntry = new JsonObject
-        {
-            ["matcher"] = "Bash",
-            [HooksProperty] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "command",
-                    ["command"] = command
-                }
-            }
-        };
-
-        await IntegratorHelpers.MergeJsonSettingsAsync(
-            path, "PreToolUse", hookEntry, command, context, CancellationToken.None);
-
-        var innerCommands = await ReadInnerCommandsAsync(path, "PreToolUse");
-        innerCommands.Should().ContainSingle().Which.Should().Be(command);
-        context.Created.Should().ContainSingle();
-    }
-
-    [Fact]
     public async Task MergeJsonSettingsAsync_WholePathQuotedVariantRegistered_UpgradesInPlaceToCurrentCommand()
     {
         // A user hand-editing settings.json might quote the whole path instead of just the env-var
@@ -1731,5 +1535,190 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Skipped.Should().ContainSingle().Which.Should().Be(path);
         context.Unchanged.Should().BeEmpty();
         context.Updated.Should().BeEmpty();
+    }
+
+    // --- WriteHookRegistrationAsync / MergeJsonSettingsAsync legacy migration ---
+
+    [Theory]
+    [InlineData("python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dotnet-to-dtk.py")]
+    [InlineData("python3 .claude/hooks/dotnet-to-dtk.py")]
+    [InlineData("python \"C:\\Users\\me\\.claude\\hooks\\dotnet-to-dtk.py\"")]
+    [InlineData("\"C:\\Program Files\\Python\\python.exe\" \"$HOME\"/.claude/hooks/dotnet-to-dtk.py")]
+    public async Task MergeJsonSettingsAsync_PythonHookRegistration_IsUpgradedInPlaceToTheDtkHook(string legacyCommand)
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, $$$"""
+            {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":{{{System.Text.Json.JsonSerializer.Serialize(legacyCommand)}}},"timeout":30}]}]}}
+            """);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude"), context, CancellationToken.None);
+
+        (await ReadInnerCommandsAsync(path, "PreToolUse")).Should().ContainSingle().Which.Should().Be("dtk hook claude");
+        (await File.ReadAllTextAsync(path)).Should().Contain("\"timeout\": 30", "an upgrade in place keeps the entry's other properties");
+        context.Updated.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_HookRunningAnotherScript_IsLeftAloneAndTheDtkHookAppended()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, """
+            {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .claude/hooks/rtk-rewrite.py"}]}]}}
+            """);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude"), context, CancellationToken.None);
+
+        (await ReadInnerCommandsAsync(path, "PreToolUse")).Should().Equal("python3 .claude/hooks/rtk-rewrite.py", "dtk hook claude");
+    }
+
+    [Fact]
+    public async Task WriteHookRegistrationAsync_NewFile_WritesOnlyTheRegistration()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "BeforeTool", "run_shell_command", "dtk hook gemini; exit 0"), context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be(
+            """
+            {
+              "hooks": {
+                "BeforeTool": [
+                  {
+                    "matcher": "run_shell_command",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "dtk hook gemini; exit 0"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+
+            """);
+        context.Created.Should().Equal(path);
+        Directory.EnumerateFiles(_tempDir).Should().Equal(path);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RemoveLegacyHookScriptAsync_ScriptDtkWrote_IsDeletedWithItsEmptyDirectory(bool stamped)
+    {
+        var context = new IntegrationContext(false);
+        var script = Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py");
+        if (stamped)
+        {
+            LegacyHookFixtures.WriteStampedScript(script);
+        }
+        else
+        {
+            LegacyHookFixtures.WriteUnstampedScript(script);
+        }
+
+        await IntegratorHelpers.RemoveLegacyHookScriptAsync(script, context, CancellationToken.None);
+
+        File.Exists(script).Should().BeFalse();
+        Directory.Exists(Path.GetDirectoryName(script)).Should().BeFalse("an emptied hooks directory is removed too");
+        context.Removed.Should().Equal(script);
+        context.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_DirectoryWithOtherFiles_IsKept()
+    {
+        var context = new IntegrationContext(false);
+        var script = Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, "hooks", "dtk-dotnet.json"), "{}");
+
+        await IntegratorHelpers.RemoveLegacyHookScriptAsync(script, context, CancellationToken.None);
+
+        File.Exists(script).Should().BeFalse();
+        Directory.Exists(Path.GetDirectoryName(script)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_EditedScript_IsKeptWithANote()
+    {
+        var context = new IntegrationContext(false);
+        var script = Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteEditedScript(script);
+
+        await IntegratorHelpers.RemoveLegacyHookScriptAsync(script, context, CancellationToken.None);
+
+        File.Exists(script).Should().BeTrue();
+        context.Removed.Should().BeEmpty();
+        context.Notes.Should().ContainSingle().Which.Should().Contain(script).And.Contain("no longer used").And.Contain("--force");
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_EditedScriptWithForce_IsDeleted()
+    {
+        var context = new IntegrationContext(true);
+        var script = Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteEditedScript(script);
+
+        await IntegratorHelpers.RemoveLegacyHookScriptAsync(script, context, CancellationToken.None);
+
+        File.Exists(script).Should().BeFalse();
+        context.Removed.Should().Equal(script);
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_NoScript_DoesNothing()
+    {
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.RemoveLegacyHookScriptAsync(Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py"), context, CancellationToken.None);
+
+        context.Removed.Should().BeEmpty();
+        context.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteOwnedFileAsync_ReplaceExisting_OverwritesWithoutForce()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "dtk-dotnet.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "old");
+
+        await IntegratorHelpers.WriteOwnedFileAsync(path, "new", replaceExisting: true, context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be("new");
+        context.Updated.Should().Equal(path);
+    }
+
+    [Fact]
+    public async Task WriteOwnedFileAsync_NotReplaceable_SkipsWithoutForce()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "dtk-dotnet.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "old");
+
+        await IntegratorHelpers.WriteOwnedFileAsync(path, "new", replaceExisting: false, context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be("old");
+        context.Skipped.Should().Equal(path);
+    }
+
+    [Fact]
+    public void IntegrationContext_ToResult_CarriesRemovedFiles()
+    {
+        var context = new IntegrationContext(false);
+        context.Removed.Add("/p/.claude/hooks/dotnet-to-dtk.py");
+
+        context.ToResult().RemovedFiles.Should().Equal("/p/.claude/hooks/dotnet-to-dtk.py");
     }
 }

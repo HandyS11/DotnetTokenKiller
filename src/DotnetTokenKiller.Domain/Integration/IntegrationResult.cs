@@ -32,4 +32,7 @@ public sealed record IntegrationResult(
     /// that is already up to date, where the flag would change nothing.
     /// </remarks>
     public IReadOnlyList<string> UnchangedFiles { get; init; } = [];
+
+    /// <summary>Gets the files dtk deleted because nothing uses them any more, such as a Python hook script.</summary>
+    public IReadOnlyList<string> RemovedFiles { get; init; } = [];
 }
