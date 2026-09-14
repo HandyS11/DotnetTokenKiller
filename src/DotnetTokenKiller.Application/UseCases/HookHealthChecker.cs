@@ -239,7 +239,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 return new DiagnosticCheck(
                     name,
                     false,
-                    $"'{hook}' exited with code {result.ExitCode}: {result.StdErr.Trim()}. "
+                    $"'{hook}' exited with code {result.ExitCode}: {FirstErrorLine(result)} "
                     + $"A dtk older than 'dtk hook' cannot answer it; run '{UpdateCommand}'.");
             }
 
@@ -262,6 +262,18 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         {
             return new DiagnosticCheck(name, false, $"could not run {dtk}: {ex.Message}.");
         }
+    }
+
+    /// <summary>
+    /// The first non-blank line of a failed probe's stderr, or of its stdout when stderr is empty — a dtk too old
+    /// to know <c>hook</c> reports "Unknown command" on stdout, because its argument parser writes errors there.
+    /// </summary>
+    /// <param name="result">The failed probe's captured output.</param>
+    private static string FirstErrorLine(CommandResult result)
+    {
+        var output = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+        var line = output.Split('\n').Select(text => text.Trim()).FirstOrDefault(text => text.Length > 0) ?? "(no output)";
+        return line.EndsWith('.') ? line : line + ".";
     }
 
     /// <summary>Builds the stdin payload in the shape the provider's host CLI sends.</summary>

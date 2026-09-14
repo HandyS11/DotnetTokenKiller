@@ -310,6 +310,22 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_DtkTooOldReportingOnStdout_ProbeFailsQuotingThatError()
+    {
+        // Spectre.Console.Cli, which parses dtk's arguments, prints "Unknown command" to stdout, not stderr.
+        await IntegrateAsync();
+        _runner.RunCapturedWithInputAsync(null!, null!, null!)
+            .ReturnsForAnyArgs(new CommandResult("\nError: Unknown command 'hook'.\n\n       hook gemini\n", string.Empty, 255));
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Contain("exited with code 255: Error: Unknown command 'hook'.")
+            .And.Contain("dotnet tool update -g DotnetTokenKiller");
+    }
+
+    [Fact]
     public async Task RunAsync_ResolvedDtkCannotBeStarted_ProbeFailsNamingThatPath()
     {
         await IntegrateAsync();
