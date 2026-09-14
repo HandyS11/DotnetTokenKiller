@@ -1,27 +1,54 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Application.UseCases;
 
 /// <summary>
-/// Checks that the rewrite hooks dtk installed are present, registered, current, and actually
-/// firing.
+/// Checks that the rewrite hooks dtk installed are registered and that the <c>dtk</c> on <c>PATH</c> answers them.
 /// </summary>
 /// <remarks>
-/// These are the checks <c>doctor</c> was missing. The SDK, config, database, and tee directory it
-/// already verified rarely break; the hook — a generated Python script, registered by an absolute
-/// command string, invoked by an interpreter that may not exist under that name — breaks silently
-/// and takes the whole integration with it.
+/// A registration is only a command string, <c>dtk hook &lt;provider&gt;</c>; what breaks silently is the
+/// <c>dtk</c> it names — missing from <c>PATH</c>, or too old to know <c>hook</c>. The probe runs exactly that,
+/// resolved from <c>PATH</c> by <see cref="ExecutableSearch"/> and started by its absolute path: a bare name
+/// would be found beside the running dtk first, so every probe would test the dtk running doctor.
+/// A registration still naming the Python <c>dotnet-to-dtk.py</c> script is an install from before
+/// <c>dtk hook</c>, reported with the command that migrates it.
 /// </remarks>
 /// <param name="runner">Runs the installed hook for the probe.</param>
-internal sealed class HookHealthChecker(ICommandRunner runner)
+/// <param name="locateDtk">
+/// Returns the absolute path of the <c>dtk</c> a harness would run, or <see langword="null"/> when <c>PATH</c> has none.
+/// </param>
+internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> locateDtk)
 {
-    /// <summary>How long the probe waits before declaring the interpreter wedged.</summary>
+    /// <summary>Creates a checker that resolves <c>dtk</c> from this process's <c>PATH</c>.</summary>
+    /// <param name="runner">Runs the installed hook for the probe.</param>
+    public HookHealthChecker(ICommandRunner runner)
+        : this(runner, static () => ExecutableSearch.FindOnProcessPath(DtkCommand))
+    {
+    }
+
+    /// <summary>The command name every registration runs.</summary>
+    private const string DtkCommand = "dtk";
+
+    /// <summary>
+    /// Doctor only reads settings files, so it accepts what their harnesses accept rather than failing a file
+    /// with a comment as unreadable.
+    /// </summary>
+    private static readonly JsonDocumentOptions LenientJson = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
+    /// <summary>How long the probe waits before declaring the hook wedged.</summary>
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
+
+    private const string UpdateCommand = "dotnet tool update -g DotnetTokenKiller";
 
     /// <summary>Runs the status check and probe for every hook installed in either scope.</summary>
     /// <param name="integrators">The hook-installing providers to inspect.</param>
@@ -36,10 +63,21 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
 
         var checks = new List<DiagnosticCheck>();
 
-        await foreach (var candidate in EnumerateCandidatesAsync(integrators, projectDirectory, cancellationToken)
-            .ConfigureAwait(false))
+        foreach (var integrator in integrators)
         {
-            checks.AddRange(await CheckInstallationAsync(candidate, cancellationToken).ConfigureAwait(false));
+            foreach (var scope in new[] { HookScope.Project, HookScope.Global })
+            {
+                foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
+                {
+                    var registration = await ReadRegistrationAsync(installation, cancellationToken).ConfigureAwait(false);
+                    if (registration.Kind == RegistrationKind.Absent && !File.Exists(installation.LegacyScriptPath))
+                    {
+                        continue;
+                    }
+
+                    checks.AddRange(await CheckAsync(installation, registration, cancellationToken).ConfigureAwait(false));
+                }
+            }
         }
 
         if (checks.Count == 0)
@@ -48,156 +86,102 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                 "hook integration",
                 true,
                 "No rewrite hook found in this directory or your home config. "
-                + "Run 'dtk integrate <provider>' to install one."));
+                + "Run 'dtk init <provider>' to install one."));
         }
 
         return checks;
     }
 
-    /// <summary>
-    /// Yields every hook installation, across all integrators and both scopes, that has something to
-    /// report — i.e. the presence filter from <see cref="RunAsync"/> already applied.
-    /// </summary>
-    /// <remarks>
-    /// An installation is present when either the script exists or the registration names it — a
-    /// hook whose script was moved or deleted after being registered must still surface (as a
-    /// failure), not be silently skipped as "no integration here". Only when neither holds is there
-    /// truly nothing to report.
-    /// </remarks>
-    /// <param name="integrators">The hook-installing providers to inspect.</param>
-    /// <param name="projectDirectory">The directory to treat as the project root.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    private static async IAsyncEnumerable<HookInstallationCandidate> EnumerateCandidatesAsync(
-        IReadOnlyList<IHookIntegrator> integrators,
-        string projectDirectory,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<DiagnosticCheck>> CheckAsync(
+        HookInstallation installation, Registration registration, CancellationToken cancellationToken)
     {
-        foreach (var integrator in integrators)
+        var name = CheckName(installation, "hook");
+
+        return registration.Kind switch
         {
-            foreach (var scope in new[] { HookScope.Project, HookScope.Global })
-            {
-                foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
-                {
-                    var scriptExists = File.Exists(installation.Script.Path);
-                    var (registered, registrationMessage) = await ReadRegisteredCommandAsync(
-                        installation, cancellationToken).ConfigureAwait(false);
-
-                    if (!scriptExists && registered is null)
-                    {
-                        continue;
-                    }
-
-                    yield return new HookInstallationCandidate(installation, scriptExists, registered, registrationMessage);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Runs the status check for one installation, plus the probe when registration was found.
-    /// </summary>
-    /// <remarks>
-    /// The probe is skipped when registration was not found, so one root cause — an unregistered
-    /// hook — yields one failure rather than two.
-    /// </remarks>
-    /// <param name="candidate">The installation to check, and what its presence scan found.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    private async Task<IReadOnlyList<DiagnosticCheck>> CheckInstallationAsync(
-        HookInstallationCandidate candidate,
-        CancellationToken cancellationToken)
-    {
-        var (installation, scriptExists, registered, registrationMessage) = candidate;
-
-        if (!scriptExists)
-        {
-            return
+            RegistrationKind.Legacy =>
             [
                 new DiagnosticCheck(
-                    CheckName(installation, "hook"),
+                    name,
                     false,
-                    $"{installation.Script.Path} is registered but missing. "
-                    + $"Run '{RemedyCommand(installation)}' to reinstall it.")
-            ];
-        }
-
-        var checks = new List<DiagnosticCheck>
-        {
-            await BuildStatusCheckAsync(installation, registered, registrationMessage, cancellationToken)
-                .ConfigureAwait(false)
+                    $"legacy Python hook — {installation.RegistrationPath} still runs {IntegratorHelpers.LegacyHookScriptName}. "
+                    + $"Run '{RemedyCommand(installation)}' to migrate it to '{installation.Command}'.")
+            ],
+            RegistrationKind.Current =>
+            [
+                new DiagnosticCheck(name, true, "registered"),
+                await ProbeAsync(installation, cancellationToken).ConfigureAwait(false)
+            ],
+            _ => [new DiagnosticCheck(name, false, $"{registration.Problem}. Run '{RemedyCommand(installation)}'.")]
         };
-
-        if (registered is not null)
-        {
-            checks.Add(await ProbeAsync(installation, registered, cancellationToken).ConfigureAwait(false));
-        }
-
-        return checks;
     }
 
-    /// <summary>One hook installation together with what the presence scan found for it.</summary>
-    /// <param name="Installation">The installation being checked.</param>
-    /// <param name="ScriptExists">Whether the hook script file exists on disk.</param>
-    /// <param name="RegisteredCommand">The command found in the registration, or <see langword="null"/>.</param>
-    /// <param name="RegistrationMessage">The reason no command was found, when applicable.</param>
-    private sealed record HookInstallationCandidate(
-        HookInstallation Installation,
-        bool ScriptExists,
-        string? RegisteredCommand,
-        string RegistrationMessage);
+    /// <summary>What the registration file says about this hook.</summary>
+    private enum RegistrationKind
+    {
+        /// <summary>No file, or a file with no dtk hook in it.</summary>
+        Absent = 0,
+
+        /// <summary>A file dtk could not read or parse.</summary>
+        Unreadable = 1,
+
+        /// <summary>A registration still running the Python script.</summary>
+        Legacy = 2,
+
+        /// <summary>A registration running <c>dtk hook &lt;provider&gt;</c>.</summary>
+        Current = 3
+    }
+
+    /// <summary>The classification of one registration file.</summary>
+    /// <param name="Kind">What the file holds.</param>
+    /// <param name="Problem">Why no current registration was found, for <see cref="RegistrationKind.Absent"/> and <see cref="RegistrationKind.Unreadable"/>.</param>
+    private sealed record Registration(RegistrationKind Kind, string Problem);
 
     /// <summary>
-    /// Finds the command the host CLI is configured to run for this hook, by locating any string in
-    /// the registration JSON that names the hook script.
+    /// Classifies the registration by searching every string in its JSON — which spans Claude Code's and
+    /// Gemini CLI's nested <c>hooks[event][].hooks[].command</c> and Copilot CLI's <c>hooks.preToolUse[].bash</c>
+    /// with no per-provider branching.
     /// </summary>
-    /// <remarks>
-    /// Matching on the script's file name rather than on dtk's exact command string is deliberate:
-    /// the SKILL and instruction files tell Windows users to change <c>python3</c> to <c>python</c>
-    /// in the registration, and an exact-command match would report that working install as broken.
-    /// It also spans both registration shapes — the nested <c>hooks[event][].hooks[].command</c>
-    /// used by Claude Code and Gemini CLI, and Copilot CLI's <c>hooks.preToolUse[].bash</c> — with
-    /// no per-provider branching.
-    /// </remarks>
     /// <param name="installation">The installation whose registration to read.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>
-    /// The registered command and an empty message, or <see langword="null"/> paired with a
-    /// human-readable reason.
-    /// </returns>
-    private static async Task<(string? Command, string Message)> ReadRegisteredCommandAsync(
+    private static async Task<Registration> ReadRegistrationAsync(
         HookInstallation installation, CancellationToken cancellationToken)
     {
-        if (!File.Exists(installation.RegistrationPath))
+        var path = installation.RegistrationPath;
+        if (!File.Exists(path))
         {
-            return (null, $"not registered — {installation.RegistrationPath} does not exist");
+            return new Registration(RegistrationKind.Absent, $"not registered — {path} does not exist");
         }
 
         string content;
         try
         {
-            content = await File.ReadAllTextAsync(installation.RegistrationPath, cancellationToken)
-                .ConfigureAwait(false);
+            content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return (null, $"{installation.RegistrationPath} could not be read: {ex.Message}");
+            return new Registration(RegistrationKind.Unreadable, $"{path} could not be read: {ex.Message}");
         }
 
-        JsonNode? root;
+        // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is
+        // enumerated, so the search belongs inside the same guard as the parse.
         try
         {
-            root = JsonNode.Parse(content);
+            var root = JsonNode.Parse(content, documentOptions: LenientJson);
+
+            if (FindStringContaining(root, IntegratorHelpers.LegacyHookScriptName) is not null)
+            {
+                return new Registration(RegistrationKind.Legacy, string.Empty);
+            }
+
+            return FindStringContaining(root, HookCommands.Invocation(installation.ProviderName)) is not null
+                ? new Registration(RegistrationKind.Current, string.Empty)
+                : new Registration(RegistrationKind.Absent, $"not registered — no entry in {path} runs '{installation.Command}'");
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
-            return (null, $"{installation.RegistrationPath} could not be read as JSON: {ex.Message}");
+            return new Registration(RegistrationKind.Unreadable, $"{path} could not be read as JSON: {ex.Message}");
         }
-
-        var scriptFileName = Path.GetFileName(installation.Script.Path);
-        var command = FindStringContaining(root, scriptFileName);
-
-        return command is null
-            ? (null, $"not registered — no entry in {installation.RegistrationPath} runs {scriptFileName}")
-            : (command, string.Empty);
     }
 
     /// <summary>Depth-first search for a string value containing <paramref name="needle"/>.</summary>
@@ -217,78 +201,24 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
         };
     }
 
-    /// <summary>Builds the presence/registration/freshness check for one installation.</summary>
-    /// <param name="installation">The installation being checked.</param>
-    /// <param name="registeredCommand">The command found in the registration, or <see langword="null"/>.</param>
-    /// <param name="registrationMessage">The reason no command was found, when applicable.</param>
+    /// <summary>Feeds a payload through the <c>dtk</c> on <c>PATH</c> and asserts every subcommand is rewritten.</summary>
+    /// <param name="installation">The installation to probe.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    private static async Task<DiagnosticCheck> BuildStatusCheckAsync(
-        HookInstallation installation,
-        string? registeredCommand,
-        string registrationMessage,
-        CancellationToken cancellationToken)
+    private async Task<DiagnosticCheck> ProbeAsync(HookInstallation installation, CancellationToken cancellationToken)
     {
-        var name = CheckName(installation, "hook");
+        var name = CheckName(installation, "hook probe");
 
-        if (registeredCommand is null)
+        var dtk = locateDtk();
+        if (dtk is null)
         {
             return new DiagnosticCheck(
                 name,
                 false,
-                $"{registrationMessage}. Run '{RemedyCommand(installation)}'.");
+                $"'{DtkCommand}' was not found on PATH, and the harness runs it from there. Add the .NET tools directory "
+                + "(~/.dotnet/tools) to PATH, or install dtk with 'dotnet tool install -g DotnetTokenKiller'.");
         }
 
-        string installed;
-        try
-        {
-            installed = (await File.ReadAllTextAsync(installation.Script.Path, cancellationToken)
-                .ConfigureAwait(false)).ReplaceLineEndings("\n");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return new DiagnosticCheck(name, false, $"{installation.Script.Path} could not be read: {ex.Message}");
-        }
-
-        var current = ArtifactStamping.Apply(installation.Script.Body, installation.Script.Style);
-
-        if (string.Equals(installed, current, StringComparison.Ordinal))
-        {
-            return new DiagnosticCheck(name, true, "installed, registered, up to date");
-        }
-
-        // ArtifactStamping.TryParse (and therefore IsAuthentic) requires the stamp to be the last
-        // line of the file, so a trailing hand-added edit — e.g. a "# my own change" comment tacked
-        // on after the stamp — is correctly rejected here rather than misreported as merely stale.
-        // The legacy check below keys on HasStamp, not on "TryParse failed", for the same reason:
-        // otherwise that same trailing edit would read as an unstamped legacy file (it still
-        // contains the legacy signature) and get silently refreshed through the other branch.
-        var refreshable = ArtifactStamping.IsAuthentic(installed)
-                          || (!ArtifactStamping.HasStamp(installed)
-                              && installed.Contains(installation.Script.LegacySignature, StringComparison.Ordinal));
-
-        return refreshable
-            ? new DiagnosticCheck(
-                name,
-                false,
-                $"stale — written by an older dtk. Run '{RemedyCommand(installation)}' to refresh.")
-            : new DiagnosticCheck(
-                name,
-                false,
-                "modified locally — dtk will not overwrite it. Run '"
-                + $"{RemedyCommand(installation, "--force")}' to regenerate.");
-    }
-
-    /// <summary>Feeds a payload through the installed hook and asserts every subcommand is rewritten.</summary>
-    /// <param name="installation">The installation to probe.</param>
-    /// <param name="registeredCommand">The command the host CLI runs, used to resolve the interpreter.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    private async Task<DiagnosticCheck> ProbeAsync(
-        HookInstallation installation,
-        string registeredCommand,
-        CancellationToken cancellationToken)
-    {
-        var name = CheckName(installation, "hook probe");
-        var interpreter = ResolveInterpreter(registeredCommand);
+        var hook = $"{dtk} {HookCommands.Verb} {installation.ProviderName}";
         var command = string.Join("; ", DotnetSubcommands.Ordered.Select(sub => $"dotnet {sub}"));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -298,8 +228,8 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
         {
             var result = await runner
                 .RunCapturedWithInputAsync(
-                    interpreter,
-                    [installation.Script.Path],
+                    dtk,
+                    [HookCommands.Verb, installation.ProviderName],
                     BuildPayload(installation.PayloadKind, command),
                     timeout.Token)
                 .ConfigureAwait(false);
@@ -307,7 +237,10 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             if (result.ExitCode != 0)
             {
                 return new DiagnosticCheck(
-                    name, false, $"{interpreter} exited with code {result.ExitCode}: {result.StdErr.Trim()}");
+                    name,
+                    false,
+                    $"'{hook}' exited with code {result.ExitCode}: {FirstErrorLine(result)} "
+                    + $"A dtk older than 'dtk hook' cannot answer it; run '{UpdateCommand}'.");
             }
 
             var missing = DotnetSubcommands.Ordered
@@ -315,51 +248,32 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                 .ToList();
 
             return missing.Count == 0
-                ? new DiagnosticCheck(name, true, $"rewrites all {DotnetSubcommands.Ordered.Count} subcommands")
+                ? new DiagnosticCheck(name, true, $"{dtk} rewrites all {DotnetSubcommands.Ordered.Count} subcommands")
                 : new DiagnosticCheck(
                     name,
                     false,
-                    $"does not rewrite: {string.Join(", ", missing)}. "
-                    + $"Run '{RemedyCommand(installation)}' to refresh the hook.");
+                    $"{dtk} does not rewrite: {string.Join(", ", missing)}. It is older than this dtk; run '{UpdateCommand}'.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new DiagnosticCheck(
-                name, false, $"{interpreter} did not respond within {ProbeTimeout.TotalSeconds:F0}s");
+            return new DiagnosticCheck(name, false, $"'{hook}' did not respond within {ProbeTimeout.TotalSeconds:F0}s");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new DiagnosticCheck(name, false, $"could not run {interpreter}: {ex.Message}");
+            return new DiagnosticCheck(name, false, $"could not run {dtk}: {ex.Message}.");
         }
     }
 
     /// <summary>
-    /// Takes the interpreter from the registered command's first token, so an install whose command
-    /// was edited is probed the way the host CLI will actually run it.
+    /// The first non-blank line of a failed probe's stderr, or of its stdout when stderr is empty — a dtk too old
+    /// to know <c>hook</c> reports "Unknown command" on stdout, because its argument parser writes errors there.
     /// </summary>
-    /// <remarks>
-    /// A quoted first token (e.g. Windows' <c>"C:\Program Files\Python\python.exe" hook.py</c>) is
-    /// taken whole, up to its closing quote, rather than split on the space it contains — splitting
-    /// on whitespace alone would take just <c>"C:\Program</c> and fail a working install.
-    /// </remarks>
-    /// <param name="registeredCommand">The command found in the registration file.</param>
-    private static string ResolveInterpreter(string registeredCommand)
+    /// <param name="result">The failed probe's captured output.</param>
+    private static string FirstErrorLine(CommandResult result)
     {
-        var trimmed = registeredCommand.TrimStart(' ', '\t');
-
-        if (trimmed.Length == 0)
-        {
-            return "python3";
-        }
-
-        if (trimmed[0] == '"')
-        {
-            var closingQuote = trimmed.IndexOf('"', 1);
-            return closingQuote < 0 ? trimmed[1..] : trimmed[1..closingQuote];
-        }
-
-        var end = trimmed.IndexOfAny([' ', '\t']);
-        return end < 0 ? trimmed : trimmed[..end];
+        var output = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
+        var line = output.Split('\n').Select(text => text.Trim()).FirstOrDefault(text => text.Length > 0) ?? "(no output)";
+        return line.EndsWith('.') ? line : line + ".";
     }
 
     /// <summary>Builds the stdin payload in the shape the provider's host CLI sends.</summary>
@@ -390,7 +304,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
         => $"{installation.ProviderName} {label} ({installation.Scope.ToString().ToLowerInvariant()})";
 
     /// <summary>
-    /// Renders the <c>dtk integrate</c> remedy command for one installation, appending
+    /// Renders the <c>dtk init</c> remedy command for one installation, appending
     /// <c>--global</c> whenever that installation lives in the user's home config. Every remedy
     /// message must go through this so a global-hook failure can never be pointed at the plain,
     /// project-scoped command — which refreshes the wrong installation and leaves doctor red.
@@ -401,6 +315,6 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
     {
         var scopeFlag = installation.Scope == HookScope.Global ? " --global" : string.Empty;
         var trailingFlags = string.IsNullOrEmpty(extraFlags) ? string.Empty : $" {extraFlags}";
-        return $"dtk integrate {installation.ProviderName}{scopeFlag}{trailingFlags}";
+        return $"dtk init {installation.ProviderName}{scopeFlag}{trailingFlags}";
     }
 }

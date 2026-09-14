@@ -170,6 +170,62 @@ internal static class IntegrationTestHelper
         string isolatedDir, string stdin, params string[] args) =>
         RunProcessAsync(Launcher.Executable, [.. Launcher.PrefixArguments, .. args], isolatedDir, stdin);
 
+    /// <summary>Runs dtk with <paramref name="stdin"/> piped in, keeping stdout and stderr apart, for
+    /// commands whose stdout is read by a program (<c>dtk hook</c>).</summary>
+    /// <param name="stdin">The text to write to the process's standard input, as UTF-8.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    internal static Task<(string StdOut, string StdErr, int ExitCode)> RunDtkSeparatingStreamsAsync(
+        string stdin, params string[] args) =>
+        RunDtkSeparatingStreamsInDirAsync(NewIsolatedDir(), stdin, args);
+
+    /// <summary>As <see cref="RunDtkSeparatingStreamsAsync"/>, against an explicit isolated directory.</summary>
+    /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>; dtk's tracking, tee and config paths point inside it.</param>
+    /// <param name="stdin">The text to write to the process's standard input, as UTF-8.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    /// <exception cref="InvalidOperationException">The process could not be started.</exception>
+    internal static async Task<(string StdOut, string StdErr, int ExitCode)> RunDtkSeparatingStreamsInDirAsync(
+        string isolatedDir, string stdin, params string[] args)
+    {
+        var psi = new ProcessStartInfo(Launcher.Executable)
+        {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            StandardInputEncoding = new UTF8Encoding(false),
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            Environment =
+            {
+                ["DTK_DB_PATH"] = Path.Combine(isolatedDir, "tracking.db"),
+                ["DTK_TEE_DIR"] = Path.Combine(isolatedDir, "tee"),
+                ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
+            }
+        };
+        foreach (var arg in Launcher.PrefixArguments.Concat(args))
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start dtk");
+        try
+        {
+            await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // dtk may exit without reading stdin (e.g. `dtk hook` with an unknown provider), closing the pipe
+            // under the write. Harnesses ignore that broken pipe too; the exit code and output are the result.
+        }
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        return (await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false), process.ExitCode);
+    }
+
     internal static double CalculateSavings(string rawOutput, string filteredOutput)
     {
         var inputTokens = rawOutput.Length / 4;

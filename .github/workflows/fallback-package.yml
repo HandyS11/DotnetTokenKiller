@@ -102,6 +102,15 @@ jobs:
           fi
           echo "DTK_INSTALLED=$binary" >> "$GITHUB_ENV"
 
+      # The hook as each harness runs it; on Windows this includes Windows PowerShell 5.1.
+      - name: Check dtk hook in every shell
+        run: |
+          tools="$RUNNER_TEMP/dtk-tools"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            tools="$(cygpath -u "$tools")"
+          fi
+          sh eng/hooks/check-hook-shells.sh "$tools"
+
       # DTK_AOT_REQUIRED=1 makes a missing binary fail the parity tests instead of skipping them.
       - name: Check parity
         env:

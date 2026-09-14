@@ -36,12 +36,16 @@ internal sealed class IntegrationContext
     /// </summary>
     internal List<string> Unchanged { get; } = [];
 
+    /// <summary>Gets the list of file paths deleted during this integration run.</summary>
+    internal List<string> Removed { get; } = [];
+
     /// <summary>Builds an <see cref="IntegrationResult"/> from the accumulated lists.</summary>
     internal IntegrationResult ToResult()
     {
         return new IntegrationResult(Created, Updated, Skipped, Notes)
         {
-            UnchangedFiles = Unchanged
+            UnchangedFiles = Unchanged,
+            RemovedFiles = Removed
         };
     }
 }

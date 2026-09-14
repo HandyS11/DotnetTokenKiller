@@ -15,8 +15,11 @@ internal static class CliConfigurator
     /// <summary>The <c>dotnet</c> branch name.</summary>
     public const string DotnetCommand = "dotnet";
 
-    /// <summary>The <c>integrate</c> command name.</summary>
-    public const string IntegrateCommand = "integrate";
+    /// <summary>The <c>init</c> command name.</summary>
+    public const string InitCommand = "init";
+
+    /// <summary>The <c>init</c> command's former name, kept as an alias so existing scripts and docs keep working.</summary>
+    public const string IntegrateAlias = "integrate";
 
     /// <summary>The <c>pipe</c> command name.</summary>
     public const string PipeCommand = "pipe";
@@ -82,18 +85,19 @@ internal static class CliConfigurator
             .WithDescription("Filter output piped in from a command dtk did not run")
             .WithExample(PipeCommand, DotnetSubcommands.Build);
 
-        config.AddCommand<Commands.IntegrateCommand>(IntegrateCommand)
+        config.AddCommand<Commands.InitCommand>(InitCommand)
+            .WithAlias(IntegrateAlias)
             .WithDescription("Install dtk integration artifacts for an AI assistant provider")
-            .WithExample(IntegrateCommand, "claude")
-            .WithExample(IntegrateCommand, "claude", "--dir", "/path/to/project", "--force")
-            .WithExample(IntegrateCommand, "copilot")
-            .WithExample(IntegrateCommand, "copilot-cli")
-            .WithExample(IntegrateCommand, "copilot-cli", "--global")
-            .WithExample(IntegrateCommand, "gemini")
-            .WithExample(IntegrateCommand, "cursor")
-            .WithExample(IntegrateCommand, "windsurf")
-            .WithExample(IntegrateCommand, "aider")
-            .WithExample(IntegrateCommand, "jetbrains");
+            .WithExample(InitCommand, "claude")
+            .WithExample(InitCommand, "claude", "--dir", "/path/to/project", "--force")
+            .WithExample(InitCommand, "copilot")
+            .WithExample(InitCommand, "copilot-cli")
+            .WithExample(InitCommand, "copilot-cli", "--global")
+            .WithExample(InitCommand, "gemini")
+            .WithExample(InitCommand, "cursor")
+            .WithExample(InitCommand, "windsurf")
+            .WithExample(InitCommand, "aider")
+            .WithExample(InitCommand, "jetbrains");
 
         config.AddBranch(ConfigBranch, cfg =>
         {

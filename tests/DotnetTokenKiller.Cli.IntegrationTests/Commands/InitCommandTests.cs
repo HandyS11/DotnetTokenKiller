@@ -8,7 +8,7 @@ using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests.Commands;
 
-public class IntegrateCommandTests
+public class InitCommandTests
 {
     [Fact]
     public async Task ExecuteAsync_AllFilesCreated_ShowsCreatedLinesAndDoneMessage()
@@ -25,7 +25,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir
@@ -52,7 +52,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir,
@@ -80,7 +80,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir,
@@ -108,7 +108,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("aider", result);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "aider",
             Directory = dir,
@@ -133,7 +133,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir,
@@ -158,7 +158,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir,
@@ -173,14 +173,14 @@ public class IntegrateCommandTests
     [Fact]
     public async Task ExecuteAsync_NoProvidersRegistered_PrintsErrorAndReturnsExitCodeOne()
     {
-        // With an empty provider registry, every provider name is unknown, so IntegrateCommand's
+        // With an empty provider registry, every provider name is unknown, so InitCommand's
         // validation against AvailableProviders produces a friendly CLI error and exit 1 rather than
         // an unhandled exception. (A genuinely-unknown provider against a populated registry is
         // covered by ExecuteAsync_UnknownProvider_ListsAvailableProviders.)
         var console = new TestConsole();
-        var command = new IntegrateCommand(new IntegrateUseCase([]), console);
+        var command = new InitCommand(new IntegrateUseCase([]), console);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude"
         }, CancellationToken.None);
@@ -194,7 +194,7 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_UnknownProvider_ListsAvailableProviders()
     {
         var console = new TestConsole();
-        var command = new IntegrateCommand(
+        var command = new InitCommand(
             new IntegrateUseCase(
             [
                 new StubIntegrator("claude"),
@@ -202,7 +202,7 @@ public class IntegrateCommandTests
             ]),
             console);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "bogus"
         }, CancellationToken.None);
@@ -218,7 +218,7 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_MalformedSettingsJson_PrintsErrorAndReturnsExitCodeOne()
     {
         // IntegratorHelpers.MergeJsonSettingsAsync throws InvalidOperationException on a
-        // malformed/non-object settings.json. IntegrateCommand must catch it and turn it into a
+        // malformed/non-object settings.json. InitCommand must catch it and turn it into a
         // friendly exit-1 error instead of letting it escape to Spectre's default handler (exit 255).
         var dir = Path.Combine(Path.GetTempPath(), $"dtk-malformed-settings-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(dir, ".claude"));
@@ -230,11 +230,11 @@ public class IntegrateCommandTests
             var userClaudeDir = Path.Combine(isolatedHome, ".claude");
             var rtkConfigPath = Path.Combine(dir, "isolated-config", "rtk", "config.toml");
             var console = new TestConsole();
-            var command = new IntegrateCommand(
+            var command = new InitCommand(
                 new IntegrateUseCase([new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath), new HomePaths(isolatedHome))]),
                 console);
 
-            var exitCode = await command.RunAsync(new IntegrateCommandSettings
+            var exitCode = await command.RunAsync(new InitCommandSettings
             {
                 Provider = "claude",
                 Directory = dir
@@ -264,9 +264,9 @@ public class IntegrateCommandTests
         {
             Result = result
         };
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+        var command = new InitCommand(new IntegrateUseCase([stub]), console);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "CLAUDE",
             Directory = dir
@@ -275,6 +275,20 @@ public class IntegrateCommandTests
         exitCode.Should().Be(0);
         console.Output.Should().Contain("integrated with claude");
         console.Output.Should().NotContain("CLAUDE");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RemovedFiles_ArePrintedAndCountAsAChange()
+    {
+        const string dir = "/project";
+        var result = new IntegrationResult([], [], []) { RemovedFiles = [$"{dir}/.claude/hooks/dotnet-to-dtk.py"] };
+        var (command, console) = Create("claude", result);
+
+        var exitCode = await command.RunAsync(new InitCommandSettings { Provider = "claude", Directory = dir }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("removed").And.Contain(".claude/hooks/dotnet-to-dtk.py");
+        console.Output.Should().Contain("Done.").And.NotContain("Already integrated");
     }
 
     [Fact]
@@ -288,7 +302,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir
@@ -303,9 +317,9 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_NoDirectoryOption_UsesCurrentDirectory()
     {
         var stub = new StubIntegrator("claude");
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new InitCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude"
         }, CancellationToken.None);
@@ -317,9 +331,9 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_WithDirectoryOption_UsesProvidedDirectory()
     {
         var stub = new StubIntegrator("claude");
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new InitCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = "/custom/dir"
@@ -332,9 +346,9 @@ public class IntegrateCommandTests
     public async Task ExecuteAsync_ForceFlag_PassesForceThroughToUseCase()
     {
         var stub = new StubIntegrator("claude");
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), new TestConsole());
+        var command = new InitCommand(new IntegrateUseCase([stub]), new TestConsole());
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Force = true
@@ -355,9 +369,9 @@ public class IntegrateCommandTests
     {
         var stub = new StubIntegrator(provider);
         var otherStub = new StubIntegrator($"not-{provider}");
-        var command = new IntegrateCommand(new IntegrateUseCase([stub, otherStub]), new TestConsole());
+        var command = new InitCommand(new IntegrateUseCase([stub, otherStub]), new TestConsole());
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = provider
         }, CancellationToken.None);
@@ -374,7 +388,7 @@ public class IntegrateCommandTests
         var result = new IntegrationResult([""], [], []);
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = "/project"
@@ -394,7 +408,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir
@@ -414,7 +428,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = ""
@@ -436,7 +450,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir
@@ -457,7 +471,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir
@@ -476,7 +490,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings
+        await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Directory = dir
@@ -493,7 +507,7 @@ public class IntegrateCommandTests
 
         var (command, console) = Create("claude", result);
 
-        await command.RunAsync(new IntegrateCommandSettings { Provider = "claude" }, CancellationToken.None);
+        await command.RunAsync(new InitCommandSettings { Provider = "claude" }, CancellationToken.None);
 
         console.Output.Should().Contain("excluded dotnet in rtk config");
     }
@@ -504,9 +518,9 @@ public class IntegrateCommandTests
         var stub = new GlobalStubIntegrator("claude");
         var console = new TestConsole();
         console.Profile.Width = 400; // avoid wrapping the long error message in the output
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+        var command = new InitCommand(new IntegrateUseCase([stub]), console);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Global = true,
@@ -523,9 +537,9 @@ public class IntegrateCommandTests
     {
         var stub = new StubIntegrator("copilot");
         var console = new TestConsole();
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+        var command = new InitCommand(new IntegrateUseCase([stub]), console);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "copilot",
             Global = true
@@ -543,9 +557,9 @@ public class IntegrateCommandTests
             Result = new IntegrationResult(["~/.claude/CLAUDE.md"], [], [])
         };
         var console = new TestConsole();
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+        var command = new InitCommand(new IntegrateUseCase([stub]), console);
 
-        var exitCode = await command.RunAsync(new IntegrateCommandSettings
+        var exitCode = await command.RunAsync(new InitCommandSettings
         {
             Provider = "claude",
             Global = true,
@@ -566,7 +580,7 @@ public class IntegrateCommandTests
 
         try
         {
-            var settings = new IntegrateCommandSettings { Provider = "claude", Directory = dir };
+            var settings = new InitCommandSettings { Provider = "claude", Directory = dir };
 
             var firstConsole = new TestConsole();
             (await CreateClaudeCommand(dir, firstConsole).RunAsync(settings, CancellationToken.None)).Should().Be(0);
@@ -594,7 +608,7 @@ public class IntegrateCommandTests
 
         try
         {
-            var settings = new IntegrateCommandSettings { Provider = "claude", Directory = dir };
+            var settings = new InitCommandSettings { Provider = "claude", Directory = dir };
 
             await CreateClaudeCommand(dir, new TestConsole()).RunAsync(settings, CancellationToken.None);
 
@@ -602,7 +616,7 @@ public class IntegrateCommandTests
             await CreateClaudeCommand(dir, secondConsole).RunAsync(settings, CancellationToken.None);
 
             secondConsole.Output.Should().Contain("unchanged");
-            secondConsole.Output.Should().Contain("dotnet-to-dtk.py");
+            secondConsole.Output.Should().Contain("settings.json");
         }
         finally
         {
@@ -619,17 +633,17 @@ public class IntegrateCommandTests
     /// </summary>
     /// <param name="dir">The project directory to integrate into.</param>
     /// <param name="console">The console the command writes its output to.</param>
-    private static IntegrateCommand CreateClaudeCommand(string dir, TestConsole console)
+    private static InitCommand CreateClaudeCommand(string dir, TestConsole console)
     {
         var isolatedHome = Path.Combine(dir, "isolated-home");
         var userClaudeDir = Path.Combine(isolatedHome, ".claude");
         var rtkConfigPath = Path.Combine(dir, "isolated-config", "rtk", "config.toml");
-        return new IntegrateCommand(
+        return new InitCommand(
             new IntegrateUseCase([new ClaudeCodeIntegrator(new RtkHookCoexistence(userClaudeDir, rtkConfigPath), new HomePaths(isolatedHome))]),
             console);
     }
 
-    private static (IntegrateCommand command, TestConsole console) Create(
+    private static (InitCommand command, TestConsole console) Create(
         string provider,
         IntegrationResult result)
     {
@@ -638,7 +652,7 @@ public class IntegrateCommandTests
         {
             Result = result
         };
-        var command = new IntegrateCommand(new IntegrateUseCase([stub]), console);
+        var command = new InitCommand(new IntegrateUseCase([stub]), console);
         return (command, console);
     }
 

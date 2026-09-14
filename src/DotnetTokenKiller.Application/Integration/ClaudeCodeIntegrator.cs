@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain.Integration;
 
 namespace DotnetTokenKiller.Application.Integration;
@@ -9,8 +10,10 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Creates:
 /// <list type="bullet">
 ///   <item><description><c>.claude/skills/dotnet-token-killer/SKILL.md</c></description></item>
-///   <item><description><c>.claude/hooks/dotnet-to-dtk.py</c></description></item>
-///   <item><description><c>.claude/settings.json</c> (merged, never overwritten)</description></item>
+///   <item><description>
+///     <c>.claude/settings.json</c> registering <c>dtk hook claude</c> (merged, never overwritten); a Python
+///     hook left by an older dtk is migrated
+///   </description></item>
 ///   <item><description>
 ///     When an rtk PreToolUse hook is detected, merges <c>exclude_commands = ["dotnet"]</c> into
 ///     <c>~/.config/rtk/config.toml</c> so dtk (not rtk) owns dotnet commands. Silent if already excluded.
@@ -29,24 +32,10 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
 {
     /// <summary>
-    /// Quoted and rooted at <c>$CLAUDE_PROJECT_DIR</c> (the absolute project root Claude Code
-    /// exports to hooks) so the hook resolves correctly regardless of Claude's current working
-    /// directory.
-    /// </summary>
-    private const string HookCommand = """python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""";
-
-    /// <summary>
-    /// Global variant of <see cref="HookCommand"/>: rooted at <c>$HOME</c> because the hook script is
-    /// installed under <c>~/.claude/hooks</c> (Claude's <c>$CLAUDE_PROJECT_DIR</c> points at the
-    /// current project, not the home-installed script).
-    /// </summary>
-    private const string GlobalHookCommand = """python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py""";
-
-    /// <summary>
     /// The skill's frontmatter <c>description:</c> line. This is Claude Code's <em>skill-trigger</em>
     /// text — the one string that decides whether the skill surfaces for a given user intent — so it
     /// is derived from <see cref="IntegrationInstructions.SubcommandProse"/> rather than hand-written.
-    /// A hardcoded list here meant a user who ran <c>dtk integrate claude</c> got a skill that never
+    /// A hardcoded list here meant a user who ran <c>dtk init claude</c> got a skill that never
     /// fired for package-listing intent, which is invisible from inside dtk.
     /// </summary>
     private static readonly string SkillDescription =
@@ -96,7 +85,6 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
         - Build errors grouped by file; warnings grouped by diagnostic code with frequency counts
         - Works with xUnit, NUnit, MSTest, and Reqnroll
         - Run `dtk dotnet clean` first for a full warning report (incremental builds skip unchanged files)
-        - The PreToolUse hook shells out to `python3`; on Windows (where the launcher is usually `python`, not `python3`), edit the `command` in `.claude/settings.json` if the hook doesn't fire
 
         ## Token Savings
 
@@ -115,6 +103,9 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     /// </summary>
     internal const string SkillLegacySignature = "name: dotnet-token-killer";
 
+    /// <summary>The per-user settings file Claude Code reads beside <c>settings.json</c>, which dtk never edits.</summary>
+    private const string LocalSettingsFileName = "settings.local.json";
+
     /// <inheritdoc/>
     public string ProviderName => "claude";
 
@@ -128,34 +119,25 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
             new HookInstallation(
                 ProviderName,
                 scope,
-                new GeneratedArtifact(
-                    Path.Combine(baseDirectory, "hooks", "dotnet-to-dtk.py"),
-                    HookScriptTemplates.ClaudeHook,
-                    StampStyle.HashComment,
-                    IntegratorHelpers.HookLegacySignature),
                 Path.Combine(baseDirectory, "settings.json"),
+                HookCommands.Invocation(ProviderName),
+                Path.Combine(baseDirectory, "hooks", IntegratorHelpers.LegacyHookScriptName),
                 HookPayloadKind.ClaudeCode)
         ];
     }
 
     /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateAsync(
-        string directory,
-        bool force,
-        CancellationToken cancellationToken)
-        => IntegrateCoreAsync(
-            Path.Combine(directory, ".claude"), directory, HookScope.Project, directory, HookCommand, force, cancellationToken);
+    public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
+        => IntegrateCoreAsync(Path.Combine(directory, ".claude"), directory, HookScope.Project, force, cancellationToken);
 
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(home.ClaudeDir, home.Home, HookScope.Global, home.Home, GlobalHookCommand, force, cancellationToken);
+        => IntegrateCoreAsync(home.ClaudeDir, home.Home, HookScope.Global, force, cancellationToken);
 
     private async Task<IntegrationResult> IntegrateCoreAsync(
         string baseDirectory,
         string hookDirectory,
         HookScope scope,
-        string reconcileDir,
-        string hookCommand,
         bool force,
         CancellationToken cancellationToken)
     {
@@ -169,19 +151,21 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
                 SkillLegacySignature),
             context, cancellationToken).ConfigureAwait(false);
 
-        var hookInstallation = DescribeHooks(hookDirectory, scope)[0];
+        var hook = DescribeHooks(hookDirectory, scope)[0];
 
-        await IntegratorHelpers.WriteHookAndSettingsAsync(
-            new HookSpec(
-                hookInstallation.Script.Path,
-                hookInstallation.Script.Body,
-                hookInstallation.RegistrationPath,
-                "PreToolUse",
-                "Bash",
-                hookCommand),
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command),
             context, cancellationToken).ConfigureAwait(false);
 
-        var rtkOutcome = await rtk.ReconcileAsync(reconcileDir, cancellationToken).ConfigureAwait(false);
+        // dtk merges settings.json only; Claude Code also runs the hooks in settings.local.json beside it.
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            hook.LegacyScriptPath,
+            replacedLegacy,
+            [hook.RegistrationPath, Path.Combine(Path.GetDirectoryName(hook.RegistrationPath)!, LocalSettingsFileName)],
+            context,
+            cancellationToken).ConfigureAwait(false);
+
+        var rtkOutcome = await rtk.ReconcileAsync(hookDirectory, cancellationToken).ConfigureAwait(false);
         if (rtkOutcome.CreatedConfigPath is not null)
         {
             context.Created.Add(rtkOutcome.CreatedConfigPath);

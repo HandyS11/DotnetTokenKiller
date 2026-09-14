@@ -50,7 +50,7 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
         {
             throw new InvalidOperationException(
                 $"Provider '{providerName}' is repository-scoped and has no global config. " +
-                $"Run 'dtk integrate {providerName}' inside a project.");
+                $"Run 'dtk init {providerName}' inside a project.");
         }
 
         return globalIntegrator.IntegrateGlobalAsync(force, cancellationToken);
@@ -62,7 +62,7 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="providerName"/> is unknown.</exception>
     private IProviderIntegrator ResolveOrThrow(string providerName)
     {
-        // InvalidOperationException (not ArgumentException): IntegrateCommand validates
+        // InvalidOperationException (not ArgumentException): InitCommand validates
         // settings.Provider against AvailableProviders before calling RunAsync, so this path
         // is a defense-in-depth guard for other callers of this public use case rather than
         // the CLI's primary error path.

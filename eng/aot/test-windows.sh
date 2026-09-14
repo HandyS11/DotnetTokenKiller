@@ -83,6 +83,9 @@ install
 check_installed
 "$shim" --version
 
+# The hook as Claude Code (Git Bash), Gemini CLI (pwsh, else powershell.exe) and Copilot CLI run it.
+sh "$repo/eng/hooks/check-hook-shells.sh" "$tools"
+
 # Tracking with nothing beside the shim: the exe must find winsqlite3 in System32. dtk is a Windows
 # program, so its environment gets Windows paths.
 state="$tools/state"

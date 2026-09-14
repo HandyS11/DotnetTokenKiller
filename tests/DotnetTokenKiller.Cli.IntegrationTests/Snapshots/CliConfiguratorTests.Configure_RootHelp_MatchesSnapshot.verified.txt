@@ -3,22 +3,22 @@ USAGE:
 
 EXAMPLES:
     dtk pipe build
-    dtk integrate claude
-    dtk integrate claude --dir /path/to/project --force
-    dtk integrate copilot
-    dtk integrate copilot-cli
+    dtk init claude
+    dtk init claude --dir /path/to/project --force
+    dtk init copilot
+    dtk init copilot-cli
 
 OPTIONS:
     -h, --help       Prints help information   
     -v, --version    Prints version information
 
 COMMANDS:
-    dotnet                  Run dotnet commands with filtered output                      
-    pipe <subcommand>       Filter output piped in from a command dtk did not run         
-    integrate <provider>    Install dtk integration artifacts for an AI assistant provider
-    config                  View or modify dtk configuration                              
-    doctor                  Run diagnostics to verify dtk is set up correctly             
-    completion <shell>      Print shell completion script                                 
-    gain                    Show token savings analytics                                  
-    log                     Show the full output of a previous run                        
-    reset                   Clear all tracking data                                       
+    dotnet                Run dotnet commands with filtered output                      
+    pipe <subcommand>     Filter output piped in from a command dtk did not run         
+    init <provider>       Install dtk integration artifacts for an AI assistant provider
+    config                View or modify dtk configuration                              
+    doctor                Run diagnostics to verify dtk is set up correctly             
+    completion <shell>    Print shell completion script                                 
+    gain                  Show token savings analytics                                  
+    log                   Show the full output of a previous run                        
+    reset                 Clear all tracking data                                       

@@ -2,7 +2,7 @@ namespace DotnetTokenKiller.Domain;
 
 /// <summary>
 /// The dotnet subcommands dtk filters. This is the single source of truth: CLI routing, shell
-/// completion, the keyed filter registrations, and the generated agent hook scripts all derive
+/// completion, the keyed filter registrations, and the <c>dtk hook</c> rewrite all derive
 /// from it, so a new subcommand cannot be half-added.
 /// </summary>
 /// <remarks>
@@ -27,13 +27,11 @@ namespace DotnetTokenKiller.Domain;
 ///   example block are both derived, and pinned by <c>SubcommandBindingTests</c>.
 ///   </description></item>
 ///   <item><description>
-///   Update the pinned literals in <c>SubcommandBindingTests</c>, <c>DotnetSubcommandsTests</c>,
-///   <c>AiderIntegratorTests</c>, and <c>GitHubCopilotIntegratorTests</c> — the last two pin fully
-///   rendered instruction text, not just the list — and accept the CLI help snapshots.
-///   </description></item>
-///   <item><description>
-///   Regenerate <c>.claude/hooks/dotnet-to-dtk.py</c> from <c>HookScriptTemplates.ClaudeHook</c>
-///   (e.g. run <c>dtk integrate claude</c> against a scratch directory and copy the result over).
+///   Update the pinned literals in <c>SubcommandBindingTests</c> (including
+///   <c>SubcommandBindingTests.HookRewrite_CoversExactlyTheCanonicalSubcommands</c>),
+///   <c>DotnetSubcommandsTests</c>, <c>AiderIntegratorTests</c>, and <c>GitHubCopilotIntegratorTests</c>
+///   — the last two pin fully rendered instruction text, not just the list — and accept the CLI help
+///   snapshots.
 ///   </description></item>
 ///   <item><description>
 ///   Add an example line to <c>IntegrationInstructions.UsageBody</c>. The prose lists themselves are
@@ -94,8 +92,8 @@ public static class DotnetSubcommands
         new HashSet<string>(Ordered, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Ordinal alphabetical order. Generated artifacts (the Python hook's subcommand tuple) use
-    /// this so their bytes stay stable regardless of how <see cref="Ordered"/> is rearranged.
+    /// Ordinal alphabetical order. The hook rewrite tries subcommands longest first and, among
+    /// equal lengths, in this order.
     /// </summary>
     public static readonly IReadOnlyList<string> Sorted = [.. Ordered.Order(StringComparer.Ordinal)];
 

@@ -6,7 +6,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <summary>Comment syntax used to carry the provenance stamp in a generated artifact.</summary>
 internal enum StampStyle
 {
-    /// <summary>A <c>#</c> line comment, for Python hook scripts.</summary>
+    /// <summary>A <c>#</c> line comment, as the Python hook scripts dtk installed before <c>dtk hook</c> carried.</summary>
     HashComment = 0,
 
     /// <summary>An HTML comment, for Markdown artifacts such as <c>SKILL.md</c>.</summary>
@@ -38,14 +38,12 @@ internal sealed record GeneratedArtifact(
 /// leaving an edited one alone.
 /// <para>
 /// It carries no version number deliberately. Freshness is decided by comparing the installed body
-/// against the current template, never against a version — and a version would make this repo's
-/// committed <c>.claude/hooks/dotnet-to-dtk.py</c> change on every release, breaking the test that
-/// locks it to the generator for reasons unrelated to the hook's content.
+/// against the current template, never against a version — a version would change a generated file
+/// on every release for reasons unrelated to its content.
 /// </para>
 /// <para>
-/// The stamp is the last line rather than the first so it need not be positioned below a Python
-/// shebang in one artifact and below YAML frontmatter in another; the only per-artifact difference
-/// is the comment syntax.
+/// The stamp is the last line rather than the first so it need not be positioned below YAML
+/// frontmatter; the only per-artifact difference is the comment syntax.
 /// </para>
 /// </remarks>
 internal static class ArtifactStamping

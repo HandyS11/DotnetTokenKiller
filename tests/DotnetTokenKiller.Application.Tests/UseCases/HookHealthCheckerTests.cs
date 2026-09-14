@@ -1,21 +1,28 @@
-using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Application.Tests.Integration;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Execution;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
 public sealed class HookHealthCheckerTests : IDisposable
 {
+    /// <summary>The arguments the probe must pass to <c>dtk</c> for the Gemini hook.</summary>
+    private static readonly string[] GeminiHookArguments = ["hook", "gemini"];
+
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-hookhealth-{Guid.NewGuid()}");
     private readonly HookHealthChecker _sut;
 
+    /// <summary>What resolving <c>dtk</c> from <c>PATH</c> returns; <see langword="null"/> when it is not on <c>PATH</c>.</summary>
+    private string? _dtkOnPath = Path.Combine(Path.GetTempPath(), "tools", "dtk");
+
     public HookHealthCheckerTests()
     {
-        _sut = new HookHealthChecker(_runner);
+        _sut = new HookHealthChecker(_runner, () => _dtkOnPath);
         Directory.CreateDirectory(_tempDir);
 
         // Default: the probe succeeds, so status-check tests are not perturbed by it.
@@ -62,100 +69,154 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         checks.Should().ContainSingle();
         checks[0].Passed.Should().BeTrue("dtk works without hooks, so their absence is not a failure");
-        checks[0].Message.Should().Contain("dtk integrate");
+        checks[0].Message.Should().Contain("dtk init");
     }
 
-    [Fact]
-    public async Task RunAsync_HealthyInstall_StatusAndProbeBothPass()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_HealthyInstall_StatusAndProbeBothPass(bool isGlobal)
     {
-        await IntegrateAsync();
+        var scope = isGlobal ? HookScope.Global : HookScope.Project;
+        await IntegrateAsync(scope);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
         checks.Should().HaveCount(2);
         checks.Should().OnlyContain(c => c.Passed);
-        checks.Select(c => c.Name).Should().Contain("gemini hook (project)", "gemini hook probe (project)");
+        checks.Select(c => c.Name).Should().Equal($"gemini hook ({ScopeLabel(scope)})", $"gemini hook probe ({ScopeLabel(scope)})");
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task RunAsync_ScriptStale_StatusFailsAndNamesTheRemedy(bool isGlobal)
+    [Fact]
+    public async Task RunAsync_Probe_RunsTheDtkResolvedFromPathByItsAbsolutePath()
     {
-        var scope = isGlobal ? HookScope.Global : HookScope.Project;
-        await IntegrateAsync(scope);
-        var scriptPath = Integrators[0].DescribeHooks(_tempDir, scope)[0].Script.Path;
-        await File.WriteAllTextAsync(
-            scriptPath,
-            ArtifactStamping.Apply("_DTK_SUBCOMMANDS = (\"build\",)\n", StampStyle.HashComment));
+        // A bare "dtk" handed to Process.Start is looked up beside the running executable before PATH,
+        // so an installed dtk would always probe itself; the probe must run the file PATH resolves to.
+        await IntegrateAsync();
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
-        var status = checks.First(c => c.Name == $"gemini hook ({ScopeLabel(scope)})");
-        status.Passed.Should().BeFalse();
-        status.Message.Should().Contain("stale").And.Contain("dtk integrate gemini");
-        status.Message.Should().NotContain("--force", "a stale-but-unmodified hook refreshes without it");
-
-        if (scope == HookScope.Global)
-        {
-            status.Message.Should().Contain("--global", "a global hook's remedy must refresh the global install");
-        }
-        else
-        {
-            status.Message.Should().NotContain("--global", "a project hook's remedy must not send the user to --global");
-        }
+        await _runner.Received(1).RunCapturedWithInputAsync(
+            _dtkOnPath!,
+            Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(GeminiHookArguments)),
+            Arg.Is<string>(payload => payload.Contains("tool_input", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+        checks.First(c => c.Name == "gemini hook probe (project)").Message.Should().Contain(_dtkOnPath!);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task RunAsync_ScriptEditedLocally_StatusFailsAndAsksForForce(bool isGlobal)
+    [Fact]
+    public async Task AddApplication_ResolvesAChecker_ThatNeverStartsABareDtk()
     {
-        var scope = isGlobal ? HookScope.Global : HookScope.Project;
-        await IntegrateAsync(scope);
-        var scriptPath = Integrators[0].DescribeHooks(_tempDir, scope)[0].Script.Path;
-        await File.AppendAllTextAsync(scriptPath, "# my own change\n");
+        // The seam constructor takes a Func the container cannot supply, so DI must pick the PATH-resolving one.
+        await IntegrateAsync();
+        await using var provider = new ServiceCollection()
+            .AddApplication()
+            .AddSingleton(_runner)
+            .BuildServiceProvider();
+
+        var checks = await provider.GetRequiredService<HookHealthChecker>().RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().HaveCount(2);
+        await _runner.DidNotReceive().RunCapturedWithInputAsync(
+            "dtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_DtkNotFoundOnPath_ProbeFailsWithoutStartingAProcess()
+    {
+        await IntegrateAsync();
+        _dtkOnPath = null;
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
-        var status = checks.First(c => c.Name == $"gemini hook ({ScopeLabel(scope)})");
-        status.Passed.Should().BeFalse();
-        status.Message.Should().Contain("modified").And.Contain("--force");
+        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Contain("not found on PATH").And.Contain("~/.dotnet/tools");
+        await _runner.DidNotReceiveWithAnyArgs().RunCapturedWithInputAsync(default!, default!, default!, default);
+    }
 
-        if (scope == HookScope.Global)
-        {
-            status.Message.Should().Contain("--global --force", "the scope and force flags must combine");
-        }
-        else
-        {
-            status.Message.Should().NotContain("--global");
-        }
+    [Fact]
+    public async Task RunAsync_RegistrationWithCommentsAndTrailingCommas_IsClassifiedNotReportedUnreadable()
+    {
+        // Claude Code and Gemini CLI both accept comments in their settings files; a read-only
+        // diagnostic has no reason to be stricter than the harness that reads them.
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        Directory.CreateDirectory(Path.GetDirectoryName(installation.RegistrationPath)!);
+        await File.WriteAllTextAsync(installation.RegistrationPath, """
+            {
+              // dtk rewrites dotnet commands
+              "hooks": {
+                "BeforeTool": [
+                  { "matcher": "run_shell_command", "hooks": [ { "type": "command", "command": "dtk hook gemini; exit 0" }, ] },
+                ],
+              },
+            }
+            """);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal("gemini hook (project)", "gemini hook probe (project)");
+        checks.Should().OnlyContain(c => c.Passed);
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RunAsync_ScriptPresentButNotRegistered_StatusFailsAndProbeIsNotRun(bool isGlobal)
+    public async Task RunAsync_PythonEraRegistration_FailsWithTheMigrateRemedyAndIsNotProbed(bool isGlobal)
     {
         var scope = isGlobal ? HookScope.Global : HookScope.Project;
-        await IntegrateAsync(scope);
         var installation = Integrators[0].DescribeHooks(_tempDir, scope)[0];
-        await File.WriteAllTextAsync(installation.RegistrationPath, "{}");
+        Directory.CreateDirectory(Path.GetDirectoryName(installation.RegistrationPath)!);
+        await File.WriteAllTextAsync(installation.RegistrationPath, """
+            {"hooks":{"BeforeTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"python3 \"$GEMINI_PROJECT_DIR\"/.gemini/hooks/dotnet-to-dtk.py"}]}]}}
+            """);
+        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
         checks.Should().ContainSingle("one root cause must produce one failure, not two");
         checks[0].Passed.Should().BeFalse();
-        checks[0].Message.Should().Contain("not registered").And.Contain("dtk integrate gemini");
-
-        if (scope == HookScope.Global)
+        checks[0].Message.Should().Contain("legacy Python hook").And.Contain("dtk init gemini");
+        if (isGlobal)
         {
-            checks[0].Message.Should().Contain("--global", "a global hook's remedy must refresh the global install");
+            checks[0].Message.Should().Contain("--global");
         }
         else
         {
-            checks[0].Message.Should().NotContain("--global", "a project hook's remedy must not send the user to --global");
+            checks[0].Message.Should().NotContain("--global");
         }
+
+        await _runner.DidNotReceiveWithAnyArgs().RunCapturedWithInputAsync(default!, default!, default!, default);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_LegacyScriptLeftButNothingRegistered_FailsNotRegistered(bool isGlobal)
+    {
+        var scope = isGlobal ? HookScope.Global : HookScope.Project;
+        var installation = Integrators[0].DescribeHooks(_tempDir, scope)[0];
+        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().ContainSingle();
+        checks[0].Passed.Should().BeFalse();
+        checks[0].Message.Should().Contain("not registered").And.Contain("dtk init gemini");
+    }
+
+    [Fact]
+    public async Task RunAsync_RegistrationWithoutTheDtkHook_FailsNotRegistered()
+    {
+        await IntegrateAsync();
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        await File.WriteAllTextAsync(installation.RegistrationPath, "{}");
+        LegacyHookFixtures.WriteEditedScript(installation.LegacyScriptPath);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().ContainSingle();
+        checks[0].Message.Should().Contain("not registered").And.Contain(installation.Command);
     }
 
     [Fact]
@@ -168,17 +229,32 @@ public sealed class HookHealthCheckerTests : IDisposable
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
         // A diagnostic that crashes on a broken config is useless exactly when it is needed.
+        checks.Should().ContainSingle();
         checks[0].Passed.Should().BeFalse();
-        checks[0].Message.Should().Contain("could not be read");
+        checks[0].Message.Should().Contain("could not be read as JSON");
+    }
+
+    [Theory]
+    [InlineData("""{"hooks":{},"hooks":{}}""")]
+    [InlineData("""{"hooks":{"BeforeTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"dtk hook gemini; exit 0","command":"dtk hook gemini; exit 0"}]}]}}""")]
+    public async Task RunAsync_RegistrationWithDuplicateKeys_FailsWithoutThrowing(string duplicated)
+    {
+        // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is enumerated.
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        Directory.CreateDirectory(Path.GetDirectoryName(installation.RegistrationPath)!);
+        await File.WriteAllTextAsync(installation.RegistrationPath, duplicated);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().ContainSingle();
+        checks[0].Passed.Should().BeFalse();
+        checks[0].Message.Should().Contain(installation.RegistrationPath).And.Contain("could not be read");
     }
 
     [Fact]
     public async Task RunAsync_RegistrationUnreadable_StatusFailsNamingPathAndReason()
     {
-        // An I/O failure reading the registration (locked, permission-denied, ...) must become a
-        // failed check, not an unhandled exception out of RunAsync. An exclusive lock held from
-        // within this process is used rather than chmod, since chmod-based "unreadable" files are
-        // not reliably unreadable when tests run as root.
+        // An exclusive lock held from within this process, rather than chmod, which root ignores.
         await IntegrateAsync();
         var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
 
@@ -193,49 +269,64 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_ScriptUnreadable_StatusFailsNamingPathAndReason()
+    public async Task RunAsync_UnrelatedSettingsFile_IsNotReported()
     {
-        await IntegrateAsync();
         var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        Directory.CreateDirectory(Path.GetDirectoryName(installation.RegistrationPath)!);
+        await File.WriteAllTextAsync(installation.RegistrationPath, """{"theme":"dark"}""");
 
-        await using (new FileStream(installation.Script.Path, FileMode.Open, FileAccess.Read, FileShare.None))
-        {
-            var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
-            var status = checks.First(c => c.Name == "gemini hook (project)");
-            status.Passed.Should().BeFalse();
-            status.Message.Should().Contain(installation.Script.Path).And.Contain("could not be read");
-        }
+        checks.Should().ContainSingle().Which.Passed.Should().BeTrue("a settings file without any dtk hook is not a dtk install");
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task RunAsync_HookDoesNotRewrite_ProbeFailsAndNamesTheSubcommand(bool isGlobal)
+    [Fact]
+    public async Task RunAsync_HookDoesNotRewrite_ProbeFailsNamingTheSubcommandAndTheUpdate()
     {
-        var scope = isGlobal ? HookScope.Global : HookScope.Project;
-        await IntegrateAsync(scope);
+        await IntegrateAsync();
         _runner.RunCapturedWithInputAsync(null!, null!, null!)
             .ReturnsForAnyArgs(new CommandResult("dtk dotnet build", string.Empty, 0));
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
-        var probe = checks.First(c => c.Name == $"gemini hook probe ({ScopeLabel(scope)})");
+        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
         probe.Passed.Should().BeFalse();
-        probe.Message.Should().Contain("list package").And.Contain("dtk integrate gemini");
-
-        if (scope == HookScope.Global)
-        {
-            probe.Message.Should().Contain("--global");
-        }
-        else
-        {
-            probe.Message.Should().NotContain("--global");
-        }
+        probe.Message.Should().Contain("list package").And.Contain("dotnet tool update -g DotnetTokenKiller");
     }
 
     [Fact]
-    public async Task RunAsync_InterpreterMissing_ProbeFailsWithTheInterpreterName()
+    public async Task RunAsync_DtkTooOldForHook_ProbeFailsSuggestingTheUpdate()
+    {
+        await IntegrateAsync();
+        _runner.RunCapturedWithInputAsync(null!, null!, null!)
+            .ReturnsForAnyArgs(new CommandResult(string.Empty, "Error: Unknown command 'hook'.", 255));
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Contain("exited with code 255").And.Contain("Unknown command 'hook'")
+            .And.Contain("dotnet tool update -g DotnetTokenKiller");
+    }
+
+    [Fact]
+    public async Task RunAsync_DtkTooOldReportingOnStdout_ProbeFailsQuotingThatError()
+    {
+        // Spectre.Console.Cli, which parses dtk's arguments, prints "Unknown command" to stdout, not stderr.
+        await IntegrateAsync();
+        _runner.RunCapturedWithInputAsync(null!, null!, null!)
+            .ReturnsForAnyArgs(new CommandResult("\nError: Unknown command 'hook'.\n\n       hook gemini\n", string.Empty, 255));
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Contain("exited with code 255: Error: Unknown command 'hook'.")
+            .And.Contain("dotnet tool update -g DotnetTokenKiller");
+    }
+
+    [Fact]
+    public async Task RunAsync_ResolvedDtkCannotBeStarted_ProbeFailsNamingThatPath()
     {
         await IntegrateAsync();
         _runner.RunCapturedWithInputAsync(null!, null!, null!)
@@ -246,129 +337,6 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         var probe = checks.First(c => c.Name == "gemini hook probe (project)");
         probe.Passed.Should().BeFalse();
-        probe.Message.Should().Contain("python3");
-    }
-
-    [Fact]
-    public async Task RunAsync_EditedInterpreterInRegistration_ProbesWithThatInterpreter()
-    {
-        // Windows users are told to change python3 to python in settings.json. Probing with a
-        // hardcoded python3 would fail a working install.
-        await IntegrateAsync();
-        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
-        var json = await File.ReadAllTextAsync(installation.RegistrationPath);
-        await File.WriteAllTextAsync(
-            installation.RegistrationPath,
-            json.Replace("python3 ", "python ", StringComparison.Ordinal));
-
-        await _sut.RunAsync(Integrators, _tempDir, default);
-
-        await _runner.Received().RunCapturedWithInputAsync(
-            "python",
-            Arg.Any<IReadOnlyList<string>>(),
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task RunAsync_QuotedInterpreterPathWithSpace_ProbesWithTheWholeQuotedPath()
-    {
-        // On Windows a registration commonly reads "C:\Program Files\Python\python.exe" hook.py.
-        // Splitting the registered command on whitespace alone would take just "C:\Program and
-        // report a false failure on a working install.
-        await IntegrateAsync();
-        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
-        var root = JsonNode.Parse(await File.ReadAllTextAsync(installation.RegistrationPath));
-        const string interpreter = "C:\\Program Files\\Python\\python.exe";
-        ReplaceStringValue(root, "python3", $"\"{interpreter}\"");
-        await File.WriteAllTextAsync(installation.RegistrationPath, root!.ToJsonString());
-
-        await _sut.RunAsync(Integrators, _tempDir, default);
-
-        await _runner.Received().RunCapturedWithInputAsync(
-            interpreter,
-            Arg.Any<IReadOnlyList<string>>(),
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task RunAsync_ScriptMovedOrDeletedButStillRegistered_FailsNamingTheMissingScript(bool isGlobal)
-    {
-        // A hook registered in settings.json whose script was moved or deleted must not be silently
-        // skipped as "no integration here" — that would report a broken integration as healthy,
-        // which is the exact failure class this checker exists to catch.
-        var scope = isGlobal ? HookScope.Global : HookScope.Project;
-        await IntegrateAsync(scope);
-        var installation = Integrators[0].DescribeHooks(_tempDir, scope)[0];
-        File.Delete(installation.Script.Path);
-
-        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
-
-        checks.Should().ContainSingle("one root cause must produce one failure, not two");
-        checks[0].Passed.Should().BeFalse();
-        checks[0].Message.Should().Contain(installation.Script.Path).And.Contain("missing")
-            .And.Contain("dtk integrate gemini");
-
-        if (scope == HookScope.Global)
-        {
-            checks[0].Message.Should().Contain("--global");
-        }
-        else
-        {
-            checks[0].Message.Should().NotContain("--global");
-        }
-    }
-
-    /// <summary>Replaces every string value containing <paramref name="oldSubstring"/> in a JSON tree.</summary>
-    /// <param name="node">The JSON node (object, array, or value) to search and mutate in place.</param>
-    /// <param name="oldSubstring">The substring to look for in each string value.</param>
-    /// <param name="newSubstring">The substring to replace it with.</param>
-    private static void ReplaceStringValue(JsonNode? node, string oldSubstring, string newSubstring)
-    {
-        if (node is JsonObject obj)
-        {
-            foreach (var key in obj.Select(pair => pair.Key).ToList())
-            {
-                if (TryReplace(obj[key], oldSubstring, newSubstring, out var replaced))
-                {
-                    obj[key] = replaced;
-                }
-                else
-                {
-                    ReplaceStringValue(obj[key], oldSubstring, newSubstring);
-                }
-            }
-        }
-        else if (node is JsonArray arr)
-        {
-            for (var i = 0; i < arr.Count; i++)
-            {
-                if (TryReplace(arr[i], oldSubstring, newSubstring, out var replaced))
-                {
-                    arr[i] = replaced;
-                }
-                else
-                {
-                    ReplaceStringValue(arr[i], oldSubstring, newSubstring);
-                }
-            }
-        }
-    }
-
-    private static bool TryReplace(JsonNode? value, string oldSubstring, string newSubstring, out string? replaced)
-    {
-        if (value is JsonValue jsonValue
-            && jsonValue.TryGetValue<string>(out var text)
-            && text.Contains(oldSubstring, StringComparison.Ordinal))
-        {
-            replaced = text.Replace(oldSubstring, newSubstring, StringComparison.Ordinal);
-            return true;
-        }
-
-        replaced = null;
-        return false;
+        probe.Message.Should().Contain($"could not run {_dtkOnPath}").And.Contain("No such file or directory");
     }
 }

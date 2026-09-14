@@ -35,15 +35,15 @@ public sealed class CopilotCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FreshDirectory_CreatesAllThreeFiles()
+    public async Task IntegrateAsync_FreshDirectory_CreatesRegistrationAndInstructions()
     {
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        result.CreatedFiles.Should().HaveCount(3);
+        result.CreatedFiles.Should().HaveCount(2);
         result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
 
-        File.Exists(HookScriptPath).Should().BeTrue();
+        File.Exists(HookScriptPath).Should().BeFalse();
         File.Exists(HookJsonPath).Should().BeTrue();
         File.Exists(InstructionsPath).Should().BeTrue();
     }
@@ -57,23 +57,15 @@ public sealed class CopilotCliIntegratorTests : IDisposable
 
         root.Should().NotBeNull();
         root["version"]!.GetValue<int>().Should().Be(1);
-        var entry = root["hooks"]!["preToolUse"]!.AsArray()[0]!;
+        var preToolUse = root["hooks"]!["preToolUse"]!.AsArray();
+        preToolUse.Should().ContainSingle();
+        var entry = preToolUse[0]!;
         entry["type"]!.GetValue<string>().Should().Be("command");
         entry["matcher"]!.GetValue<string>().Should().Be("bash");
-        entry["bash"]!.GetValue<string>().Should().Contain("dotnet-to-dtk.py");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_HookScript_ContainsCopilotDecisionSchema()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var content = await File.ReadAllTextAsync(HookScriptPath);
-
-        content.Should().Contain("def rewrite");
-        content.Should().Contain("permissionDecision");
-        content.Should().Contain("modifiedArgs");
-        content.Should().NotContain("updatedInput");
+        entry["bash"]!.GetValue<string>().Should().Be("dtk hook copilot-cli; exit 0");
+        entry["powershell"]!.GetValue<string>().Should().Be("dtk hook copilot-cli; exit 0");
+        entry["timeoutSec"]!.GetValue<int>().Should().Be(10);
+        entry.AsObject().ContainsKey("cwd").Should().BeFalse();
     }
 
     [Fact]
@@ -96,15 +88,13 @@ public sealed class CopilotCliIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        // With generated-artifact stamping, the hook script is already byte-identical to the
-        // stamped current template, so it reports unchanged rather than skipped. The
-        // plain-written registration JSON is deterministic too, so a repeat run finds it
-        // byte-identical and reports it unchanged rather than skipped — WriteFileAsync must never
-        // print false "use --force" advice for a file --force would not change. Only the
-        // section-based instructions file has no such comparison and still reports skipped.
+        // The registration JSON is deterministic, so a repeat run finds it byte-identical and
+        // reports it unchanged rather than skipped — dtk must never print false "use --force"
+        // advice for a file --force would not change. Only the section-based instructions file has
+        // no such comparison and still reports skipped.
         result.CreatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().ContainSingle();
-        result.UnchangedFiles.Should().HaveCount(2);
+        result.UnchangedFiles.Should().Equal(HookJsonPath);
     }
 
     [Fact]
@@ -115,13 +105,12 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         // The section-based instructions file has no identical-content check and is always
-        // rewritten under --force. The hook script (generated-artifact stamping) and the
-        // plain-written registration JSON both have nothing to write over identical content, so
-        // both report unchanged rather than updated.
+        // rewritten under --force. The registration JSON has nothing to write over identical
+        // content, so it reports unchanged rather than updated.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().ContainSingle();
         result.SkippedFiles.Should().BeEmpty();
-        result.UnchangedFiles.Should().HaveCount(2);
+        result.UnchangedFiles.Should().Equal(HookJsonPath);
     }
 
     [Fact]
@@ -145,21 +134,19 @@ public sealed class CopilotCliIntegratorTests : IDisposable
     {
         var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
 
-        File.Exists(GlobalHookScriptPath).Should().BeTrue();
+        File.Exists(GlobalHookScriptPath).Should().BeFalse();
         File.Exists(GlobalHookJsonPath).Should().BeTrue();
-        result.CreatedFiles.Should().HaveCount(2);
+        result.CreatedFiles.Should().Equal(GlobalHookJsonPath);
         result.Notes.Should().NotBeEmpty();
     }
 
     [Fact]
-    public async Task IntegrateGlobalAsync_HookJson_UsesAbsoluteHooksDirCwd()
+    public async Task IntegrateGlobalAsync_HookJson_IsTheSameRegistration()
     {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
         await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
 
-        var root = JsonNode.Parse(await File.ReadAllTextAsync(GlobalHookJsonPath)) as JsonObject;
-        var cwd = root!["hooks"]!["preToolUse"]!.AsArray()[0]!["cwd"]!.GetValue<string>();
-
-        cwd.Should().Be(Path.Combine(_isolatedHome, ".copilot", "hooks"));
+        (await File.ReadAllTextAsync(GlobalHookJsonPath)).Should().Be(await File.ReadAllTextAsync(HookJsonPath));
     }
 
     [Fact]
@@ -170,5 +157,99 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         File.Exists(InstructionsPath).Should().BeFalse();
         Directory.Exists(Path.Combine(_isolatedHome, ".github")).Should().BeFalse();
         Directory.GetFiles(_isolatedHome, "copilot-instructions.md", SearchOption.AllDirectories).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_PythonEraRegistration_IsReplacedWithoutForceAndTheScriptRemoved()
+    {
+        LegacyHookFixtures.WriteStampedScript(HookScriptPath);
+        await File.WriteAllTextAsync(HookJsonPath, """
+            {"version":1,"hooks":{"preToolUse":[{"type":"command","matcher":"bash","bash":"python3 dotnet-to-dtk.py","cwd":".github/hooks","timeoutSec":10}]}}
+            """);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Contain("dtk hook copilot-cli; exit 0").And.NotContain("python3");
+        result.UpdatedFiles.Should().Contain(HookJsonPath);
+        result.RemovedFiles.Should().Equal(HookScriptPath);
+        Directory.Exists(Path.GetDirectoryName(HookJsonPath)).Should().BeTrue("the registration still lives there");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_ForeignHookJson_IsSkippedWithoutForce()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(HookJsonPath)!);
+        const string foreign = """{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"./my-own-check.sh"}]}}""";
+        await File.WriteAllTextAsync(HookJsonPath, foreign);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Be(foreign);
+        result.SkippedFiles.Should().Contain(HookJsonPath);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_SkippedRegistrationStillRunningThePythonHook_KeepsTheScript()
+    {
+        // Copilot CLI denies every tool call when a hook exits non-zero, so deleting the script a skipped
+        // registration still runs would turn a kept-as-is install into a broken one.
+        LegacyHookFixtures.WriteStampedScript(HookScriptPath);
+        const string mixed = """{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py","cwd":".github/hooks"},{"type":"command","bash":"./my-own-check.sh"}]}}""";
+        await File.WriteAllTextAsync(HookJsonPath, mixed);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Be(mixed);
+        result.SkippedFiles.Should().Contain(HookJsonPath);
+        File.Exists(HookScriptPath).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().Contain(note => note.Contains(HookJsonPath, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_AnotherHookFileStillRunsThePythonHook_KeepsTheScript()
+    {
+        // Copilot CLI loads every JSON file in the hooks directory, not only dtk-dotnet.json.
+        LegacyHookFixtures.WriteStampedScript(HookScriptPath);
+        const string legacy = """{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py","cwd":".github/hooks"}]}}""";
+        await File.WriteAllTextAsync(HookJsonPath, legacy);
+        var other = Path.Combine(_tempDir, ".github", "hooks", "team.json");
+        await File.WriteAllTextAsync(other, legacy);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Contain("dtk hook copilot-cli");
+        File.Exists(HookScriptPath).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().Contain(note => note.Contains(other, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_OrphanPythonScriptWithNoRegistration_IsKeptWithANote()
+    {
+        LegacyHookFixtures.WriteStampedScript(HookScriptPath);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        File.Exists(HookJsonPath).Should().BeTrue();
+        File.Exists(HookScriptPath).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().ContainSingle(note => note.Contains(HookScriptPath, StringComparison.Ordinal))
+            .Which.Should().Contain("left in place");
+    }
+
+    [Theory]
+    [InlineData("""{"version":1,"hooks":{},"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py"}]}}""")]
+    [InlineData("""{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py","bash":"python3 dotnet-to-dtk.py"}]}}""")]
+    public async Task IntegrateAsync_HookJsonWithDuplicateKeys_IsSkippedWithoutForce(string duplicated)
+    {
+        // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is indexed.
+        Directory.CreateDirectory(Path.GetDirectoryName(HookJsonPath)!);
+        await File.WriteAllTextAsync(HookJsonPath, duplicated);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Be(duplicated);
+        result.SkippedFiles.Should().Contain(HookJsonPath);
     }
 }

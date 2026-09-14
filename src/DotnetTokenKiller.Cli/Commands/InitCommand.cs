@@ -6,21 +6,21 @@ using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands;
 
-/// <summary>Installs dtk integration artifacts for the given AI assistant provider.</summary>
+/// <summary>Installs dtk integration artifacts for the given AI assistant provider (<c>dtk init</c>, alias <c>dtk integrate</c>).</summary>
 /// <param name="integrateUseCase">The integration use case.</param>
 /// <param name="console">The Spectre.Console output sink.</param>
-internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiConsole console)
-    : AsyncCommand<IntegrateCommandSettings>
+internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsole console)
+    : AsyncCommand<InitCommandSettings>
 {
     /// <inheritdoc/>
     protected override Task<int> ExecuteAsync(
         CommandContext context,
-        IntegrateCommandSettings settings,
+        InitCommandSettings settings,
         CancellationToken cancellationToken)
         => RunAsync(settings, cancellationToken);
 
     internal async Task<int> RunAsync(
-        IntegrateCommandSettings settings,
+        InitCommandSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -81,6 +81,11 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             console.MarkupLine($"[grey]unchanged[/] {Markup.Escape(RelativePath(directory, file))}");
         }
 
+        foreach (var file in result.RemovedFiles)
+        {
+            console.MarkupLine($"[red]removed[/]  {Markup.Escape(RelativePath(directory, file))}");
+        }
+
         foreach (var file in result.SkippedFiles)
         {
             // Once --force was already passed, telling the user to "use --force" is never true:
@@ -110,7 +115,7 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
     /// <c>.aider.conf.yml</c> without the dtk <c>read:</c> key) might never have been functionally
     /// integrated — the CLI cannot tell that apart from a file that already carries dtk's exact
     /// managed content, so without <c>--force</c> it must never claim "Done" or "Already
-    /// integrated". A generated artifact (the Python hook, <c>SKILL.md</c>) that is already
+    /// integrated". A generated artifact such as the skill file <c>SKILL.md</c> that is already
     /// byte-identical to the current stamped template, and a settings merge whose hook entry is
     /// already registered, both arrive in <see cref="IntegrationResult.UnchangedFiles"/> rather
     /// than <see cref="IntegrationResult.SkippedFiles"/> — dtk can prove nothing needs to change
@@ -134,7 +139,7 @@ internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiC
             return;
         }
 
-        if (result.CreatedFiles.Count > 0 || result.UpdatedFiles.Count > 0)
+        if (result.CreatedFiles.Count > 0 || result.UpdatedFiles.Count > 0 || result.RemovedFiles.Count > 0)
         {
             console.MarkupLine($"[green]Done.[/] dtk is now integrated with [bold]{provider}[/].");
             return;

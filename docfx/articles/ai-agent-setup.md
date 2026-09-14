@@ -1,19 +1,20 @@
 # AI Agent Setup
 
-Each supported agent gets a hook that rewrites `dotnet …` to `dtk dotnet …` before the command runs, so the filtering happens whether or not the agent remembers to ask for it. One `dtk integrate` command installs it.
+Each supported agent gets a hook that rewrites `dotnet …` to `dtk dotnet …` before the command runs, so the filtering happens whether or not the agent remembers to ask for it. One `dtk init` command installs it (`dtk integrate` is an alias).
 
-> [!IMPORTANT]
-> **Python 3 requirement**: The Claude Code and Gemini CLI integrations install Python-based hooks that run at command interception time. Make sure `python3` is available on your `PATH` before using `dtk integrate claude` or `dtk integrate gemini`. Other providers (Copilot, Cursor, Windsurf, Aider, JetBrains) do not require Python.
+> [!NOTE]
+> The hooks run `dtk hook <provider>`, so the agent only needs `dtk` on its `PATH` — no Python, no `jq`,
+> and the same registration works from sh, bash, Git Bash and PowerShell.
 
 ## Installing globally
 
 Pass `--global` (`-g`) to install into your home directory instead of a project, so the integration applies across every project you touch:
 
 ```sh
-dtk integrate claude      --global   # ~/.claude
-dtk integrate gemini      --global   # ~/.gemini
-dtk integrate aider       --global   # ~/.aider.conf.yml
-dtk integrate copilot-cli --global   # ~/.copilot/hooks
+dtk init claude      --global   # ~/.claude
+dtk init gemini      --global   # ~/.gemini
+dtk init aider       --global   # ~/.aider.conf.yml
+dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
 
 `--global` is supported only for the providers with a home config — **claude**, **gemini**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
@@ -27,29 +28,29 @@ A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|
 From your project root, run:
 
 ```sh
-dtk integrate claude
+dtk init claude
 ```
 
-This creates three files:
+This creates two files:
 
 - `.claude/skills/dotnet-token-killer/SKILL.md` — instructs Claude Code to prefer `dtk`
-- `.claude/hooks/dotnet-to-dtk.py` — the Python rewrite hook
-- `.claude/settings.json` — registers the hook under `PreToolUse` (merges with any existing settings)
+- `.claude/settings.json` — registers `dtk hook claude` under `PreToolUse` (merges with any existing settings)
 
-Re-running the command without `--force` leaves any already-existing files untouched
-(`SKILL.md`, the hook script). `.claude/settings.json` is always safely merged: the hook entry
-is added if missing, or upgraded in place if it still carries the pre-`$CLAUDE_PROJECT_DIR`
-command from an older version of dtk — either way it is never duplicated. To write into
-existing `SKILL.md`/hook-script files (replacing them with the latest version), pass `--force`:
+Re-running the command refreshes `SKILL.md` if dtk wrote it and leaves an edited copy alone unless you
+pass `--force`. `.claude/settings.json` is always merged: the hook entry is added if missing, and a
+registration from an older dtk that ran `dotnet-to-dtk.py` is replaced in place — never duplicated. The
+old `.claude/hooks/dotnet-to-dtk.py` is deleted when that run replaced its registration, no hook in
+`.claude/settings.json` or `.claude/settings.local.json` still runs it, and dtk can prove it wrote it.
+Otherwise it is kept and a note says why; for an edited copy, `--force` on the migrating run deletes it too:
 
 ```sh
-dtk integrate claude --force
+dtk init claude --force
 ```
 
 To target a directory other than the current one:
 
 ```sh
-dtk integrate claude --dir /path/to/project
+dtk init claude --dir /path/to/project
 ```
 
 ### How It Works
@@ -58,17 +59,7 @@ With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`,
 
 ### Manual Installation
 
-If you prefer not to use `dtk integrate`, it requires `curl` and `python3`. From your project root:
-
-```sh
-mkdir -p .claude/hooks
-curl -sSL https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.claude/hooks/dotnet-to-dtk.py \
-  -o .claude/hooks/dotnet-to-dtk.py
-```
-
-Then add the following to `.claude/settings.json`. The command is rooted at
-`$CLAUDE_PROJECT_DIR` (the absolute project root Claude Code exports to hooks, quoted so the
-path survives spaces) so the hook resolves regardless of Claude's current working directory:
+Add the following to `.claude/settings.json`:
 
 ```json
 {
@@ -79,7 +70,7 @@ path survives spaces) so the hook resolves regardless of Claude's current workin
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dotnet-to-dtk.py"
+            "command": "dtk hook claude"
           }
         ]
       }
@@ -95,19 +86,19 @@ path survives spaces) so the hook resolves regardless of Claude's current workin
 From your project root, run:
 
 ```sh
-dtk integrate copilot
+dtk init copilot
 ```
 
 This creates `.github/copilot-instructions.md` with a `dtk` instructions section, wrapped in `<!-- dtk -->` / `<!-- /dtk -->` markers, if the file does not exist yet. If the file already exists, it is left completely untouched unless you pass `--force`. With `--force`, the section is merged in: an existing dtk section (identified by the markers) is replaced in place, or the section is appended after your existing content if no dtk section is present yet:
 
 ```sh
-dtk integrate copilot --force
+dtk init copilot --force
 ```
 
 ### Manual Installation
 
 Add to your `.github/copilot-instructions.md`, wrapped in `<!-- dtk -->` / `<!-- /dtk -->`
-markers so a future `dtk integrate copilot --force` can safely replace just this section:
+markers so a future `dtk init copilot --force` can safely replace just this section:
 
 ````markdown
 <!-- dtk -->
@@ -127,6 +118,39 @@ dtk dotnet list package --outdated
 <!-- /dtk -->
 ````
 
+## GitHub Copilot CLI
+
+### Installation
+
+```sh
+dtk init copilot-cli
+```
+
+This creates `.github/hooks/dtk-dotnet.json`, which registers the `preToolUse` hook, and a dtk section in
+`.github/copilot-instructions.md`. `dtk init copilot-cli --global` writes the hook to `~/.copilot/hooks/`.
+
+### Manual Installation
+
+Create `.github/hooks/dtk-dotnet.json`. Copilot CLI denies the tool call when a hook exits non-zero, so
+`; exit 0` keeps a missing `dtk` from blocking every command:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "matcher": "bash",
+        "bash": "dtk hook copilot-cli; exit 0",
+        "powershell": "dtk hook copilot-cli; exit 0",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}
+```
+
 ## Gemini CLI
 
 A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`.
@@ -136,30 +160,30 @@ A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|
 From your project root, run:
 
 ```sh
-dtk integrate gemini
+dtk init gemini
 ```
 
-This creates three files:
+This creates two files:
 
 - `GEMINI.md` — a `dtk` instructions section, created if the file does not exist yet
-- `.gemini/hooks/dotnet-to-dtk.py` — the Python rewrite hook
-- `.gemini/settings.json` — registers the hook under `BeforeTool` (merges with any existing settings)
+- `.gemini/settings.json` — registers `dtk hook gemini; exit 0` under `BeforeTool` (merges with any existing settings)
 
-Re-running the command without `--force` leaves any already-existing files untouched
-(`GEMINI.md`, the hook script). `.gemini/settings.json` is always safely merged: the hook entry
-is added if missing, or upgraded in place if it still carries the pre-`$GEMINI_PROJECT_DIR`
-command from an older version of dtk — either way it is never duplicated. To write into an
-existing `GEMINI.md` (its dtk section, marked by `<!-- dtk -->` / `<!-- /dtk -->`, is replaced;
-the rest of the file is preserved) or the hook script, pass `--force`:
+Re-running the command replaces `GEMINI.md`'s dtk section only with `--force`; without it, an
+existing `GEMINI.md` is left untouched. `.gemini/settings.json` is always merged: the hook entry
+is added if missing, and a registration from an older dtk that ran `dotnet-to-dtk.py` is replaced
+in place — never duplicated. The old `.gemini/hooks/dotnet-to-dtk.py` is deleted when that run
+replaced its registration, no hook left in `.gemini/settings.json` still runs it, and dtk can prove it
+wrote it. Otherwise it is kept and a note says why; for an edited copy, `--force` on the migrating run
+deletes it too:
 
 ```sh
-dtk integrate gemini --force
+dtk init gemini --force
 ```
 
 To target a directory other than the current one:
 
 ```sh
-dtk integrate gemini --dir /path/to/project
+dtk init gemini --dir /path/to/project
 ```
 
 ### How It Works
@@ -168,17 +192,8 @@ With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, 
 
 ### Manual Installation
 
-If you prefer not to use `dtk integrate`, it requires `curl` and `python3`. From your project root:
-
-```sh
-mkdir -p .gemini/hooks
-curl -sSL https://raw.githubusercontent.com/HandyS11/DotnetTokenKiller/develop/.gemini/hooks/dotnet-to-dtk.py \
-  -o .gemini/hooks/dotnet-to-dtk.py
-```
-
-Then add the following to `.gemini/settings.json`. The command is rooted at
-`$GEMINI_PROJECT_DIR` (the absolute project root Gemini CLI exports to hooks, quoted so the
-path survives spaces) so the hook resolves regardless of the CLI's current working directory:
+Add the following to `.gemini/settings.json`. Gemini CLI blocks the shell command when a hook exits
+with a code other than 0 or 1, so `; exit 0` keeps a missing `dtk` from blocking every command:
 
 ```json
 {
@@ -189,7 +204,7 @@ path survives spaces) so the hook resolves regardless of the CLI's current worki
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$GEMINI_PROJECT_DIR\"/.gemini/hooks/dotnet-to-dtk.py"
+            "command": "dtk hook gemini; exit 0"
           }
         ]
       }
@@ -199,7 +214,7 @@ path survives spaces) so the hook resolves regardless of the CLI's current worki
 ```
 
 And append the following to your `GEMINI.md`, wrapped in `<!-- dtk -->` / `<!-- /dtk -->`
-markers so a future `dtk integrate gemini --force` can safely replace just this section without
+markers so a future `dtk init gemini --force` can safely replace just this section without
 touching the rest of the file:
 
 ```markdown
@@ -216,7 +231,7 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and l
 ### Installation
 
 ```sh
-dtk integrate cursor
+dtk init cursor
 ```
 
 This creates `.cursor/rules/dtk.mdc` — a Cursor rule file with `alwaysApply: false` that instructs the agent to use `dtk` for dotnet commands.
@@ -225,7 +240,7 @@ Use `--force` to overwrite an existing file. Use `--dir` to target a specific pr
 
 ### How It Works
 
-Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format|list package` over raw `dotnet` commands. No hook or Python dependency is needed — it's a plain text instruction file.
+Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format|list package` over raw `dotnet` commands. No hook is needed — it's a plain text instruction file.
 
 ### Manual Installation
 
@@ -245,7 +260,7 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and l
 ### Installation
 
 ```sh
-dtk integrate windsurf
+dtk init windsurf
 ```
 
 This creates `.windsurf/rules/dtk.md` — a Windsurf rule file that instructs the agent to prefer `dtk` over raw `dotnet` commands.
@@ -254,7 +269,7 @@ Use `--force` to overwrite. Use `--dir` to target a specific project directory.
 
 ### How It Works
 
-Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format|list package` to reduce token usage. No hook or Python dependency is needed.
+Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format|list package` to reduce token usage. No hook is needed.
 
 ### Manual Installation
 
@@ -270,7 +285,7 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and l
 ### Installation
 
 ```sh
-dtk integrate aider
+dtk init aider
 ```
 
 This creates two files:
@@ -281,7 +296,7 @@ This creates two files:
 If either file already exists, it is left completely untouched unless you pass `--force`:
 
 ```sh
-dtk integrate aider --force
+dtk init aider --force
 ```
 
 When `--force` writes into an existing `.aider.conf.yml`:
@@ -318,14 +333,14 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and l
 
 ### How It Works
 
-Aider reads configuration from `.aider.conf.yml`, which can reference additional instruction files via the `read:` key. The integration adds a reference to `.aider-dtk-instructions.md`, merging it into an existing top-level `read:` key when present rather than declaring a second one, which tells Aider to prefer `dtk` over raw `dotnet` commands. No hook or Python dependency is needed beyond Aider's own Python runtime.
+Aider reads configuration from `.aider.conf.yml`, which can reference additional instruction files via the `read:` key. The integration adds a reference to `.aider-dtk-instructions.md`, merging it into an existing top-level `read:` key when present rather than declaring a second one, which tells Aider to prefer `dtk` over raw `dotnet` commands. No hook is needed.
 
 ## JetBrains AI
 
 ### Installation
 
 ```sh
-dtk integrate jetbrains
+dtk init jetbrains
 ```
 
 This creates `.junie/guidelines.md` with a `<!-- dtk -->` / `<!-- /dtk -->` instructions section if the file does not exist yet. If the file already exists, it is left completely untouched unless you pass `--force`. With `--force`, the section is merged in: an existing dtk section is replaced in place, or the section is appended after your existing content if none is present yet.
@@ -366,14 +381,16 @@ For any AI agent that runs terminal commands, the general approach is:
 
 ## Upgrading dtk
 
-The hook installed in your project carries the list of subcommands dtk filters, so a dtk release
-that adds one leaves your installed hook a version behind. Re-run the integration after upgrading:
+The hooks run the installed `dtk`, so upgrading the tool upgrades the rewrite — a new subcommand is
+covered as soon as `dotnet tool update -g DotnetTokenKiller` finishes. Re-run `dtk init <provider>` after
+upgrading to refresh the skill and instruction files, and once to migrate a project set up by a dtk that
+installed a Python hook:
 
 ```sh
 dotnet tool update -g DotnetTokenKiller
-dtk integrate claude          # refreshes the hook and skill in place
+dtk init claude          # refreshes the skill; migrates a Python hook if one is left
 ```
 
-dtk stamps the files it generates, so an artifact you have not edited is refreshed without
-`--force`; one you have edited is left alone and reported. To check the state of an installation
-without changing anything, run `dtk doctor`.
+dtk stamps the files it generates, so an artifact you have not edited is refreshed without `--force`; one
+you have edited is left alone and reported. To check an installation without changing anything, run
+`dtk doctor`.

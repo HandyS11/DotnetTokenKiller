@@ -79,9 +79,10 @@ jb inspectcode DotnetTokenKiller.slnx --output=artifacts/inspectcode.xml --forma
 jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Syntax Style"
 ```
 
-`dtk integrate copilot-cli` installs a GitHub Copilot CLI `preToolUse` hook (`.github/hooks/`) that rewrites
-`dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`). Distinct from `dtk integrate copilot`
-(instruction-only, Copilot IDE).
+`dtk init copilot-cli` (alias `dtk integrate`) installs a GitHub Copilot CLI `preToolUse` hook (`.github/hooks/`)
+that runs `dtk hook copilot-cli`, rewriting `dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`).
+Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is `dtk hook <provider>`; this repo's own
+`.claude/settings.json` still runs the frozen `.claude/hooks/dotnet-to-dtk.py` until a released dtk has `hook`.
 
 ## Git Hooks
 
@@ -172,6 +173,14 @@ CLI integration suite (392) pass against the installed `dtk.exe`; tracking reach
 (Windows 10 1903 or later). 21 runs each in Git Bash, medians minus a ~34 ms Git Bash process-start baseline
 measured the same way (raw medians in parentheses): `dtk --version` 5.0 ms for the native shim vs 131.0 ms for
 `any` (40 vs 166 ms raw); `dtk pipe build` 57.0 ms vs 277.0 ms (90 vs 310 ms raw).
+
+`dtk hook`, measured 2026-09-14, 55 runs each, local AOT publish (linux-x64) against this repo's Python hook, medians
+including a 1.0 ms `/bin/true` fork-and-exec baseline: `dtk hook claude` 9.5 ms (no rewrite) and 9.8 ms
+(rewrite); `python3 .claude/hooks/dotnet-to-dtk.py` 15.9 ms and 15.9 ms; `dtk --version` 12.9 ms. A harness runs the
+hook on every shell tool call, so this is a per-call cost; on the `any` fallback it is the JIT start-up instead.
+The hook runs 2.9–3.4 ms *faster* than `--version`, because it returns before the service container and
+Spectre are built, which `--version` still constructs — meeting the spec's 3 ms ceiling on hook overhead, a
+gap a repeat run confirmed as stable (9.5/10.0 ms hook vs 12.9 ms `--version`).
 
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in
