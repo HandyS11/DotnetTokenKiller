@@ -3268,6 +3268,10 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 Task 2 appends its result here.
 
+Measured 2026-09-14: `DotnetCommandRewriterDifferentialTests` ran 5000 seeded-generated commands plus the
+61 Task 1 `InlineData` cases (5061 total) through both the Python `CopilotCliHook` template and the C# port —
+0 mismatches.
+
 ## Follow-up (not in this plan)
 
 After the first release containing `dtk hook`: run `dtk init claude` in this repository, commit the migrated `.claude/settings.json` and the deletion of `.claude/hooks/dotnet-to-dtk.py`, and drop the frozen-hook sentence from `CLAUDE.md`. Harness expansion (Cursor, Codex CLI, Factory Droid, Crush, VS Code Copilot, Junie CLI) is sub-project 2 with its own spec.
