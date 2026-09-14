@@ -344,4 +344,34 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         result.RemovedFiles.Should().Equal(script);
         result.UpdatedFiles.Should().Contain(settings);
     }
+
+    [Fact]
+    public async Task IntegrateAsync_OrphanPythonScriptWithNoRegistration_IsKeptWithANote()
+    {
+        LegacyHookFixtures.WriteStampedScript(HookPath);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        File.Exists(HookPath).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().ContainSingle(note => note.Contains(HookPath, StringComparison.Ordinal))
+            .Which.Should().Contain("left in place");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_PythonHookStillRegisteredUnderAnotherEvent_KeepsTheScript()
+    {
+        // The merge migrates BeforeTool only; a second registration elsewhere in the file still runs the script.
+        LegacyHookFixtures.WriteStampedScript(HookPath);
+        await File.WriteAllTextAsync(SettingsPath, """
+            {"hooks":{
+              "BeforeTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"python3 .gemini/hooks/dotnet-to-dtk.py"}]}],
+              "AfterTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"python3 .gemini/hooks/dotnet-to-dtk.py"}]}]}}
+            """);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        File.Exists(HookPath).Should().BeTrue("Gemini CLI denies the tool call when a hook exits 2");
+        result.Notes.Should().Contain(note => note.Contains(SettingsPath, StringComparison.Ordinal));
+    }
 }

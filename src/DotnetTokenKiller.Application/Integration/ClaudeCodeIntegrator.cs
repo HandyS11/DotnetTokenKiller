@@ -103,6 +103,9 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     /// </summary>
     internal const string SkillLegacySignature = "name: dotnet-token-killer";
 
+    /// <summary>The per-user settings file Claude Code reads beside <c>settings.json</c>, which dtk never edits.</summary>
+    private const string LocalSettingsFileName = "settings.local.json";
+
     /// <inheritdoc/>
     public string ProviderName => "claude";
 
@@ -150,12 +153,17 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
 
-        await IntegratorHelpers.WriteHookRegistrationAsync(
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
             new HookRegistrationSpec(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command),
             context, cancellationToken).ConfigureAwait(false);
 
-        await IntegratorHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath, context, cancellationToken)
-            .ConfigureAwait(false);
+        // dtk merges settings.json only; Claude Code also runs the hooks in settings.local.json beside it.
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            hook.LegacyScriptPath,
+            replacedLegacy,
+            [hook.RegistrationPath, Path.Combine(Path.GetDirectoryName(hook.RegistrationPath)!, LocalSettingsFileName)],
+            context,
+            cancellationToken).ConfigureAwait(false);
 
         var rtkOutcome = await rtk.ReconcileAsync(hookDirectory, cancellationToken).ConfigureAwait(false);
         if (rtkOutcome.CreatedConfigPath is not null)

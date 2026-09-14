@@ -203,6 +203,39 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         result.SkippedFiles.Should().Contain(HookJsonPath);
         File.Exists(HookScriptPath).Should().BeTrue();
         result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().Contain(note => note.Contains(HookJsonPath, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_AnotherHookFileStillRunsThePythonHook_KeepsTheScript()
+    {
+        // Copilot CLI loads every JSON file in the hooks directory, not only dtk-dotnet.json.
+        LegacyHookFixtures.WriteStampedScript(HookScriptPath);
+        const string legacy = """{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py","cwd":".github/hooks"}]}}""";
+        await File.WriteAllTextAsync(HookJsonPath, legacy);
+        var other = Path.Combine(_tempDir, ".github", "hooks", "team.json");
+        await File.WriteAllTextAsync(other, legacy);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Contain("dtk hook copilot-cli");
+        File.Exists(HookScriptPath).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().Contain(note => note.Contains(other, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_OrphanPythonScriptWithNoRegistration_IsKeptWithANote()
+    {
+        LegacyHookFixtures.WriteStampedScript(HookScriptPath);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        File.Exists(HookJsonPath).Should().BeTrue();
+        File.Exists(HookScriptPath).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().ContainSingle(note => note.Contains(HookScriptPath, StringComparison.Ordinal))
+            .Which.Should().Contain("left in place");
     }
 
     [Theory]

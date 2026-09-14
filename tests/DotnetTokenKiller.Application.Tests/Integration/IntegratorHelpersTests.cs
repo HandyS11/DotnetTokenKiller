@@ -1515,12 +1515,13 @@ public sealed class IntegratorHelpersTests : IDisposable
             {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":{{{System.Text.Json.JsonSerializer.Serialize(legacyCommand)}}},"timeout":30}]}]}}
             """);
 
-        await IntegratorHelpers.WriteHookRegistrationAsync(
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
             new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude"), context, CancellationToken.None);
 
         (await ReadInnerCommandsAsync(path, "PreToolUse")).Should().ContainSingle().Which.Should().Be("dtk hook claude");
         (await File.ReadAllTextAsync(path)).Should().Contain("\"timeout\": 30", "an upgrade in place keeps the entry's other properties");
         context.Updated.Should().ContainSingle();
+        replacedLegacy.Should().BeTrue("the caller may only retire the Python script when its registration was migrated");
     }
 
     [Fact]
@@ -1533,10 +1534,11 @@ public sealed class IntegratorHelpersTests : IDisposable
             {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .claude/hooks/rtk-rewrite.py"}]}]}}
             """);
 
-        await IntegratorHelpers.WriteHookRegistrationAsync(
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
             new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude"), context, CancellationToken.None);
 
         (await ReadInnerCommandsAsync(path, "PreToolUse")).Should().Equal("python3 .claude/hooks/rtk-rewrite.py", "dtk hook claude");
+        replacedLegacy.Should().BeFalse();
     }
 
     [Fact]
@@ -1620,7 +1622,8 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         File.Exists(script).Should().BeTrue();
         context.Removed.Should().BeEmpty();
-        context.Notes.Should().ContainSingle().Which.Should().Contain(script).And.Contain("no longer used").And.Contain("--force");
+        context.Notes.Should().ContainSingle().Which.Should().Contain(script).And.Contain("no longer used")
+            .And.NotContain("re-run", "a re-run finds the registration already migrated and never deletes the script");
     }
 
     [Fact]
@@ -1645,6 +1648,208 @@ public sealed class IntegratorHelpersTests : IDisposable
 
         context.Removed.Should().BeEmpty();
         context.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_CurrentCommandAlreadyRegistered_ReportsNoLegacyReplaced()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        var spec = new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude");
+        await IntegratorHelpers.WriteHookRegistrationAsync(spec, new IntegrationContext(false), CancellationToken.None);
+
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(spec, context, CancellationToken.None);
+
+        replacedLegacy.Should().BeFalse();
+        context.Unchanged.Should().Equal(path);
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_LegacyDuplicateBesideTheCurrentCommand_ReportsTheLegacyReplaced()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, """
+            {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"dtk hook claude"},{"type":"command","command":"python3 .claude/hooks/dotnet-to-dtk.py"}]}]}}
+            """);
+
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude"), context, CancellationToken.None);
+
+        (await ReadInnerCommandsAsync(path, "PreToolUse")).Should().Equal("dtk hook claude");
+        replacedLegacy.Should().BeTrue("a removed Python entry is a migrated one too");
+    }
+
+    // --- RetireLegacyHookScriptAsync ---
+
+    private string RetireScriptPath => Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py");
+
+    private string RetireSettingsPath => Path.Combine(_tempDir, "settings.json");
+
+    private string RetireLocalSettingsPath => Path.Combine(_tempDir, "settings.local.json");
+
+    [Fact]
+    public async Task RetireLegacyHookScriptAsync_MigratedAndNothingElseRunsIt_RemovesTheScript()
+    {
+        var context = new IntegrationContext(false);
+        LegacyHookFixtures.WriteStampedScript(RetireScriptPath);
+        await File.WriteAllTextAsync(RetireSettingsPath, """{"hooks":{"PreToolUse":[]}}""");
+
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            RetireScriptPath, replacedLegacyRegistration: true, [RetireSettingsPath, RetireLocalSettingsPath], context, CancellationToken.None);
+
+        File.Exists(RetireScriptPath).Should().BeFalse();
+        context.Removed.Should().Equal(RetireScriptPath);
+        context.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RetireLegacyHookScriptAsync_AnotherSettingsFileStillRunsIt_KeepsTheScriptNamingThatFile()
+    {
+        var context = new IntegrationContext(false);
+        LegacyHookFixtures.WriteStampedScript(RetireScriptPath);
+        await File.WriteAllTextAsync(RetireLocalSettingsPath, """
+            {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"python3 .claude/hooks/dotnet-to-dtk.py"}]}]}}
+            """);
+
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            RetireScriptPath, replacedLegacyRegistration: true, [RetireSettingsPath, RetireLocalSettingsPath], context, CancellationToken.None);
+
+        File.Exists(RetireScriptPath).Should().BeTrue("a missing script makes python3 exit 2, which Claude Code treats as blocking");
+        context.Removed.Should().BeEmpty();
+        context.Notes.Should().ContainSingle().Which.Should().Contain(RetireScriptPath).And.Contain(RetireLocalSettingsPath);
+    }
+
+    [Fact]
+    public async Task RetireLegacyHookScriptAsync_SettingsFileUnreadable_KeepsTheScriptNamingThatFile()
+    {
+        // An exclusive lock held from within this process, rather than chmod, which root ignores.
+        var context = new IntegrationContext(false);
+        LegacyHookFixtures.WriteStampedScript(RetireScriptPath);
+        await File.WriteAllTextAsync(RetireLocalSettingsPath, "{}");
+
+        await using (new FileStream(RetireLocalSettingsPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            await IntegratorHelpers.RetireLegacyHookScriptAsync(
+                RetireScriptPath, replacedLegacyRegistration: true, [RetireLocalSettingsPath], context, CancellationToken.None);
+        }
+
+        File.Exists(RetireScriptPath).Should().BeTrue("dtk cannot prove a file it cannot read no longer runs the script");
+        context.Notes.Should().ContainSingle().Which.Should().Contain(RetireLocalSettingsPath);
+    }
+
+    [Fact]
+    public async Task RetireLegacyHookScriptAsync_NoRegistrationWasMigrated_KeepsTheScriptWithANote()
+    {
+        var context = new IntegrationContext(true);
+        LegacyHookFixtures.WriteStampedScript(RetireScriptPath);
+
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            RetireScriptPath, replacedLegacyRegistration: false, [RetireSettingsPath, RetireLocalSettingsPath], context, CancellationToken.None);
+
+        File.Exists(RetireScriptPath).Should().BeTrue("even --force cannot tell what else still runs a script no registration dtk updated ran");
+        context.Removed.Should().BeEmpty();
+        context.Notes.Should().ContainSingle().Which.Should().Contain(RetireScriptPath).And.Contain("left in place");
+    }
+
+    [Fact]
+    public async Task RetireLegacyHookScriptAsync_NoScript_DoesNothing()
+    {
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            RetireScriptPath, replacedLegacyRegistration: false, [RetireSettingsPath], context, CancellationToken.None);
+
+        context.Removed.Should().BeEmpty();
+        context.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_ScriptCannotBeDeleted_KeepsItWithANoteInsteadOfThrowing()
+    {
+        // Unlinking needs write permission on the directory. POSIX modes are a no-op on Windows, and root
+        // ignores them, so both are skipped rather than asserting something the mode did not cause.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var context = new IntegrationContext(false);
+        var script = RetireScriptPath;
+        LegacyHookFixtures.WriteStampedScript(script);
+        var hooksDirectory = Path.GetDirectoryName(script)!;
+        var originalMode = File.GetUnixFileMode(hooksDirectory);
+        try
+        {
+            File.SetUnixFileMode(hooksDirectory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            if (CanCreateFileIn(hooksDirectory))
+            {
+                return;
+            }
+
+            var act = () => IntegratorHelpers.RemoveLegacyHookScriptAsync(script, context, CancellationToken.None);
+
+            await act.Should().NotThrowAsync();
+            File.Exists(script).Should().BeTrue();
+            context.Removed.Should().BeEmpty();
+            context.Notes.Should().ContainSingle().Which.Should().Contain(script).And.Contain("could not be deleted");
+        }
+        finally
+        {
+            File.SetUnixFileMode(hooksDirectory, originalMode);
+        }
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_EmptiedDirectoryCannotBeDeleted_StillReportsTheScriptRemoved()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var context = new IntegrationContext(false);
+        var parent = Path.Combine(_tempDir, "provider");
+        var script = Path.Combine(parent, "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        var originalMode = File.GetUnixFileMode(parent);
+        try
+        {
+            File.SetUnixFileMode(parent, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            if (CanCreateFileIn(parent))
+            {
+                return;
+            }
+
+            var act = () => IntegratorHelpers.RemoveLegacyHookScriptAsync(script, context, CancellationToken.None);
+
+            await act.Should().NotThrowAsync("the script is gone; an empty directory left behind costs nothing");
+            File.Exists(script).Should().BeFalse();
+            Directory.Exists(Path.GetDirectoryName(script)).Should().BeTrue();
+            context.Removed.Should().Equal(script);
+        }
+        finally
+        {
+            File.SetUnixFileMode(parent, originalMode);
+        }
+    }
+
+    /// <summary>Whether this user can create a file in <paramref name="directory"/> despite its mode (true as root).</summary>
+    /// <param name="directory">The directory to probe.</param>
+    private static bool CanCreateFileIn(string directory)
+    {
+        var probe = Path.Combine(directory, ".dtk-writability-probe");
+        try
+        {
+            File.WriteAllText(probe, string.Empty);
+            File.Delete(probe);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     [Fact]

@@ -371,19 +371,95 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         result.UpdatedFiles.Should().Contain(settings);
     }
 
-    [Fact]
-    public async Task IntegrateAsync_EditedPythonScript_IsKeptWithANoteUnlessForced()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task IntegrateAsync_EditedPythonScript_IsKeptWithANoteUnlessForced(bool force)
     {
         var script = Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py");
         LegacyHookFixtures.WriteEditedScript(script);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, ".claude", "settings.json"), LegacyClaudeSettings);
 
-        var kept = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var result = await _sut.IntegrateAsync(_tempDir, force, CancellationToken.None);
+
+        File.Exists(script).Should().Be(!force);
+        if (force)
+        {
+            result.RemovedFiles.Should().Equal(script);
+        }
+        else
+        {
+            result.Notes.Should().Contain(note => note.Contains(script, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>A Claude Code settings file whose only hook runs the Python script.</summary>
+    private const string LegacyClaudeSettings = """
+        {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dotnet-to-dtk.py"}]}]}}
+        """;
+
+    [Fact]
+    public async Task IntegrateAsync_PythonRegistrationOnlyInSettingsLocal_KeepsTheScriptAndNamesThatFile()
+    {
+        // dtk merges only settings.json. Deleting the script settings.local.json still runs would make that
+        // hook's python3 exit 2, which Claude Code treats as blocking every Bash call.
+        var script = Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        var local = Path.Combine(_tempDir, ".claude", "settings.local.json");
+        await File.WriteAllTextAsync(local, LegacyClaudeSettings);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
         File.Exists(script).Should().BeTrue();
-        kept.Notes.Should().Contain(note => note.Contains(script, StringComparison.Ordinal));
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().ContainSingle(note => note.Contains(script, StringComparison.Ordinal))
+            .Which.Should().Contain(local);
+        (await File.ReadAllTextAsync(Path.Combine(_tempDir, ".claude", "settings.json"))).Should().Contain("dtk hook claude");
+        (await File.ReadAllTextAsync(local)).Should().Be(LegacyClaudeSettings, "dtk does not edit settings.local.json");
+    }
 
-        var forced = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
-        File.Exists(script).Should().BeFalse();
-        forced.RemovedFiles.Should().Equal(script);
+    [Fact]
+    public async Task IntegrateAsync_PythonRegistrationInBothSettingsFiles_MigratesSettingsJsonAndKeepsTheScript()
+    {
+        var script = Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        var settings = Path.Combine(_tempDir, ".claude", "settings.json");
+        var local = Path.Combine(_tempDir, ".claude", "settings.local.json");
+        await File.WriteAllTextAsync(settings, LegacyClaudeSettings);
+        await File.WriteAllTextAsync(local, LegacyClaudeSettings);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(settings)).Should().Contain("dtk hook claude").And.NotContain("python3");
+        File.Exists(script).Should().BeTrue();
+        result.Notes.Should().Contain(note => note.Contains(local, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_PythonRegistrationOnlyInHomeSettingsLocal_KeepsTheScript()
+    {
+        var script = Path.Combine(_isolatedHome, ".claude", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        await File.WriteAllTextAsync(Path.Combine(_isolatedHome, ".claude", "settings.local.json"), LegacyClaudeSettings);
+
+        var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        File.Exists(script).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_OrphanPythonScriptWithNoRegistration_IsKeptWithANote()
+    {
+        var script = Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+
+        var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+
+        File.Exists(script).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().ContainSingle(note => note.Contains(script, StringComparison.Ordinal))
+            .Which.Should().Contain("left in place");
     }
 
     [Fact]

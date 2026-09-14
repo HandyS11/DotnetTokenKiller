@@ -104,19 +104,43 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     {
         var hook = DescribeHooks(directory, scope)[0];
         var replaceable = await IsDtkRegistrationAsync(hook.RegistrationPath, cancellationToken).ConfigureAwait(false);
+        var ranLegacyScript = await MentionsLegacyScriptAsync(hook.RegistrationPath, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.WriteOwnedFileAsync(
             hook.RegistrationPath, BuildHookJson(hook.Command), replaceable, context, cancellationToken).ConfigureAwait(false);
 
         // A skipped registration may still run the Python script, and Copilot CLI denies the tool call when a
-        // hook fails, so the script goes only once the registration no longer needs it.
-        if (context.Skipped.Contains(hook.RegistrationPath))
+        // hook fails, so the script goes only once the registration no longer needs it — and no other hook
+        // file does either, since Copilot CLI loads every JSON file in the hooks directory.
+        var replacedLegacy = ranLegacyScript && !context.Skipped.Contains(hook.RegistrationPath);
+        var hooksDirectory = Path.GetDirectoryName(hook.RegistrationPath)!;
+        var hookFiles = Directory.Exists(hooksDirectory)
+            ? Directory.GetFiles(hooksDirectory, "*.json").Order(StringComparer.Ordinal).ToList()
+            : [];
+
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            hook.LegacyScriptPath, replacedLegacy, hookFiles, context, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Whether an existing registration file mentions the Python hook script, read before dtk rewrites it.</summary>
+    /// <param name="path">The registration file.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<bool> MentionsLegacyScriptAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
         {
-            return;
+            return false;
         }
 
-        await IntegratorHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath, context, cancellationToken)
-            .ConfigureAwait(false);
+        try
+        {
+            var content = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+            return content.Contains(IntegratorHelpers.LegacyHookScriptName, StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>

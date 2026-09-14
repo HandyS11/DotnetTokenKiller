@@ -305,7 +305,8 @@ internal static class IntegratorHelpers
     /// <param name="spec">Where and what to register.</param>
     /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    internal static Task WriteHookRegistrationAsync(
+    /// <returns>Whether the merge replaced or removed an entry running <see cref="LegacyHookScriptName"/>.</returns>
+    internal static Task<bool> WriteHookRegistrationAsync(
         HookRegistrationSpec spec, IntegrationContext context, CancellationToken cancellationToken) =>
         MergeJsonSettingsAsync(
             spec.SettingsPath,
@@ -326,8 +327,9 @@ internal static class IntegratorHelpers
     /// Proof is the same as for refreshing a generated artifact: the provenance stamp verifies, or the file is
     /// unstamped and carries <see cref="HookLegacySignature"/>. Anything else may hold the user's own changes,
     /// so it is kept with a note unless <c>--force</c> is set. The directory is removed when this empties it.
-    /// Call it only after the registration was written, so a settings file that fails to parse never costs
-    /// the user a working hook.
+    /// A script the file system refuses to delete is kept with a note rather than aborting the run, whose
+    /// registration is already migrated. Integrators call it through <see cref="RetireLegacyHookScriptAsync"/>,
+    /// which first establishes that nothing dtk can see still runs the script.
     /// </remarks>
     /// <param name="scriptPath">Where the Python script would be.</param>
     /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
@@ -348,20 +350,114 @@ internal static class IntegratorHelpers
 
         if (!writtenByDtk && !context.Force)
         {
+            // No --force hint: once this run has migrated the registration, a re-run has nothing left to migrate
+            // and never reaches this point, so only --force on the migrating run itself would have deleted it.
             context.Notes.Add(
                 $"{scriptPath} is no longer used: the hook now runs dtk directly. It differs from what dtk "
-                + "wrote, so it was left in place; delete it, or re-run with --force to remove it.");
+                + "wrote, so it was left in place; delete it once you have kept any changes you need.");
             return;
         }
 
-        File.Delete(scriptPath);
+        try
+        {
+            File.Delete(scriptPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            context.Notes.Add(
+                $"{scriptPath} is no longer used: the hook now runs dtk directly. It could not be deleted "
+                + $"({ex.Message}), so it was left in place; delete it yourself.");
+            return;
+        }
+
         context.Removed.Add(scriptPath);
 
         var directory = Path.GetDirectoryName(scriptPath);
-        if (directory is not null && !Directory.EnumerateFileSystemEntries(directory).Any())
+        try
         {
-            Directory.Delete(directory);
+            if (directory is not null && !Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                Directory.Delete(directory);
+            }
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The script is gone, which is what mattered. An empty directory that cannot be removed, or one
+            // that gained a file since it was listed, is left as it is.
+        }
+    }
+
+    /// <summary>
+    /// Deletes the Python hook script dtk installed before <c>dtk hook</c> only when nothing dtk can see can still
+    /// run it; otherwise keeps it with a note saying why.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A registration whose script is gone is worse than a stale one: <c>python3</c> on a missing file exits 2,
+    /// which Claude Code treats as blocking and Gemini CLI and Copilot CLI as a denied tool call. So the script
+    /// goes only when both hold:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><description>
+    ///     this run replaced a registration that ran it — evidence it was dtk's hook and that the harness has
+    ///     moved on — which a script with no registration at all never gives, even under <c>--force</c>;
+    ///   </description></item>
+    ///   <item><description>
+    ///     none of <paramref name="registrationFiles"/>, read after the registration was written, still mentions
+    ///     <see cref="LegacyHookScriptName"/>. A file that cannot be read may still run it.
+    ///   </description></item>
+    /// </list>
+    /// <para>Then <see cref="RemoveLegacyHookScriptAsync"/> decides whether dtk can prove it wrote the script.</para>
+    /// </remarks>
+    /// <param name="scriptPath">Where the Python script would be.</param>
+    /// <param name="replacedLegacyRegistration">Whether this run's registration write replaced an entry running the script.</param>
+    /// <param name="registrationFiles">
+    /// Every file beside the registration that the harness reads hooks from, the registration itself included.
+    /// </param>
+    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task RetireLegacyHookScriptAsync(
+        string scriptPath,
+        bool replacedLegacyRegistration,
+        IReadOnlyList<string> registrationFiles,
+        IntegrationContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(registrationFiles);
+
+        if (!File.Exists(scriptPath))
+        {
+            return;
+        }
+
+        foreach (var file in registrationFiles.Where(File.Exists))
+        {
+            var content = await TryReadExistingAsync(file, cancellationToken).ConfigureAwait(false);
+            if (content is null)
+            {
+                context.Notes.Add(
+                    $"{scriptPath} was left in place: {file} could not be read, so it may still run it. "
+                    + "Delete the script once no hook runs it.");
+                return;
+            }
+
+            if (content.Contains(LegacyHookScriptName, StringComparison.Ordinal))
+            {
+                context.Notes.Add(
+                    $"{scriptPath} was left in place: {file} still runs it. Delete the script once no hook there does.");
+                return;
+            }
+        }
+
+        if (!replacedLegacyRegistration)
+        {
+            context.Notes.Add(
+                $"{scriptPath} was left in place: no registration dtk updated ran it, so dtk cannot tell whether "
+                + "something else still does. Delete it if nothing runs it.");
+            return;
+        }
+
+        await RemoveLegacyHookScriptAsync(scriptPath, context, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -406,8 +502,12 @@ internal static class IntegratorHelpers
     /// <param name="hookCommand">The command string used to detect whether the hook is already registered.</param>
     /// <param name="context">Integration context carrying the result accumulators.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// Whether an entry running <see cref="LegacyHookScriptName"/> was upgraded in place or removed — the only
+    /// evidence a caller has that the Python script this registration ran is no longer needed by it.
+    /// </returns>
     /// <exception cref="InvalidOperationException">The settings file contains invalid JSON or an unexpected root type.</exception>
-    internal static async Task MergeJsonSettingsAsync(
+    internal static async Task<bool> MergeJsonSettingsAsync(
         string path,
         string hookEventKey,
         JsonObject hookEntry,
@@ -437,6 +537,8 @@ internal static class IntegratorHelpers
         };
 
         var matches = FindEquivalentEntries(hookArray, hookCommand);
+        var replacedLegacy = matches.Exists(
+            match => match["command"]!.GetValue<string>().Contains(LegacyHookScriptName, StringComparison.Ordinal));
 
         if (matches.Count == 0)
         {
@@ -447,7 +549,7 @@ internal static class IntegratorHelpers
         {
             // The only registration is already the identical current command: nothing to write.
             context.Unchanged.Add(path);
-            return;
+            return false;
         }
         else
         {
@@ -478,6 +580,7 @@ internal static class IntegratorHelpers
             cancellationToken).ConfigureAwait(false);
 
         (exists ? context.Updated : context.Created).Add(path);
+        return replacedLegacy;
     }
 
     /// <summary>

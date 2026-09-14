@@ -39,8 +39,9 @@ This creates two files:
 Re-running the command refreshes `SKILL.md` if dtk wrote it and leaves an edited copy alone unless you
 pass `--force`. `.claude/settings.json` is always merged: the hook entry is added if missing, and a
 registration from an older dtk that ran `dotnet-to-dtk.py` is replaced in place — never duplicated. The
-old `.claude/hooks/dotnet-to-dtk.py` is deleted when dtk can prove it wrote it; an edited copy is kept
-and reported, and `--force` deletes it too:
+old `.claude/hooks/dotnet-to-dtk.py` is deleted when that run replaced its registration, no hook in
+`.claude/settings.json` or `.claude/settings.local.json` still runs it, and dtk can prove it wrote it.
+Otherwise it is kept and a note says why; for an edited copy, `--force` on the migrating run deletes it too:
 
 ```sh
 dtk init claude --force
@@ -170,8 +171,10 @@ This creates two files:
 Re-running the command replaces `GEMINI.md`'s dtk section only with `--force`; without it, an
 existing `GEMINI.md` is left untouched. `.gemini/settings.json` is always merged: the hook entry
 is added if missing, and a registration from an older dtk that ran `dotnet-to-dtk.py` is replaced
-in place — never duplicated. The old `.gemini/hooks/dotnet-to-dtk.py` is deleted when dtk can
-prove it wrote it; an edited copy is kept and reported, and `--force` deletes it too:
+in place — never duplicated. The old `.gemini/hooks/dotnet-to-dtk.py` is deleted when that run
+replaced its registration, no hook left in `.gemini/settings.json` still runs it, and dtk can prove it
+wrote it. Otherwise it is kept and a note says why; for an edited copy, `--force` on the migrating run
+deletes it too:
 
 ```sh
 dtk init gemini --force

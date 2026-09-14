@@ -90,12 +90,12 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
 
-        await IntegratorHelpers.WriteHookRegistrationAsync(
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
             new HookRegistrationSpec(hook.RegistrationPath, "BeforeTool", "run_shell_command", hook.Command),
             context, cancellationToken).ConfigureAwait(false);
 
-        await IntegratorHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath, context, cancellationToken)
-            .ConfigureAwait(false);
+        await IntegratorHelpers.RetireLegacyHookScriptAsync(
+            hook.LegacyScriptPath, replacedLegacy, [hook.RegistrationPath], context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
