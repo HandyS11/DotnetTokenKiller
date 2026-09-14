@@ -28,8 +28,16 @@ log="$(cd "$(dirname "$log")" && pwd)/$(basename "$log")"
 dotnet build DotnetTokenKiller.slnx -c Release -p:Version="$version"
 
 # The native binary. AotWarningLogTests reads this log: its IL warnings must be exactly Spectre's three.
+# MSBuild's file logger takes a native path: $log is POSIX (from `pwd`), and Git Bash's MSYS argument
+# conversion skips any argument containing a `;` (it looks like a Windows path list), so an unconverted
+# POSIX path here would resolve against the drive root instead of $log.
+log_arg=$log
+if command -v cygpath >/dev/null 2>&1; then
+    log_arg=$(cygpath -w "$log")
+fi
 dotnet publish src/DotnetTokenKiller.Cli -c Release -r win-x64 -p:Version="$version" -o "$publish" \
-    "-flp:LogFile=$log;Verbosity=minimal"
+    "-flp:LogFile=$log_arg;Verbosity=minimal"
+[ -s "$log" ] || { echo "pack-windows.sh: expected the publish log at $log" >&2; exit 1; }
 exe="$publish/dtk.exe"
 if [ ! -f "$exe" ]; then
     echo "pack-windows.sh: expected $exe" >&2

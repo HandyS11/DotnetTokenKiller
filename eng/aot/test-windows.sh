@@ -120,8 +120,25 @@ time_runs() {
         i=$((i + 1))
     done | median_ms
 }
-echo "win-x64 shim: --version median $(time_runs "$shim" --version) ms"
-echo "win-x64 shim: pipe build median $(STDIN_FILE=$fixture time_runs "$shim" pipe build --exit-code 1) ms"
+# Every sample above also pays for Git Bash's emulated fork/exec of the target and a full msys process
+# start for the second `date`, tens of milliseconds on a Windows runner that can swamp a ~12 ms dtk.
+# hostname.exe takes no arguments Git Bash would rewrite, so timing it the same way isolates that
+# overhead; the *difference* below is the figure to compare with Linux measurements, since Git Bash's
+# fork/exec and `date` costs are in both samples.
+baseline_exe="$(cygpath -u "$SYSTEMROOT")/System32/hostname.exe"
+baseline_noinput=$(time_runs "$baseline_exe")
+baseline_stdin=$(STDIN_FILE=$fixture time_runs "$baseline_exe")
+
+report_timing() {
+    label=$1
+    median=$2
+    baseline=$3
+    diff=$(awk -v a="$median" -v b="$baseline" 'BEGIN { printf "%.1f", a - b }')
+    echo "$label median $median ms (process-start baseline $baseline ms, difference $diff ms)"
+}
+
+report_timing "win-x64 shim: --version" "$(time_runs "$shim" --version)" "$baseline_noinput"
+report_timing "win-x64 shim: pipe build" "$(STDIN_FILE=$fixture time_runs "$shim" pipe build --exit-code 1)" "$baseline_stdin"
 
 if [ "$compare_any" = "--compare-any" ]; then
     any_feed="$feed-any"
@@ -134,8 +151,8 @@ if [ "$compare_any" = "--compare-any" ]; then
     write_config "$any_config" "$(basename "$any_feed")"
     rm -rf "$nuget/dotnettokenkiller/$version_lower"
     dotnet tool install --tool-path "$any_tools" --configfile "$any_config" DotnetTokenKiller --version "$version"
-    echo "any package: --version median $(time_runs "$any_tools/dtk.exe" --version) ms"
-    echo "any package: pipe build median $(STDIN_FILE=$fixture time_runs "$any_tools/dtk.exe" pipe build --exit-code 1) ms"
+    report_timing "any package: --version" "$(time_runs "$any_tools/dtk.exe" --version)" "$baseline_noinput"
+    report_timing "any package: pipe build" "$(STDIN_FILE=$fixture time_runs "$any_tools/dtk.exe" pipe build --exit-code 1)" "$baseline_stdin"
 fi
 
 if [ -n "${GITHUB_ENV:-}" ]; then
