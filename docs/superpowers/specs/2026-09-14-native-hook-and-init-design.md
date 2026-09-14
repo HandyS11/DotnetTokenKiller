@@ -10,8 +10,9 @@ Replace the generated Python hook scripts with a native `dtk hook <provider>` su
 The three hook-capable integrations — Claude Code, Gemini CLI and GitHub Copilot CLI — each install a
 Python script generated from `HookScriptTemplates` and register it as `python3 …/dotnet-to-dtk.py`.
 That needs a Python on `PATH` under the name `python3` (Windows users are told to hand-edit it to
-`python`), and the Gemini registration cannot work on Windows at all: Gemini CLI runs hook commands
-through PowerShell there, where `"$GEMINI_PROJECT_DIR"` is not an environment variable reference.
+`python`), and when it is missing the Gemini integration does worse than not rewriting: Gemini CLI
+denies any `BeforeTool` call whose hook exits with a code other than 0 or 1, so the shell's 127 blocks
+every shell command (verified against Gemini CLI 0.59.0, see *Resolved questions*).
 
 A POSIX sh script was considered and rejected (see *Research*): sh cannot parse JSON without `jq`, Git
 for Windows does not ship `jq`, and most harnesses run hooks through PowerShell or `cmd` on Windows.
@@ -39,11 +40,11 @@ commands are rewritten (the rewrite semantics are ported, not redesigned).
 
 How each current harness executes a hook command:
 
-| Harness | Linux/macOS | Windows | Rewrite contract |
-|---|---|---|---|
-| Claude Code | `sh -c` | Git Bash (PowerShell fallback) | `hookSpecificOutput.updatedInput` |
-| Gemini CLI | `bash -c` | PowerShell (`-NoProfile -Command`) | `hookSpecificOutput.tool_input` |
-| Copilot CLI | `bash` field | `powershell` field | `permissionDecision` + `modifiedArgs`; non-zero exit **denies** |
+| Harness | Linux/macOS | Windows | Rewrite contract | Hook exits non-zero |
+|---|---|---|---|---|
+| Claude Code | `sh -c` | Git Bash (PowerShell when Git Bash is absent) | `hookSpecificOutput.updatedInput` | 2 blocks; any other code, including 127, is a non-blocking notice |
+| Gemini CLI | `bash -c` | `pwsh.exe -NoProfile -Command`, else `powershell.exe -NoProfile -NonInteractive -Command` | `hookSpecificOutput.tool_input` | 1 allows with a warning; **any other code, including 127, denies** |
+| Copilot CLI | `bash` field | `powershell` field | `permissionDecision` + `modifiedArgs` | **any code but 2 denies**; 2 denies too; a timeout allows |
 
 Sources: [Claude Code hooks](https://code.claude.com/docs/en/hooks),
 [Gemini hookRunner](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/hooks/hookRunner.ts),
@@ -67,9 +68,11 @@ which is intended: only harnesses call it.
 
 `HookEntryPoint` does I/O only:
 
-- Reads stdin as bytes (`Console.OpenStandardInput`) and parses it as UTF-8 JSON, and writes stdout as
-  UTF-8 bytes. It never goes through `Console.In`, whose Windows encoding is the OEM code page and would
-  corrupt a command containing non-ASCII text when the rewrite round-trips it.
+- Reads stdin as bytes (`Console.OpenStandardInput`) and parses it as UTF-8 JSON, skipping a leading
+  UTF-8 BOM, and writes stdout as UTF-8 bytes. It never goes through `Console.In`, whose Windows
+  encoding is the OEM code page and would corrupt a command containing non-ASCII text when the rewrite
+  round-trips it. The BOM is tolerated because Windows PowerShell 5.1 inserts one whenever it pipes
+  text into a native command ([jin-bo/agentao#223](https://github.com/jin-bo/agentao/pull/223)).
 - When stdin is not redirected (a person typed `dtk hook claude`), prints a one-line usage to stderr and
   exits 0 without waiting.
 - Unknown or missing provider: one line to stderr, exit 0.
@@ -137,17 +140,23 @@ is path-rooted any more:
 | Provider | Registration file (project / `--global`) | Entry |
 |---|---|---|
 | `claude` | `.claude/settings.json` / `~/.claude/settings.json` | `PreToolUse`, matcher `Bash`, command `dtk hook claude` |
-| `gemini` | `.gemini/settings.json` / `~/.gemini/settings.json` | `BeforeTool`, matcher `run_shell_command`, command `dtk hook gemini` |
+| `gemini` | `.gemini/settings.json` / `~/.gemini/settings.json` | `BeforeTool`, matcher `run_shell_command`, command `dtk hook gemini; exit 0` |
 | `copilot-cli` | `.github/hooks/dtk-dotnet.json` / `~/.copilot/hooks/dtk-dotnet.json` | see below |
 
-Claude and Gemini get the bare command so it parses identically under sh, bash, Git Bash and
-PowerShell. If `dtk` is missing from `PATH`, Claude Code documents a non-zero exit other than 2 as a
-non-blocking hook error and runs the command unrewritten; Gemini CLI is expected to do the same, and
-that is confirmed during implementation (open question 3). If it blocks instead, Gemini gets the same
-guards as Copilot.
+A project registration is committed and shared across operating systems, so one command string must
+behave under bash, Git Bash, PowerShell 7 and Windows PowerShell 5.1. `A; exit 0` is valid in all of
+them; `A || true` is not valid in Windows PowerShell 5.1.
 
-Copilot CLI denies the tool call on a non-zero exit, so a missing `dtk` would block every bash call.
-Its registration guards both shells and drops the now-meaningless `cwd`:
+- **Claude Code** gets the bare command. If `dtk` is missing, Claude Code shows the shell's
+  "not found" as a non-blocking notice and runs the command unrewritten, which is the most visible
+  safe failure; a guard would exit 0 and hide it.
+- **Gemini CLI** must be guarded: a bare command with `dtk` missing exits 127 under bash and Gemini
+  denies the call. With `; exit 0` it allows the call and surfaces the shell's "not found" text as a
+  warning (both verified by running Gemini's `HookRunner`). Under PowerShell, Gemini appends
+  `; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }`, which never runs after `exit 0`.
+- **Copilot CLI** denies on any non-zero exit, so it gets the same guard in both shell fields, and the
+  now-meaningless `cwd` is dropped. The explicit `bash`/`powershell` pair is kept rather than the newer
+  cross-platform `command` field, which older Copilot CLI versions do not read:
 
 ```json
 {
@@ -157,7 +166,7 @@ Its registration guards both shells and drops the now-meaningless `cwd`:
       {
         "type": "command",
         "matcher": "bash",
-        "bash": "dtk hook copilot-cli || true",
+        "bash": "dtk hook copilot-cli; exit 0",
         "powershell": "dtk hook copilot-cli; exit 0",
         "timeoutSec": 10
       }
@@ -254,23 +263,47 @@ text changes).
   `dtk-dotnet.json`), including the modified-script, `--force` and malformed-settings cases.
 - **`doctor` tests** for each status above and each probe failure.
 - **Windows:** `eng/aot/test-windows.sh` and the `fallback-package.yml` Windows job pipe a payload
-  through the installed tool as each harness would: `dtk hook claude` from Git Bash,
-  `pwsh -NoProfile -Command "dtk hook gemini"` and `powershell -NoProfile -Command "dtk hook gemini"`
-  with stdin redirected, and both Copilot guard commands, including a `PATH` without `dtk` exiting 0.
-  This settles the open question below.
+  through the installed tool exactly as each harness would, and assert the rewrite on stdout:
+  `bash -c "dtk hook claude"` from Git Bash; Gemini's two argv forms,
+  `pwsh -NoProfile -Command "dtk hook gemini; exit 0; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"`
+  and the same through `powershell.exe -NoProfile -NonInteractive -Command`; and Copilot's
+  `dtk hook copilot-cli; exit 0` through both PowerShells. Each guarded form also runs with `dtk`
+  removed from `PATH` and must exit 0. The `powershell.exe` runs are the gate for Windows PowerShell
+  5.1's stdin behavior, the one question that cannot be settled off Windows (see below).
 - `SavingsBaselineTests` is unaffected (no filter changes).
 
-## Open questions resolved during implementation
+## Resolved questions (2026-09-14)
 
-1. **Does a native command launched by `powershell -Command "dtk …"` receive the redirected stdin?**
-   Gemini on Windows and Copilot's `powershell` field depend on it. Verified by the Windows tests above;
-   if it does not hold, the PowerShell forms pipe `$input` explicitly (`$input | dtk hook gemini`), and
-   the spec is amended.
-2. **Claude Code and Gemini with the same hook in project and global settings.** Both invocations now
-   run the same command and produce the same output, so the result is correct either way; whether the
-   harness deduplicates it only affects latency. Checked against the harness docs, not tested.
-3. **Does Gemini CLI run the tool call when its hook command exits non-zero (other than 2)?** Checked
-   against `hookRunner.ts`; see section 3 for the fallback.
+Checked against `@google/gemini-cli-core` 0.59.0 and `@github/copilot` 1.0.83 from npm, PowerShell 7.6.6
+(in `mcr.microsoft.com/dotnet/sdk:10.0-alpine`), and the current Claude Code and Copilot CLI hook docs.
+
+1. **Does a native command started by PowerShell `-Command` receive the hook payload on stdin?**
+   - PowerShell 7.6: yes, byte-exact. Fed through a pipe with Gemini's exact argv
+     (`-NoProfile -NonInteractive -Command "<cmd>; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"`),
+     `/bin/cat` and `wc -c` received all 44 bytes of a payload containing `é`: no BOM, no added newline,
+     so the child inherits the pipe rather than receiving re-encoded pipeline text.
+   - Why: PowerShell 7's `NativeCommandProcessor.CalculateIORedirection` sets
+     `redirectInput = this.Command.MyInvocation.ExpectingInput`, so a native command without pipeline
+     input inherits the PowerShell process's stdin.
+   - Windows PowerShell 5.1: cannot run off Windows, and its source is not public, so it is not
+     verified here. PowerShell 6 was open-sourced from the 5.1 engine, so the same result is expected,
+     not proven. The `powershell.exe` runs in *Testing* are the gate. If they fail, the PowerShell forms become `$input | dtk hook <provider>`, which works but
+     makes 5.1 prepend a BOM — already tolerated by `HookEntryPoint`.
+2. **The same hook registered in project and global settings.**
+   - Claude Code runs a handler defined in more than one settings file once (hook docs).
+   - Gemini CLI deduplicates hooks whose `name` + `command` match (`hookPlanner.js`). Today's project
+     and global Python commands differ (`$GEMINI_PROJECT_DIR` vs `$HOME`), so both run; the new
+     identical commands will run once.
+   - Copilot CLI runs every entry from every source (hooks configuration reference), so both run.
+     Each rewrites the original command identically, and the second sees `dtk dotnet …` already
+     prefixed if applied in sequence, so the result is the same. Only latency is affected.
+3. **What each harness does when the hook exits non-zero.** See the table in *Research summary*.
+   Gemini's behavior was verified by running its `HookRunner` and `HookAggregator` on bash:
+   `nosuchdtk hook gemini` → exit 127, decision `deny`; `nosuchdtk hook gemini; exit 0` → exit 0,
+   decision `allow`, warning `bash: line 1: nosuchdtk: command not found`; a stand-in `dtk` printing
+   the rewrite payload → decision `allow` with the rewritten `tool_input`. Also observed: Gemini expands
+   `$GEMINI_PROJECT_DIR` in the command string itself before running it, so today's registration path
+   does resolve under PowerShell; Windows users' problem is `python3`, not the path.
 
 ## Acceptance
 
