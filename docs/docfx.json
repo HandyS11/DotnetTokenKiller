@@ -65,7 +65,7 @@
       "_gitContribute": {
         "repo": "https://github.com/HandyS11/DotnetTokenKiller",
         "branch": "develop",
-        "apiSpecFolder": "docfx/api"
+        "apiSpecFolder": "docs/api"
       },
       "pdf": false
     },
