@@ -4,7 +4,7 @@ Each supported agent gets a hook that rewrites `dotnet …` to `dtk dotnet …` 
 
 > [!NOTE]
 > The hooks run `dtk hook <provider>`, so the agent only needs `dtk` on its `PATH` — no Python, no `jq`,
-> and the same registration works from sh, bash, Git Bash, PowerShell and cmd.
+> and the same registration works from sh, bash, Git Bash and PowerShell.
 
 ## Installing globally
 

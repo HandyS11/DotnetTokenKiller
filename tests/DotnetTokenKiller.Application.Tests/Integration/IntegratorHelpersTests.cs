@@ -1478,7 +1478,7 @@ public sealed class IntegratorHelpersTests : IDisposable
     {
         // Same hazard as WriteFileAsync: dtk cannot prove authorship of an artifact it cannot read,
         // so it must never be refreshed or reported Unchanged, and the read failure must not crash
-        // the whole 'dtk integrate' run. An exclusive lock held from within this process is used
+        // the whole 'dtk init' run. An exclusive lock held from within this process is used
         // rather than chmod, since chmod-based "unreadable" files are not reliably unreadable when
         // tests run as root.
         var path = Path.Combine(_tempDir, "hook.py");

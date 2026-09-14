@@ -115,7 +115,7 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
     /// <c>.aider.conf.yml</c> without the dtk <c>read:</c> key) might never have been functionally
     /// integrated — the CLI cannot tell that apart from a file that already carries dtk's exact
     /// managed content, so without <c>--force</c> it must never claim "Done" or "Already
-    /// integrated". A generated artifact (a generated skill file, <c>SKILL.md</c>) that is already
+    /// integrated". A generated artifact such as the skill file <c>SKILL.md</c> that is already
     /// byte-identical to the current stamped template, and a settings merge whose hook entry is
     /// already registered, both arrive in <see cref="IntegrationResult.UnchangedFiles"/> rather
     /// than <see cref="IntegrationResult.SkippedFiles"/> — dtk can prove nothing needs to change

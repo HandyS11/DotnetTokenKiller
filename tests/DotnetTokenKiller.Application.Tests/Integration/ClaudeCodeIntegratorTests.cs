@@ -317,7 +317,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         // Exactly this repo's own committed .claude/settings.json, whose hook command was
         // hand-edited in #120 to quote the whole path instead of just the env-var segment. This is
         // the real-world file that exposed the duplicate-entry, \uXXXX-escaping and
-        // missing-final-newline bugs when 'dtk integrate claude' merged into it.
+        // missing-final-newline bugs when 'dtk init claude' merged into it.
         var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
         Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         await File.WriteAllTextAsync(settingsPath,
