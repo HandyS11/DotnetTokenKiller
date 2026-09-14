@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
@@ -68,11 +69,24 @@ public sealed class FilteredRunUseCase(
             .BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false);
 #pragma warning restore CA2007
 
-        // Both sinks are the same writer: it serialises the two concurrent pumps internally, and
-        // interleaving stdout and stderr by arrival is a truer record than concatenating them.
+        // Tracking counts stdout while the child streams it; stderr, usually empty for dotnet, is
+        // appended when the child exits. The counter relies on the runner writing to the stdout
+        // sink exactly the text it returns as StdOut, which ProcessCommandRunner's pump guarantees.
+        var counter = prepared.Config.Tracking.Enabled
+            ? new ChunkedTokenCounter(prepared.Config.Tracking.Tokenizer)
+            : null;
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var countingSink = counter is null ? null : new CountingTextWriter(session.Writer, counter);
+#pragma warning restore CA2007
+        var stdOutSink = countingSink ?? session.Writer;
+
         var result = await commandRunner
-            .RunStreamedAsync(command, args, session.Writer, session.Writer, cancellationToken)
+            .RunStreamedAsync(command, args, stdOutSink, session.Writer, cancellationToken)
             .ConfigureAwait(false);
+
+        // RunStreamedAsync awaits both pumps before returning, so both have finished writing by now:
+        // appending after Finish would throw, but nothing more will be appended.
+        counter?.Finish(result.StdErr);
 
         var request = new FilteredOutputRequest(
             filter,
@@ -82,7 +96,10 @@ public sealed class FilteredRunUseCase(
             displayCommandLine,
             RunSource.Run,
             options,
-            startTimestamp);
+            startTimestamp)
+        {
+            InputTokenCounter = counter
+        };
 
         return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
     }

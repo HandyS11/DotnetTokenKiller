@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text;
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
@@ -36,7 +38,11 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
 
         // Before reading stdin, so setup overlaps a slow producer on the other end of the pipe.
         var prepared = await pipeline.BeginAsync(cancellationToken).ConfigureAwait(false);
-        var raw = await input.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        var counter = prepared.Config.Tracking.Enabled
+            ? new ChunkedTokenCounter(prepared.Config.Tracking.Tokenizer)
+            : null;
+        var raw = await ReadAllAsync(input, counter, cancellationToken).ConfigureAwait(false);
+        counter?.Finish(string.Empty);
 
         // Piped input is read to completion before anything can be written, so this path gains no
         // durability. It uses the session API so the header format and the retention rules have a
@@ -63,8 +69,31 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             displayCommandLine,
             RunSource.Pipe,
             options.Normalized(),
-            startTimestamp);
+            startTimestamp)
+        {
+            InputTokenCounter = counter
+        };
 
         return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
+    }
+
+    private const int ReadBlockChars = 64 * 1024;
+
+    /// <summary>Reads stdin to the end in blocks, feeding each to the counter as it arrives.</summary>
+    /// <param name="input">The text reader supplying the piped output.</param>
+    /// <param name="counter">The run's counter, or <see langword="null"/> when tracking is disabled.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private static async Task<string> ReadAllAsync(TextReader input, ChunkedTokenCounter? counter, CancellationToken cancellationToken)
+    {
+        var buffer = new char[ReadBlockChars];
+        var raw = new StringBuilder();
+        int read;
+        while ((read = await input.ReadAsync(buffer.AsMemory(), cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            raw.Append(buffer, 0, read);
+            counter?.Append(buffer.AsSpan(0, read));
+        }
+
+        return raw.ToString();
     }
 }

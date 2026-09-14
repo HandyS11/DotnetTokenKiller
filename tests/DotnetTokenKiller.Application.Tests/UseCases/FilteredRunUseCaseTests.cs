@@ -1,4 +1,6 @@
+using System.Text;
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
@@ -40,6 +42,40 @@ public class FilteredRunUseCaseTests
         session.Writer.Returns(TextWriter.Null);
         session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(finalizeHint);
         return session;
+    }
+
+    /// <summary>
+    /// Stubs the runner to write <paramref name="stdout"/>'s lines to whatever stdout sink it is
+    /// given, the way <c>ProcessCommandRunner.PumpAsync</c> does, and returns the
+    /// <see cref="StringBuilder"/> that accumulates the text actually written — using the sink's own
+    /// <see cref="TextWriter.NewLine"/>, not a hardcoded "\n", so the returned text matches what a
+    /// <see cref="DotnetTokenKiller.Application.Helpers.CountingTextWriter"/> would have fed the
+    /// counter even where <see cref="Environment.NewLine"/> is "\r\n". Read it only after awaiting
+    /// the run: it is filled in as the stubbed call executes.
+    /// </summary>
+    /// <param name="stdout">The lines to write to the stdout sink, separated by "\n".</param>
+    /// <param name="stderr">The stderr text <see cref="CommandResult"/> reports.</param>
+    /// <param name="actualStdout">Filled in with the text actually written, using the sink's <see cref="TextWriter.NewLine"/>.</param>
+    /// <param name="exitCode">The exit code <see cref="CommandResult"/> reports.</param>
+    /// <param name="onSinksUsed">Invoked with the stdout and stderr sinks the runner was given, so a caller can inspect their concrete type outside an expression tree.</param>
+    private void RunnerWrites(
+        string stdout, string stderr, StringBuilder actualStdout, int exitCode = 0, Action<TextWriter, TextWriter>? onSinksUsed = null)
+    {
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var sink = call.ArgAt<TextWriter>(2);
+                onSinksUsed?.Invoke(sink, call.ArgAt<TextWriter>(3));
+                foreach (var line in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    await sink.WriteLineAsync(line.AsMemory(), CancellationToken.None);
+                    await sink.FlushAsync(CancellationToken.None);
+                    actualStdout.Append(line).Append(sink.NewLine);
+                }
+
+                return new CommandResult(actualStdout.ToString(), stderr, exitCode);
+            });
     }
 
     [Fact]
@@ -204,10 +240,13 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsCorrectTokenCounts_AfterSuccessfulExecution()
     {
-        // tiktoken cl100k_base: "1234567890123456" = 6 tokens; "1234" = 2 tokens; saved = 4
-        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
-                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(new CommandResult("1234567890123456", "", 0));
+        // The stdout sink now sees the raw text through CountingTextWriter, which (like the real
+        // pump) appends a trailing newline after the last line, so tiktoken cl100k_base counts the
+        // sixteen digits plus that newline as 7 tokens, one more than the digits alone. The filter's
+        // output is never written to a sink, so it is still counted at 2 tokens as before, giving a
+        // saved count of 5.
+        var actualStdout = new StringBuilder();
+        RunnerWrites("1234567890123456", "", actualStdout);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234");
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
@@ -215,9 +254,9 @@ public class FilteredRunUseCaseTests
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
                 r.Command == "build" &&
-                r.InputTokens == 6 &&
+                r.InputTokens == 7 &&
                 r.OutputTokens == 2 &&
-                r.SavedTokens == 4),
+                r.SavedTokens == 5),
             Arg.Any<CancellationToken>());
     }
 
@@ -254,19 +293,21 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_RecordsNegativeSavedTokens_WhenFilterExpandsOutput()
     {
-        // tiktoken cl100k_base: "1234" = 2 tokens; filter returns "1234567890123456" = 6 tokens; saved = -4
-        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
-                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(new CommandResult("1234", "", 0));
+        // The stdout sink now sees the raw text through CountingTextWriter, which (like the real
+        // pump) appends a trailing newline after the last line: tiktoken cl100k_base counts "1234\n"
+        // as 3 tokens (not 2, as the newline-less literal alone would be); the filter returns
+        // "1234567890123456" (never written to a sink) at 6 tokens; saved = -3.
+        var actualStdout = new StringBuilder();
+        RunnerWrites("1234", "", actualStdout);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234567890123456");
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r.InputTokens == 2 &&
+                r.InputTokens == 3 &&
                 r.OutputTokens == 6 &&
-                r.SavedTokens == -4 &&
+                r.SavedTokens == -3 &&
                 r.SavingsPercentage < 0),
             Arg.Any<CancellationToken>());
     }
@@ -483,20 +524,22 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_VerifiesSavingsPercentageCalculation()
     {
         // Kills arithmetic mutations: savedTokens / inputTokens * 100.0 (line 146)
-        // "Hello world" = 2 tokens; "Hello" = 1 token; saved = 1; pct = 50%
-        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
-                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(new CommandResult("Hello world", "", 0));
+        // The stdout sink now sees the raw text through CountingTextWriter, which (like the real
+        // pump) appends a trailing newline after the last line: tiktoken cl100k_base counts
+        // "Hello world\n" as 3 tokens (not 2, as the newline-less literal alone would be); "Hello"
+        // (the filter's output, never written to a sink) is still 1 token; saved = 2; pct = 66.67%.
+        var actualStdout = new StringBuilder();
+        RunnerWrites("Hello world", "", actualStdout);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("Hello");
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
-                r.InputTokens == 2 &&
+                r.InputTokens == 3 &&
                 r.OutputTokens == 1 &&
-                r.SavedTokens == 1 &&
-                Math.Abs(r.SavingsPercentage - 50.0) < 0.01),
+                r.SavedTokens == 2 &&
+                Math.Abs(r.SavingsPercentage - (200.0 / 3.0)) < 0.01),
             Arg.Any<CancellationToken>());
     }
 
@@ -1063,6 +1106,42 @@ public class FilteredRunUseCaseTests
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Command == "list package"),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_TrackingOn_CountsStdoutAsItStreamsAndStderrAtTheEnd()
+    {
+        const string stderr = "warning: stderr\n";
+        var actualStdout = new StringBuilder();
+        TextWriter? stdOutSink = null;
+        TextWriter? stdErrSink = null;
+        RunnerWrites("first line\nsecond line\n", stderr, actualStdout,
+            onSinksUsed: (o, e) => { stdOutSink = o; stdErrSink = e; });
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        var expected = TokenEstimator.Estimate(actualStdout + stderr);
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.InputTokens == expected), Arg.Any<CancellationToken>());
+        stdOutSink.Should().BeOfType<CountingTextWriter>();
+        stdErrSink.Should().NotBeOfType<CountingTextWriter>();
+    }
+
+    [Fact]
+    public async Task RunAsync_TrackingOff_PassesTheSessionWriterThrough()
+    {
+        var config = new DtkConfig(
+            new TrackingConfig(false, 90, null, TokenizerModel.Cl100kBase), DtkConfig.Default.Display, DtkConfig.Default.Tee);
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
+        RunnerWrites("out\n", "", new StringBuilder());
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+
+        await _runner.Received(1).RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+            Arg.Is<TextWriter>(w => ReferenceEquals(w, TextWriter.Null)), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
