@@ -5,11 +5,26 @@ using Microsoft.Data.Sqlite;
 namespace DotnetTokenKiller.Infrastructure.Tracking;
 
 /// <summary>Persists command tracking records in a SQLite database.</summary>
+/// <remarks>
+/// On a file data source a tracked run never opens SQLite: <see cref="RecordAsync"/> writes one file
+/// to the pending-record journal (<c>pending</c> beside the database), and every reader, as well as
+/// <see cref="CleanupAsync"/>, folds the journal into the database before it queries, so what it
+/// returns includes every run that has finished. Retention runs when the database is initialized
+/// and at fold time. An in-memory data source has no directory to journal into, so there
+/// <see cref="RecordAsync"/> inserts directly.
+/// </remarks>
 /// <param name="connectionString">The SQLite connection string.</param>
 /// <param name="defaultRetentionDays">Number of days to retain records before automatic cleanup.</param>
-public sealed class SqliteTracker(string connectionString, int defaultRetentionDays = 90)
+/// <param name="foldThreshold">Pending runs at which <see cref="WarmUpAsync"/> starts a background fold.</param>
+public sealed class SqliteTracker(
+    string connectionString,
+    int defaultRetentionDays = 90,
+    int foldThreshold = SqliteTracker.DefaultFoldThreshold)
     : ITracker, IDisposable, IAsyncDisposable
 {
+    /// <summary>Pending runs at which a warm-up folds the journal in the background, so it never grows unbounded.</summary>
+    public const int DefaultFoldThreshold = 64;
+
     private const int HistoryLimit = 500;
 
     /// <summary>
@@ -19,15 +34,18 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     private static readonly string CountedInSavingsSqlList =
         string.Join(", ", RunOutcomes.CountedInSavings.Select(o => $"'{o}'"));
 
+    private readonly PendingRecordJournal? _journal = CreateJournal(connectionString);
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private Task? _backgroundFold;
     private SqliteConnection? _connection;
     private bool _disposed;
     private bool _initialized;
 
     /// <summary>Asynchronously releases managed resources.</summary>
     /// <remarks>
-    /// Takes the semaphore first, so an initialization still running on a background thread (a
-    /// warm-up that outlived its run) finishes before its connection is disposed.
+    /// Waits for a fold that <see cref="WarmUpAsync"/> started in the background, then takes the
+    /// semaphore, so an initialization still running on a background thread (a warm-up that outlived
+    /// its run) finishes before its connection is disposed.
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
@@ -36,6 +54,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
             return;
         }
 
+        await BackgroundFoldAsync().ConfigureAwait(false);
         await _semaphore.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -79,35 +98,27 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// On a file data source this writes one journal file and touches nothing else: no connection,
+    /// no statement, no fsync. The next read folds it into the database. An in-memory data source
+    /// inserts the row directly.
+    /// </remarks>
     public async Task RecordAsync(CommandRecord record, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(record);
+
+        if (_journal is { } journal)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            await journal.WriteAsync(record, cancellationToken).ConfigureAwait(false);
+            return;
+        }
 
         await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = CreateCommand();
-#pragma warning restore CA2007
-            cmd.CommandText = """
-                              INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
-                                  saved_tokens, savings_percentage, execution_time_ms, success, outcome, source)
-                              VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success, @outcome, @source)
-                              """;
-            cmd.Parameters.AddWithValue("@ts",
-                record.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
-            cmd.Parameters.AddWithValue("@cmd", record.Command);
-            cmd.Parameters.AddWithValue("@path", record.ProjectPath);
-            cmd.Parameters.AddWithValue("@in", record.InputTokens);
-            cmd.Parameters.AddWithValue("@out", record.OutputTokens);
-            cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
-            cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
-            cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
-            cmd.Parameters.AddWithValue("@success", record.Success ? 1 : 0);
-            cmd.Parameters.AddWithValue("@outcome", record.Outcome.ToString());
-            cmd.Parameters.AddWithValue("@source", record.Source.ToString());
-            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await InsertAsync(record, null, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -116,16 +127,38 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// On a file data source this creates the journal directory and, once at least the fold
+    /// threshold of runs wait in it, starts folding them on the thread pool without awaiting the
+    /// fold; <see cref="DisposeAsync"/> waits for it. It opens no connection itself. An in-memory
+    /// data source opens its connection and creates the schema.
+    /// </remarks>
     public async Task WarmUpAsync(CancellationToken cancellationToken = default)
     {
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        if (_journal is not { } journal)
         {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+
+            return;
         }
-        finally
+
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        Directory.CreateDirectory(journal.Root);
+
+        // The journal folds itself on read; this keeps it bounded for a user who never reads. The
+        // fold's SQLite setup, inserts and fsync run while the child does, and RecordAsync never
+        // waits for it: an aborted fold is refolded next time (see PendingRecordJournal.FoldAsync).
+        if (journal.Count() >= foldThreshold)
         {
-            _semaphore.Release();
+            _backgroundFold = Task.Run(() => FoldInBackgroundAsync(cancellationToken), CancellationToken.None);
         }
     }
 
@@ -209,7 +242,8 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            await CleanupCoreAsync(retentionDays, cancellationToken).ConfigureAwait(false);
+            await FoldLockedAsync(wait: true, cancellationToken).ConfigureAwait(false);
+            await CleanupCoreAsync(retentionDays, null, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -218,6 +252,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
     }
 
     /// <inheritdoc/>
+    /// <remarks>Also deletes the runs still waiting in the journal and the record of past folds.</remarks>
     public async Task ResetAsync(CancellationToken cancellationToken = default)
     {
         await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -227,8 +262,9 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
             await using var cmd = CreateCommand();
 #pragma warning restore CA2007
-            cmd.CommandText = "DELETE FROM commands";
+            cmd.CommandText = "DELETE FROM commands; DELETE FROM folds";
             await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            _journal?.Clear();
         }
         finally
         {
@@ -264,6 +300,135 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         }
     }
 
+    /// <summary>The journal beside the database file, or <see langword="null"/> for an in-memory database.</summary>
+    /// <param name="cs">The SQLite connection string.</param>
+    private static PendingRecordJournal? CreateJournal(string cs)
+    {
+        if (cs.Contains(":memory:", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var csb = new SqliteConnectionStringBuilder(cs);
+        if (string.IsNullOrWhiteSpace(csb.DataSource) || csb.DataSource == ":memory:")
+        {
+            return null;
+        }
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(csb.DataSource)) ?? Environment.CurrentDirectory;
+        return new PendingRecordJournal(Path.Combine(directory, "pending"));
+    }
+
+    private async Task FoldInBackgroundAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await FoldAsync(wait: false, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Intentional: best effort; the next read folds what this one did not
+        }
+    }
+
+    /// <summary>The fold <see cref="WarmUpAsync"/> started, or a completed task. Never throws.</summary>
+    private Task BackgroundFoldAsync() => _backgroundFold ?? Task.CompletedTask;
+
+    private async Task FoldAsync(bool wait, CancellationToken cancellationToken)
+    {
+        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            await FoldLockedAsync(wait, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    /// <summary>Folds the journal. The caller holds the semaphore and has initialized the connection.</summary>
+    /// <param name="wait">Wait for another process's fold (readers), or skip when one is running (background).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task FoldLockedAsync(bool wait, CancellationToken cancellationToken)
+    {
+        if (_journal is not { } journal)
+        {
+            return;
+        }
+
+        await journal.FoldAsync(IsFoldCommittedAsync, CommitFoldAsync, wait, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> IsFoldCommittedAsync(string foldId, CancellationToken cancellationToken)
+    {
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var cmd = CreateCommand();
+#pragma warning restore CA2007
+        cmd.CommandText = "SELECT COUNT(*) FROM folds WHERE id = @id";
+        cmd.Parameters.AddWithValue("@id", foldId);
+        return (long)(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
+    }
+
+    /// <summary>Inserts the folded records, every fold id, and applies retention, in one transaction.</summary>
+    /// <param name="foldIds">The new claim's id and every recovered claim's id.</param>
+    /// <param name="records">The claimed records, in run order.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">Called before initialization succeeded.</exception>
+    private async Task CommitFoldAsync(
+        IReadOnlyList<string> foldIds, IReadOnlyList<CommandRecord> records, CancellationToken cancellationToken)
+    {
+        var connection = _connection ?? throw new InvalidOperationException("The tracker was used before it was initialized.");
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+#pragma warning restore CA2007
+        foreach (var record in records)
+        {
+            await InsertAsync(record, transaction, cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var foldId in foldIds)
+        {
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+            await using var cmd = CreateCommand();
+#pragma warning restore CA2007
+            cmd.Transaction = transaction;
+            cmd.CommandText = "INSERT OR IGNORE INTO folds (id) VALUES (@id)";
+            cmd.Parameters.AddWithValue("@id", foldId);
+            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await CleanupCoreAsync(defaultRetentionDays, transaction, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task InsertAsync(CommandRecord record, SqliteTransaction? transaction, CancellationToken cancellationToken)
+    {
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var cmd = CreateCommand();
+#pragma warning restore CA2007
+        cmd.Transaction = transaction;
+        cmd.CommandText = """
+                          INSERT INTO commands (timestamp, command, project_path, input_tokens, output_tokens,
+                              saved_tokens, savings_percentage, execution_time_ms, success, outcome, source)
+                          VALUES (@ts, @cmd, @path, @in, @out, @saved, @pct, @ms, @success, @outcome, @source)
+                          """;
+        cmd.Parameters.AddWithValue("@ts", record.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("@cmd", record.Command);
+        cmd.Parameters.AddWithValue("@path", record.ProjectPath);
+        cmd.Parameters.AddWithValue("@in", record.InputTokens);
+        cmd.Parameters.AddWithValue("@out", record.OutputTokens);
+        cmd.Parameters.AddWithValue("@saved", record.SavedTokens);
+        cmd.Parameters.AddWithValue("@pct", record.SavingsPercentage);
+        cmd.Parameters.AddWithValue("@ms", record.ExecutionTime.TotalMilliseconds);
+        cmd.Parameters.AddWithValue("@success", record.Success ? 1 : 0);
+        cmd.Parameters.AddWithValue("@outcome", record.Outcome.ToString());
+        cmd.Parameters.AddWithValue("@source", record.Source.ToString());
+        await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task EnsureInitializedAsync(CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -286,14 +451,15 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
 
             // A one-shot CLI runs as a single process with a single tracker instance, so purge
             // expired rows once here at startup. A single delete per process is cheap and replaces
-            // the old per-insert counter cleanup that could never fire during a one-command run.
-            await CleanupCoreAsync(defaultRetentionDays, ct).ConfigureAwait(false);
+            // the old per-insert counter cleanup that could never fire during a one-command run. A
+            // fold applies retention again, inside its transaction, to the records it inserts.
+            await CleanupCoreAsync(defaultRetentionDays, null, ct).ConfigureAwait(false);
             _initialized = true;
         }
         catch
         {
-            // A failed attempt leaves nothing behind, so the next call (a RecordAsync after a
-            // background warm-up failed) starts again from a fresh connection instead of reopening
+            // A failed attempt leaves nothing behind, so the next call (a read after a failed one,
+            // or after a failed warm-up) starts again from a fresh connection instead of reopening
             // a half-initialized one. The field is cleared before disposing so a throwing
             // DisposeAsync cannot mask the original setup exception or leave a disposed connection
             // behind in the field.
@@ -336,6 +502,9 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
                                 );
                                 CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
                                 CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
+                                CREATE TABLE IF NOT EXISTS folds (
+                                    id TEXT PRIMARY KEY
+                                );
                                 """;
         await createCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
@@ -393,6 +562,7 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            await FoldLockedAsync(wait: true, cancellationToken).ConfigureAwait(false);
             var since = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
@@ -581,12 +751,13 @@ public sealed class SqliteTracker(string connectionString, int defaultRetentionD
         return new CoverageSummary(entries, totalRuns, totalUnfiltered);
     }
 
-    private async Task CleanupCoreAsync(int days, CancellationToken cancellationToken)
+    private async Task CleanupCoreAsync(int days, SqliteTransaction? transaction, CancellationToken cancellationToken)
     {
         var cutoff = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var cmd = CreateCommand();
 #pragma warning restore CA2007
+        cmd.Transaction = transaction;
         cmd.CommandText = "DELETE FROM commands WHERE timestamp < @cutoff";
         cmd.Parameters.AddWithValue("@cutoff", cutoff);
         await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);

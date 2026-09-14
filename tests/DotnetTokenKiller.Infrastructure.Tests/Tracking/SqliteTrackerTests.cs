@@ -82,28 +82,28 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task RecordAsync_FirstInsertOfProcess_PurgesExpiredRowsAsync()
+    public async Task FirstReadOfProcess_PurgesRowsThatExpiredWhileItWasNotRunningAsync()
     {
         // A one-shot CLI is one process = one tracker instance. Cleanup must run once at
         // initialization so a fresh process purges rows that expired while it was not running.
         var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "tracking.db");
         try
         {
-            // Seed an expired row using a first tracker (a prior process).
-            await using (var seeder = new SqliteTracker($"Data Source={dbPath}"))
+            // A prior process with a long retention folds an expired row into the database.
+            await using (var seeder = new SqliteTracker($"Data Source={dbPath}", defaultRetentionDays: 3650))
             {
                 await seeder.RecordAsync(MakeRecord(timestamp: DateTimeOffset.UtcNow.AddDays(-100)));
+                (await seeder.GetHistoryAsync(365, null)).Should().ContainSingle();
             }
 
             SqliteConnection.ClearAllPools();
 
-            // Fresh instance = fresh process. Its first insert must purge the expired row.
+            // Fresh instance = fresh process. The journal is empty, so its first read folds nothing
+            // and only the purge at initialization can remove the expired row.
             await using var tracker = new SqliteTracker($"Data Source={dbPath}");
-            await tracker.RecordAsync(MakeRecord(timestamp: DateTimeOffset.UtcNow));
 
             var history = await tracker.GetHistoryAsync(365, null);
-            history.Should().ContainSingle(); // expired row purged at init, only the fresh one remains
-            history.Should().NotContain(r => r.Timestamp < DateTimeOffset.UtcNow.AddDays(-90));
+            history.Should().BeEmpty();
         }
         finally
         {
@@ -135,7 +135,8 @@ public class SqliteTrackerTests : IAsyncDisposable
     {
         // Two processes racing to initialize the same brand-new db file must not collide on
         // schema creation / migration (old failure: "duplicate column name: success").
-        // Looped to make the timing-dependent race reliable.
+        // A tracked run no longer opens the database, so the race is between two readers, each
+        // folding the run it journaled. Looped to make the timing-dependent race reliable.
         for (var attempt = 0; attempt < 20; attempt++)
         {
             var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "race.db");
@@ -143,12 +144,15 @@ public class SqliteTrackerTests : IAsyncDisposable
             {
                 await using var a = new SqliteTracker($"Data Source={dbPath}");
                 await using var b = new SqliteTracker($"Data Source={dbPath}");
+                await a.RecordAsync(MakeRecord());
+                await b.RecordAsync(MakeRecord());
 
                 var act = () => Task.WhenAll(
-                    a.RecordAsync(MakeRecord(), default),
-                    b.RecordAsync(MakeRecord(), default));
+                    a.GetSummaryAsync(1, null),
+                    b.GetSummaryAsync(1, null));
 
                 await act.Should().NotThrowAsync();
+                (await a.GetSummaryAsync(1, null)).TotalCommands.Should().Be(2);
             }
             finally
             {
@@ -173,10 +177,12 @@ public class SqliteTrackerTests : IAsyncDisposable
             await CreateLegacySchemaByHandAsync(dbPath);
 
             await using var tracker = new SqliteTracker($"Data Source={dbPath}");
-            var act = () => tracker.RecordAsync(MakeRecord(), default);
+            await tracker.RecordAsync(MakeRecord());
 
-            await act.Should().NotThrowAsync();
-            (await tracker.GetHistoryAsync(1, null)).Should().ContainSingle();
+            // The read initializes (and so migrates) the database, then folds the run into it.
+            var read = () => tracker.GetHistoryAsync(1, null);
+
+            (await read.Should().NotThrowAsync()).Which.Should().ContainSingle();
         }
         finally
         {
@@ -195,7 +201,7 @@ public class SqliteTrackerTests : IAsyncDisposable
         // The probe compares names case-sensitively while SQLite treats them case-insensitively, so
         // a column spelled `Success` reads as missing and the ALTER then reports it as a duplicate.
         // That is the same "someone already added it" condition a concurrent initializer produces,
-        // and it must not fail the run — the column is there either way, which is all that matters.
+        // and it must not fail the read — the column is there either way, which is all that matters.
         var dbPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "legacy.db");
         try
         {
@@ -209,10 +215,12 @@ public class SqliteTrackerTests : IAsyncDisposable
             }
 
             await using var tracker = new SqliteTracker($"Data Source={dbPath}");
-            var act = () => tracker.RecordAsync(MakeRecord(), default);
+            await tracker.RecordAsync(MakeRecord());
 
-            await act.Should().NotThrowAsync();
-            (await tracker.GetHistoryAsync(1, null)).Should().ContainSingle();
+            // The read initializes (and so migrates) the database, then folds the run into it.
+            var read = () => tracker.GetHistoryAsync(1, null);
+
+            (await read.Should().NotThrowAsync()).Which.Should().ContainSingle();
         }
         finally
         {
@@ -541,7 +549,7 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task RecordAsync_OnDatabaseWithExistingSuccessColumn_DoesNotThrow()
+    public async Task SecondInitialization_OnDatabaseWithExistingSuccessColumn_DoesNotThrow()
     {
         // Kills equality mutation: (long)count > 0 → (long)count < 0
         // With < 0 mutation, columnExists is always false and ALTER TABLE always runs,
@@ -549,9 +557,11 @@ public class SqliteTrackerTests : IAsyncDisposable
         var tempPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "tracking.db");
         try
         {
+            // A run alone no longer creates the database; the first tracker's read does.
             await using (var firstTracker = new SqliteTracker($"Data Source={tempPath}"))
             {
                 await firstTracker.RecordAsync(MakeRecord());
+                (await firstTracker.GetHistoryAsync(1, null)).Should().ContainSingle();
             }
 
             SqliteConnection.ClearAllPools();
@@ -561,7 +571,7 @@ public class SqliteTrackerTests : IAsyncDisposable
             await secondTracker.RecordAsync(MakeRecord());
 
             var history = await secondTracker.GetHistoryAsync(1, null);
-            history.Should().NotBeEmpty();
+            history.Should().HaveCount(2);
         }
         finally
         {
@@ -758,7 +768,10 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task Schema_AddsOutcomeColumnToLegacyDatabase_DefaultingExistingRowsToFiltered()
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"dtk-legacy-{Guid.NewGuid():N}.db");
+        // A directory of its own: the tracker keeps its journal in "pending" beside the database,
+        // which must not be a folder shared with every other process using the temp directory.
+        var dir = Directory.CreateTempSubdirectory("dtk-legacy-").FullName;
+        var dbPath = Path.Combine(dir, "legacy.db");
         var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
         try
         {
@@ -800,10 +813,7 @@ public class SqliteTrackerTests : IAsyncDisposable
         finally
         {
             SqliteConnection.ClearAllPools();
-            if (File.Exists(dbPath))
-            {
-                File.Delete(dbPath);
-            }
+            Directory.Delete(dir, recursive: true);
         }
     }
 
@@ -985,11 +995,12 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task RecordAsync_AfterWarmUpFailedBeforeOpening_RecoversAsync()
+    public async Task GetHistoryAsync_AfterAReadFailedBeforeOpening_RecoversAsync()
     {
         // A file sits where the database's directory must go, so creating the directory throws
-        // before any connection exists. Once it is gone, recording must work.
-        var root = Directory.CreateTempSubdirectory("dtk-warmup-").FullName;
+        // before any connection exists. Once it is gone, the next read must set up from scratch
+        // and report the run recorded since.
+        var root = Directory.CreateTempSubdirectory("dtk-read-").FullName;
         var blocker = Path.Combine(root, "blocker");
         await File.WriteAllTextAsync(blocker, "not a directory");
         try
@@ -997,8 +1008,8 @@ public class SqliteTrackerTests : IAsyncDisposable
             await using var tracker =
                 new SqliteTracker($"Data Source={Path.Combine(blocker, "tracking.db")};Pooling=False");
 
-            var warmUp = () => tracker.WarmUpAsync();
-            await warmUp.Should().ThrowAsync<IOException>();
+            var read = () => tracker.GetHistoryAsync(1, null);
+            await read.Should().ThrowAsync<IOException>();
 
             File.Delete(blocker);
             await tracker.RecordAsync(MakeRecord());
@@ -1012,22 +1023,23 @@ public class SqliteTrackerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task RecordAsync_AfterWarmUpFailedOnAnOpenedConnection_RecoversAsync()
+    public async Task GetHistoryAsync_AfterAReadFailedOnAnOpenedConnection_RecoversAsync()
     {
         // A file that is not a SQLite database fails during setup, after the connection was
-        // created. The retry must start from a fresh connection, not reopen the failed one.
-        var root = Directory.CreateTempSubdirectory("dtk-warmup-").FullName;
+        // created. The retry must start from a fresh connection, not reopen the failed one, and
+        // the run journaled before the failure must still be reported.
+        var root = Directory.CreateTempSubdirectory("dtk-read-").FullName;
         var dbPath = Path.Combine(root, "tracking.db");
         await File.WriteAllTextAsync(dbPath, new string('x', 4096));
         try
         {
             await using var tracker = new SqliteTracker($"Data Source={dbPath};Pooling=False");
+            await tracker.RecordAsync(MakeRecord());
 
-            var warmUp = () => tracker.WarmUpAsync();
-            await warmUp.Should().ThrowAsync<SqliteException>();
+            var read = () => tracker.GetHistoryAsync(1, null);
+            await read.Should().ThrowAsync<SqliteException>();
 
             File.Delete(dbPath);
-            await tracker.RecordAsync(MakeRecord());
 
             (await tracker.GetHistoryAsync(1, null)).Should().ContainSingle();
         }
@@ -1042,15 +1054,18 @@ public class SqliteTrackerTests : IAsyncDisposable
     {
         // A warm-up can outlive its run (the child failed to launch and the tracker is disposed on
         // the way out). Disposal runs on the user's path and must be clean; the warm-up itself may
-        // lose the race and see ObjectDisposedException, which TrackingWarmUp discards. Looped
-        // because the race is timing-dependent: this guards the fix but cannot prove its absence.
+        // lose the race and see ObjectDisposedException, which TrackingWarmUp discards. On a file
+        // data source the warm-up's SQLite work is the fold it starts at the threshold, so the
+        // threshold is one pending run here. Looped because the race is timing-dependent: this
+        // guards the fix but cannot prove its absence.
         var root = Directory.CreateTempSubdirectory("dtk-warmup-").FullName;
         try
         {
             for (var attempt = 0; attempt < 20; attempt++)
             {
-                var dbPath = Path.Combine(root, $"race-{attempt}.db");
-                var tracker = new SqliteTracker($"Data Source={dbPath};Pooling=False");
+                var dbPath = Path.Combine(root, $"race-{attempt}", "tracking.db");
+                var tracker = new SqliteTracker($"Data Source={dbPath};Pooling=False", foldThreshold: 1);
+                await tracker.RecordAsync(MakeRecord());
                 var warmUp = Task.Run(() => tracker.WarmUpAsync());
 
                 var dispose = async () => await tracker.DisposeAsync();

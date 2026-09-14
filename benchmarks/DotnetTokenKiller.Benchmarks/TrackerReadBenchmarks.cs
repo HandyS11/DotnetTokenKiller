@@ -15,7 +15,9 @@ namespace DotnetTokenKiller.Benchmarks;
 /// Split out from the write benchmark (see <see cref="TrackerWriteBenchmarks"/>) because
 /// <c>GetSummaryAsync</c> is a pure read: nothing in the benchmark method mutates the table, so the
 /// <c>RowCount</c> label stays exact for every iteration BenchmarkDotNet runs, including pilot and
-/// warmup ones.
+/// warmup ones. Seeding journals every row, so the setup folds them once with a wide read; each
+/// measured read still folds first, but finds the journal empty and pays only its lock and
+/// directory listing, as a <c>dtk gain</c> right after another does.
 /// </remarks>
 [MemoryDiagnoser]
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
@@ -41,6 +43,9 @@ public class TrackerReadBenchmarks
         {
             await _tracker.RecordAsync(CommandRecordFactory.NewRecord(i)).ConfigureAwait(false);
         }
+
+        // RecordAsync only journals; fold the seed here so no measured read includes it.
+        await _tracker.GetSummaryAsync(days: 36_500, projectPath: null).ConfigureAwait(false);
     }
 
     [GlobalCleanup]

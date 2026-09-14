@@ -33,6 +33,17 @@ public sealed class TrackerFactoryTests : IDisposable
     private static DtkConfig ConfigWithDbPath(string? dbPath) =>
         DtkConfig.Default with { Tracking = new TrackingConfig(DbPath: dbPath) };
 
+    /// <summary>
+    /// The runs journaled beside <paramref name="dbPath"/>: a tracked run writes there rather than
+    /// to the database itself, so the journal is what proves which path was resolved.
+    /// </summary>
+    /// <param name="dbPath">A database path the tracker may have resolved.</param>
+    private static int PendingRecordsBeside(string dbPath)
+    {
+        var pending = Path.Combine(Path.GetDirectoryName(dbPath)!, "pending");
+        return Directory.Exists(pending) ? Directory.GetFiles(pending, "*.json").Length : 0;
+    }
+
     [Fact]
     public async Task Create_WritesToTheConfiguredDbPath()
     {
@@ -44,7 +55,7 @@ public sealed class TrackerFactoryTests : IDisposable
             await using var tracker = TrackerFactory.Create(ConfigWithDbPath(configured));
             await tracker.RecordAsync(Record());
 
-            File.Exists(configured).Should().BeTrue();
+            PendingRecordsBeside(configured).Should().Be(1);
         }
         finally
         {
@@ -66,8 +77,8 @@ public sealed class TrackerFactoryTests : IDisposable
             await using var tracker = TrackerFactory.Create(ConfigWithDbPath(configured));
             await tracker.RecordAsync(Record());
 
-            File.Exists(overridden).Should().BeTrue();
-            File.Exists(configured).Should().BeFalse();
+            PendingRecordsBeside(overridden).Should().Be(1);
+            PendingRecordsBeside(configured).Should().Be(0);
         }
         finally
         {
