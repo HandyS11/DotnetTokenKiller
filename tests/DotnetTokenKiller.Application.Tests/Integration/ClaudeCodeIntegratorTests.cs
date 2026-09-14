@@ -6,8 +6,6 @@ namespace DotnetTokenKiller.Application.Tests.Integration;
 
 public sealed class ClaudeCodeIntegratorTests : IDisposable
 {
-    private const string RepoMarkerFileName = "DotnetTokenKiller.slnx";
-
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-claude-test-{Guid.NewGuid()}");
     private readonly ClaudeCodeIntegrator _sut;
     private readonly string _isolatedHome;
@@ -29,16 +27,16 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FreshDirectory_CreatesAllThreeFiles()
+    public async Task IntegrateAsync_FreshDirectory_CreatesSkillAndSettings()
     {
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        result.CreatedFiles.Should().HaveCount(3);
+        result.CreatedFiles.Should().HaveCount(2);
         result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
 
         File.Exists(Path.Combine(_tempDir, ".claude", "skills", "dotnet-token-killer", "SKILL.md")).Should().BeTrue();
-        File.Exists(Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py")).Should().BeTrue();
+        File.Exists(Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py")).Should().BeFalse();
         File.Exists(Path.Combine(_tempDir, ".claude", "settings.json")).Should().BeTrue();
     }
 
@@ -49,15 +47,15 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        // With generated-artifact stamping, SKILL.md and the hook script are already
-        // byte-identical to the stamped current template, so they report unchanged rather than
-        // skipped. settings.json's merge is also idempotent — the hook entry is already
-        // registered, so dtk can prove there is nothing to write there either — so it reports
-        // unchanged too, not skipped: nothing here would change if --force were added.
+        // With generated-artifact stamping, SKILL.md is already byte-identical to the stamped
+        // current template, so it reports unchanged rather than skipped. settings.json's merge is
+        // also idempotent — the hook entry is already registered, so dtk can prove there is nothing
+        // to write there either — so it reports unchanged too, not skipped: nothing here would
+        // change if --force were added.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
-        result.UnchangedFiles.Should().HaveCount(3);
+        result.UnchangedFiles.Should().HaveCount(2);
     }
 
     [Fact]
@@ -68,13 +66,13 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         // With generated-artifact stamping, a --force re-run over identical content writes nothing:
-        // the skill and hook are already current, so they report unchanged rather than updated.
+        // the skill is already current, so it reports unchanged rather than updated.
         // settings.json's merge is idempotent and the hook entry is already present, so it is also
         // unchanged, not skipped — force-independent by nature, so --force changes nothing here.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
-        result.UnchangedFiles.Should().HaveCount(3);
+        result.UnchangedFiles.Should().HaveCount(2);
     }
 
     [Fact]
@@ -90,41 +88,18 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_HookScript_ContainsPythonRewriteLogic()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var content = await File.ReadAllTextAsync(
-            Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py"));
-
-        content.Should().Contain("def rewrite");
-        content.Should().Contain("def main");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_WritesHookEmittingUpdatedInputSchemaAsync()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var script = await File.ReadAllTextAsync(
-            Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py"));
-
-        script.Should().Contain("hookSpecificOutput");
-        script.Should().Contain("updatedInput");
-        script.Should().NotContain("\"decision\"");
-        script.Should().Contain("format");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_SettingsJson_ContainsHookEntry()
+    public async Task IntegrateAsync_SettingsJson_RegistersTheDtkHook()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var json = await File.ReadAllTextAsync(Path.Combine(_tempDir, ".claude", "settings.json"));
         var root = JsonNode.Parse(json) as JsonObject;
 
-        root.Should().NotBeNull();
-        root["hooks"]!["PreToolUse"]!.AsArray().Should().NotBeEmpty();
+        var preToolUse = root!["hooks"]!["PreToolUse"]!.AsArray();
+        preToolUse.Should().ContainSingle();
+        preToolUse[0]!["matcher"]!.GetValue<string>().Should().Be("Bash");
+        preToolUse[0]!["hooks"]!.AsArray().Should().ContainSingle();
+        preToolUse[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("dtk hook claude");
     }
 
     [Fact]
@@ -169,7 +144,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         result.UpdatedFiles.Should().Contain(settingsPath);
         var json = await File.ReadAllTextAsync(settingsPath);
         json.Should().Contain("PreToolUse");
-        json.Should().Contain("dotnet-to-dtk.py");
+        json.Should().Contain("dtk hook claude");
     }
 
     [Fact]
@@ -231,63 +206,14 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_HookScript_MatchesCommittedRepoHook()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var shippedHook = await File.ReadAllTextAsync(
-            Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py"));
-
-        var repoRoot = FindRepoRoot(AppContext.BaseDirectory);
-        var committedHook = await File.ReadAllTextAsync(
-            Path.Combine(repoRoot, ".claude", "hooks", "dotnet-to-dtk.py"));
-
-        string.Equals(shippedHook, committedHook, StringComparison.Ordinal).Should().BeTrue(
-            "HookScriptTemplates.ClaudeHook must stay byte-for-byte in sync with the repo's own " +
-            ".claude/hooks/dotnet-to-dtk.py; update whichever one drifted.");
-    }
-
-    private static string FindRepoRoot(string startDirectory)
-    {
-        var current = new DirectoryInfo(startDirectory);
-
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, RepoMarkerFileName)))
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new InvalidOperationException(
-            $"Could not locate repo root (a directory containing '{RepoMarkerFileName}') " +
-            $"walking up from '{startDirectory}'.");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_SettingsJson_RegistersHookViaClaudeProjectDirEnvVar()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var json = await File.ReadAllTextAsync(Path.Combine(_tempDir, ".claude", "settings.json"));
-        var root = JsonNode.Parse(json) as JsonObject;
-
-        var command = root!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
-        command.Should().Be("""python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_SkillFile_DocumentsWindowsPythonCaveat()
+    public async Task IntegrateAsync_SkillFile_DoesNotMentionPython()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(
             Path.Combine(_tempDir, ".claude", "skills", "dotnet-token-killer", "SKILL.md"));
 
-        content.Should().Contain("python3");
-        content.Should().Contain("Windows");
+        content.ToLowerInvariant().Should().NotContain("python", "the hook no longer needs an interpreter");
     }
 
     [Fact]
@@ -312,7 +238,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         result.UpdatedFiles.Should().Contain(settingsPath);
         var json = await File.ReadAllTextAsync(settingsPath);
-        json.Should().Contain("dotnet-to-dtk.py");
+        json.Should().Contain("dtk hook claude");
         json.Should().Contain("some-other-hook.sh");
     }
 
@@ -362,18 +288,18 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateGlobalAsync_FreshHome_CreatesAllThreeFilesUnderHomeClaudeDir()
+    public async Task IntegrateGlobalAsync_FreshHome_CreatesSkillAndSettingsUnderHomeClaudeDir()
     {
         var result = await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
 
-        result.CreatedFiles.Should().HaveCount(3);
+        result.CreatedFiles.Should().HaveCount(2);
         File.Exists(Path.Combine(_isolatedHome, ".claude", "skills", "dotnet-token-killer", "SKILL.md")).Should().BeTrue();
-        File.Exists(Path.Combine(_isolatedHome, ".claude", "hooks", "dotnet-to-dtk.py")).Should().BeTrue();
+        File.Exists(Path.Combine(_isolatedHome, ".claude", "hooks", "dotnet-to-dtk.py")).Should().BeFalse();
         File.Exists(Path.Combine(_isolatedHome, ".claude", "settings.json")).Should().BeTrue();
     }
 
     [Fact]
-    public async Task IntegrateGlobalAsync_RegistersHomeRootedHookCommand()
+    public async Task IntegrateGlobalAsync_RegistersTheSameDtkHookInHomeSettings()
     {
         await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
 
@@ -381,7 +307,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         var root = JsonNode.Parse(json) as JsonObject;
 
         var command = root!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
-        command.Should().Be("""python3 "$HOME"/.claude/hooks/dotnet-to-dtk.py""");
+        command.Should().Be("dtk hook claude");
     }
 
     [Fact]
@@ -421,9 +347,55 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         preToolUse.Should().ContainSingle();
         preToolUse[0]!["hooks"]!.AsArray().Should().ContainSingle();
-        preToolUse[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should()
-            .Be("""python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/dotnet-to-dtk.py""");
+        preToolUse[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("dtk hook claude");
         json.Should().EndWith("\n").And.NotEndWith("\n\n");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_PythonInstall_MigratesTheRegistrationAndRemovesTheScript()
+    {
+        var script = Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        var settings = Path.Combine(_tempDir, ".claude", "settings.json");
+        await File.WriteAllTextAsync(settings, """
+            {"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dotnet-to-dtk.py"}]}]}}
+            """);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(settings)).Should().Contain("\"command\": \"dtk hook claude\"").And.NotContain("python3");
+        File.Exists(script).Should().BeFalse();
+        Directory.Exists(Path.GetDirectoryName(script)).Should().BeFalse();
+        result.RemovedFiles.Should().Equal(script);
+        result.UpdatedFiles.Should().Contain(settings);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_EditedPythonScript_IsKeptWithANoteUnlessForced()
+    {
+        var script = Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteEditedScript(script);
+
+        var kept = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        File.Exists(script).Should().BeTrue();
+        kept.Notes.Should().Contain(note => note.Contains(script, StringComparison.Ordinal));
+
+        var forced = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
+        File.Exists(script).Should().BeFalse();
+        forced.RemovedFiles.Should().Equal(script);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_MalformedSettings_ThrowsAndKeepsThePythonScript()
+    {
+        var script = Path.Combine(_tempDir, ".claude", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, ".claude", "settings.json"), "{ not json");
+
+        var act = () => _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        File.Exists(script).Should().BeTrue("the working Python hook must survive a settings file dtk could not update");
     }
 
     [Fact]

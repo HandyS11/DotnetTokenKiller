@@ -29,16 +29,16 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FreshDirectory_CreatesAllThreeFiles()
+    public async Task IntegrateAsync_FreshDirectory_CreatesGeminiMdAndSettings()
     {
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        result.CreatedFiles.Should().HaveCount(3);
+        result.CreatedFiles.Should().HaveCount(2);
         result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
 
         File.Exists(GeminiMdPath).Should().BeTrue();
-        File.Exists(HookPath).Should().BeTrue();
+        File.Exists(HookPath).Should().BeFalse();
         File.Exists(SettingsPath).Should().BeTrue();
     }
 
@@ -50,14 +50,12 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         // GEMINI.md is section-based and reports skipped when already present without --force.
-        // With generated-artifact stamping, the hook script is already byte-identical to the
-        // stamped current template, so it reports unchanged rather than skipped. settings.json's
-        // merge is idempotent — the hook entry is already registered, so dtk can prove there is
-        // nothing to write there either — so it reports unchanged too, not skipped.
+        // settings.json's merge is idempotent — the hook entry is already registered, so dtk can
+        // prove there is nothing to write there — so it reports unchanged, not skipped.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().ContainSingle();
-        result.UnchangedFiles.Should().HaveCount(2);
+        result.UnchangedFiles.Should().Equal(SettingsPath);
     }
 
     [Fact]
@@ -68,14 +66,12 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         // GEMINI.md is overwritten because section-based writes always replace under --force.
-        // With generated-artifact stamping, the hook script has nothing to write over identical
-        // content, so it reports unchanged rather than updated. settings.json's merge is
-        // idempotent and the hook entry is already present, so it is also unchanged, not skipped —
-        // force-independent by nature, so --force changes nothing there.
+        // settings.json's merge is idempotent and the hook entry is already present, so it is
+        // unchanged, not skipped — force-independent by nature, so --force changes nothing there.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().ContainSingle();
         result.SkippedFiles.Should().BeEmpty();
-        result.UnchangedFiles.Should().HaveCount(2);
+        result.UnchangedFiles.Should().Equal(SettingsPath);
     }
 
     [Fact]
@@ -92,42 +88,18 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_HookScript_ContainsPythonRewriteLogic()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var content = await File.ReadAllTextAsync(HookPath);
-
-        content.Should().Contain("def rewrite");
-        content.Should().Contain("def main");
-        content.Should().Contain("hookSpecificOutput");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_HookScript_KeepsGeminiSchemaDistinctFromClaude()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var content = await File.ReadAllTextAsync(HookPath);
-
-        content.Contains("\"tool_input\"", StringComparison.Ordinal).Should().BeTrue(
-            "Gemini must keep emitting its own hookSpecificOutput.tool_input payload field.");
-        content.Contains("\"decision\"", StringComparison.Ordinal).Should().BeTrue(
-            "Gemini must keep emitting its own top-level decision field.");
-        content.Contains("\"updatedInput\"", StringComparison.Ordinal).Should().BeFalse(
-            "Gemini must keep its own output schema; updatedInput belongs to Claude's schema only.");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_SettingsJson_ContainsBeforeToolHook()
+    public async Task IntegrateAsync_SettingsJson_RegistersTheFailOpenDtkHook()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var json = await File.ReadAllTextAsync(SettingsPath);
         var root = JsonNode.Parse(json) as JsonObject;
 
-        root.Should().NotBeNull();
-        root["hooks"]!["BeforeTool"]!.AsArray().Should().NotBeEmpty();
+        var beforeTool = root!["hooks"]!["BeforeTool"]!.AsArray();
+        beforeTool.Should().ContainSingle();
+        beforeTool[0]!["matcher"]!.GetValue<string>().Should().Be("run_shell_command");
+        beforeTool[0]!["hooks"]!.AsArray().Should().ContainSingle();
+        beforeTool[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("dtk hook gemini; exit 0");
     }
 
     [Fact]
@@ -166,7 +138,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         result.UpdatedFiles.Should().Contain(SettingsPath);
         var json = await File.ReadAllTextAsync(SettingsPath);
         json.Should().Contain("BeforeTool");
-        json.Should().Contain("dotnet-to-dtk.py");
+        json.Should().Contain("dtk hook gemini; exit 0");
     }
 
     [Fact]
@@ -190,7 +162,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
 
         result.UpdatedFiles.Should().Contain(SettingsPath);
         var json = await File.ReadAllTextAsync(SettingsPath);
-        json.Should().Contain("dotnet-to-dtk.py");
+        json.Should().Contain("dtk hook gemini; exit 0");
         json.Should().Contain("some-other-hook.sh");
     }
 
@@ -285,25 +257,12 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SettingsJson_RegistersHookViaGeminiProjectDirEnvVar()
-    {
-        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
-
-        var json = await File.ReadAllTextAsync(SettingsPath);
-        var root = JsonNode.Parse(json) as JsonObject;
-
-        var command = root!["hooks"]!["BeforeTool"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
-        command.Should().Be("""python3 "$GEMINI_PROJECT_DIR"/.gemini/hooks/dotnet-to-dtk.py""");
-    }
-
-    [Fact]
-    public async Task IntegrateAsync_GeminiMd_DocumentsWindowsPythonCaveat()
+    public async Task IntegrateAsync_GeminiMd_DoesNotMentionPython()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var content = await File.ReadAllTextAsync(GeminiMdPath);
-        content.Should().Contain("python3");
-        content.Should().Contain("Windows");
+        content.ToLowerInvariant().Should().NotContain("python", "the hook no longer needs an interpreter");
     }
 
     [Fact]
@@ -313,7 +272,7 @@ public sealed class GeminiCliIntegratorTests : IDisposable
 
         result.CreatedFiles.Should().NotBeEmpty();
         File.Exists(Path.Combine(_isolatedHome, ".gemini", "settings.json")).Should().BeTrue();
-        File.Exists(Path.Combine(_isolatedHome, ".gemini", "hooks", "dotnet-to-dtk.py")).Should().BeTrue();
+        File.Exists(Path.Combine(_isolatedHome, ".gemini", "hooks", "dotnet-to-dtk.py")).Should().BeFalse();
         File.Exists(Path.Combine(_isolatedHome, ".gemini", "GEMINI.md")).Should().BeTrue();
     }
 
@@ -352,12 +311,11 @@ public sealed class GeminiCliIntegratorTests : IDisposable
 
         beforeTool.Should().ContainSingle();
         beforeTool[0]!["hooks"]!.AsArray().Should().ContainSingle();
-        beforeTool[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should()
-            .Be("""python3 "$GEMINI_PROJECT_DIR"/.gemini/hooks/dotnet-to-dtk.py""");
+        beforeTool[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("dtk hook gemini; exit 0");
     }
 
     [Fact]
-    public async Task IntegrateGlobalAsync_RegistersHomeRootedHookCommand()
+    public async Task IntegrateGlobalAsync_RegistersTheSameDtkHookInHomeSettings()
     {
         await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
 
@@ -365,6 +323,25 @@ public sealed class GeminiCliIntegratorTests : IDisposable
         var root = JsonNode.Parse(json) as JsonObject;
 
         var command = root!["hooks"]!["BeforeTool"]![0]!["hooks"]![0]!["command"]!.GetValue<string>();
-        command.Should().Be("""python3 "$HOME"/.gemini/hooks/dotnet-to-dtk.py""");
+        command.Should().Be("dtk hook gemini; exit 0");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_PythonInstall_MigratesTheRegistrationAndRemovesTheScript()
+    {
+        var script = Path.Combine(_tempDir, ".gemini", "hooks", "dotnet-to-dtk.py");
+        LegacyHookFixtures.WriteStampedScript(script);
+        var settings = Path.Combine(_tempDir, ".gemini", "settings.json");
+        await File.WriteAllTextAsync(settings, """
+            {"hooks":{"BeforeTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"python3 \"$GEMINI_PROJECT_DIR\"/.gemini/hooks/dotnet-to-dtk.py"}]}]}}
+            """);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(settings)).Should().Contain("\"command\": \"dtk hook gemini; exit 0\"").And.NotContain("python3");
+        File.Exists(script).Should().BeFalse();
+        Directory.Exists(Path.GetDirectoryName(script)).Should().BeFalse();
+        result.RemovedFiles.Should().Equal(script);
+        result.UpdatedFiles.Should().Contain(settings);
     }
 }

@@ -211,7 +211,9 @@ A project-scope removal shows up in the user's `git status`, which is the intend
 script path instead. Per installation and scope:
 
 - **Presence.** An installation is reported when its registration names `dtk hook <provider>` or
-  `dotnet-to-dtk.py`, or the legacy script exists.
+  `dotnet-to-dtk.py`, when the legacy script exists, or when the registration file exists but cannot be
+  read or parsed (a broken settings file is worth reporting, and dtk cannot tell whether it holds a hook).
+  A readable settings file with no dtk hook is not reported.
 - **Status.**
   - Registration names `dotnet-to-dtk.py`: fail — "legacy Python hook — run `dtk init <provider>
     [--global]` to migrate".

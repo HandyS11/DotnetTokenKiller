@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain.Integration;
 
 namespace DotnetTokenKiller.Application.Integration;
@@ -9,8 +10,10 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <remarks>
 /// Creates a hook-based integration modeled on <see cref="GeminiCliIntegrator"/>:
 /// <list type="bullet">
-///   <item><description><c>.github/hooks/dotnet-to-dtk.py</c> — the preToolUse rewrite script.</description></item>
-///   <item><description><c>.github/hooks/dtk-dotnet.json</c> — a dedicated, dtk-owned hook registration (no merge).</description></item>
+///   <item><description>
+///     <c>.github/hooks/dtk-dotnet.json</c> — a dtk-owned registration running <c>dtk hook copilot-cli</c>; a
+///     Python hook left by an older dtk is migrated
+///   </description></item>
 ///   <item><description><c>.github/copilot-instructions.md</c> — section-merged dtk instructions.</description></item>
 /// </list>
 /// Distinct from <see cref="GitHubCopilotIntegrator"/> (the instruction-only IDE <c>copilot</c> provider).
@@ -21,15 +24,13 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
 {
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
-    private const string HookScriptName = "dotnet-to-dtk.py";
     private const string HookJsonName = "dtk-dotnet.json";
 
     /// <summary>
     /// The dtk-managed section written into <c>.github/copilot-instructions.md</c>, between
     /// <see cref="SectionMarker"/> and <see cref="SectionEndMarker"/>. Internal (rather than
     /// private) so <c>SubcommandBindingTests</c> can pin this repo's own committed copy of that
-    /// file to it, the same way <see cref="HookScriptTemplates.ClaudeHook"/> pins the committed
-    /// Claude hook.
+    /// file to it.
     /// <para>
     /// Ends with an explicit <c>\n</c>: when this section is the whole file (the create path, and how
     /// this repo's own committed copy came to be), a section without one produces a file that violates
@@ -44,9 +45,8 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
 
         {IntegrationInstructions.Markdown}
 
-        A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` rewrites `dotnet {IntegrationInstructions.SubcommandAlternation}`
-        to `dtk dotnet ...` automatically. The hook shells out to `python3`; on Windows (where the launcher is
-        usually `python`, not `python3`), edit the `bash` command in that file if it doesn't fire.
+        A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` runs `dtk hook copilot-cli`, which rewrites
+        `dotnet {IntegrationInstructions.SubcommandAlternation}` to `dtk dotnet ...` automatically.
         {SectionEndMarker}
         """ + "\n";
 
@@ -63,12 +63,9 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
             new HookInstallation(
                 ProviderName,
                 scope,
-                new GeneratedArtifact(
-                    Path.Combine(hooksDir, HookScriptName),
-                    HookScriptTemplates.CopilotCliHook,
-                    StampStyle.HashComment,
-                    IntegratorHelpers.HookLegacySignature),
                 Path.Combine(hooksDir, HookJsonName),
+                HookCommands.FailOpen(ProviderName),
+                Path.Combine(hooksDir, IntegratorHelpers.LegacyHookScriptName),
                 HookPayloadKind.CopilotCli)
         ];
     }
@@ -83,8 +80,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
             SectionMarker, SectionEndMarker, CopilotSection,
             context, cancellationToken).ConfigureAwait(false);
 
-        await WriteHookArtifactsAsync(directory, HookScope.Project, HookCwdRelative, context, cancellationToken)
-            .ConfigureAwait(false);
+        await WriteHookArtifactsAsync(directory, HookScope.Project, context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
@@ -94,10 +90,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
     {
         var context = new IntegrationContext(force);
 
-        // Global (~/.copilot/hooks) is not a git-tracked location, so an absolute cwd is portable and
-        // unambiguous here (unlike the repo variant, which uses a relative cwd for a committed file).
-        await WriteHookArtifactsAsync(home.Home, HookScope.Global, home.CopilotHooksDir, context, cancellationToken)
-            .ConfigureAwait(false);
+        await WriteHookArtifactsAsync(home.Home, HookScope.Global, context, cancellationToken).ConfigureAwait(false);
 
         context.Notes.Add(
             "Copilot CLI instructions are repository-scoped; the global install adds the rewrite hook only. "
@@ -106,28 +99,86 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
         return context.ToResult();
     }
 
-    /// <summary>Relative <c>cwd</c> for the repository hook (resolved by Copilot CLI against the repo root).</summary>
-    private const string HookCwdRelative = ".github/hooks";
-
     private async Task WriteHookArtifactsAsync(
-        string directory,
-        HookScope scope,
-        string cwd,
-        IntegrationContext context,
-        CancellationToken cancellationToken)
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
     {
-        var hookInstallation = DescribeHooks(directory, scope)[0];
+        var hook = DescribeHooks(directory, scope)[0];
+        var replaceable = await IsDtkRegistrationAsync(hook.RegistrationPath, cancellationToken).ConfigureAwait(false);
 
-        await IntegratorHelpers.WriteGeneratedFileAsync(hookInstallation.Script, context, cancellationToken)
+        await IntegratorHelpers.WriteOwnedFileAsync(
+            hook.RegistrationPath, BuildHookJson(hook.Command), replaceable, context, cancellationToken).ConfigureAwait(false);
+
+        // A skipped registration may still run the Python script, and Copilot CLI denies the tool call when a
+        // hook fails, so the script goes only once the registration no longer needs it.
+        if (context.Skipped.Contains(hook.RegistrationPath))
+        {
+            return;
+        }
+
+        await IntegratorHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath, context, cancellationToken)
             .ConfigureAwait(false);
-
-        await IntegratorHelpers.WriteFileAsync(
-            hookInstallation.RegistrationPath,
-            BuildHookJson(cwd),
-            context, cancellationToken).ConfigureAwait(false);
     }
 
-    private static string BuildHookJson(string cwd)
+    /// <summary>
+    /// Whether an existing <c>dtk-dotnet.json</c> holds only dtk's own hooks — the Python-era
+    /// <c>dotnet-to-dtk.py</c> command or <c>dtk hook copilot-cli</c> — so it can be replaced without <c>--force</c>.
+    /// </summary>
+    /// <param name="path">The registration file.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<bool> IsDtkRegistrationAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false));
+            if (root?["hooks"]?["preToolUse"] is not JsonArray { Count: > 0 } entries)
+            {
+                return false;
+            }
+
+            return entries.All(IsDtkHookEntry);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Whether a <c>preToolUse</c> entry runs a command, and every command it runs is dtk's.</summary>
+    /// <param name="entry">One element of <c>hooks.preToolUse</c>.</param>
+    private bool IsDtkHookEntry(JsonNode? entry)
+    {
+        if (entry is not JsonObject hook)
+        {
+            return false;
+        }
+
+        var invocation = HookCommands.Invocation(ProviderName);
+        var sawCommand = false;
+        foreach (var key in new[] { "bash", "powershell", "command" })
+        {
+            if (hook[key] is not JsonValue value || !value.TryGetValue<string>(out var text))
+            {
+                continue;
+            }
+
+            if (!text.Contains(IntegratorHelpers.LegacyHookScriptName, StringComparison.Ordinal)
+                && !text.Contains(invocation, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            sawCommand = true;
+        }
+
+        return sawCommand;
+    }
+
+    private static string BuildHookJson(string command)
     {
         var root = new JsonObject
         {
@@ -139,8 +190,8 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
                     {
                         ["type"] = "command",
                         ["matcher"] = "bash",
-                        ["bash"] = $"python3 {HookScriptName}",
-                        ["cwd"] = cwd,
+                        ["bash"] = command,
+                        ["powershell"] = command,
                         ["timeoutSec"] = 10
                     })
             }

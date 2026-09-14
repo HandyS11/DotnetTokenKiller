@@ -985,44 +985,6 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
-    public async Task WriteHookAndSettingsAsync_NewFiles_WritesScriptAndExactSettingsJson()
-    {
-        // Pins the exact hook-entry shape produced by WriteHookAndSettingsAsync: the "matcher",
-        // "type" and "command" property names, the literal "command" type value, and the
-        // indented serializer options used to persist the settings file.
-        var context = new IntegrationContext(false);
-        var scriptPath = Path.Combine(_tempDir, "hooks", "dotnet-to-dtk.py");
-        var settingsPath = Path.Combine(_tempDir, "settings.json");
-        const string script = "#!/usr/bin/env python3\nprint('hi')\n";
-        var spec = new HookSpec(scriptPath, script, settingsPath, "PreToolUse", "Bash", "python3 hook.py");
-
-        await IntegratorHelpers.WriteHookAndSettingsAsync(spec, context, CancellationToken.None);
-
-        (await File.ReadAllTextAsync(scriptPath)).Should().Be(
-            ArtifactStamping.Apply(script, StampStyle.HashComment));
-        (await File.ReadAllTextAsync(settingsPath)).Should().Be(
-            """
-            {
-              "hooks": {
-                "PreToolUse": [
-                  {
-                    "matcher": "Bash",
-                    "hooks": [
-                      {
-                        "type": "command",
-                        "command": "python3 hook.py"
-                      }
-                    ]
-                  }
-                ]
-              }
-            }
-
-            """);
-        context.Created.Should().HaveCount(2);
-    }
-
-    [Fact]
     public async Task MergeJsonSettingsAsync_EntryWithoutCommandProperty_IsNotTreatedAsLegacyMatch()
     {
         // The hook command has no quoted env-var segment, so no legacy command can be derived and

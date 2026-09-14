@@ -616,7 +616,7 @@ public class InitCommandTests
             await CreateClaudeCommand(dir, secondConsole).RunAsync(settings, CancellationToken.None);
 
             secondConsole.Output.Should().Contain("unchanged");
-            secondConsole.Output.Should().Contain("dotnet-to-dtk.py");
+            secondConsole.Output.Should().Contain("settings.json");
         }
         finally
         {

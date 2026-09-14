@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain.Integration;
 
 namespace DotnetTokenKiller.Application.Integration;
@@ -8,8 +9,10 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Creates:
 /// <list type="bullet">
 ///   <item><description><c>GEMINI.md</c> (project root, section-based merge)</description></item>
-///   <item><description><c>.gemini/hooks/dotnet-to-dtk.py</c></description></item>
-///   <item><description><c>.gemini/settings.json</c> (merged, never overwritten)</description></item>
+///   <item><description>
+///     <c>.gemini/settings.json</c> registering <c>dtk hook gemini; exit 0</c> (merged, never overwritten); a
+///     Python hook left by an older dtk is migrated
+///   </description></item>
 /// </list>
 /// Declared <see langword="internal"/> (rather than <see langword="public"/>, its original
 /// accessibility) because its primary constructor takes the <see langword="internal"/>
@@ -24,28 +27,12 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
 
-    /// <summary>
-    /// Quoted and rooted at <c>$GEMINI_PROJECT_DIR</c> (the absolute project root Gemini CLI
-    /// exports to hooks) so the hook resolves correctly regardless of the CLI's current working
-    /// directory.
-    /// </summary>
-    private const string HookCommand = """python3 "$GEMINI_PROJECT_DIR"/.gemini/hooks/dotnet-to-dtk.py""";
-
-    /// <summary>
-    /// Global variant of <see cref="HookCommand"/>: rooted at <c>$HOME</c> because the hook script is
-    /// installed under <c>~/.gemini/hooks</c> (there is no project-scoped env var to anchor to).
-    /// </summary>
-    private const string GlobalHookCommand = """python3 "$HOME"/.gemini/hooks/dotnet-to-dtk.py""";
-
     private static readonly string GeminiSection =
         $"""
         {SectionMarker}
         ## DotnetTokenKiller (dtk)
 
         {IntegrationInstructions.Markdown}
-
-        The `BeforeTool` hook shells out to `python3`; on Windows (where the launcher is usually
-        `python`, not `python3`), edit the hook command in `.gemini/settings.json` if it doesn't fire.
         {SectionEndMarker}
         """;
 
@@ -62,12 +49,9 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
             new HookInstallation(
                 ProviderName,
                 scope,
-                new GeneratedArtifact(
-                    Path.Combine(geminiDir, "hooks", "dotnet-to-dtk.py"),
-                    HookScriptTemplates.GeminiHook,
-                    StampStyle.HashComment,
-                    IntegratorHelpers.HookLegacySignature),
                 Path.Combine(geminiDir, "settings.json"),
+                HookCommands.FailOpen(ProviderName),
+                Path.Combine(geminiDir, "hooks", IntegratorHelpers.LegacyHookScriptName),
                 HookPayloadKind.GeminiCli)
         ];
     }
@@ -78,7 +62,6 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
             Path.Combine(directory, "GEMINI.md"),
             directory,
             HookScope.Project,
-            HookCommand,
             force,
             cancellationToken);
 
@@ -88,7 +71,6 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
             Path.Combine(home.GeminiDir, "GEMINI.md"),
             home.Home,
             HookScope.Global,
-            GlobalHookCommand,
             force,
             cancellationToken);
 
@@ -96,7 +78,6 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
         string contextFilePath,
         string hookDirectory,
         HookScope scope,
-        string hookCommand,
         bool force,
         CancellationToken cancellationToken)
     {
@@ -107,17 +88,14 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
             SectionMarker, SectionEndMarker, GeminiSection,
             context, cancellationToken).ConfigureAwait(false);
 
-        var hookInstallation = DescribeHooks(hookDirectory, scope)[0];
+        var hook = DescribeHooks(hookDirectory, scope)[0];
 
-        await IntegratorHelpers.WriteHookAndSettingsAsync(
-            new HookSpec(
-                hookInstallation.Script.Path,
-                hookInstallation.Script.Body,
-                hookInstallation.RegistrationPath,
-                "BeforeTool",
-                "run_shell_command",
-                hookCommand),
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(hook.RegistrationPath, "BeforeTool", "run_shell_command", hook.Command),
             context, cancellationToken).ConfigureAwait(false);
+
+        await IntegratorHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath, context, cancellationToken)
+            .ConfigureAwait(false);
 
         return context.ToResult();
     }

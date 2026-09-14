@@ -17,10 +17,10 @@ public sealed class HookDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task DescribeHooks_Project_PointsAtThePathsIntegrateActuallyWrote()
+    public async Task DescribeHooks_Project_NamesTheRegistrationInitWrote()
     {
-        // The point of a shared description: a diagnostic that keeps its own copy of where the hook
-        // lives will eventually check a path integrate no longer writes, and report success doing it.
+        // A diagnostic that keeps its own copy of where the hook lives will eventually check a file init no
+        // longer writes, and report success doing it.
         var home = new HomePaths(_tempDir);
         var rtkConfigPath = Path.Combine(_tempDir, "isolated-config", "rtk", "config.toml");
         var integrators = new IHookIntegrator[]
@@ -37,11 +37,8 @@ public sealed class HookDescriptionTests : IDisposable
 
             foreach (var installation in integrator.DescribeHooks(projectDir, HookScope.Project))
             {
-                File.Exists(installation.Script.Path).Should().BeTrue(
-                    "integrate wrote the script that DescribeHooks names ({0})", installation.Script.Path);
-                File.Exists(installation.RegistrationPath).Should().BeTrue(
-                    "integrate wrote the registration file that DescribeHooks names ({0})",
-                    installation.RegistrationPath);
+                (await File.ReadAllTextAsync(installation.RegistrationPath)).Should().Contain(installation.Command);
+                File.Exists(installation.LegacyScriptPath).Should().BeFalse("init no longer writes a script");
             }
         }
     }
@@ -50,19 +47,25 @@ public sealed class HookDescriptionTests : IDisposable
     public void DescribeHooks_Global_UsesTheHomeConfigPaths()
     {
         var home = new HomePaths(_tempDir);
-        var integrator = new GeminiCliIntegrator(home);
 
-        var installation = integrator.DescribeHooks(_tempDir, HookScope.Global).Should().ContainSingle().Subject;
+        var installation = new GeminiCliIntegrator(home).DescribeHooks(_tempDir, HookScope.Global).Should().ContainSingle().Subject;
 
-        installation.Script.Path.Should().StartWith(home.GeminiDir);
+        installation.RegistrationPath.Should().StartWith(home.GeminiDir);
+        installation.LegacyScriptPath.Should().StartWith(home.GeminiDir);
         installation.Scope.Should().Be(HookScope.Global);
     }
 
     [Fact]
-    public void DescribeHooks_EveryHookProvider_CarriesTheHookLegacySignature()
+    public void DescribeHooks_EveryHookProvider_RegistersItsOwnDtkHook()
     {
         var home = new HomePaths(_tempDir);
         var rtkConfigPath = Path.Combine(_tempDir, "isolated-config", "rtk", "config.toml");
+        var expected = new Dictionary<string, string>
+        {
+            ["claude"] = "dtk hook claude",
+            ["gemini"] = "dtk hook gemini; exit 0",
+            ["copilot-cli"] = "dtk hook copilot-cli; exit 0"
+        };
         var integrators = new IHookIntegrator[]
         {
             new ClaudeCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
@@ -70,13 +73,10 @@ public sealed class HookDescriptionTests : IDisposable
             new CopilotCliIntegrator(home)
         };
 
-        foreach (var integrator in integrators)
+        foreach (var installation in integrators.SelectMany(i => i.DescribeHooks(_tempDir, HookScope.Project)))
         {
-            foreach (var installation in integrator.DescribeHooks(_tempDir, HookScope.Project))
-            {
-                installation.Script.LegacySignature.Should().Be(IntegratorHelpers.HookLegacySignature);
-                installation.Script.Body.Should().Contain(IntegratorHelpers.HookLegacySignature);
-            }
+            installation.Command.Should().Be(expected[installation.ProviderName]);
+            Path.GetFileName(installation.LegacyScriptPath).Should().Be(IntegratorHelpers.LegacyHookScriptName);
         }
     }
 }

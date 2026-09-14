@@ -24,19 +24,21 @@ internal enum HookPayloadKind
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>
-/// <param name="ProviderName">The provider this hook belongs to (e.g. "claude").</param>
+/// <param name="ProviderName">The provider this hook belongs to, which is also the <c>dtk hook</c> argument (e.g. "claude").</param>
 /// <param name="Scope">Whether this describes the project or the home-config install.</param>
-/// <param name="Script">The hook script as a generated artifact, including its current template body.</param>
 /// <param name="RegistrationPath">
-/// The JSON file that registers the hook with the host CLI — a merged <c>settings.json</c> for most
-/// providers, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI.
+/// The JSON file that registers the hook with the host CLI — a merged <c>settings.json</c> for Claude Code and
+/// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI.
 /// </param>
+/// <param name="Command">The exact command dtk registers, e.g. <c>dtk hook gemini; exit 0</c>.</param>
+/// <param name="LegacyScriptPath">Where dtk installed the Python hook this registration replaces.</param>
 /// <param name="PayloadKind">Payload shape to use when probing this hook.</param>
 internal sealed record HookInstallation(
     string ProviderName,
     HookScope Scope,
-    GeneratedArtifact Script,
     string RegistrationPath,
+    string Command,
+    string LegacyScriptPath,
     HookPayloadKind PayloadKind);
 
 /// <summary>

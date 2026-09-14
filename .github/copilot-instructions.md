@@ -18,7 +18,6 @@ dtk dotnet list package --outdated
 - Exit codes are preserved — CI pipelines work correctly.
 - Unknown subcommands (e.g. `run`, `publish`) pass through to `dotnet` unchanged.
 
-A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` rewrites `dotnet build|test|restore|clean|format|list package`
-to `dtk dotnet ...` automatically. The hook shells out to `python3`; on Windows (where the launcher is
-usually `python`, not `python3`), edit the `bash` command in that file if it doesn't fire.
+A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` runs `dtk hook copilot-cli`, which rewrites
+`dotnet build|test|restore|clean|format|list package` to `dtk dotnet ...` automatically.
 <!-- /dtk -->

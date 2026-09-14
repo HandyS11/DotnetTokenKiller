@@ -4,14 +4,6 @@ using System.Text.Json.Nodes;
 
 namespace DotnetTokenKiller.Application.Integration;
 
-internal sealed record HookSpec(
-    string ScriptPath,
-    string Script,
-    string SettingsPath,
-    string EventKey,
-    string Matcher,
-    string Command);
-
 /// <summary>A hook registration merged into a harness's settings file.</summary>
 /// <param name="SettingsPath">Path to the settings.json file.</param>
 /// <param name="EventKey">Key of the hook event array within the hooks object (e.g. "PreToolUse").</param>
@@ -307,40 +299,6 @@ internal static class IntegratorHelpers
         }
 
         return content[..start] + section + content[(end + endMarker.Length)..];
-    }
-
-    /// <summary>
-    /// Writes the hook script file and merges the hook registration into the provider's settings JSON.
-    /// </summary>
-    /// <param name="spec">Hook installation specification.</param>
-    /// <param name="context">Integration context carrying the force flag and result accumulators.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    internal static async Task WriteHookAndSettingsAsync(
-        HookSpec spec,
-        IntegrationContext context,
-        CancellationToken cancellationToken)
-    {
-        await WriteGeneratedFileAsync(
-            new GeneratedArtifact(spec.ScriptPath, spec.Script, StampStyle.HashComment, HookLegacySignature),
-            context,
-            cancellationToken).ConfigureAwait(false);
-
-        await MergeJsonSettingsAsync(
-            spec.SettingsPath,
-            spec.EventKey,
-            new JsonObject
-            {
-                ["matcher"] = spec.Matcher,
-                ["hooks"] = new JsonArray(
-                    new JsonObject
-                    {
-                        ["type"] = "command",
-                        ["command"] = spec.Command
-                    })
-            },
-            spec.Command,
-            context,
-            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Merges a hook registration into the provider's settings JSON. No script is written.</summary>
