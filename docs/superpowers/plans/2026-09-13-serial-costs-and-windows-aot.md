@@ -757,7 +757,7 @@ comes next.
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ```
 
-Run: `dtk dtk dotnet format DotnetTokenKiller.slnx --no-restore && git add src/DotnetTokenKiller.Infrastructure/Tracking tests/DotnetTokenKiller.Infrastructure.Tests/Tracking && git commit -F /tmp/commit-b4.txt`
+Run: `dtk dotnet format DotnetTokenKiller.slnx --no-restore && git add src/DotnetTokenKiller.Infrastructure/Tracking tests/DotnetTokenKiller.Infrastructure.Tests/Tracking && git commit -F /tmp/commit-b4.txt`
 
 ### Task 5: exact-once folds
 
@@ -911,7 +911,7 @@ Append to `PendingRecordJournalTests`:
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `dtk dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~PendingRecordJournalTests"`
+Run: `dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~PendingRecordJournalTests"`
 Expected: build errors, `FoldAsync`, `Clear`, `FoldOutcome` missing.
 
 - [ ] **Step 3: Write `FoldOutcome` and the fold**
@@ -1115,7 +1115,7 @@ in some sharing cases; if the lock test fails on Windows CI with that type, wide
 
 - [ ] **Step 4: Run the tests**
 
-Run: `dtk dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~PendingRecordJournalTests"`
+Run: `dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~PendingRecordJournalTests"`
 Expected: 10 passed (the lock test takes about 0.3 s).
 
 - [ ] **Step 5: Commit**
@@ -1133,7 +1133,7 @@ one that dies after it is recognised by its id and discarded.
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ```
 
-Run: `dtk dtk dotnet format DotnetTokenKiller.slnx --no-restore && git add src/DotnetTokenKiller.Infrastructure/Tracking tests/DotnetTokenKiller.Infrastructure.Tests/Tracking && git commit -F /tmp/commit-b5.txt`
+Run: `dtk dotnet format DotnetTokenKiller.slnx --no-restore && git add src/DotnetTokenKiller.Infrastructure/Tracking tests/DotnetTokenKiller.Infrastructure.Tests/Tracking && git commit -F /tmp/commit-b5.txt`
 
 ### Task 6: `SqliteTracker` writes to the journal and folds on read
 
@@ -1289,7 +1289,7 @@ is `internal static` in `PendingRecordJournalTests` (Task 4).
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `dtk dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~SqliteTrackerJournalTests"`
+Run: `dtk dotnet test tests/DotnetTokenKiller.Infrastructure.Tests --filter "FullyQualifiedName~SqliteTrackerJournalTests"`
 Expected: build error on the three-argument constructor, or failures on the first assertions.
 
 - [ ] **Step 3: Change `SqliteTracker`**
@@ -1538,7 +1538,7 @@ write lock. A folds table makes recovery exact-once.
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ```
 
-Run: `dtk dtk dotnet format DotnetTokenKiller.slnx --no-restore && git add src tests && git commit -F /tmp/commit-b6.txt`
+Run: `dtk dotnet format DotnetTokenKiller.slnx --no-restore && git add src tests && git commit -F /tmp/commit-b6.txt`
 
 ### Task 7: the loader test, the docs, and the journal measurement
 
@@ -1589,7 +1589,7 @@ on any platform; `gain` is the positive control.
 
 - [ ] **Step 2: Build the integration test project**
 
-Run: `dtk dtk dotnet build tests/DotnetTokenKiller.Cli.IntegrationTests`
+Run: `dtk dotnet build tests/DotnetTokenKiller.Cli.IntegrationTests`
 Expected: no warnings. (The test itself runs on macOS in CI.)
 
 - [ ] **Step 3: Update the three platform paragraphs**
