@@ -80,6 +80,14 @@ public sealed class HookPayloadsTests
         HookPayloads.Reply(HookPayloadKind.ClaudeCode, bytes).Should().Contain("dtk dotnet test");
     }
 
+    [Theory]
+    [InlineData("""{"tool_input":{"command":"a","command":"b"}}""")]
+    [InlineData("""{"tool_input":{"command":"a"},"tool_input":{"command":"b"}}""")]
+    public void Claude_DuplicateJsonKey_PrintsNothing(string payload)
+    {
+        Reply(HookPayloadKind.ClaudeCode, payload).Should().BeNull();
+    }
+
     [Fact]
     public void Gemini_Rewrite_AllowsWithTheRewrittenToolInput()
     {
@@ -103,6 +111,12 @@ public sealed class HookPayloadsTests
     public void Gemini_InvalidJson_PrintsNothing()
     {
         Reply(HookPayloadKind.GeminiCli, "{").Should().BeNull();
+    }
+
+    [Fact]
+    public void Gemini_DuplicateJsonKey_AllowsWithoutChange()
+    {
+        Reply(HookPayloadKind.GeminiCli, """{"tool_input":{"command":"a","command":"b"}}""").Should().Be("""{"decision":"allow"}""");
     }
 
     [Theory]
@@ -136,6 +150,14 @@ public sealed class HookPayloadsTests
     [InlineData("[]")]
     [InlineData("{")]
     public void Copilot_NothingToRewrite_PrintsNothing(string payload)
+    {
+        Reply(HookPayloadKind.CopilotCli, payload).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("""{"toolName":"bash","toolArgs":{"command":"a"},"toolArgs":{"command":"b"}}""")]
+    [InlineData("""{"toolName":"bash","toolArgs":"{\"command\":\"a\",\"command\":\"b\"}"}""")]
+    public void Copilot_DuplicateJsonKey_PrintsNothing(string payload)
     {
         Reply(HookPayloadKind.CopilotCli, payload).Should().BeNull();
     }

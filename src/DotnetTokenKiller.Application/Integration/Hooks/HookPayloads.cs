@@ -7,10 +7,17 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// <remarks>
 /// The replies are the ones the Python hooks printed. Other fields of the tool input round-trip untouched.
 /// An unexpected payload shape yields no rewrite rather than an exception, because a hook that fails must
-/// never block the tool call.
+/// never block the tool call. This also covers a payload with a duplicate JSON object key: <see cref="JsonNode"/>
+/// builds a <see cref="JsonObject"/>'s property dictionary lazily, so parsing such a payload succeeds and the
+/// <see cref="ArgumentException"/> only surfaces the first time something here indexes into the duplicated
+/// object — <see cref="Reply"/> guards the per-provider dispatch, not just the initial parse, so that still
+/// yields the provider's no-rewrite result instead of an unhandled exception.
 /// </remarks>
 internal static class HookPayloads
 {
+    /// <summary>Gemini CLI's reply when nothing about the payload calls for a rewrite.</summary>
+    private const string GeminiAllowReply = """{"decision":"allow"}""";
+
     /// <summary>Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>) to its payload shape.</summary>
     /// <param name="provider">The name passed to <c>dtk hook</c>.</param>
     /// <param name="kind">The payload shape, when the name is known.</param>
@@ -47,13 +54,24 @@ internal static class HookPayloads
             return null;
         }
 
-        return kind switch
+        try
         {
-            HookPayloadKind.ClaudeCode => ReplyToClaude(root),
-            HookPayloadKind.GeminiCli => ReplyToGemini(root),
-            HookPayloadKind.CopilotCli => ReplyToCopilot(root),
-            _ => null
-        };
+            return kind switch
+            {
+                HookPayloadKind.ClaudeCode => ReplyToClaude(root),
+                HookPayloadKind.GeminiCli => ReplyToGemini(root),
+                HookPayloadKind.CopilotCli => ReplyToCopilot(root),
+                _ => null
+            };
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or JsonException)
+        {
+            // A duplicate key in a JSON object (e.g. two "command" properties) parses without error —
+            // JsonObject builds its property dictionary lazily — and only throws the first time something
+            // above indexes into that object. Treat it the same as any other unexpected shape: the no-rewrite
+            // result for this provider, never an unhandled exception.
+            return kind == HookPayloadKind.GeminiCli ? GeminiAllowReply : null;
+        }
     }
 
     private static string? ReplyToClaude(JsonNode? root)
