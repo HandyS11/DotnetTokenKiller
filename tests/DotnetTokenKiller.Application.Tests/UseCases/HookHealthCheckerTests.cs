@@ -172,6 +172,23 @@ public sealed class HookHealthCheckerTests : IDisposable
         checks[0].Message.Should().Contain("could not be read as JSON");
     }
 
+    [Theory]
+    [InlineData("""{"hooks":{},"hooks":{}}""")]
+    [InlineData("""{"hooks":{"BeforeTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"dtk hook gemini; exit 0","command":"dtk hook gemini; exit 0"}]}]}}""")]
+    public async Task RunAsync_RegistrationWithDuplicateKeys_FailsWithoutThrowing(string duplicated)
+    {
+        // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is enumerated.
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        Directory.CreateDirectory(Path.GetDirectoryName(installation.RegistrationPath)!);
+        await File.WriteAllTextAsync(installation.RegistrationPath, duplicated);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().ContainSingle();
+        checks[0].Passed.Should().BeFalse();
+        checks[0].Message.Should().Contain(installation.RegistrationPath).And.Contain("could not be read");
+    }
+
     [Fact]
     public async Task RunAsync_RegistrationUnreadable_StatusFailsNamingPathAndReason()
     {

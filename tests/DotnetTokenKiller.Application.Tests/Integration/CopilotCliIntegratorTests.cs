@@ -204,4 +204,19 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         File.Exists(HookScriptPath).Should().BeTrue();
         result.RemovedFiles.Should().BeEmpty();
     }
+
+    [Theory]
+    [InlineData("""{"version":1,"hooks":{},"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py"}]}}""")]
+    [InlineData("""{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py","bash":"python3 dotnet-to-dtk.py"}]}}""")]
+    public async Task IntegrateAsync_HookJsonWithDuplicateKeys_IsSkippedWithoutForce(string duplicated)
+    {
+        // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is indexed.
+        Directory.CreateDirectory(Path.GetDirectoryName(HookJsonPath)!);
+        await File.WriteAllTextAsync(HookJsonPath, duplicated);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Be(duplicated);
+        result.SkippedFiles.Should().Contain(HookJsonPath);
+    }
 }

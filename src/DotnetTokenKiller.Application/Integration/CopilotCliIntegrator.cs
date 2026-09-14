@@ -142,8 +142,10 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
 
             return entries.All(IsDtkHookEntry);
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException
+                                       or InvalidOperationException or ArgumentException)
         {
+            // ArgumentException: JsonNode.Parse accepts a repeated key and throws only when the object is indexed.
             return false;
         }
     }

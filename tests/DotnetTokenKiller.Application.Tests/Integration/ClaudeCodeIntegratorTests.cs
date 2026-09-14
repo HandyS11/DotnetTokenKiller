@@ -85,6 +85,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
 
         content.Should().Contain("dotnet-token-killer");
         content.Should().Contain("dtk dotnet build");
+        content.Should().NotContain("dtk dtk");
     }
 
     [Fact]

@@ -84,7 +84,7 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
         - Paths are workspace-relative (`src/Foo.cs`, not absolute)
         - Build errors grouped by file; warnings grouped by diagnostic code with frequency counts
         - Works with xUnit, NUnit, MSTest, and Reqnroll
-        - Run `dtk dtk dotnet clean` first for a full warning report (incremental builds skip unchanged files)
+        - Run `dtk dotnet clean` first for a full warning report (incremental builds skip unchanged files)
 
         ## Token Savings
 

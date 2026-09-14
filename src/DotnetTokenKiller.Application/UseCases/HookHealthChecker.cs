@@ -137,24 +137,25 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
             return new Registration(RegistrationKind.Unreadable, $"{path} could not be read: {ex.Message}");
         }
 
-        JsonNode? root;
+        // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is
+        // enumerated, so the search belongs inside the same guard as the parse.
         try
         {
-            root = JsonNode.Parse(content);
+            var root = JsonNode.Parse(content);
+
+            if (FindStringContaining(root, IntegratorHelpers.LegacyHookScriptName) is not null)
+            {
+                return new Registration(RegistrationKind.Legacy, string.Empty);
+            }
+
+            return FindStringContaining(root, HookCommands.Invocation(installation.ProviderName)) is not null
+                ? new Registration(RegistrationKind.Current, string.Empty)
+                : new Registration(RegistrationKind.Absent, $"not registered — no entry in {path} runs '{installation.Command}'");
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
         {
             return new Registration(RegistrationKind.Unreadable, $"{path} could not be read as JSON: {ex.Message}");
         }
-
-        if (FindStringContaining(root, IntegratorHelpers.LegacyHookScriptName) is not null)
-        {
-            return new Registration(RegistrationKind.Legacy, string.Empty);
-        }
-
-        return FindStringContaining(root, HookCommands.Invocation(installation.ProviderName)) is not null
-            ? new Registration(RegistrationKind.Current, string.Empty)
-            : new Registration(RegistrationKind.Absent, $"not registered — no entry in {path} runs '{installation.Command}'");
     }
 
     /// <summary>Depth-first search for a string value containing <paramref name="needle"/>.</summary>
