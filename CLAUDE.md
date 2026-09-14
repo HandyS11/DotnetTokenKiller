@@ -111,10 +111,11 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
   around it on every iteration, alternating which goes first, and report the paired difference as
   dtk's overhead. The instant child is the worst case (background setup can overlap only dtk's own
   work); the sleeping child is the best case (an idle CPU). For output this fixture's size (2.6 KB),
-  a real build's cost lies between them; dtk's per-line tee flush and token counting grow with
-  output size, so that bracket says nothing about a much larger build log — the fourth scenario
-  keeps the same idle-CPU sleeping child but swaps in the 1024 KB log, isolating the counting-and-
-  tee cost at that size from process-spawn overhead. Every sample must print the build filter's
+  a real build's cost lies between them; dtk's per-line tee write and flush still run in the pump
+  and grow with output size, while token counting now overlaps the child except for the last chunk
+  (under 64 K chars) and stderr, so that bracket says nothing about a much larger build log's tee
+  cost — the fourth scenario keeps the same idle-CPU sleeping child but swaps in the 1024 KB log,
+  isolating the tee-and-final-chunk cost at that size from process-spawn overhead. Every sample must print the build filter's
   summary line, because the real SDK found on `PATH` by mistake also exits 1. The header prints any
   `DOTNET_*`/`COMPlus_*` variables, the binary's `runtimeconfig.json` properties, and a
   `State: <root> (<filesystem>)` line, since all three move the figures: state defaults to the temp
@@ -134,7 +135,14 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
   185.7 → 186.9 ms (1000 ms child, 1 MB log); on ext4, pipe 75.5 → 63.4 ms; wrapped overhead
   74.9 → 63.7 ms (instant child), 179.1 → 26.5 ms (1000 ms child), and 307.1 → 188.6 ms (1000 ms
   child, 1 MB log). With no SQLite write left in the run, the ext4 medians sit within 2 ms of tmpfs
-  and the ext4 spread closed (1000 ms-child p95 30.8 ms, max 31.8 ms).
+  and the ext4 spread closed (1000 ms-child p95 30.8 ms, max 31.8 ms). Streaming count, measured
+  2026-09-14, journal → counting stdout in chunks while the child runs, both local AOT publishes: on
+  tmpfs, pipe 65.6 → 63.9 ms; wrapped overhead 63.3 → 62.5 ms (instant child), 26.5 → 25.5 ms (1000 ms
+  child), and 186.9 → 158.9 ms (1000 ms child, 1 MB log); on ext4, pipe 63.4 → 64.9 ms; wrapped
+  overhead 63.7 → 62.7 ms (instant child), 26.5 → 25.8 ms (1000 ms child), and 188.6 → 160.6 ms
+  (1000 ms child, 1 MB log). The three unchanged scenarios moved by at most 1.7 ms either way, well
+  under the 3 ms ceiling; the 1 MB scenario's overhead dropped 28.0 ms on both filesystems, 2.0 ms
+  short of the 30 ms target the spec set for it.
 - `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
   `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
   in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
