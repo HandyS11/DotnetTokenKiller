@@ -45,7 +45,11 @@ public class HookIntegrationTests
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Hook_UnknownProvider_ExitsZeroWithUsageOnStderrAsync()
     {
-        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync("{}", "hook", "cursor");
+        // dtk rejects the provider without reading stdin. A payload larger than any pipe buffer makes the
+        // write outlive the process on every OS, as a fast native exit already did with "{}" on Windows.
+        var payload = new string(' ', 1024 * 1024) + "{}";
+
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(payload, "hook", "cursor");
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();

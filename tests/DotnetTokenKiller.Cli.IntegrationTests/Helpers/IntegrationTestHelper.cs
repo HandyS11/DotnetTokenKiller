@@ -208,8 +208,17 @@ internal static class IntegrationTestHelper
         }
 
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start dtk");
-        await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
-        process.StandardInput.Close();
+        try
+        {
+            await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // dtk may exit without reading stdin (e.g. `dtk hook` with an unknown provider), closing the pipe
+            // under the write. Harnesses ignore that broken pipe too; the exit code and output are the result.
+        }
+
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
