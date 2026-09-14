@@ -8,6 +8,8 @@
     <PackageReference Include="xunit"/>
     <PackageReference Include="xunit.runner.visualstudio"/>
     <PackageReference Include="FluentAssertions"/>
+    <!-- Opens databases through SqliteTracker and no longer inherits a bundle from the application. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3"/>
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

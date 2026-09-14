@@ -1,6 +1,6 @@
-**Status:** Draft, awaiting the owner's review. Written in an autonomous session: the decisions in
-"Decisions" were taken without the owner and are the first thing to check. Plan:
-[docs/superpowers/plans/2026-09-13-serial-costs-and-windows-aot.md](../plans/2026-09-13-serial-costs-and-windows-aot.md).
+**Status:** Implemented — see [the plan](../plans/2026-09-13-serial-costs-and-windows-aot.md).
+The decisions were taken without the owner and are recorded, with every later ruling, in the
+pull requests (#151, #152 and #153).
 
 ## Context
 

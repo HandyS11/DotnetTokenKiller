@@ -37,11 +37,21 @@
       SDK's RID graph maps them to linux-x64 and linux-arm64, so Alpine would otherwise install
       the glibc package. Set here, not with -p:, because a semicolon list on the command line
       collapses into one RID. The pack sequence is in CLAUDE.md.
-      Windows installs `any`: the SDK's shim for a native tool there is a dtk.cmd batch file, which
-      Git Bash cannot run and which re-parses | & ^ % in arguments (see
-      docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md).
+      win-x64 is a framework-dependent package (runner `dotnet`) whose packaged shim is the Native AOT
+      dtk.exe: the SDK writes a dtk.cmd batch file for a native tool, which Git Bash cannot run and which
+      re-parses | & ^ % in arguments, but copies a packaged shim by name, unchecked, to ~/.dotnet/tools.
+      Windows arm64 and x86 install `any`. See UseNativeBinaryAsPackagedShim below and
+      docs/superpowers/specs/2026-09-13-serial-costs-and-windows-aot-design.md.
     -->
-    <ToolPackageRuntimeIdentifiers>linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
+    <ToolPackageRuntimeIdentifiers>linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-arm64;win-x64;any</ToolPackageRuntimeIdentifiers>
+    <!--
+      The win-x64 package's shim is the Native AOT dtk.exe, installed alone in ~/.dotnet/tools (see
+      UseNativeBinaryAsPackagedShim below), so it cannot find e_sqlite3.dll beside it. That build uses
+      winsqlite3.dll, which Windows 10 1903 and later ship in System32. Every other build, the
+      framework-dependent dtk.dll in the same package included, keeps e_sqlite3.
+    -->
+    <DtkUseWinSqlite3>false</DtkUseWinSqlite3>
+    <DtkUseWinSqlite3 Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' == 'win-x64'">true</DtkUseWinSqlite3>
     <PackageId>DotnetTokenKiller</PackageId>
     <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
@@ -61,11 +71,15 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console"/>
     <PackageReference Include="Spectre.Console.Cli"/>
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Condition="!$(DtkUseWinSqlite3)"/>
+    <PackageReference Include="SQLitePCLRaw.bundle_winsqlite3" Condition="$(DtkUseWinSqlite3)"/>
     <!--
-      Already a transitive dependency through Microsoft.Data.Sqlite, and pinned in Directory.Packages.props.
-      Referenced directly for $(PkgSQLitePCLRaw_lib_e_sqlite3), the static library's location below.
+      A transitive dependency of SQLitePCLRaw.bundle_e_sqlite3 in every build except the win-x64 AOT
+      publish, which uses winsqlite3 and must not carry e_sqlite3.dll (DtkUseWinSqlite3 above). Referenced
+      directly, and pinned in Directory.Packages.props, for $(PkgSQLitePCLRaw_lib_e_sqlite3), the static
+      library's location the Linux static link below needs.
     -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" GeneratePathProperty="true"/>
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" GeneratePathProperty="true" Condition="!$(DtkUseWinSqlite3)"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj"/>
@@ -75,22 +89,44 @@
     <InternalsVisibleTo Include="DotnetTokenKiller.Cli.IntegrationTests"/>
   </ItemGroup>
   <!--
-    An AOT RID package carries the native dtk and, where SQLite is not linked in, libe_sqlite3. Tool packing globs
-    the whole publish directory, so symbols (released as GitHub Release assets instead), managed .pdb and .xml files,
-    and SQLitePCLRaw's static libe_sqlite3.a are kept out of it here. The `any` package is unaffected, and keeps its
-    .pdb files for its .snupkg.
+    A RID package, AOT or the framework-dependent win-x64 one, carries the runtime files only: tool packing
+    globs the whole publish directory, so symbols (released as GitHub Release assets instead), managed .pdb
+    and .xml files, and SQLitePCLRaw's static libe_sqlite3.a are kept out of it here. The `any` package is
+    unaffected, and keeps its .pdb files for its .snupkg.
   -->
-  <PropertyGroup Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
   </PropertyGroup>
-  <Target Name="KeepAotToolPackageRuntimeOnly" AfterTargets="ComputeResolvedFilesToPublishList"
-          Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
+  <Target Name="KeepRidToolPackageRuntimeOnly" AfterTargets="ComputeResolvedFilesToPublishList"
+          Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
                              Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb' or '%(ResolvedFileToPublish.Extension)' == '.xml' or '%(ResolvedFileToPublish.Extension)' == '.a'"/>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
                              Condition="'$(DtkLinkSqliteStatically)' == 'true' and '%(ResolvedFileToPublish.Filename)%(ResolvedFileToPublish.Extension)' == 'libe_sqlite3.so'"/>
     </ItemGroup>
+  </Target>
+  <!--
+    The win-x64 package is packed framework-dependent with -p:PublishAot=false -p:UseAppHost=false, so its
+    runner is `dotnet` and the SDK generates an apphost shim for PackAsToolShimRuntimeIdentifiers. This
+    target then replaces that shim with the Native AOT dtk.exe named by DtkPackagedShim: on install the SDK
+    copies a packaged shim by file name, unchecked, to ~/.dotnet/tools/dtk.exe (dotnet/sdk,
+    ShellShimRepository.TryGetPackagedShim), so the command every shell runs is the native binary, while
+    `dotnet tool run`, manifests and dnx run dtk.dll on the runtime. eng/aot/pack-windows.sh checks the
+    packed shim is the exe byte for byte; here only its existence is checked.
+  -->
+  <Target Name="UseNativeBinaryAsPackagedShim" AfterTargets="GenerateShimsAssets" Condition="'$(DtkPackagedShim)' != ''">
+    <Error Condition="'$(PackAsToolShimRuntimeIdentifiers)' == ''"
+           Text="DtkPackagedShim needs PackAsToolShimRuntimeIdentifiers, or the SDK generates no shim to replace."/>
+    <Error Condition="!Exists('$(DtkPackagedShim)')" Text="DtkPackagedShim '$(DtkPackagedShim)' does not exist."/>
+    <PropertyGroup>
+      <_DtkShimExtension Condition="'$(RuntimeIdentifier)' == 'win-x64'">.exe</_DtkShimExtension>
+      <_DtkShimTarget>$([MSBuild]::NormalizePath($(PackagedShimOutputRootDirectory), 'shims', $(_ToolPackShortTargetFrameworkName), $(RuntimeIdentifier), '$(ToolCommandName)$(_DtkShimExtension)'))</_DtkShimTarget>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_DtkShimTarget)')"
+           Text="The SDK generated no shim at '$(_DtkShimTarget)'; its packaged-shim layout changed."/>
+    <Copy SourceFiles="$(DtkPackagedShim)" DestinationFiles="$(_DtkShimTarget)" SkipUnchangedFiles="false"/>
+    <Message Importance="high" Text="Packaged shim replaced with $(DtkPackagedShim)."/>
   </Target>
   <!--
     The glibc AOT binaries link SQLite statically. SQLitePCLRaw.lib.e_sqlite3 3.53.3's libe_sqlite3.so needs

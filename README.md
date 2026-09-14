@@ -101,10 +101,13 @@ dotnet tool install -g DotnetTokenKiller
 
 On Linux (x64 and arm64, glibc 2.27 or later, or musl as on Alpine) and macOS on Apple silicon, this installs
 a natively compiled `dtk` that starts in milliseconds and needs no .NET runtime to run; on Linux it needs ICU
-(`libicu`, or `icu-libs` on Alpine), as .NET does. Windows and every other platform get the
-framework-dependent build, which runs on the .NET 10 runtime: on Windows, the SDK's launcher for a native tool
-cannot be started from Git Bash and re-parses `|`, `&`, `^` and `%` in arguments. The same command,
-`dotnet tool update`, tool manifests and `dnx` all pick the right package for the machine.
+(`libicu`, or `icu-libs` on Alpine), as .NET does. On Windows x64 it installs the same natively compiled
+`dtk.exe` as the command (Windows 10 1903 or later, whose own SQLite and ICU it uses), packaged as the tool's
+shim because the SDK writes a `dtk.cmd` batch file for a native tool, which Git Bash cannot run and cmd
+re-parses; `dotnet tool run dtk`, tool manifests and `dnx` run the package's managed build on the .NET 10
+runtime instead. Windows arm64 and every other platform get the framework-dependent build, which runs on the
+.NET 10 runtime. The same command, `dotnet tool update`, tool manifests and `dnx` all pick the right package
+for the machine.
 
 The framework-dependent build records runs on any glibc, but `dtk gain` cannot report them on glibc
 older than 2.34, because its SQLite library needs GLIBC_2.34

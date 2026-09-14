@@ -92,6 +92,12 @@ jobs:
             test-image: ''
             glibc: false
             run-integration-suite: false
+          - rid: win-x64
+            pack-runner: windows-latest
+            test-runner: windows-latest
+            test-image: ''
+            glibc: false
+            run-integration-suite: true
     uses: ./.github/workflows/aot-package.yml
     with:
       rid: ${{ matrix.rid }}
