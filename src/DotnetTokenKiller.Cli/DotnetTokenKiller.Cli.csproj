@@ -74,10 +74,12 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Condition="!$(DtkUseWinSqlite3)"/>
     <PackageReference Include="SQLitePCLRaw.bundle_winsqlite3" Condition="$(DtkUseWinSqlite3)"/>
     <!--
-      Already a transitive dependency through SQLitePCLRaw.bundle_e_sqlite3, and pinned in Directory.Packages.props.
-      Referenced directly for $(PkgSQLitePCLRaw_lib_e_sqlite3), the static library's location below.
+      A transitive dependency of SQLitePCLRaw.bundle_e_sqlite3 in every build except the win-x64 AOT
+      publish, which uses winsqlite3 and must not carry e_sqlite3.dll (DtkUseWinSqlite3 above). Referenced
+      directly, and pinned in Directory.Packages.props, for $(PkgSQLitePCLRaw_lib_e_sqlite3), the static
+      library's location the Linux static link below needs.
     -->
-    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" GeneratePathProperty="true"/>
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" GeneratePathProperty="true" Condition="!$(DtkUseWinSqlite3)"/>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj"/>
