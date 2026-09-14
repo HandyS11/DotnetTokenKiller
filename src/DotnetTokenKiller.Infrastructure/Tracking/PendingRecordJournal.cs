@@ -125,6 +125,44 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
 
         DeleteStaleTempFiles();
 
+        var (claimIds, claimDirs) = await ClaimAsync(committed, cancellationToken).ConfigureAwait(false);
+        if (claimDirs.Count == 0)
+        {
+            return new FoldOutcome(true, 0, 0);
+        }
+
+        var (records, corrupt) = await ReadClaimedAsync(claimDirs, cancellationToken).ConfigureAwait(false);
+
+        await commit(claimIds, records, cancellationToken).ConfigureAwait(false);
+
+        foreach (var dir in claimDirs)
+        {
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Safe to leave: the records and this claim's id are committed, so the next fold
+                // finds the id in the database and deletes the directory without refolding it. A
+                // delete-pending handle or an antivirus scan on Windows, or a racing reset, must not
+                // fail a fold whose data is already in.
+            }
+        }
+
+        return new FoldOutcome(true, records.Count, corrupt);
+    }
+
+    /// <summary>
+    /// Deletes leftover claim directories whose fold committed, keeps the rest for refolding, and moves
+    /// every pending file into a new claim directory. Called under the lock.
+    /// </summary>
+    /// <param name="committed">Whether the database already holds the fold with this id.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The id and directory of every claim to fold, in matching order; both empty when there is nothing to fold.</returns>
+    private async Task<(List<string> Ids, List<string> Dirs)> ClaimAsync(
+        Func<string, CancellationToken, Task<bool>> committed, CancellationToken cancellationToken)
+    {
         var claimIds = new List<string>();
         var claimDirs = new List<string>();
         foreach (var dir in Directory.EnumerateDirectories(Root, ClaimPrefix + "*").ToList())
@@ -156,11 +194,19 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
             claimDirs.Add(dir);
         }
 
-        if (claimDirs.Count == 0)
-        {
-            return new FoldOutcome(true, 0, 0);
-        }
+        return (claimIds, claimDirs);
+    }
 
+    /// <summary>
+    /// Parses every file in <paramref name="claimDirs"/>, ordered by file name across all of them, and
+    /// deletes each one that does not parse or convert.
+    /// </summary>
+    /// <param name="claimDirs">The claim directories to read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The records in run order, and how many corrupt files were deleted.</returns>
+    private static async Task<(List<CommandRecord> Records, int Corrupt)> ReadClaimedAsync(
+        List<string> claimDirs, CancellationToken cancellationToken)
+    {
         var records = new List<CommandRecord>();
         var corrupt = 0;
         var claimedFiles = claimDirs
@@ -191,24 +237,7 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
             }
         }
 
-        await commit(claimIds, records, cancellationToken).ConfigureAwait(false);
-
-        foreach (var dir in claimDirs)
-        {
-            try
-            {
-                Directory.Delete(dir, recursive: true);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Safe to leave: the records and this claim's id are committed, so the next fold
-                // finds the id in the database and deletes the directory without refolding it. A
-                // delete-pending handle or an antivirus scan on Windows, or a racing reset, must not
-                // fail a fold whose data is already in.
-            }
-        }
-
-        return new FoldOutcome(true, records.Count, corrupt);
+        return (records, corrupt);
     }
 
     /// <summary>Deletes every pending file and claim directory. The lock file stays; it is never deleted.</summary>

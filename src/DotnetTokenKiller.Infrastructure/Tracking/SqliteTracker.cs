@@ -27,6 +27,9 @@ public sealed class SqliteTracker(
 
     private const int HistoryLimit = 500;
 
+    /// <summary>SQLite's data source name for a private, in-memory database.</summary>
+    private const string MemoryDataSource = ":memory:";
+
     /// <summary>
     /// The SQL literal list of outcomes that count toward savings, derived from
     /// <see cref="RunOutcomes.CountedInSavings"/> so the two can never disagree.
@@ -285,20 +288,28 @@ public sealed class SqliteTracker(
         return Path.Combine(baseDir, "dtk", "tracking.db");
     }
 
+    /// <summary>The database file's path, or <see langword="null"/> for an in-memory or unnamed database.</summary>
+    /// <param name="cs">The SQLite connection string.</param>
+    private static string? FileDataSource(string cs)
+    {
+        if (cs.Contains(MemoryDataSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var dataSource = new SqliteConnectionStringBuilder(cs).DataSource;
+        return string.IsNullOrWhiteSpace(dataSource) || dataSource == MemoryDataSource ? null : dataSource;
+    }
+
     private static void EnsureDataDirectory(string cs)
     {
-        if (cs.Contains(":memory:", StringComparison.OrdinalIgnoreCase))
+        var dataSource = FileDataSource(cs);
+        if (dataSource is null)
         {
             return;
         }
 
-        var csb = new SqliteConnectionStringBuilder(cs);
-        if (string.IsNullOrWhiteSpace(csb.DataSource) || csb.DataSource == ":memory:")
-        {
-            return;
-        }
-
-        var dir = Path.GetDirectoryName(csb.DataSource);
+        var dir = Path.GetDirectoryName(dataSource);
         if (!string.IsNullOrWhiteSpace(dir))
         {
             Directory.CreateDirectory(dir);
@@ -309,13 +320,8 @@ public sealed class SqliteTracker(
     /// <param name="cs">The SQLite connection string.</param>
     private static PendingRecordJournal? CreateJournal(string cs)
     {
-        if (cs.Contains(":memory:", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var csb = new SqliteConnectionStringBuilder(cs);
-        if (string.IsNullOrWhiteSpace(csb.DataSource) || csb.DataSource == ":memory:")
+        var dataSource = FileDataSource(cs);
+        if (dataSource is null)
         {
             return null;
         }
@@ -323,7 +329,7 @@ public sealed class SqliteTracker(
         // Named after the database file, as SQLite names its own "-journal": the database path is
         // user-configurable, and a generic folder name in that directory could belong to someone
         // else, whose files a fold would claim and delete and a reset would clear.
-        var fullPath = Path.GetFullPath(csb.DataSource);
+        var fullPath = Path.GetFullPath(dataSource);
         var directory = Path.GetDirectoryName(fullPath) ?? Environment.CurrentDirectory;
         return new PendingRecordJournal(Path.Combine(directory, Path.GetFileName(fullPath) + ".pending"));
     }
