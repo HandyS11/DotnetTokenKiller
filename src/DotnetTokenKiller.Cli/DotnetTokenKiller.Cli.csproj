@@ -42,6 +42,14 @@
       docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md).
     -->
     <ToolPackageRuntimeIdentifiers>linux-x64;linux-arm64;linux-musl-x64;linux-musl-arm64;osx-arm64;any</ToolPackageRuntimeIdentifiers>
+    <!--
+      The win-x64 package's shim is the Native AOT dtk.exe, installed alone in ~/.dotnet/tools (see
+      UseNativeBinaryAsPackagedShim below), so it cannot find e_sqlite3.dll beside it. That build uses
+      winsqlite3.dll, which Windows 10 1903 and later ship in System32. Every other build, the
+      framework-dependent dtk.dll in the same package included, keeps e_sqlite3.
+    -->
+    <DtkUseWinSqlite3>false</DtkUseWinSqlite3>
+    <DtkUseWinSqlite3 Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' == 'win-x64'">true</DtkUseWinSqlite3>
     <PackageId>DotnetTokenKiller</PackageId>
     <Description>A .NET CLI proxy that reduces LLM token usage by filtering dotnet command output</Description>
     <PackageTags>dotnet;cli;llm;tokens;productivity</PackageTags>
@@ -61,8 +69,10 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console"/>
     <PackageReference Include="Spectre.Console.Cli"/>
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Condition="!$(DtkUseWinSqlite3)"/>
+    <PackageReference Include="SQLitePCLRaw.bundle_winsqlite3" Condition="$(DtkUseWinSqlite3)"/>
     <!--
-      Already a transitive dependency through Microsoft.Data.Sqlite, and pinned in Directory.Packages.props.
+      Already a transitive dependency through SQLitePCLRaw.bundle_e_sqlite3, and pinned in Directory.Packages.props.
       Referenced directly for $(PkgSQLitePCLRaw_lib_e_sqlite3), the static library's location below.
     -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" GeneratePathProperty="true"/>
