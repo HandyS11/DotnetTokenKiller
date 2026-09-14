@@ -3268,9 +3268,10 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 Task 2 appends its result here.
 
-Measured 2026-09-14: `DotnetCommandRewriterDifferentialTests` ran 5000 seeded-generated commands plus the
-61 Task 1 `InlineData` cases (5061 total) through both the Python `CopilotCliHook` template and the C# port —
-0 mismatches.
+Measured 2026-09-14: `DotnetCommandRewriterDifferentialTests` ran 5000 seeded-generated commands through
+both the Python `CopilotCliHook` template and the C# port — 0 mismatches. Separately, the 61
+`DotnetCommandRewriterTests` (Task 1) `InlineData` cases assert expected values recorded from the Python
+hook; they are not re-run against Python here.
 
 ## Follow-up (not in this plan)
 
