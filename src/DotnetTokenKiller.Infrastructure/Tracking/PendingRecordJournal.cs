@@ -18,7 +18,11 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 /// opens, moves, or reads a file that a writer still has open.
 /// </remarks>
 /// <param name="root">The journal directory.</param>
-/// <param name="lockWait">How long a waiting fold retries for the lock; 2 s unless a test shortens it.</param>
+/// <param name="lockWait">
+/// How long a waiting fold retries for the lock; 30 s unless a test shortens it. Safe to wait this
+/// long because the lock is released with its handle, so it is never stale — only ever held by a
+/// fold that is genuinely still running.
+/// </param>
 internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = null)
 {
     private const string FileExtension = ".json";
@@ -27,7 +31,7 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
     private const string ClaimPrefix = "folding-";
     private static readonly TimeSpan LockRetry = TimeSpan.FromMilliseconds(25);
     private static readonly TimeSpan StaleTempAge = TimeSpan.FromHours(1);
-    private readonly TimeSpan _lockWait = lockWait ?? TimeSpan.FromSeconds(2);
+    private readonly TimeSpan _lockWait = lockWait ?? TimeSpan.FromSeconds(30);
 
     /// <summary>The journal directory, created on the first write.</summary>
     public string Root { get; } = root;

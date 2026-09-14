@@ -159,7 +159,7 @@ would then fold, delete as corrupt, and clear on `reset`.
   whether a fold id is in the database and `commit(ids, records)` inserts, folds exactly once under
   any interruption:
   1. Takes `tracking.db.pending/.lock` with `FileShare.None` (an exclusive `flock` on Unix). With
-     `wait`, it retries for up to two seconds and then throws, so a reader never silently reports
+     `wait`, it retries for up to 30 seconds and then throws, so a reader never silently reports
      rows another process is inserting as missing; without `wait` (the writer's background fold) a
      busy lock means another process is folding, and it returns at once.
   2. Recovers leftovers: for every `tracking.db.pending/folding-<id>/` directory, `committed(id)`
