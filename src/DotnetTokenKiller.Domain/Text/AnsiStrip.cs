@@ -48,7 +48,8 @@ public static partial class AnsiStrip
     /// <remarks>
     /// Only the last escape matters: the OSC pattern cannot cross an ESC, so every earlier
     /// sequence is either complete or already a bare ESC, whatever follows. A lone trailing ESC
-    /// counts as inside, since either sequence could start there.
+    /// counts as inside, since either sequence could start there. The existing CSI and OSC
+    /// patterns can only match at the tail's start because it holds exactly one ESC at index 0.
     /// </remarks>
     /// <param name="text">The text so far.</param>
     public static bool EndsInsideEscapeSequence(ReadOnlySpan<char> text)
@@ -67,16 +68,9 @@ public static partial class AnsiStrip
 
         return tail[1] switch
         {
-            '[' => !CsiAtStartPattern().IsMatch(tail),
-            ']' => !OscAtStartPattern().IsMatch(tail),
+            '[' => !CsiPattern().IsMatch(tail),
+            ']' => !OscPattern().IsMatch(tail),
             _ => false
         };
     }
-
-    // The two sequence patterns anchored at the start, for the tail check above.
-    [GeneratedRegex(@"^\x1b\[[0-9;]*[A-Za-z]")]
-    private static partial Regex CsiAtStartPattern();
-
-    [GeneratedRegex(@"^\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")]
-    private static partial Regex OscAtStartPattern();
 }
