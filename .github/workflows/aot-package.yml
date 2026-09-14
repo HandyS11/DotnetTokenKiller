@@ -87,7 +87,8 @@ jobs:
           -p:IncludeSymbols=false -p:Version="$VERSION" -o artifacts/feed
           "-flp:LogFile=artifacts/pack-$RID.log;Verbosity=minimal"
 
-      - name: Pack the AOT package
+      # win-x64 is a framework-dependent package whose packaged shim is the Native AOT dtk.exe.
+      - name: Pack the win-x64 package with its native shim
         if: runner.os == 'Windows'
         run: sh eng/aot/pack-windows.sh "$VERSION" artifacts/feed artifacts/aot/win-x64 "artifacts/pack-$RID.log"
 
