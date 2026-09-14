@@ -131,8 +131,8 @@ internal static class IntegratorHelpers
     internal static bool ShouldSkipWrite(bool fileExists, bool force) => fileExists && !force;
 
     /// <summary>
-    /// Substring present in every generation of the Python hooks, used to recognize an unstamped
-    /// copy installed by dtk 0.6.0 or earlier.
+    /// Substring present in every generation of the Python hook dtk installed before <c>dtk hook</c>,
+    /// used to prove an unstamped copy is dtk's before deleting it.
     /// </summary>
     internal const string HookLegacySignature = "_DTK_SUBCOMMANDS";
 
@@ -155,8 +155,8 @@ internal static class IntegratorHelpers
     /// The legacy branch exists because no artifact installed before stamping carries a stamp, so
     /// without it every existing user would fall through to the skip branch and the refresh would
     /// only begin working one release after the one that adds it. It costs a one-time overwrite
-    /// for anyone who hand-edited an unstamped hook, which is why the overwrite is reported rather
-    /// than silent, and it becomes unreachable once one stamped generation is installed.
+    /// for anyone who hand-edited an unstamped artifact, which is why the overwrite is reported
+    /// rather than silent, and it becomes unreachable once one stamped generation is installed.
     /// </para>
     /// <para>
     /// When the existing artifact cannot be read (locked, permission denied), dtk cannot prove it

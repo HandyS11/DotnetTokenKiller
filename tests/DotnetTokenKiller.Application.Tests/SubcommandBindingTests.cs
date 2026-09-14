@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Filters;
 using FluentAssertions;
@@ -48,83 +49,17 @@ public sealed class SubcommandBindingTests
     }
 
     [Fact]
-    public void GeneratedHooks_DeclareExactlyTheCanonicalSubcommands()
+    public void HookRewrite_CoversExactlyTheCanonicalSubcommands()
     {
-        // Pinned to the literal, known-good bytes rather than recomputed from
-        // DotnetSubcommands.Sorted: if the source list shrinks or grows, the expectation must
-        // not shrink or grow in lockstep with it, or this test could never fail. Adding a
-        // subcommand means updating this literal by hand — that is the intended tripwire, since
-        // it forces whoever adds one to also regenerate the committed hook.
-        const string expectedTuple =
-            "_DTK_SUBCOMMANDS = (\"build\", \"clean\", \"format\", \"list package\", \"restore\", \"test\")";
+        // Pinned to literals rather than derived from DotnetSubcommands.Ordered, so a subcommand added there
+        // must be added here too — and this test proves the hook rewrites it.
+        string[] expected = ["build", "test", "restore", "clean", "format", "list package"];
 
-        foreach (var (name, hook) in new (string Name, string Hook)[]
-                 {
-                     ("Claude", HookScriptTemplates.ClaudeHook),
-                     ("Gemini", HookScriptTemplates.GeminiHook),
-                     ("Copilot CLI", HookScriptTemplates.CopilotCliHook)
-                 })
+        DotnetSubcommands.Ordered.Should().Equal(expected);
+        foreach (var sub in expected)
         {
-            hook.Should().Contain(
-                expectedTuple,
-                "the {0} hook's subcommand tuple must match the canonical set — if it doesn't, regenerate "
-                + "'.claude/hooks/dotnet-to-dtk.py' from HookScriptTemplates.ClaudeHook and update this pinned "
-                + "literal, rather than editing the literal alone",
-                name);
+            DotnetCommandRewriter.Rewrite($"dotnet {sub}").Should().Be($"dtk dotnet {sub}");
         }
-    }
-
-    [Fact]
-    public void GeneratedHooks_DocumentEveryCanonicalSubcommand()
-    {
-        // Pinned to the literal, known-good bytes for the same reason as the tuple assertion
-        // above: deriving the expected alternation from DotnetSubcommands.Ordered would make the
-        // test move in lockstep with the thing it is supposed to be pinning. Adding a
-        // subcommand requires updating this literal, which forces regenerating the hooks too.
-        const string expected = "rewrites `dotnet build|test|restore|clean|format|list package`";
-
-        HookScriptTemplates.ClaudeHook.Should().Contain(
-            expected,
-            "the Claude hook's docstring must list every canonical subcommand, or a user reading it would "
-            + "not know the hook covers the newest one");
-        HookScriptTemplates.GeminiHook.Should().Contain(
-            expected,
-            "the Gemini hook's docstring must list every canonical subcommand, or a user reading it would "
-            + "not know the hook covers the newest one");
-        HookScriptTemplates.CopilotCliHook.Should().Contain(
-            expected,
-            "the Copilot CLI hook's docstring must list every canonical subcommand, or a user reading it "
-            + "would not know the hook covers the newest one");
-    }
-
-    [Fact]
-    public void RepoClaudeHook_MatchesTheGeneratedHook()
-    {
-        var repoRoot = FindRepoRoot();
-        var hookPath = Path.Combine(repoRoot, ".claude", "hooks", "dotnet-to-dtk.py");
-
-        File.Exists(hookPath).Should().BeTrue("this repo ships its own copy of the Claude hook at {0}", hookPath);
-
-        var committed = File.ReadAllText(hookPath).ReplaceLineEndings("\n");
-
-        // The committed copy is compared against the *stamped* form, because that is what a user
-        // receives. Comparing against the bare template would let this repo's copy and the
-        // installed one diverge in exactly the field that decides whether dtk will refresh it.
-        committed.Should().Be(
-            ArtifactStamping.Apply(HookScriptTemplates.ClaudeHook, StampStyle.HashComment),
-            "the committed hook must be regenerated whenever the template changes, or this repo's own "
-            + "agent sessions silently stop rewriting the newest subcommand");
-    }
-
-    [Fact]
-    public void RepoClaudeHook_CarriesAVerifiableStamp()
-    {
-        var repoRoot = FindRepoRoot();
-        var committed = File.ReadAllText(Path.Combine(repoRoot, ".claude", "hooks", "dotnet-to-dtk.py"));
-
-        ArtifactStamping.IsAuthentic(committed).Should().BeTrue(
-            "an unverifiable stamp would make dtk treat this repo's own hook as user-edited and refuse "
-            + "to refresh it");
     }
 
     [Fact]
@@ -138,13 +73,12 @@ public sealed class SubcommandBindingTests
 
         var committed = File.ReadAllText(instructionsPath);
 
-        // Unlike '.claude/hooks/dotnet-to-dtk.py', this file has no test binding it to its
-        // generator, so a subcommand addition can leave it stale silently — the exact failure
-        // this test exists to prevent. The committed file predates section-merging and happens to
-        // be nothing but the dtk-managed section, so it must be byte-identical to
-        // CopilotCliIntegrator.CopilotSection; a repo that also carried hand-written content
-        // outside the '<!-- dtk -->' / '<!-- /dtk -->' markers would need a substring assertion
-        // instead.
+        // Nothing else binds this file to its generator, so a subcommand addition can leave it
+        // stale silently — the exact failure this test exists to prevent. The committed file
+        // predates section-merging and happens to be nothing but the dtk-managed section, so it
+        // must be byte-identical to CopilotCliIntegrator.CopilotSection; a repo that also carried
+        // hand-written content outside the '<!-- dtk -->' / '<!-- /dtk -->' markers would need a
+        // substring assertion instead.
         committed.Should().Be(
             CopilotCliIntegrator.CopilotSection,
             "the committed instructions must be regenerated (via 'dtk init copilot-cli' into a "
