@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs the Windows x64 package from a local feed and checks what the shim route promises: the command
 # on PATH is the native binary and not a .cmd, tracking works with no e_sqlite3.dll beside it, the managed
-# entry point still runs, and uninstall then reinstall round-trips. Prints 21-run medians for the shim and,
+# entry point still runs and tracks, and uninstall then reinstall round-trips. Prints 21-run medians for the shim and,
 # with --compare-any, for the `any` package installed beside it. Git Bash on Windows. The parity tests, the
 # integration suite and the three-shell smokes run from the workflow, which reads DTK_INSTALLED and
 # DTK_STORE from $GITHUB_ENV when this script sets them.
@@ -100,6 +100,26 @@ grep -q '"TotalCommands":1' "$state/gain.json" || { cat "$state/gain.json"; fail
 
 # The managed entry point every `dotnet tool run`, manifest and dnx invocation uses.
 dotnet "$store/dtk.dll" --version
+
+# That route tracks through the e_sqlite3.dll beside dtk.dll, not the shim's winsqlite3, so check it
+# separately, in a state directory of its own. The shim's variables come back afterwards for the timings.
+shim_config_path=$DTK_CONFIG_PATH
+shim_db_path=$DTK_DB_PATH
+shim_tee_dir=$DTK_TEE_DIR
+managed_state="$tools/state-managed"
+mkdir -p "$managed_state/logs"
+DTK_CONFIG_PATH=$(cygpath -w "$managed_state/config.json")
+DTK_DB_PATH=$(cygpath -w "$managed_state/tracking.db")
+DTK_TEE_DIR=$(cygpath -w "$managed_state/logs")
+status=0
+dotnet "$store/dtk.dll" pipe build --exit-code 1 < "$fixture" > "$managed_state/pipe.txt" 2>&1 || status=$?
+[ "$status" -eq 1 ] || { cat "$managed_state/pipe.txt"; fail "pipe build through dtk.dll exited $status, expected 1"; }
+grep -q "dotnet build: 3 errors" "$managed_state/pipe.txt" || { cat "$managed_state/pipe.txt"; fail "pipe build through dtk.dll did not print the filtered summary"; }
+dotnet "$store/dtk.dll" gain --json > "$managed_state/gain.json" || { cat "$managed_state/gain.json"; fail "gain through dtk.dll failed"; }
+grep -Eq '"TotalCommands": ?1[,}]' "$managed_state/gain.json" || { cat "$managed_state/gain.json"; fail "gain through dtk.dll did not report exactly one tracked run: its e_sqlite3 is not working"; }
+DTK_CONFIG_PATH=$shim_config_path
+DTK_DB_PATH=$shim_db_path
+DTK_TEE_DIR=$shim_tee_dir
 
 # The SDK's RemoveShim and CreateShim paths.
 dotnet tool uninstall --tool-path "$tools" DotnetTokenKiller
