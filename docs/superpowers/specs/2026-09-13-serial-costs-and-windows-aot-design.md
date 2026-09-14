@@ -1,6 +1,6 @@
 **Status:** Implemented — see [the plan](../plans/2026-09-13-serial-costs-and-windows-aot.md).
 The decisions were taken without the owner and are recorded, with every later ruling, in the
-pull requests (#151, #152 and this one).
+pull requests (#151, #152 and #153).
 
 ## Context
 
