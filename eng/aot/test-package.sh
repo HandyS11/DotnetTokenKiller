@@ -88,6 +88,10 @@ if [ ! -d "$store" ]; then
     exit 1
 fi
 
+# The hook as Claude Code, Gemini CLI and Copilot CLI run it. Falls back to sh when bash is absent, so
+# it also runs inside the musl image.
+sh "$repo/eng/hooks/check-hook-shells.sh" "$tools"
+
 # DTK_AOT_REQUIRED=1 makes a missing binary or pack log fail these tests instead of skipping them.
 DTK_AOT_REQUIRED=1 DTK_AOT_PACK_LOG="$log" DTK_AOT_BINARY="$tools/dtk" \
     dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build \
