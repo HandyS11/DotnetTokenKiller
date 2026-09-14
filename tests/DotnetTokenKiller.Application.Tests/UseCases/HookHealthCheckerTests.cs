@@ -13,6 +13,9 @@ public sealed class HookHealthCheckerTests : IDisposable
     /// <summary>The arguments the probe must pass to <c>dtk</c> for the Gemini hook.</summary>
     private static readonly string[] GeminiHookArguments = ["hook", "gemini"];
 
+    /// <summary>The arguments the probe must pass to <c>dtk</c> for the Copilot CLI hook.</summary>
+    private static readonly string[] CopilotCliHookArguments = ["hook", "copilot-cli"];
+
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-hookhealth-{Guid.NewGuid()}");
     private readonly HookHealthChecker _sut;
@@ -323,6 +326,71 @@ public sealed class HookHealthCheckerTests : IDisposable
         probe.Passed.Should().BeFalse();
         probe.Message.Should().Contain("exited with code 255: Error: Unknown command 'hook'.")
             .And.Contain("dotnet tool update -g DotnetTokenKiller");
+    }
+
+    [Fact]
+    public async Task RunAsync_CopilotCliInstall_ProbesWithTheCopilotPayloadShape()
+    {
+        // Copilot CLI's registration also holds non-string values ("version", "timeoutSec"), which the
+        // registration search must step over.
+        var copilot = new CopilotCliIntegrator(Home);
+        await copilot.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([copilot], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal("copilot-cli hook (project)", "copilot-cli hook probe (project)");
+        checks.Should().OnlyContain(c => c.Passed);
+        await _runner.Received(1).RunCapturedWithInputAsync(
+            _dtkOnPath!,
+            Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(CopilotCliHookArguments)),
+            Arg.Is<string>(payload => payload.Contains("\"toolName\":\"bash\"", StringComparison.Ordinal)
+                                      && payload.Contains("toolArgs", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_ProbeTimesOut_ProbeFailsSayingItDidNotRespond()
+    {
+        await IntegrateAsync();
+        _runner.RunCapturedWithInputAsync(null!, null!, null!)
+            .ReturnsForAnyArgs(Task.FromException<CommandResult>(new OperationCanceledException()));
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Contain("did not respond within 10s");
+    }
+
+    [Fact]
+    public async Task RunAsync_CallerCancelsDuringTheProbe_Throws()
+    {
+        // Only the probe's own timeout is a failed check; the caller's cancellation must still cancel doctor.
+        await IntegrateAsync();
+        using var cts = new CancellationTokenSource();
+        _runner.RunCapturedWithInputAsync(null!, null!, null!)
+            .ReturnsForAnyArgs(async Task<CommandResult> (_) =>
+            {
+                await cts.CancelAsync();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        var act = () => _sut.RunAsync(Integrators, _tempDir, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task RunAsync_ProbeFailsWithNoOutput_SaysSo()
+    {
+        await IntegrateAsync();
+        _runner.RunCapturedWithInputAsync(null!, null!, null!)
+            .ReturnsForAnyArgs(new CommandResult(" \n", string.Empty, 1));
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.First(c => c.Name == "gemini hook probe (project)").Message
+            .Should().Contain("exited with code 1: (no output).");
     }
 
     [Fact]

@@ -20,6 +20,9 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
     /// <summary>Groups diagnostics that name no source file, such as tool- and project-level errors.</summary>
     private const string NoFile = "(no file)";
 
+    private const string ErrorLevel = "error";
+    private const string WarningLevel = "warning";
+
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the raw build output.</summary>
@@ -33,8 +36,8 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
         }
 
         var parsed = ParseLines(AnsiStrip.Strip(rawOutput).Split('\n'));
-        var errors = parsed.Diagnostics.Where(d => d.Level == "error").ToList();
-        var warnings = parsed.Diagnostics.Where(d => d.Level == "warning").ToList();
+        var errors = parsed.Diagnostics.Where(d => d.Level == ErrorLevel).ToList();
+        var warnings = parsed.Diagnostics.Where(d => d.Level == WarningLevel).ToList();
         var context = BuildContext(parsed.ProjectCount, parsed.Elapsed);
 
         // MSBuild's own "N Error(s)" tally is the authority on how many diagnostics the build
@@ -87,62 +90,75 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
             // MSBuild's end-of-build tally ("    3 Error(s)"). Read before it is discarded as
             // noise: it is the only count in the output that is not derived from what we parsed.
-            var countMatch = DeclaredCountPattern().Match(line);
-            if (countMatch.Success)
-            {
-                if (int.TryParse(countMatch.Groups["count"].Value, NumberStyles.None,
-                        CultureInfo.InvariantCulture, out var declared))
-                {
-                    if (countMatch.Groups["kind"].Value == "Error")
-                    {
-                        declaredErrors = declared;
-                    }
-                    else
-                    {
-                        declaredWarnings = declared;
-                    }
-                }
-
-                continue;
-            }
-
-            // Skip noise lines
-            if (IsNoiseLine(line))
+            if (TryReadDeclaredCount(line, ref declaredErrors, ref declaredWarnings))
             {
                 continue;
             }
 
-            // Parse diagnostic lines
-            if (TryAddDiagnosticLine(line, seen, diagnostics))
+            // Skip noise lines, then parse diagnostic lines with and without a file/line/col anchor
+            if (!IsNoiseLine(line) && !TryAddDiagnosticLine(line, seen, diagnostics))
             {
-                continue;
+                AddSimpleDiagnosticLine(line, seen, diagnostics);
             }
-
-            // Parse diagnostic lines without file/line/col (e.g., "MSBUILD : error MSB1001: message")
-            var simpleDiagMatch = SimpleDiagnosticPattern().Match(line);
-            if (!simpleDiagMatch.Success)
-            {
-                continue;
-            }
-
-            var simpleDiagnostic = new Diagnostic(
-                string.Empty,
-                string.Empty,
-                string.Empty,
-                simpleDiagMatch.Groups["level"].Value,
-                simpleDiagMatch.Groups["code"].Value,
-                TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen));
-
-            // Keyed off the rendered message for the same reason as the file-anchored diagnostics.
-            if (!seen.Add($"{simpleDiagnostic.Code}:{simpleDiagnostic.Message}"))
-            {
-                continue;
-            }
-
-            diagnostics.Add(simpleDiagnostic);
         }
 
         return new ParsedOutput(diagnostics, projectCount, elapsed, declaredErrors, declaredWarnings);
+    }
+
+    /// <summary>Reads MSBuild's "    3 Error(s)" / "    0 Warning(s)" tally line into the matching count.</summary>
+    /// <param name="line">The output line.</param>
+    /// <param name="declaredErrors">Set to the error tally when <paramref name="line"/> declares it.</param>
+    /// <param name="declaredWarnings">Set to the warning tally when <paramref name="line"/> declares it.</param>
+    /// <returns>Whether <paramref name="line"/> is a tally line, parsed or not.</returns>
+    private static bool TryReadDeclaredCount(string line, ref int? declaredErrors, ref int? declaredWarnings)
+    {
+        var countMatch = DeclaredCountPattern().Match(line);
+        if (!countMatch.Success)
+        {
+            return false;
+        }
+
+        if (int.TryParse(countMatch.Groups["count"].Value, NumberStyles.None,
+                CultureInfo.InvariantCulture, out var declared))
+        {
+            if (countMatch.Groups["kind"].Value == "Error")
+            {
+                declaredErrors = declared;
+            }
+            else
+            {
+                declaredWarnings = declared;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Parses a diagnostic without file/line/col (e.g., "MSBUILD : error MSB1001: message").</summary>
+    /// <param name="line">The output line.</param>
+    /// <param name="seen">The keys of the diagnostics already added.</param>
+    /// <param name="diagnostics">The diagnostics parsed so far.</param>
+    private static void AddSimpleDiagnosticLine(string line, HashSet<string> seen, List<Diagnostic> diagnostics)
+    {
+        var simpleDiagMatch = SimpleDiagnosticPattern().Match(line);
+        if (!simpleDiagMatch.Success)
+        {
+            return;
+        }
+
+        var simpleDiagnostic = new Diagnostic(
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            simpleDiagMatch.Groups["level"].Value,
+            simpleDiagMatch.Groups["code"].Value,
+            TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen));
+
+        // Keyed off the rendered message for the same reason as the file-anchored diagnostics.
+        if (seen.Add($"{simpleDiagnostic.Code}:{simpleDiagnostic.Message}"))
+        {
+            diagnostics.Add(simpleDiagnostic);
+        }
     }
 
     private bool TryAddDiagnosticLine(string line, HashSet<string> seen, List<Diagnostic> diagnostics)
@@ -190,21 +206,21 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             }
 
             sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"dotnet build: {Tally(errorTotal, errors.Count, "error")}, {Tally(warningTotal, warnings.Count, "warning")}{context}")
+                    $"dotnet build: {Tally(errorTotal, errors.Count, ErrorLevel)}, {Tally(warningTotal, warnings.Count, WarningLevel)}{context}")
                 .AppendLine(Separator);
             AppendGroupedByCode(sb, warnings);
         }
         else
         {
             sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"dotnet build: {Tally(errorTotal, errors.Count, "error")}, {Tally(warningTotal, warnings.Count, "warning")}{context}")
+                    $"dotnet build: {Tally(errorTotal, errors.Count, ErrorLevel)}, {Tally(warningTotal, warnings.Count, WarningLevel)}{context}")
                 .AppendLine(Separator);
             AppendGroupedByFile(sb, errors);
             AppendTopCodes(sb, errors);
             if (warnings.Count > 0)
             {
                 sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{Tally(warningTotal, warnings.Count, "warning")} suppressed (use --vv to see)");
+                    $"{Tally(warningTotal, warnings.Count, WarningLevel)} suppressed (use --vv to see)");
             }
         }
 

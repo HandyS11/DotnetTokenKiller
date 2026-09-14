@@ -14,6 +14,7 @@ internal sealed record HookRegistrationSpec(string SettingsPath, string EventKey
 internal static class IntegratorHelpers
 {
     private const string HooksKey = "hooks";
+    private const string CommandKey = "command";
 
     /// <summary>
     /// Serializer options for settings files merged by <see cref="MergeJsonSettingsAsync"/>.
@@ -314,7 +315,7 @@ internal static class IntegratorHelpers
             new JsonObject
             {
                 ["matcher"] = spec.Matcher,
-                ["hooks"] = new JsonArray(new JsonObject { ["type"] = "command", ["command"] = spec.Command })
+                [HooksKey] = new JsonArray(new JsonObject { ["type"] = "command", [CommandKey] = spec.Command })
             },
             spec.Command,
             context,
@@ -538,14 +539,14 @@ internal static class IntegratorHelpers
 
         var matches = FindEquivalentEntries(hookArray, hookCommand);
         var replacedLegacy = matches.Exists(
-            match => match["command"]!.GetValue<string>().Contains(LegacyHookScriptName, StringComparison.Ordinal));
+            match => match[CommandKey]!.GetValue<string>().Contains(LegacyHookScriptName, StringComparison.Ordinal));
 
         if (matches.Count == 0)
         {
             // The JsonNode overload: Add<JsonObject> is neither trim- nor AOT-safe.
             hookArray.Add((JsonNode)hookEntry);
         }
-        else if (matches.Count == 1 && matches[0]["command"]!.GetValue<string>() == hookCommand)
+        else if (matches.Count == 1 && matches[0][CommandKey]!.GetValue<string>() == hookCommand)
         {
             // The only registration is already the identical current command: nothing to write.
             context.Unchanged.Add(path);
@@ -557,8 +558,8 @@ internal static class IntegratorHelpers
             // whichever match happens to be first) preserves any extra properties it carries (e.g.
             // "timeout") and minimizes churn. Otherwise upgrade the first match in place. Every
             // other equivalent/legacy match is then dropped so exactly one registration survives.
-            var survivor = matches.Find(match => match["command"]!.GetValue<string>() == hookCommand) ?? matches[0];
-            survivor["command"] = hookCommand;
+            var survivor = matches.Find(match => match[CommandKey]!.GetValue<string>() == hookCommand) ?? matches[0];
+            survivor[CommandKey] = hookCommand;
 
             var toRemove = matches.FindAll(match => !ReferenceEquals(match, survivor));
             if (toRemove.Count > 0)
@@ -658,7 +659,7 @@ internal static class IntegratorHelpers
                     continue;
                 }
 
-                var command = innerEntry["command"]?.GetValue<string>();
+                var command = innerEntry[CommandKey]?.GetValue<string>();
                 if (command is not null
                     && (AreEquivalentIgnoringQuotes(command, hookCommand)
                         || command.Contains(LegacyHookScriptName, StringComparison.Ordinal)))

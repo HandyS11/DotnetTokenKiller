@@ -132,6 +132,21 @@ public class PipeFilterUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_TrackingOff_FiltersTheWholeInputWithoutRecordingOrWarmingUp()
+    {
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(DtkConfig.Default with { Tracking = DtkConfig.Default.Tracking with { Enabled = false } });
+        var big = string.Concat(Enumerable.Repeat("a line of piped output\n", 20_000));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await Create(big).RunAsync(_filter, "build", 0, new OutputOptions());
+
+        _filter.Received(1).Apply(big, 0);
+        await _tracker.DidNotReceiveWithAnyArgs().WarmUpAsync(default);
+        await _tracker.DidNotReceiveWithAnyArgs().RecordAsync(default!, default);
+    }
+
+    [Fact]
     public async Task RunAsync_StartsTrackingSetupBeforeStdinIsRead()
     {
         // Setup overlaps a slow producer on the other end of the pipe. The reader waits (bounded)

@@ -374,6 +374,18 @@ public class ChunkedTokenCounterTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public async Task Finish_CalledTwice_KeepsTheFirstTrailingText()
+    {
+        var counter = new ChunkedTokenCounter(TokenizerModel.Cl100kBase);
+        counter.Append("hello\n");
+
+        counter.Finish("first");
+        counter.Finish(" and a much longer second trailing text that would change the count");
+
+        (await counter.TotalAsync()).Should().Be(TokenEstimator.Estimate("hello\nfirst"));
+    }
+
+    [Fact]
     public async Task TotalAsync_PropagatesAFailedEstimate()
     {
         var counter = new ChunkedTokenCounter(TokenizerModel.Cl100kBase, TinyChunk,

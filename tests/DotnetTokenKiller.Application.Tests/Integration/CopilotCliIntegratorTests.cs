@@ -188,6 +188,45 @@ public sealed class CopilotCliIntegratorTests : IDisposable
         result.SkippedFiles.Should().Contain(HookJsonPath);
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("""{"version":1}""")]
+    [InlineData("""{"version":1,"hooks":{"preToolUse":[]}}""")]
+    [InlineData("""{"version":1,"hooks":{"preToolUse":["dtk hook copilot-cli; exit 0"]}}""")]
+    [InlineData("""{"version":1,"hooks":{"preToolUse":[{"type":"command","timeoutSec":10}]}}""")]
+    public async Task IntegrateAsync_HookJsonWithoutADtkCommandEntry_IsSkippedWithoutForce(string existing)
+    {
+        // Only a file whose every entry runs a dtk command is provably dtk's; an empty list, a non-object
+        // entry, or an entry with no command at all could be anyone's.
+        Directory.CreateDirectory(Path.GetDirectoryName(HookJsonPath)!);
+        await File.WriteAllTextAsync(HookJsonPath, existing);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Be(existing);
+        result.SkippedFiles.Should().Contain(HookJsonPath);
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_HookJsonLocked_IsSkippedWithoutThrowing()
+    {
+        // An exclusive lock held from within this process, rather than chmod, which root ignores.
+        LegacyHookFixtures.WriteStampedScript(HookScriptPath);
+        const string legacy = """{"version":1,"hooks":{"preToolUse":[{"type":"command","bash":"python3 dotnet-to-dtk.py"}]}}""";
+        await File.WriteAllTextAsync(HookJsonPath, legacy);
+
+        await using (new FileStream(HookJsonPath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+            result.SkippedFiles.Should().Contain(HookJsonPath);
+            result.RemovedFiles.Should().BeEmpty();
+        }
+
+        (await File.ReadAllTextAsync(HookJsonPath)).Should().Be(legacy);
+        File.Exists(HookScriptPath).Should().BeTrue("a registration dtk could not read may still run the script");
+    }
+
     [Fact]
     public async Task IntegrateAsync_SkippedRegistrationStillRunningThePythonHook_KeepsTheScript()
     {
