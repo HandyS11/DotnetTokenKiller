@@ -56,6 +56,10 @@ sh eng/aot/pack-linux.sh linux-x64 0.0.0-local artifacts/aot/feed artifacts/aot/
 dotnet pack src/DotnetTokenKiller.Cli -c Release -p:IncludeSymbols=false -o artifacts/feed
 dotnet pack src/DotnetTokenKiller.Cli -c Release -r any -p:PublishAot=false -o artifacts/feed
 
+# Pack and test the Windows x64 package (Git Bash on Windows; needs the MSVC toolset for the AOT compile).
+sh eng/aot/pack-windows.sh 0.0.0-local artifacts/aot/feed artifacts/aot/win-x64 artifacts/aot/pack-win-x64.log
+sh eng/aot/test-windows.sh 0.0.0-local artifacts/aot/feed artifacts/aot/tools/win-x64 --compare-any
+
 # Check a glibc package's floor, install and test a packed RID package (musl: put
 # `--image mcr.microsoft.com/dotnet/sdk:10.0-alpine` first), and smoke-test the installed tool on Rocky Linux 8
 sh eng/aot/check-glibc-floor.sh artifacts/aot/feed/DotnetTokenKiller.linux-x64.0.0.0-local.nupkg
@@ -162,6 +166,13 @@ sysroot, still dynamic (`-p:DtkLinkSqliteStatically=false`) → cross-built with
 pipe 65.0 → 65.7 → 65.2 ms; wrapped overhead 62.7 → 62.8 → 63.9 ms (instant child) and 29.3 → 29.5 → 29.2 ms
 (1000 ms child); `dtk --version` 12.5 → 12.7 → 12.5 ms; tracking off 14.3 → 14.6 → 14.6 ms.
 
+Windows x64 packaged shim, measured 2026-09-14, windows-latest, indicative (a shared CI runner): the win-x64 package
+is 12,609,768 bytes (12.6 MB) and its native `dtk.exe` shim 16,414,720 bytes; parity tests (43) and the whole
+CLI integration suite (392) pass against the installed `dtk.exe`; tracking reaches Windows' own `winsqlite3.dll`
+(Windows 10 1903 or later). 21 runs each in Git Bash, medians minus a ~34 ms Git Bash process-start baseline
+measured the same way (raw medians in parentheses): `dtk --version` 5.0 ms for the native shim vs 131.0 ms for
+`any` (40 vs 166 ms raw); `dtk pipe build` 57.0 ms vs 277.0 ms (90 vs 310 ms raw).
+
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in
 the workflow's `filter` input cannot go green with an empty artifact.
@@ -169,12 +180,18 @@ the workflow's `filter` input cannot go green with an empty artifact.
 ## Native AOT
 
 The tool ships as RID-specific packages: native AOT for linux-x64, linux-arm64, linux-musl-x64,
-linux-musl-arm64 and osx-arm64, and the framework-dependent `any` package everywhere else, Windows included
-(`ToolPackageRuntimeIdentifiers` in the CLI csproj). Windows has no AOT package because the SDK's shim for a
-native tool is a `dtk.cmd` batch file: Git Bash, Claude Code's shell on Windows, cannot run it, and cmd
-re-parses `| & ^ %` in arguments from pwsh and Git Bash (docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md).
-The musl RIDs must stay listed: the SDK's RID graph maps them to the glibc RIDs, so Alpine would otherwise
-install a binary that cannot run there.
+linux-musl-arm64 and osx-arm64; win-x64 as a framework-dependent package (`Runner="dotnet"`) whose
+packaged shim is that same Native AOT `dtk.exe`; and the framework-dependent `any` package everywhere
+else, Windows arm64 included (`ToolPackageRuntimeIdentifiers` in the CLI csproj). win-x64's packaged shim
+(`DtkPackagedShim`, target `UseNativeBinaryAsPackagedShim`) is copied by the SDK, by file name and unchecked,
+to `~/.dotnet/tools/dtk.exe`, so every shell runs the native binary while `dotnet tool run`, tool manifests
+and `dnx` run `dtk.dll` on the runtime; that exe uses `SQLitePCLRaw.bundle_winsqlite3` (`DtkUseWinSqlite3`)
+because nothing ships beside it. `eng/aot/pack-windows.sh` verifies the packed shim byte for byte and writes
+native symbols to `artifacts/aot/win-x64-symbols/dtk.pdb`; `eng/aot/test-windows.sh` checks the install. A
+packaged shim is needed at all because the SDK writes a `dtk.cmd` batch file for a plain native tool: Git Bash,
+Claude Code's shell on Windows, cannot run it, and cmd re-parses `| & ^ %` in arguments from pwsh and Git Bash
+(docs/superpowers/specs/2026-09-13-linux-windows-aot-design.md). The musl RIDs must stay listed: the SDK's RID
+graph maps them to the glibc RIDs, so Alpine would otherwise install a binary that cannot run there.
 
 CI's `aot-package.yml` packs each Linux RID in Microsoft's cross-build image against its sysroot
 (`eng/aot/pack-linux.sh`: glibc 2.27, the floor .NET supports, or musl 1.2.3) and osx-arm64 on macOS, then
