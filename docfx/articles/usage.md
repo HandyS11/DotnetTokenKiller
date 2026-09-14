@@ -147,25 +147,27 @@ dotnet list package --outdated 2>&1 | dtk pipe list package
 still fails. Piped runs are tracked separately from runs dtk executed itself under a `Source`
 column in `dtk gain --coverage`.
 
-### `dtk integrate`
+### `dtk init`
 
 Install dtk integration artifacts for an AI assistant provider:
 
 ```sh
-dtk integrate claude      # Claude Code skill + PreToolUse hook
-dtk integrate copilot     # GitHub Copilot instructions section
-dtk integrate gemini      # Gemini CLI hook + settings merge
-dtk integrate cursor      # Cursor rules file
-dtk integrate windsurf    # Windsurf rules file
-dtk integrate aider       # Aider instructions + .aider.conf.yml section
-dtk integrate jetbrains   # JetBrains AI guidelines section
+dtk init claude      # Claude Code skill + PreToolUse hook
+dtk init copilot     # GitHub Copilot instructions section
+dtk init gemini      # Gemini CLI hook + settings merge
+dtk init cursor      # Cursor rules file
+dtk init windsurf    # Windsurf rules file
+dtk init aider       # Aider instructions + .aider.conf.yml section
+dtk init jetbrains   # JetBrains AI guidelines section
 ```
 
 All commands accept `--force`/`-f` to overwrite existing files and `--dir <path>`/`-d` to target a specific directory. `--global`/`-g` installs into your home config instead of the project — supported for **claude**, **gemini**, **aider**, and **copilot-cli** (the providers with a home config) — and cannot be combined with `--dir`:
 
 ```sh
-dtk integrate claude --global      # ~/.claude, applies to every project
+dtk init claude --global      # ~/.claude, applies to every project
 ```
+
+`dtk integrate` is an alias of `dtk init`.
 
 See [AI Agent Setup](ai-agent-setup.md) for details on what each provider installs.
 

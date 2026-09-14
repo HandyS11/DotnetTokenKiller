@@ -7,7 +7,6 @@ DotnetTokenKiller (DTK) is a .NET CLI proxy that reduces LLM token usage by filt
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) or later (full SDK, not just the runtime)
 - **OS**: Windows, macOS, or Linux — any platform supported by the .NET SDK
 - **Shell**: Works with bash, zsh, fish, PowerShell, and cmd
-- **Python 3** (optional): Required only if you use `dtk integrate claude` or `dtk integrate gemini`, which install Python-based hooks
 
 ## Installation
 
@@ -88,7 +87,7 @@ dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 | `dtk config set`     | Update a configuration value |
 | `dtk doctor`         | Run self-diagnostic checks |
 | `dtk completion`     | Print a shell completion script |
-| `dtk integrate`      | Install AI agent integration artifacts |
+| `dtk init`           | Install AI agent integration artifacts (alias: `dtk integrate`) |
 
 Any other `dotnet` subcommand (e.g., `dtk dotnet publish`) is passed through to `dotnet` unchanged.
 
@@ -130,13 +129,17 @@ $env:HTTPS_PROXY = "http://proxy:port"
 
 Then retry the install command.
 
-### `dtk integrate claude` / `dtk integrate gemini` fails
+### The agent's hook does not rewrite `dotnet` commands
 
-These commands generate Python-based hooks that require `python3` to be available on your `PATH` at runtime. Verify with:
+The hooks run `dtk hook <provider>`, so the agent must find `dtk` on its `PATH`. Check with:
 
 ```sh
-python3 --version
+dtk doctor
 ```
+
+A failed `hook probe` names the cause: `dtk` missing from `PATH` (add `~/.dotnet/tools`), or a `dtk`
+too old to know `hook` (`dotnet tool update -g DotnetTokenKiller`). A `legacy Python hook` means the
+project was set up by an older dtk; run `dtk init <provider>` to migrate it.
 
 ## Next Steps
 

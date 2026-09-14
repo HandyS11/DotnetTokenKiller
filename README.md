@@ -200,10 +200,10 @@ For the providers with a home config, add `--global` (`-g`) to install into your
 the integration applies across **all** projects:
 
 ```sh
-dtk integrate claude      --global   # ~/.claude
-dtk integrate gemini      --global   # ~/.gemini
-dtk integrate aider       --global   # ~/.aider.conf.yml
-dtk integrate copilot-cli --global   # ~/.copilot/hooks
+dtk init claude      --global   # ~/.claude
+dtk init gemini      --global   # ~/.gemini
+dtk init aider       --global   # ~/.aider.conf.yml
+dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
 
 Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
@@ -212,18 +212,22 @@ for **claude**, **gemini**, **aider**, and **copilot-cli** (the providers with a
 ### Per-project install
 
 For the other providers — or when you want dtk scoped to a single repository — run
-`dtk integrate <provider>` inside the project (without `--global`):
+`dtk init <provider>` inside the project (without `--global`):
 
 | Provider               | Command                     | What it creates                                            |
 |------------------------|-----------------------------|------------------------------------------------------------|
-| **Claude Code**        | `dtk integrate claude`      | Skill file, PreToolUse hook, settings merge                |
-| **GitHub Copilot**     | `dtk integrate copilot`     | Section in `.github/copilot-instructions.md`               |
-| **GitHub Copilot CLI** | `dtk integrate copilot-cli` | preToolUse hook in `.github/hooks/` + instructions section |
-| **Gemini CLI**         | `dtk integrate gemini`      | BeforeTool hook, settings merge, `GEMINI.md` section       |
-| **Cursor**             | `dtk integrate cursor`      | `.cursor/rules/dtk.mdc`                                    |
-| **Windsurf**           | `dtk integrate windsurf`    | `.windsurf/rules/dtk.md`                                   |
-| **Aider**              | `dtk integrate aider`       | Instructions file, `.aider.conf.yml` section               |
-| **JetBrains AI**       | `dtk integrate jetbrains`   | Section in `.junie/guidelines.md`                          | `dtk integrate jetbrains`   | Section in `.junie/guidelines.md`                    |
+| **Claude Code**        | `dtk init claude`      | Skill file, PreToolUse hook running dtk hook claude, settings merge |
+| **GitHub Copilot**     | `dtk init copilot`     | Section in `.github/copilot-instructions.md`               |
+| **GitHub Copilot CLI** | `dtk init copilot-cli` | preToolUse hook in .github/hooks/ running dtk hook copilot-cli + instructions section |
+| **Gemini CLI**         | `dtk init gemini`      | BeforeTool hook running dtk hook gemini, settings merge, GEMINI.md section |
+| **Cursor**             | `dtk init cursor`      | `.cursor/rules/dtk.mdc`                                    |
+| **Windsurf**           | `dtk init windsurf`    | `.windsurf/rules/dtk.md`                                   |
+| **Aider**              | `dtk init aider`       | Instructions file, `.aider.conf.yml` section               |
+| **JetBrains AI**       | `dtk init jetbrains`   | Section in `.junie/guidelines.md`                          |
+
+`dtk integrate` still works as an alias of `dtk init`. The hooks run `dtk` itself, so they need nothing
+else on `PATH` — no Python, no `jq`. Re-running `dtk init <provider>` on a project set up by an older dtk
+replaces its Python hook registration and deletes the `dotnet-to-dtk.py` script dtk wrote there.
 
 `copilot`, `cursor`, `windsurf`, and `jetbrains` are repository-scoped and have no global mode.
 `copilot-cli` is distinct from `copilot` (instruction-only, Copilot IDE) and supports `--global`.
@@ -231,7 +235,7 @@ For the other providers — or when you want dtk scoped to a single repository �
 
 All commands are idempotent — re-running is safe. Pass `--force` to refresh existing files.
 
-On machines that also run the rtk hook, `dtk integrate claude` automatically excludes `dotnet` from rtk so the two proxies don't both rewrite `dotnet` commands.
+On machines that also run the rtk hook, `dtk init claude` automatically excludes `dotnet` from rtk so the two proxies don't both rewrite `dotnet` commands.
 
 See [AI Agent Setup](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html) for per-provider details
 and manual installation steps.

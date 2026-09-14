@@ -98,7 +98,7 @@ dotnet test: <span class="dtk-fail">1 failed</span>, <span class="dtk-kept">3 pa
 </div>
 <div class="dtk-install">
 <span class="dtk-prompt">$</span>
-<code>dtk integrate claude</code>
+<code>dtk init claude</code>
 <button class="dtk-copy" type="button">Copy</button>
 </div>
 </section>

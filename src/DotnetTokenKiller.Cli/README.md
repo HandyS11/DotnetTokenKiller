@@ -78,11 +78,11 @@ Install integration artifacts with one command. Installing globally is the recom
 once and every project your agent touches picks it up automatically:
 
 ```sh
-dtk integrate claude --global   # ~/.claude
+dtk init claude --global   # ~/.claude
 ```
 
 `--global` is supported for `claude`, `gemini`, `aider`, and `copilot-cli`. The other providers
-(`copilot`, `cursor`, `windsurf`, `jetbrains`) are repository-scoped — run `dtk integrate <provider>`
+(`copilot`, `cursor`, `windsurf`, `jetbrains`) are repository-scoped — run `dtk init <provider>`
 inside the project.
 
 ## Documentation
