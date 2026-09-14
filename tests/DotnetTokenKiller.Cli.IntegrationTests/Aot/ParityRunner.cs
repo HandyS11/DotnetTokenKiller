@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using Microsoft.Data.Sqlite;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests.Aot;
@@ -137,6 +138,9 @@ internal static partial class ParityRunner
 
     private static async Task<List<string>> ReadTrackingRowsAsync(ParitySandbox sandbox)
     {
+        // First, because a tracked run leaves only a journal file: the database may exist only after the fold.
+        await IntegrationTestHelper.FoldTrackingJournalAsync(sandbox.DatabasePath);
+
         if (!File.Exists(sandbox.DatabasePath))
         {
             return [];
