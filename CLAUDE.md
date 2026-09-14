@@ -128,7 +128,13 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
   disk than on tmpfs, with the 1000 ms-child scenario rising far more (150.3 ms) than pipe or the
   instant child (11.6 ms and 13.0 ms) — more than the ext4 fsync cost alone accounts for — and the
   disk run's variance was much wider throughout (e.g. 1000 ms-child p95 571.4 ms, max 981.8 ms,
-  against tmpfs's 25.6–31.8 ms full range).
+  against tmpfs's 25.6–31.8 ms full range). Journal, measured 2026-09-14, baseline → a tracked run
+  writing a journal file instead of SQLite, both local AOT publishes: on tmpfs, pipe 63.9 → 65.6 ms;
+  wrapped overhead 61.9 → 63.3 ms (instant child), 28.8 → 26.5 ms (1000 ms child), and
+  185.7 → 186.9 ms (1000 ms child, 1 MB log); on ext4, pipe 75.5 → 63.4 ms; wrapped overhead
+  74.9 → 63.7 ms (instant child), 179.1 → 26.5 ms (1000 ms child), and 307.1 → 188.6 ms (1000 ms
+  child, 1 MB log). With no SQLite write left in the run, the ext4 medians sit within 2 ms of tmpfs
+  and the ext4 spread closed (1000 ms-child p95 30.8 ms, max 31.8 ms).
 - `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
   `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
   in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
