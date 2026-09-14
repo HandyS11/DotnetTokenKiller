@@ -768,8 +768,8 @@ public class SqliteTrackerTests : IAsyncDisposable
     [Fact]
     public async Task Schema_AddsOutcomeColumnToLegacyDatabase_DefaultingExistingRowsToFiltered()
     {
-        // A directory of its own: the tracker keeps its journal in "pending" beside the database,
-        // which must not be a folder shared with every other process using the temp directory.
+        // A directory of its own, so the journal the tracker keeps beside the database
+        // (legacy.db.pending) is deleted with it instead of being left in the temp directory.
         var dir = Directory.CreateTempSubdirectory("dtk-legacy-").FullName;
         var dbPath = Path.Combine(dir, "legacy.db");
         var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();

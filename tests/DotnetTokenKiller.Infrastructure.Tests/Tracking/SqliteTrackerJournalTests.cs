@@ -12,7 +12,7 @@ public sealed class SqliteTrackerJournalTests : IDisposable
 
     private string DbPath => Path.Combine(_root, "tracking.db");
 
-    private string PendingDir => Path.Combine(_root, "pending");
+    private string PendingDir => DbPath + ".pending";
 
     private SqliteTracker Create(int foldThreshold = SqliteTracker.DefaultFoldThreshold, int retentionDays = 90) =>
         new($"Data Source={DbPath};Pooling=False", retentionDays, foldThreshold);
@@ -36,6 +36,28 @@ public sealed class SqliteTrackerJournalTests : IDisposable
 
         PendingFiles.Should().Be(1);
         File.Exists(DbPath).Should().BeFalse("a tracked run must not touch SQLite");
+    }
+
+    [Fact]
+    public async Task RecordAsync_JournalsBesideTheDatabaseUnderItsOwnName()
+    {
+        // The database path is user-configurable, so its directory may hold anything. A generic
+        // folder name there could belong to someone else, and a fold deletes what does not parse.
+        var foreign = Path.Combine(_root, "pending");
+        Directory.CreateDirectory(foreign);
+        var foreignFile = Path.Combine(foreign, "foo.json");
+        const string foreignContent = "not a dtk record";
+        await File.WriteAllTextAsync(foreignFile, foreignContent);
+        await using var sut = Create();
+
+        await sut.RecordAsync(PendingRecordJournalTests.MakeRecord());
+        PendingFiles.Should().Be(1, "the record lands in the journal named after the database");
+        var summary = await sut.GetSummaryAsync(days: 3650, projectPath: null);
+        await sut.ResetAsync();
+
+        summary.TotalCommands.Should().Be(1);
+        Directory.GetFileSystemEntries(foreign).Should().Equal(foreignFile);
+        (await File.ReadAllTextAsync(foreignFile)).Should().Be(foreignContent);
     }
 
     [Fact]

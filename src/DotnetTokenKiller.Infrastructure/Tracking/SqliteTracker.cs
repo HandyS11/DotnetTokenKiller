@@ -7,11 +7,11 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 /// <summary>Persists command tracking records in a SQLite database.</summary>
 /// <remarks>
 /// On a file data source a tracked run never opens SQLite: <see cref="RecordAsync"/> writes one file
-/// to the pending-record journal (<c>pending</c> beside the database), and every reader, as well as
-/// <see cref="CleanupAsync"/>, folds the journal into the database before it queries, so what it
-/// returns includes every run that has finished. Retention runs when the database is initialized
-/// and at fold time. An in-memory data source has no directory to journal into, so there
-/// <see cref="RecordAsync"/> inserts directly.
+/// to the pending-record journal (<c>&lt;database file&gt;.pending</c> beside the database, such as
+/// <c>tracking.db.pending</c>), and every reader, as well as <see cref="CleanupAsync"/>, folds the
+/// journal into the database before it queries, so what it returns includes every run that has
+/// finished. Retention runs when the database is initialized and at fold time. An in-memory data
+/// source has no directory to journal into, so there <see cref="RecordAsync"/> inserts directly.
 /// </remarks>
 /// <param name="connectionString">The SQLite connection string.</param>
 /// <param name="defaultRetentionDays">Number of days to retain records before automatic cleanup.</param>
@@ -315,8 +315,12 @@ public sealed class SqliteTracker(
             return null;
         }
 
-        var directory = Path.GetDirectoryName(Path.GetFullPath(csb.DataSource)) ?? Environment.CurrentDirectory;
-        return new PendingRecordJournal(Path.Combine(directory, "pending"));
+        // Named after the database file, as SQLite names its own "-journal": the database path is
+        // user-configurable, and a generic folder name in that directory could belong to someone
+        // else, whose files a fold would claim and delete and a reset would clear.
+        var fullPath = Path.GetFullPath(csb.DataSource);
+        var directory = Path.GetDirectoryName(fullPath) ?? Environment.CurrentDirectory;
+        return new PendingRecordJournal(Path.Combine(directory, Path.GetFileName(fullPath) + ".pending"));
     }
 
     private async Task FoldInBackgroundAsync(CancellationToken cancellationToken)

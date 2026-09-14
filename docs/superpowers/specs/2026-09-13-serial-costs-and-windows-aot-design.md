@@ -143,7 +143,10 @@ Each was taken without the owner. Overrule any of them before the plan runs.
 where a record waits between the run and the report changes.
 
 **`PendingRecordJournal`** (Infrastructure, `Tracking/`), owned by `SqliteTracker`, rooted at
-`<database directory>/pending/`:
+`<database file>.pending/` in the database's directory (by default `tracking.db.pending/`). The name
+is derived from the database file, as SQLite's own `-journal` is, because the database path is
+configurable: a generic name such as `pending/` could be someone else's folder, whose files dtk
+would then fold, delete as corrupt, and clear on `reset`.
 
 - `WriteAsync(CommandRecord)`: serializes one `PendingRecord` (the flat fields of `CommandRecord`,
   execution time in milliseconds, enums as strings, plus `"Version": 1`) with a source-generated
@@ -155,15 +158,16 @@ where a record waits between the run and the report changes.
 - `FoldAsync(committed, commit, wait, CancellationToken)`, where `committed(id)` asks the tracker
   whether a fold id is in the database and `commit(ids, records)` inserts, folds exactly once under
   any interruption:
-  1. Takes `pending/.lock` with `FileShare.None` (an exclusive `flock` on Unix). With `wait`, it
-     retries for up to two seconds and then throws, so a reader never silently reports rows another
-     process is inserting as missing; without `wait` (the writer's background fold) a busy lock means
-     another process is folding, and it returns at once.
-  2. Recovers leftovers: for every `pending/folding-<id>/` directory, `committed(id)` says whether
-     fold `<id>` is in the database (the `folds` table below); if it is, the directory is deleted (a
-     fold that died after its commit); if not, its files join this fold (a fold that died before it).
-  3. Claims: moves every `pending/*.json` into a new `pending/folding-<id>/` with `File.Move`, so
-     a writer creating a file at that instant is never half-read.
+  1. Takes `tracking.db.pending/.lock` with `FileShare.None` (an exclusive `flock` on Unix). With
+     `wait`, it retries for up to two seconds and then throws, so a reader never silently reports
+     rows another process is inserting as missing; without `wait` (the writer's background fold) a
+     busy lock means another process is folding, and it returns at once.
+  2. Recovers leftovers: for every `tracking.db.pending/folding-<id>/` directory, `committed(id)`
+     says whether fold `<id>` is in the database (the `folds` table below); if it is, the directory
+     is deleted (a fold that died after its commit); if not, its files join this fold (a fold that
+     died before it).
+  3. Claims: moves every `tracking.db.pending/*.json` into a new `tracking.db.pending/folding-<id>/`
+     with `File.Move`, so a writer creating a file at that instant is never half-read.
   4. Parses the claimed files, deleting one that does not parse (a process killed mid-write leaves a
      truncated file; nothing else can) and counting it, and calls `commit(ids, records)` once, with
      the new id and every recovered claim's id. The tracker's commit is one transaction: the

@@ -40,7 +40,7 @@ public sealed class TrackerFactoryTests : IDisposable
     /// <param name="dbPath">A database path the tracker may have resolved.</param>
     private static int PendingRecordsBeside(string dbPath)
     {
-        var pending = Path.Combine(Path.GetDirectoryName(dbPath)!, "pending");
+        var pending = dbPath + ".pending";
         return Directory.Exists(pending) ? Directory.GetFiles(pending, "*.json").Length : 0;
     }
 

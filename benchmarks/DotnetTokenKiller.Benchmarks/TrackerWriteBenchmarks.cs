@@ -11,8 +11,8 @@ namespace DotnetTokenKiller.Benchmarks;
 /// </summary>
 /// <remarks>
 /// <see cref="SqliteTracker.RecordAsync"/> opens no connection on a file data source: it writes one
-/// JSON file under <c>pending</c> beside the database, and the next read folds it in. This
-/// benchmark never reads or warms up, so no fold runs and every call measures that file write
+/// JSON file under <c>tracking.db.pending</c> beside the database, and the next read folds it in.
+/// This benchmark never reads or warms up, so no fold runs and every call measures that file write
 /// alone. Deliberately carries no <c>RowCount</c> axis. BenchmarkDotNet calls a <c>[Benchmark]</c>
 /// method many times — pilot, warmup and measured iterations can add up to hundreds or thousands of
 /// calls for an operation this fast — and <see cref="RecordAsync"/> adds a pending file on every

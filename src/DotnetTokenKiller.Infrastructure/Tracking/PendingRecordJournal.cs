@@ -7,7 +7,8 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 
 /// <summary>
 /// Where a tracked run leaves its record without opening SQLite: one JSON file per run under
-/// <c>pending</c> beside the database, folded into the database by whoever reads it next.
+/// <c>&lt;database file&gt;.pending</c> beside the database, folded into the database by whoever
+/// reads it next.
 /// </summary>
 /// <remarks>
 /// One file per run rather than one appended file: no two processes ever hold the same handle, so
