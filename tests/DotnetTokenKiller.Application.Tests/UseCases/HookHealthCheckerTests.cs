@@ -3,6 +3,7 @@ using DotnetTokenKiller.Application.Tests.Integration;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Execution;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
@@ -16,9 +17,12 @@ public sealed class HookHealthCheckerTests : IDisposable
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-hookhealth-{Guid.NewGuid()}");
     private readonly HookHealthChecker _sut;
 
+    /// <summary>What resolving <c>dtk</c> from <c>PATH</c> returns; <see langword="null"/> when it is not on <c>PATH</c>.</summary>
+    private string? _dtkOnPath = Path.Combine(Path.GetTempPath(), "tools", "dtk");
+
     public HookHealthCheckerTests()
     {
-        _sut = new HookHealthChecker(_runner);
+        _sut = new HookHealthChecker(_runner, () => _dtkOnPath);
         Directory.CreateDirectory(_tempDir);
 
         // Default: the probe succeeds, so status-check tests are not perturbed by it.
@@ -84,17 +88,75 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_Probe_RunsTheDtkOnPathAsTheHarnessWould()
+    public async Task RunAsync_Probe_RunsTheDtkResolvedFromPathByItsAbsolutePath()
     {
+        // A bare "dtk" handed to Process.Start is looked up beside the running executable before PATH,
+        // so an installed dtk would always probe itself; the probe must run the file PATH resolves to.
         await IntegrateAsync();
 
-        await _sut.RunAsync(Integrators, _tempDir, default);
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
         await _runner.Received(1).RunCapturedWithInputAsync(
-            "dtk",
+            _dtkOnPath!,
             Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(GeminiHookArguments)),
             Arg.Is<string>(payload => payload.Contains("tool_input", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
+        checks.First(c => c.Name == "gemini hook probe (project)").Message.Should().Contain(_dtkOnPath!);
+    }
+
+    [Fact]
+    public async Task AddApplication_ResolvesAChecker_ThatNeverStartsABareDtk()
+    {
+        // The seam constructor takes a Func the container cannot supply, so DI must pick the PATH-resolving one.
+        await IntegrateAsync();
+        await using var provider = new ServiceCollection()
+            .AddApplication()
+            .AddSingleton(_runner)
+            .BuildServiceProvider();
+
+        var checks = await provider.GetRequiredService<HookHealthChecker>().RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().HaveCount(2);
+        await _runner.DidNotReceive().RunCapturedWithInputAsync(
+            "dtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_DtkNotFoundOnPath_ProbeFailsWithoutStartingAProcess()
+    {
+        await IntegrateAsync();
+        _dtkOnPath = null;
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        var probe = checks.First(c => c.Name == "gemini hook probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Contain("not found on PATH").And.Contain("~/.dotnet/tools");
+        await _runner.DidNotReceiveWithAnyArgs().RunCapturedWithInputAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task RunAsync_RegistrationWithCommentsAndTrailingCommas_IsClassifiedNotReportedUnreadable()
+    {
+        // Claude Code and Gemini CLI both accept comments in their settings files; a read-only
+        // diagnostic has no reason to be stricter than the harness that reads them.
+        var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
+        Directory.CreateDirectory(Path.GetDirectoryName(installation.RegistrationPath)!);
+        await File.WriteAllTextAsync(installation.RegistrationPath, """
+            {
+              // dtk rewrites dotnet commands
+              "hooks": {
+                "BeforeTool": [
+                  { "matcher": "run_shell_command", "hooks": [ { "type": "command", "command": "dtk hook gemini; exit 0" }, ] },
+                ],
+              },
+            }
+            """);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal("gemini hook (project)", "gemini hook probe (project)");
+        checks.Should().OnlyContain(c => c.Passed);
     }
 
     [Theory]
@@ -248,7 +310,7 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
-    public async Task RunAsync_DtkNotOnPath_ProbeFailsNamingPath()
+    public async Task RunAsync_ResolvedDtkCannotBeStarted_ProbeFailsNamingThatPath()
     {
         await IntegrateAsync();
         _runner.RunCapturedWithInputAsync(null!, null!, null!)
@@ -259,6 +321,6 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         var probe = checks.First(c => c.Name == "gemini hook probe (project)");
         probe.Passed.Should().BeFalse();
-        probe.Message.Should().Contain("could not run dtk").And.Contain("PATH");
+        probe.Message.Should().Contain($"could not run {_dtkOnPath}").And.Contain("No such file or directory");
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain;
@@ -12,13 +13,38 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// </summary>
 /// <remarks>
 /// A registration is only a command string, <c>dtk hook &lt;provider&gt;</c>; what breaks silently is the
-/// <c>dtk</c> it names — missing from <c>PATH</c>, or too old to know <c>hook</c>. The probe runs exactly that.
+/// <c>dtk</c> it names — missing from <c>PATH</c>, or too old to know <c>hook</c>. The probe runs exactly that,
+/// resolved from <c>PATH</c> by <see cref="ExecutableSearch"/> and started by its absolute path: a bare name
+/// would be found beside the running dtk first, so every probe would test the dtk running doctor.
 /// A registration still naming the Python <c>dotnet-to-dtk.py</c> script is an install from before
 /// <c>dtk hook</c>, reported with the command that migrates it.
 /// </remarks>
 /// <param name="runner">Runs the installed hook for the probe.</param>
-internal sealed class HookHealthChecker(ICommandRunner runner)
+/// <param name="locateDtk">
+/// Returns the absolute path of the <c>dtk</c> a harness would run, or <see langword="null"/> when <c>PATH</c> has none.
+/// </param>
+internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> locateDtk)
 {
+    /// <summary>Creates a checker that resolves <c>dtk</c> from this process's <c>PATH</c>.</summary>
+    /// <param name="runner">Runs the installed hook for the probe.</param>
+    public HookHealthChecker(ICommandRunner runner)
+        : this(runner, static () => ExecutableSearch.FindOnProcessPath(DtkCommand))
+    {
+    }
+
+    /// <summary>The command name every registration runs.</summary>
+    private const string DtkCommand = "dtk";
+
+    /// <summary>
+    /// Doctor only reads settings files, so it accepts what their harnesses accept rather than failing a file
+    /// with a comment as unreadable.
+    /// </summary>
+    private static readonly JsonDocumentOptions LenientJson = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
     /// <summary>How long the probe waits before declaring the hook wedged.</summary>
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
 
@@ -141,7 +167,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
         // enumerated, so the search belongs inside the same guard as the parse.
         try
         {
-            var root = JsonNode.Parse(content);
+            var root = JsonNode.Parse(content, documentOptions: LenientJson);
 
             if (FindStringContaining(root, IntegratorHelpers.LegacyHookScriptName) is not null)
             {
@@ -181,7 +207,18 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
     private async Task<DiagnosticCheck> ProbeAsync(HookInstallation installation, CancellationToken cancellationToken)
     {
         var name = CheckName(installation, "hook probe");
-        var hook = HookCommands.Invocation(installation.ProviderName);
+
+        var dtk = locateDtk();
+        if (dtk is null)
+        {
+            return new DiagnosticCheck(
+                name,
+                false,
+                $"'{DtkCommand}' was not found on PATH, and the harness runs it from there. Add the .NET tools directory "
+                + "(~/.dotnet/tools) to PATH, or install dtk with 'dotnet tool install -g DotnetTokenKiller'.");
+        }
+
+        var hook = $"{dtk} {HookCommands.Verb} {installation.ProviderName}";
         var command = string.Join("; ", DotnetSubcommands.Ordered.Select(sub => $"dotnet {sub}"));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -191,7 +228,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
         {
             var result = await runner
                 .RunCapturedWithInputAsync(
-                    "dtk",
+                    dtk,
                     [HookCommands.Verb, installation.ProviderName],
                     BuildPayload(installation.PayloadKind, command),
                     timeout.Token)
@@ -211,11 +248,11 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                 .ToList();
 
             return missing.Count == 0
-                ? new DiagnosticCheck(name, true, $"rewrites all {DotnetSubcommands.Ordered.Count} subcommands")
+                ? new DiagnosticCheck(name, true, $"{dtk} rewrites all {DotnetSubcommands.Ordered.Count} subcommands")
                 : new DiagnosticCheck(
                     name,
                     false,
-                    $"does not rewrite: {string.Join(", ", missing)}. The dtk on PATH is older than this one; run '{UpdateCommand}'.");
+                    $"{dtk} does not rewrite: {string.Join(", ", missing)}. It is older than this dtk; run '{UpdateCommand}'.");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -223,10 +260,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new DiagnosticCheck(
-                name,
-                false,
-                $"could not run dtk: {ex.Message}. The harness runs 'dtk' from PATH; add the .NET tools directory (~/.dotnet/tools) to it.");
+            return new DiagnosticCheck(name, false, $"could not run {dtk}: {ex.Message}.");
         }
     }
 
