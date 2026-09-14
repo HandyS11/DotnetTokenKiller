@@ -89,4 +89,20 @@ public class AnsiStripTests
         var result = AnsiStrip.Strip("text" + input);
         result.Should().NotContain(Esc);
     }
+
+    [Theory]
+    [InlineData("plain text", false)]
+    [InlineData("", false)]
+    [InlineData("red " + Esc + "[31m", false)]
+    [InlineData("cut " + Esc + "[31", true)]
+    [InlineData("title " + Esc + "]0;dtk" + Bel, false)]
+    [InlineData("title " + Esc + "]0;dtk" + Esc + "\\", false)]
+    [InlineData("title " + Esc + "]0;dtk\nmore", true)]
+    [InlineData(Esc + "]0;open" + Esc + "[0m", false)]
+    [InlineData("lone " + Esc, true)]
+    [InlineData("other " + Esc + "M", false)]
+    public void EndsInsideEscapeSequence_TellsATerminatedTailFromAnOpenOne(string text, bool expected)
+    {
+        AnsiStrip.EndsInsideEscapeSequence(text).Should().Be(expected);
+    }
 }
