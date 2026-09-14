@@ -2,22 +2,22 @@ DESCRIPTION:
 Install dtk integration artifacts for an AI assistant provider
 
 USAGE:
-    dtk integrate <provider> [OPTIONS]
+    dtk init <provider> [OPTIONS]
 
 EXAMPLES:
-    dtk integrate claude
-    dtk integrate claude --dir /path/to/project --force
-    dtk integrate copilot
-    dtk integrate copilot-cli
-    dtk integrate copilot-cli --global
-    dtk integrate gemini
-    dtk integrate cursor
-    dtk integrate windsurf
-    dtk integrate aider
-    dtk integrate jetbrains
+    dtk init claude
+    dtk init claude --dir /path/to/project --force
+    dtk init copilot
+    dtk init copilot-cli
+    dtk init copilot-cli --global
+    dtk init gemini
+    dtk init cursor
+    dtk init windsurf
+    dtk init aider
+    dtk init jetbrains
 
 ARGUMENTS:
-    <provider>    AI assistant provider to integrate (claude, copilot, copilot-cli, gemini, cursor, 
+    <provider>    AI assistant provider to set up (claude, copilot, copilot-cli, gemini, cursor,    
                   windsurf, aider, jetbrains)                                                       
 
 OPTIONS:

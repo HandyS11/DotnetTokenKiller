@@ -101,7 +101,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
 
         context.Notes.Add(
             "Copilot CLI instructions are repository-scoped; the global install adds the rewrite hook only. "
-            + "Run 'dtk integrate copilot-cli' inside a project to also write .github/copilot-instructions.md.");
+            + "Run 'dtk init copilot-cli' inside a project to also write .github/copilot-instructions.md.");
 
         return context.ToResult();
     }

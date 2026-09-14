@@ -6,21 +6,21 @@ using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands;
 
-/// <summary>Installs dtk integration artifacts for the given AI assistant provider.</summary>
+/// <summary>Installs dtk integration artifacts for the given AI assistant provider (<c>dtk init</c>, alias <c>dtk integrate</c>).</summary>
 /// <param name="integrateUseCase">The integration use case.</param>
 /// <param name="console">The Spectre.Console output sink.</param>
-internal sealed class IntegrateCommand(IntegrateUseCase integrateUseCase, IAnsiConsole console)
-    : AsyncCommand<IntegrateCommandSettings>
+internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsole console)
+    : AsyncCommand<InitCommandSettings>
 {
     /// <inheritdoc/>
     protected override Task<int> ExecuteAsync(
         CommandContext context,
-        IntegrateCommandSettings settings,
+        InitCommandSettings settings,
         CancellationToken cancellationToken)
         => RunAsync(settings, cancellationToken);
 
     internal async Task<int> RunAsync(
-        IntegrateCommandSettings settings,
+        InitCommandSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);

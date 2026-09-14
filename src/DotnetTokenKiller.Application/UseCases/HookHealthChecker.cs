@@ -48,7 +48,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
                 "hook integration",
                 true,
                 "No rewrite hook found in this directory or your home config. "
-                + "Run 'dtk integrate <provider>' to install one."));
+                + "Run 'dtk init <provider>' to install one."));
         }
 
         return checks;
@@ -390,7 +390,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
         => $"{installation.ProviderName} {label} ({installation.Scope.ToString().ToLowerInvariant()})";
 
     /// <summary>
-    /// Renders the <c>dtk integrate</c> remedy command for one installation, appending
+    /// Renders the <c>dtk init</c> remedy command for one installation, appending
     /// <c>--global</c> whenever that installation lives in the user's home config. Every remedy
     /// message must go through this so a global-hook failure can never be pointed at the plain,
     /// project-scoped command — which refreshes the wrong installation and leaves doctor red.
@@ -401,6 +401,6 @@ internal sealed class HookHealthChecker(ICommandRunner runner)
     {
         var scopeFlag = installation.Scope == HookScope.Global ? " --global" : string.Empty;
         var trailingFlags = string.IsNullOrEmpty(extraFlags) ? string.Empty : $" {extraFlags}";
-        return $"dtk integrate {installation.ProviderName}{scopeFlag}{trailingFlags}";
+        return $"dtk init {installation.ProviderName}{scopeFlag}{trailingFlags}";
     }
 }

@@ -34,9 +34,9 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             _init_completion || return
 
             local dotnet_cmds="__DOTNET_CMDS_BASH__"
-            local integrate_providers="claude copilot gemini cursor windsurf aider jetbrains"
+            local init_providers="claude copilot copilot-cli gemini cursor windsurf aider jetbrains"
             local config_subcmds="show set"
-            local top_cmds="dotnet pipe integrate config doctor completion gain log reset --version --help"
+            local top_cmds="dotnet pipe init config doctor completion gain log reset --version --help"
 
             case "${words[1]}" in
                 dotnet)
@@ -44,11 +44,11 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                         COMPREPLY=($(compgen -W "$dotnet_cmds" -- "$cur"))
                     fi
                     ;;
-                integrate)
+                init|integrate)
                     if [[ $cword -eq 2 ]]; then
-                        COMPREPLY=($(compgen -W "$integrate_providers" -- "$cur"))
+                        COMPREPLY=($(compgen -W "$init_providers" -- "$cur"))
                     elif [[ $cword -ge 3 ]]; then
-                        COMPREPLY=($(compgen -W "--dir --force --help" -- "$cur"))
+                        COMPREPLY=($(compgen -W "--dir --force --global --help" -- "$cur"))
                     fi
                     ;;
                 config)
@@ -85,7 +85,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             top_cmds=(
                 'dotnet:Run dotnet commands with filtered output'
                 'pipe:Filter output piped in from a command dtk did not run'
-                'integrate:Install dtk integration artifacts'
+                'init:Install dtk integration artifacts'
                 'config:View or modify dtk configuration'
                 'doctor:Run diagnostics'
                 'completion:Print shell completion script'
@@ -99,10 +99,11 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                 __DOTNET_CMDS_ZSH__
             )
 
-            local -a integrate_providers
-            integrate_providers=(
+            local -a init_providers
+            init_providers=(
                 'claude:Install dtk skill and hook for Claude Code'
                 'copilot:Install dtk instructions for GitHub Copilot'
+                'copilot-cli:Install dtk hook and instructions for GitHub Copilot CLI'
                 'gemini:Install dtk instructions and hook for Gemini CLI'
                 'cursor:Install dtk rules for Cursor'
                 'windsurf:Install dtk rules for Windsurf'
@@ -123,8 +124,8 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                 dotnet)
                     _describe 'dotnet subcommand' dotnet_cmds
                     ;;
-                integrate)
-                    _describe 'integration provider' integrate_providers
+                init|integrate)
+                    _describe 'integration provider' init_providers
                     ;;
                 config)
                     _describe 'config subcommand' config_cmds
@@ -147,7 +148,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         # Top-level subcommands
         complete -c dtk -f -n '__fish_use_subcommand' -a dotnet     -d 'Run dotnet commands with filtered output'
         complete -c dtk -f -n '__fish_use_subcommand' -a pipe        -d 'Filter piped output'
-        complete -c dtk -f -n '__fish_use_subcommand' -a integrate   -d 'Install dtk integration artifacts'
+        complete -c dtk -f -n '__fish_use_subcommand' -a init        -d 'Install dtk integration artifacts'
         complete -c dtk -f -n '__fish_use_subcommand' -a config      -d 'View or modify dtk configuration'
         complete -c dtk -f -n '__fish_use_subcommand' -a doctor      -d 'Run diagnostics'
         complete -c dtk -f -n '__fish_use_subcommand' -a completion  -d 'Print shell completion script'
@@ -158,14 +159,15 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         # dotnet subcommands
         __DOTNET_CMDS_FISH__
 
-        # integrate subcommands
-        complete -c dtk -f -n '__fish_seen_subcommand_from integrate' -a claude    -d 'Install dtk skill and hook for Claude Code'
-        complete -c dtk -f -n '__fish_seen_subcommand_from integrate' -a copilot   -d 'Install dtk instructions for GitHub Copilot'
-        complete -c dtk -f -n '__fish_seen_subcommand_from integrate' -a gemini    -d 'Install dtk instructions and hook for Gemini CLI'
-        complete -c dtk -f -n '__fish_seen_subcommand_from integrate' -a cursor    -d 'Install dtk rules for Cursor'
-        complete -c dtk -f -n '__fish_seen_subcommand_from integrate' -a windsurf  -d 'Install dtk rules for Windsurf'
-        complete -c dtk -f -n '__fish_seen_subcommand_from integrate' -a aider     -d 'Install dtk rules for Aider'
-        complete -c dtk -f -n '__fish_seen_subcommand_from integrate' -a jetbrains -d 'Install dtk guidelines for JetBrains AI'
+        # init providers (also after the integrate alias)
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a claude    -d 'Install dtk skill and hook for Claude Code'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a copilot   -d 'Install dtk instructions for GitHub Copilot'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a copilot-cli -d 'Install dtk hook and instructions for GitHub Copilot CLI'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a gemini    -d 'Install dtk instructions and hook for Gemini CLI'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a cursor    -d 'Install dtk rules for Cursor'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a windsurf  -d 'Install dtk rules for Windsurf'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a aider     -d 'Install dtk rules for Aider'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a jetbrains -d 'Install dtk guidelines for JetBrains AI'
 
         # config subcommands
         complete -c dtk -f -n '__fish_seen_subcommand_from config' -a show -d 'Display the current configuration'
@@ -189,14 +191,15 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             $tokens = $commandAst.CommandElements | Select-Object -Skip 1 | ForEach-Object { $_.ToString() }
             $count = $tokens.Count
 
-            $topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')
+            $topCmds = @('dotnet', 'pipe', 'init', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')
             $dotnetCmds = @(__DOTNET_CMDS_PS__)
-            $providers = @('claude', 'copilot', 'gemini', 'cursor', 'windsurf', 'aider', 'jetbrains')
+            $providers = @('claude', 'copilot', 'copilot-cli', 'gemini', 'cursor', 'windsurf', 'aider', 'jetbrains')
             $configCmds = @('show', 'set')
             $shells = @('bash', 'zsh', 'fish', 'powershell')
 
             $candidates = switch ($tokens[0]) {
                 'dotnet'    { if ($count -eq 1) { $dotnetCmds } }
+                'init'      { if ($count -eq 1) { $providers } }
                 'integrate' { if ($count -eq 1) { $providers } }
                 'config'    { if ($count -eq 1) { $configCmds } }
                 'completion'{ if ($count -eq 1) { $shells } }

@@ -32,9 +32,9 @@ public sealed class CliConfiguratorTests
     }
 
     [Fact]
-    public Task Configure_IntegrateHelp_MatchesSnapshot()
+    public Task Configure_InitHelp_MatchesSnapshot()
     {
-        return Verify(RunHelp("integrate", "--help"));
+        return Verify(RunHelp("init", "--help"));
     }
 
     [Fact]

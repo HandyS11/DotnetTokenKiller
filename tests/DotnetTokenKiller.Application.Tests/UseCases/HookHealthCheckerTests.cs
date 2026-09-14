@@ -62,7 +62,7 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         checks.Should().ContainSingle();
         checks[0].Passed.Should().BeTrue("dtk works without hooks, so their absence is not a failure");
-        checks[0].Message.Should().Contain("dtk integrate");
+        checks[0].Message.Should().Contain("dtk init");
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         var status = checks.First(c => c.Name == $"gemini hook ({ScopeLabel(scope)})");
         status.Passed.Should().BeFalse();
-        status.Message.Should().Contain("stale").And.Contain("dtk integrate gemini");
+        status.Message.Should().Contain("stale").And.Contain("dtk init gemini");
         status.Message.Should().NotContain("--force", "a stale-but-unmodified hook refreshes without it");
 
         if (scope == HookScope.Global)
@@ -146,7 +146,7 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         checks.Should().ContainSingle("one root cause must produce one failure, not two");
         checks[0].Passed.Should().BeFalse();
-        checks[0].Message.Should().Contain("not registered").And.Contain("dtk integrate gemini");
+        checks[0].Message.Should().Contain("not registered").And.Contain("dtk init gemini");
 
         if (scope == HookScope.Global)
         {
@@ -222,7 +222,7 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         var probe = checks.First(c => c.Name == $"gemini hook probe ({ScopeLabel(scope)})");
         probe.Passed.Should().BeFalse();
-        probe.Message.Should().Contain("list package").And.Contain("dtk integrate gemini");
+        probe.Message.Should().Contain("list package").And.Contain("dtk init gemini");
 
         if (scope == HookScope.Global)
         {
@@ -310,7 +310,7 @@ public sealed class HookHealthCheckerTests : IDisposable
         checks.Should().ContainSingle("one root cause must produce one failure, not two");
         checks[0].Passed.Should().BeFalse();
         checks[0].Message.Should().Contain(installation.Script.Path).And.Contain("missing")
-            .And.Contain("dtk integrate gemini");
+            .And.Contain("dtk init gemini");
 
         if (scope == HookScope.Global)
         {

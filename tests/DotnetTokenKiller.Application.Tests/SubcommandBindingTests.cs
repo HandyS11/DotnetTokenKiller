@@ -147,7 +147,7 @@ public sealed class SubcommandBindingTests
         // instead.
         committed.Should().Be(
             CopilotCliIntegrator.CopilotSection,
-            "the committed instructions must be regenerated (via 'dtk integrate copilot-cli' into a "
+            "the committed instructions must be regenerated (via 'dtk init copilot-cli' into a "
             + "scratch directory, then copied over) whenever the template changes, or this repo's own "
             + "copilot-instructions.md silently stops advertising the newest subcommand");
     }

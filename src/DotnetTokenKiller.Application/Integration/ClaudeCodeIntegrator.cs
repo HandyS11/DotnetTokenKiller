@@ -46,7 +46,7 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     /// The skill's frontmatter <c>description:</c> line. This is Claude Code's <em>skill-trigger</em>
     /// text — the one string that decides whether the skill surfaces for a given user intent — so it
     /// is derived from <see cref="IntegrationInstructions.SubcommandProse"/> rather than hand-written.
-    /// A hardcoded list here meant a user who ran <c>dtk integrate claude</c> got a skill that never
+    /// A hardcoded list here meant a user who ran <c>dtk init claude</c> got a skill that never
     /// fired for package-listing intent, which is invisible from inside dtk.
     /// </summary>
     private static readonly string SkillDescription =

@@ -70,4 +70,23 @@ public sealed class CommandDispatchIntegrationTests
         output.Should().NotBeEmpty();
         Directory.EnumerateFileSystemEntries(projectDir).Should().NotBeEmpty();
     }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Init_AndTheIntegrateAlias_WriteTheSameFilesAsync()
+    {
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        var viaInit = Path.Combine(dir, "init");
+        var viaAlias = Path.Combine(dir, "alias");
+        Directory.CreateDirectory(viaInit);
+        Directory.CreateDirectory(viaAlias);
+
+        var (initOutput, initExit) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "init", "cursor", "--dir", viaInit);
+        var (aliasOutput, aliasExit) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "integrate", "cursor", "--dir", viaAlias);
+
+        initExit.Should().Be(0);
+        aliasExit.Should().Be(initExit);
+        aliasOutput.Should().Be(initOutput, "the alias must behave exactly like init");
+        Directory.EnumerateFiles(viaAlias, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(viaAlias, f))
+            .Should().BeEquivalentTo(Directory.EnumerateFiles(viaInit, "*", SearchOption.AllDirectories).Select(f => Path.GetRelativePath(viaInit, f)));
+    }
 }

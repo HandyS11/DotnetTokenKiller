@@ -33,7 +33,7 @@ namespace DotnetTokenKiller.Domain;
 ///   </description></item>
 ///   <item><description>
 ///   Regenerate <c>.claude/hooks/dotnet-to-dtk.py</c> from <c>HookScriptTemplates.ClaudeHook</c>
-///   (e.g. run <c>dtk integrate claude</c> against a scratch directory and copy the result over).
+///   (e.g. run <c>dtk init claude</c> against a scratch directory and copy the result over).
 ///   </description></item>
 ///   <item><description>
 ///   Add an example line to <c>IntegrationInstructions.UsageBody</c>. The prose lists themselves are

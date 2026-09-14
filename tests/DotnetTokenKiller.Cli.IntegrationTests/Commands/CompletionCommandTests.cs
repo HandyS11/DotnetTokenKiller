@@ -68,7 +68,7 @@ public sealed class CompletionCommandTests
 
         var script = writer.ToString();
         script.Should().Contain("dotnet");
-        script.Should().Contain("integrate");
+        script.Should().Contain("init");
         script.Should().Contain("complete -F _dtk_completion dtk");
     }
 
@@ -85,7 +85,7 @@ public sealed class CompletionCommandTests
         var script = writer.ToString();
         script.Should().Contain("#compdef dtk");
         script.Should().Contain("dotnet");
-        script.Should().Contain("integrate");
+        script.Should().Contain("init");
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public sealed class CompletionCommandTests
         var script = writer.ToString();
         script.Should().Contain("complete -c dtk");
         script.Should().Contain("dotnet");
-        script.Should().Contain("integrate");
+        script.Should().Contain("init");
     }
 
     [Fact]
@@ -117,7 +117,23 @@ public sealed class CompletionCommandTests
         var script = writer.ToString();
         script.Should().Contain("Register-ArgumentCompleter");
         script.Should().Contain("dotnet");
-        script.Should().Contain("integrate");
+        script.Should().Contain("init");
+    }
+
+    [Theory]
+    [InlineData("bash")]
+    [InlineData("zsh")]
+    [InlineData("fish")]
+    [InlineData("powershell")]
+    public async Task ExecuteAsync_EveryShell_CompletesProvidersAfterInitAndTheAliasIncludingCopilotCli(string shell)
+    {
+        var (command, _, writer) = Create();
+
+        await command.RunAsync(new CompletionCommandSettings { Shell = shell }, CancellationToken.None);
+
+        var script = writer.ToString();
+        script.Should().Contain("init").And.Contain("integrate", "the alias still completes providers");
+        script.Should().Contain("copilot-cli");
     }
 
     [Fact]
@@ -188,14 +204,14 @@ public sealed class CompletionCommandTests
     }
 
     [Theory]
-    [InlineData("pipe", "bash", "local top_cmds=\"dotnet pipe integrate config doctor completion gain log reset --version --help\"")]
+    [InlineData("pipe", "bash", "local top_cmds=\"dotnet pipe init config doctor completion gain log reset --version --help\"")]
     [InlineData("pipe", "zsh", "'pipe:Filter output piped in from a command dtk did not run'")]
     [InlineData("pipe", "fish", "complete -c dtk -f -n '__fish_use_subcommand' -a pipe        -d 'Filter piped output'")]
-    [InlineData("pipe", "powershell", "$topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')")]
-    [InlineData("log", "bash", "local top_cmds=\"dotnet pipe integrate config doctor completion gain log reset --version --help\"")]
+    [InlineData("pipe", "powershell", "$topCmds = @('dotnet', 'pipe', 'init', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')")]
+    [InlineData("log", "bash", "local top_cmds=\"dotnet pipe init config doctor completion gain log reset --version --help\"")]
     [InlineData("log", "zsh", "'log:Show the full output of a previous run'")]
     [InlineData("log", "fish", "complete -c dtk -f -n '__fish_use_subcommand' -a log         -d 'Show output from a previous run'")]
-    [InlineData("log", "powershell", "$topCmds = @('dotnet', 'pipe', 'integrate', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')")]
+    [InlineData("log", "powershell", "$topCmds = @('dotnet', 'pipe', 'init', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')")]
     public async Task Completion_ListsCommandAsATopLevelCommandAsync(string command, string shell, string expectedFragment)
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("completion", shell);

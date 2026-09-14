@@ -3,13 +3,13 @@ using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands.Settings;
 
-/// <summary>Settings for the integrate command.</summary>
-internal sealed class IntegrateCommandSettings : CommandSettings
+/// <summary>Settings for the init command.</summary>
+internal sealed class InitCommandSettings : CommandSettings
 {
     /// <summary>Gets the AI assistant provider to integrate with.</summary>
     [CommandArgument(0, "<provider>")]
     [Description(
-        "AI assistant provider to integrate (claude, copilot, copilot-cli, gemini, cursor, windsurf, aider, jetbrains)")]
+        "AI assistant provider to set up (claude, copilot, copilot-cli, gemini, cursor, windsurf, aider, jetbrains)")]
     public string Provider { get; init; } = string.Empty;
 
     /// <summary>Gets the target project directory (defaults to the current directory).</summary>

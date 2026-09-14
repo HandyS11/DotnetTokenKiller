@@ -65,10 +65,10 @@ internal static class ParityCases
         ["doctor"] = Steps(["doctor"]),
         ["completion"] = Steps(
             ["completion", "bash"], ["completion", "zsh"], ["completion", "fish"], ["completion", "powershell"]),
-        ["integrate-project"] = new ParityCase(
+        ["init-project"] = new ParityCase(
         [
             .. new[] { "claude", "copilot", "copilot-cli", "gemini", "cursor", "windsurf", "aider", "jetbrains" }
-                .Select(provider => new ParityStep(["integrate", provider, "--dir", "{project}"])),
+                .Select(provider => new ParityStep(["init", provider, "--dir", "{project}"])),
             new ParityStep(["integrate", "claude", "--dir", "{project}"]),
         ], ArrangeRtk),
         ["spectre-built-ins"] = Steps(["cli", "version"], ["cli", "explain"], ["cli", "opencli"], ["--help-dump-opencli"]),
@@ -86,10 +86,10 @@ internal static class ParityCases
     {
         // On Windows, USERPROFILE does not move Environment.SpecialFolder.UserProfile, so a global
         // install would write into the runner's real profile.
-        ["integrate-global"] = new ParityCase(
+        ["init-global"] = new ParityCase(
         [
-            new ParityStep(["integrate", "claude", "--global"]),
-            new ParityStep(["integrate", "copilot-cli", "--global"]),
+            new ParityStep(["init", "claude", "--global"]),
+            new ParityStep(["init", "copilot-cli", "--global"]),
         ], ArrangeRtk),
         ["wrapped"] = new ParityCase(
         [
