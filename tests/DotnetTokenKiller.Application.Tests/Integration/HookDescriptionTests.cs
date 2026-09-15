@@ -27,7 +27,8 @@ public sealed class HookDescriptionTests : IDisposable
         {
             new ClaudeCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
             new GeminiCliIntegrator(home),
-            new CopilotCliIntegrator(home)
+            new CopilotCliIntegrator(home),
+            new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
         };
 
         foreach (var integrator in integrators)
@@ -64,19 +65,24 @@ public sealed class HookDescriptionTests : IDisposable
         {
             ["claude"] = "dtk hook claude",
             ["gemini"] = "dtk hook gemini; exit 0",
-            ["copilot-cli"] = "dtk hook copilot-cli; exit 0"
+            ["copilot-cli"] = "dtk hook copilot-cli; exit 0",
+            ["codex"] = "dtk hook codex"
         };
         var integrators = new IHookIntegrator[]
         {
             new ClaudeCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
             new GeminiCliIntegrator(home),
-            new CopilotCliIntegrator(home)
+            new CopilotCliIntegrator(home),
+            new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
         };
 
         foreach (var installation in integrators.SelectMany(i => i.DescribeHooks(_tempDir, HookScope.Project)))
         {
             installation.Command.Should().Be(expected[installation.ProviderName]);
-            Path.GetFileName(installation.LegacyScriptPath).Should().Be(IntegratorHelpers.LegacyHookScriptName);
+            if (installation.LegacyScriptPath is not null)
+            {
+                Path.GetFileName(installation.LegacyScriptPath).Should().Be(IntegratorHelpers.LegacyHookScriptName);
+            }
         }
     }
 }
