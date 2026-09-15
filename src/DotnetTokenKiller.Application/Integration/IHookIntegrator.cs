@@ -31,7 +31,7 @@ internal enum HookPayloadKind
 /// <param name="Scope">Whether this describes the project or the home-config install.</param>
 /// <param name="RegistrationPath">
 /// The JSON file that registers the hook with the host CLI — a merged <c>settings.json</c> for Claude Code and
-/// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI.
+/// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI, a merged <c>.codex/hooks.json</c> for Codex CLI.
 /// </param>
 /// <param name="Command">The exact command dtk registers, e.g. <c>dtk hook gemini; exit 0</c>.</param>
 /// <param name="LegacyScriptPath">

@@ -2,8 +2,10 @@ namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>
 /// Resolves the user's home directory and the per-provider config paths used by global integration.
-/// Mirrors the <see cref="RtkHookCoexistence"/> test seam: the public ctor resolves the real home;
-/// the internal ctor injects an isolated home so tests never touch the real machine.
+/// Mirrors the <see cref="RtkHookCoexistence"/> test seam: the public ctor resolves the real home and
+/// environment; the internal ctors inject an isolated home, and
+/// <c>HomePaths(string home, Func&lt;string, string?&gt; environment)</c> also injects the environment that
+/// variables such as <c>CODEX_HOME</c> are read from, so tests never touch the real machine.
 /// </summary>
 internal sealed class HomePaths
 {

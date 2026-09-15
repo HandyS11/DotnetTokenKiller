@@ -86,8 +86,9 @@ for ps in "$pwsh_cmd" "$powershell_cmd"; do
     check "copilot-cli, $(basename "$ps"), dtk missing" "$work/copilot.json" no-rewrite "$without_dtk" "$ps" -NoProfile -Command 'dtk hook copilot-cli; exit 0'
 done
 
-# Codex CLI: the session's shell without a login (sh/bash -c on Unix, powershell -NoProfile -Command on Windows); the
-# bare command, because Codex runs the original command when a hook fails.
+# Codex CLI: the turn's shell without a login (sh/bash -c on Unix, powershell -NoProfile -Command on Windows), falling
+# back to `$SHELL -lc` on Unix or `%COMSPEC% /C` on Windows when the turn has none; the bare command, because Codex runs
+# the original command when a hook fails.
 check "codex, bash" "$work/codex.json" rewrite "$with_dtk" "$bash_cmd" -c 'dtk hook codex'
 for ps in "$pwsh_cmd" "$powershell_cmd"; do
     [ -n "$ps" ] || continue

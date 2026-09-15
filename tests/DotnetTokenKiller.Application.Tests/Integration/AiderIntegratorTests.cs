@@ -307,11 +307,10 @@ public sealed class AiderIntegratorTests : IDisposable
     [Fact]
     public async Task IntegrateAsync_ExternalReadKeyWithoutMarker_NoForce_SkipsWithoutTouchingFile()
     {
-        // Regression for the consolidated skip predicate: before the fix, PrepareConfSectionAsync
-        // decided whether to merge the read: key based only on marker presence, so a "no marker,
-        // no force" file would still get the read: key merged in (a write!) even though the
-        // overall WriteSectionBasedFileAsync write is skipped-unless-force. Both decisions must
-        // now come from the same IntegratorHelpers.ShouldSkipWrite source of truth.
+        // Regression: PrepareConfSectionAsync once merged the read: key into a "no marker, no force"
+        // file (a write!) even though the section write itself was skipped unless --force. Such a
+        // file now never reaches it: AiderIntegrator's external-read-key carve-out reports the conf
+        // file skipped and returns before any merge whenever it has its own read: key and no --force.
         Directory.CreateDirectory(_tempDir);
         const string original = "read: [CONVENTIONS.md]\nauto-commits: false\n";
         await File.WriteAllTextAsync(ConfPath, original);

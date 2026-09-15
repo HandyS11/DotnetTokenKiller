@@ -102,7 +102,8 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
 
         if (!force && File.Exists(confPath))
         {
-            var confLines = (await File.ReadAllTextAsync(confPath, cancellationToken).ConfigureAwait(false)).Split('\n');
+            var confText = await File.ReadAllTextAsync(confPath, cancellationToken).ConfigureAwait(false);
+            var confLines = confText.Split('\n');
             if (FindExternalReadKeyIndex(confLines) >= 0)
             {
                 // --force would still merge readTarget into this external "read:" key (see

@@ -32,10 +32,11 @@ internal static class SharedInstructionArtifacts
         + $"running `dotnet` {IntegrationInstructions.SubcommandProse} commands.";
 
     /// <summary>
-    /// The skill written to <c>.claude/skills/dotnet-token-killer/SKILL.md</c>. Internal (rather than
-    /// private) so <c>SubcommandBindingTests</c> can pin <see cref="SkillDescription"/> the same way
-    /// it pins <see cref="CopilotCliIntegrator.CopilotSection"/> — this file is a derived artifact
-    /// with no compile-time link to the canonical subcommand list.
+    /// The skill written to <c>dotnet-token-killer/SKILL.md</c> under <c>.claude/skills</c> (Claude Code)
+    /// and <c>.agents/skills</c> (Codex CLI). Internal (rather than private) so
+    /// <c>SubcommandBindingTests</c> can pin <see cref="SkillDescription"/> the same way it pins
+    /// <see cref="CopilotCliIntegrator.CopilotSection"/> — this file is a derived artifact with no
+    /// compile-time link to the canonical subcommand list.
     /// </summary>
     internal static readonly string SkillMarkdown =
         $"""

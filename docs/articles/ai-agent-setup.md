@@ -230,7 +230,7 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and l
 ## Codex CLI
 
 A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`. It needs
-Codex CLI 0.131 or later, the first release whose hooks can change a command.
+Codex CLI 0.131 or later, the first release whose hooks can change a command, and was verified against Codex CLI 0.154.
 
 ### Installation
 
@@ -248,8 +248,11 @@ This creates three files:
 - `.codex/hooks.json` — registers `dtk hook codex` under `PreToolUse` (merges with any existing hooks)
 
 `dtk init codex --global` writes `~/.codex/AGENTS.md` and `~/.codex/hooks.json` (under `$CODEX_HOME` when it is
-set) and `~/.agents/skills/dotnet-token-killer/SKILL.md`. The `AGENTS.md` section and the skill are the same ones
-`dtk init opencode` and `dtk init antigravity` write, so running several of them leaves one copy of each.
+set) and `~/.agents/skills/dotnet-token-killer/SKILL.md`. The `AGENTS.md` section and the skill are shared: providers
+that write the same files leave one copy of each.
+
+In a linked git worktree, Codex reads hooks from the main checkout's `.codex/` folder, so run `dtk init codex` in the
+main checkout (or commit `.codex/hooks.json`).
 
 ### Approving the hook
 
@@ -264,7 +267,9 @@ command.
 ### How It Works
 
 Before each shell command, Codex sends it to `dtk hook codex`, which replies with `dtk dotnet …` for a matching
-`dotnet …` command. Codex still applies its approval policy and sandbox to the rewritten command.
+`dotnet …` command. Codex still applies its approval policy and sandbox to the rewritten command. A "don't ask again"
+approval you saved for a `dotnet …` command does not match the rewritten `dtk dotnet …` command, so Codex may ask
+again once.
 
 ### Manual Installation
 
