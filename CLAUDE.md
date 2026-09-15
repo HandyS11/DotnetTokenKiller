@@ -199,11 +199,13 @@ timing, so the figure is the median interval from the fake model receiving the t
 logging the `bash` permission check, which runs after the plugin's hook: `echo hi` 165 → 165 ms and
 `dotnet --version` 167 → 181 ms. The whole run's wall clock (about 2.1 s) moved 2086.9 → 2093.4 ms and
 2167.4 → 2180.3 ms, but its per-round installed-minus-absent differences spread from −66 to +81 ms, so it resolves
-neither figure. The plugin's `tool.execute.before` hook timed directly from Node 26, 55 samples: `dotnet --version`
-10.7 ms (one `dtk hook opencode` start, no rewrite) and `dotnet build` 11.0 ms (rewritten to `dtk dotnet build`),
-against 1.2 ms for spawning `/bin/true` the same way. The plugin starts no process for a command without `dotnet`:
-a logging `dtk` wrapper on `PATH` saw no start for `echo hi` and one for `dotnet --version`, and the hook returned
-in under 0.01 ms for `echo hi`.
+neither figure; only these in-run figures were taken inside OpenCode. The OpenCode CLI runs plugins under the Bun
+it embeds (a probe plugin's `tool.execute.before` saw `Bun.version` 1.3.14), while the figures that isolate the
+hook come from Node 26, outside OpenCode: the plugin's `tool.execute.before` imported and timed by a driver script,
+55 samples, `dotnet --version` 10.7 ms (one `dtk hook opencode` start, no rewrite) and `dotnet build` 11.0 ms
+(rewritten to `dtk dotnet build`), against 1.2 ms for spawning `/bin/true` the same way. The plugin starts no
+process for a command without `dotnet`: inside OpenCode, a logging `dtk` wrapper on `PATH` saw no start for
+`echo hi` and one for `dotnet --version`; under the Node driver, the hook returned in under 0.01 ms for `echo hi`.
 
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in
