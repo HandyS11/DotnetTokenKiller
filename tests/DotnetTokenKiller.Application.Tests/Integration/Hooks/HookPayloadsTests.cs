@@ -13,6 +13,7 @@ public sealed class HookPayloadsTests
     [InlineData("gemini", HookPayloadKind.GeminiCli)]
     [InlineData("copilot-cli", HookPayloadKind.CopilotCli)]
     [InlineData("codex", HookPayloadKind.CodexCli)]
+    [InlineData("opencode", HookPayloadKind.OpenCode)]
     internal void TryGetKind_KnownProvider_Resolves(string provider, HookPayloadKind expected)
     {
         HookPayloads.TryGetKind(provider, out var kind).Should().BeTrue();
@@ -200,6 +201,28 @@ public sealed class HookPayloadsTests
     public void Codex_DuplicateJsonKey_PrintsNothing()
     {
         Reply(HookPayloadKind.CodexCli, """{"tool_name":"Bash","tool_input":{"command":"a","command":"b"}}""").Should().BeNull();
+    }
+
+    [Fact]
+    public void OpenCode_Rewrite_PrintsOnlyTheRewrittenCommand()
+    {
+        var reply = JsonNode.Parse(Reply(HookPayloadKind.OpenCode, """{"command":"dotnet build # répertoire","extra":1}""")!)!.AsObject();
+
+        reply.Count.Should().Be(1, "only the command crosses the boundary");
+        reply["command"]!.GetValue<string>().Should().Be("dtk dotnet build # répertoire");
+    }
+
+    [Theory]
+    [InlineData("""{"command":"ls ~/dotnet-notes"}""")]
+    [InlineData("""{"command":""}""")]
+    [InlineData("""{"command":7}""")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("{")]
+    [InlineData("""{"command":"a","command":"b"}""")]
+    public void OpenCode_NothingToRewrite_PrintsNothing(string payload)
+    {
+        Reply(HookPayloadKind.OpenCode, payload).Should().BeNull();
     }
 
     private static string? Reply(HookPayloadKind kind, string payload) =>

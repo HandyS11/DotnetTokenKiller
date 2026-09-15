@@ -28,7 +28,8 @@ public sealed class HookDescriptionTests : IDisposable
             new ClaudeCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
             new GeminiCliIntegrator(home),
             new CopilotCliIntegrator(home),
-            new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
+            new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
+            new OpenCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
         };
 
         foreach (var integrator in integrators)
@@ -38,7 +39,8 @@ public sealed class HookDescriptionTests : IDisposable
 
             foreach (var installation in integrator.DescribeHooks(projectDir, HookScope.Project))
             {
-                (await File.ReadAllTextAsync(installation.RegistrationPath)).Should().Contain(installation.Command);
+                var registration = await File.ReadAllTextAsync(installation.RegistrationPath);
+                registration.Should().Contain(installation.PluginArtifact is null ? installation.Command : OpenCodePlugin.InvocationSignature);
                 File.Exists(installation.LegacyScriptPath).Should().BeFalse("init no longer writes a script");
             }
         }
@@ -66,14 +68,16 @@ public sealed class HookDescriptionTests : IDisposable
             ["claude"] = "dtk hook claude",
             ["gemini"] = "dtk hook gemini; exit 0",
             ["copilot-cli"] = "dtk hook copilot-cli; exit 0",
-            ["codex"] = "dtk hook codex"
+            ["codex"] = "dtk hook codex",
+            ["opencode"] = "dtk hook opencode"
         };
         var integrators = new IHookIntegrator[]
         {
             new ClaudeCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
             new GeminiCliIntegrator(home),
             new CopilotCliIntegrator(home),
-            new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
+            new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
+            new OpenCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
         };
 
         foreach (var installation in integrators.SelectMany(i => i.DescribeHooks(_tempDir, HookScope.Project)))

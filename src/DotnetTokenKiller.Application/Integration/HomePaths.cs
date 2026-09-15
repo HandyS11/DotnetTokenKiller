@@ -57,6 +57,13 @@ internal sealed class HomePaths
     /// <summary>Gets the user-level skills directory Codex CLI and OpenCode both read (<c>~/.agents/skills</c>).</summary>
     internal string AgentsSkillsDir => Path.Combine(Home, ".agents", "skills");
 
+    /// <summary>
+    /// Gets OpenCode's user config directory: <c>$XDG_CONFIG_HOME/opencode</c> when that variable is an absolute path,
+    /// else <c>~/.config/opencode</c> — on Windows too, where OpenCode also uses <c>~/.config</c>.
+    /// </summary>
+    internal string OpenCodeConfigDir =>
+        Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "opencode");
+
     /// <summary>An environment variable's value when it is an absolute path, otherwise <paramref name="fallback"/>.</summary>
     /// <param name="variable">The variable to read.</param>
     /// <param name="fallback">The path to use when the variable is unset, empty or relative.</param>

@@ -167,4 +167,14 @@ public sealed class ArtifactStampingTests
     {
         ArtifactStamping.HasStamp("just a file\n").Should().BeFalse();
     }
+
+    [Fact]
+    public void Apply_SlashComment_EndsWithAJavaScriptLineCommentThatVerifies()
+    {
+        var content = ArtifactStamping.Apply("export const DtkPlugin = async () => ({});\n", StampStyle.SlashComment);
+
+        content.Should().MatchRegex(@"\n// dtk-generated sha256:[0-9a-f]{64}\n$");
+        ArtifactStamping.IsAuthentic(content).Should().BeTrue();
+        ArtifactStamping.IsAuthentic(content.Replace("async", "sync", StringComparison.Ordinal)).Should().BeFalse();
+    }
 }

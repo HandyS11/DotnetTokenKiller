@@ -67,7 +67,7 @@ internal static class ParityCases
             ["completion", "bash"], ["completion", "zsh"], ["completion", "fish"], ["completion", "powershell"]),
         ["init-project"] = new ParityCase(
         [
-            .. new[] { "claude", "copilot", "copilot-cli", "gemini", "codex", "cursor", "windsurf", "aider", "jetbrains" }
+            .. new[] { "claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "cursor", "windsurf", "aider", "jetbrains" }
                 .Select(provider => new ParityStep(["init", provider, "--dir", "{project}"])),
             new ParityStep(["integrate", "claude", "--dir", "{project}"]),
         ], ArrangeRtk),

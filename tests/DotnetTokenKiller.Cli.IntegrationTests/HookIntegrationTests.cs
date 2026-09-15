@@ -53,7 +53,7 @@ public class HookIntegrationTests
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode>");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -75,6 +75,29 @@ public class HookIntegrationTests
         // A command dtk does not rewrite gets no reply at all, leaving the call to Codex's own approval policy.
         var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
             """{"tool_name":"Bash","tool_input":{"command":"ls"}}""", "hook", "codex");
+
+        exitCode.Should().Be(0);
+        stdout.Should().BeEmpty();
+        stderr.Should().BeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_OpenCode_RewritesAsync()
+    {
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"command":"dotnet format --verify-no-changes"}""", "hook", "opencode");
+
+        exitCode.Should().Be(0);
+        stderr.Should().BeEmpty();
+        JsonNode.Parse(stdout)!["command"]!.GetValue<string>().Should().Be("dtk dotnet format --verify-no-changes");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_OpenCode_NothingToRewrite_PrintsNothingAsync()
+    {
+        // A command dtk does not rewrite gets no reply at all, so the plugin leaves the command as OpenCode gave it.
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"command":"ls -la"}""", "hook", "opencode");
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();

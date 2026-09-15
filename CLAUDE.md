@@ -88,6 +88,13 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 the hook only after the user approves it under `/hooks`, keyed by a hash of the definition, so `dtk hook codex` and its
 `timeout` must never change; `dtk doctor` warns until `config.toml` records an approval.
 
+`dtk init opencode` writes the same `AGENTS.md` section and skill plus a generated, stamped `.opencode/plugins/dtk.js`
+(`--global`: `$XDG_CONFIG_HOME/opencode` or `~/.config/opencode`). OpenCode has no hook commands: the plugin's
+`tool.execute.before` spawns `dtk hook opencode` (no shell) for `bash` commands containing `dotnet` and mutates
+`output.args.command` in place. It spawns the absolute path it finds on `PATH`, never a bare `dtk`: on Windows that
+would try the project directory first, before OpenCode's permission check. `OpenCodePluginTests` run it under Node;
+CI sets `DTK_NODE_REQUIRED=1`.
+
 ## Git Hooks
 
 The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.props` files. Install it once with:
@@ -186,6 +193,21 @@ hook on every shell tool call, so this is a per-call cost; on the `any` fallback
 The hook runs 2.9–3.4 ms *faster* than `--version`, because it returns before the service container and
 Spectre are built, which `--version` still constructs — meeting the spec's 3 ms ceiling on hook overhead, a
 gap a repeat run confirmed as stable (9.5/10.0 ms hook vs 12.9 ms `--version`).
+
+OpenCode plugin, measured 2026-09-15, OpenCode 1.18.31 (`opencode-ai` from npm) running `opencode run` against a
+local fake OpenAI-compatible model that requests one `bash` call, local AOT publish (linux-x64) of dtk first on
+`PATH`, 21 runs per configuration in interleaved rounds, plugin absent → installed. `--print-logs` has no per-tool
+timing, so the figure is the median interval from the fake model receiving the tool-offering request to OpenCode
+logging the `bash` permission check, which runs after the plugin's hook: `echo hi` 165 → 165 ms and
+`dotnet --version` 167 → 181 ms. The whole run's wall clock (about 2.1 s) moved 2086.9 → 2093.4 ms and
+2167.4 → 2180.3 ms, but its per-round installed-minus-absent differences spread from −66 to +81 ms, so it resolves
+neither figure; only these in-run figures were taken inside OpenCode. The OpenCode CLI runs plugins under the Bun
+it embeds (a probe plugin's `tool.execute.before` saw `Bun.version` 1.3.14), while the figures that isolate the
+hook come from Node 26, outside OpenCode: the plugin's `tool.execute.before` imported and timed by a driver script,
+55 samples, `dotnet --version` 10.7 ms (one `dtk hook opencode` start, no rewrite) and `dotnet build` 11.0 ms
+(rewritten to `dtk dotnet build`), against 1.2 ms for spawning `/bin/true` the same way. The plugin starts no
+process for a command without `dotnet`: inside OpenCode, a logging `dtk` wrapper on `PATH` saw no start for
+`echo hi` and one for `dotnet --version`; under the Node driver, the hook returned in under 0.01 ms for `echo hi`.
 
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in

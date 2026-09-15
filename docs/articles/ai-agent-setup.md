@@ -14,11 +14,12 @@ Pass `--global` (`-g`) to install into your home directory instead of a project,
 dtk init claude      --global   # ~/.claude
 dtk init gemini      --global   # ~/.gemini
 dtk init codex       --global   # ~/.codex (or $CODEX_HOME), ~/.agents/skills
+dtk init opencode    --global   # ~/.config/opencode, ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
 
-`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
+`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
 
 ## Claude Code
 
@@ -296,6 +297,41 @@ fails, so the command needs no guard:
 ```
 
 Then approve it in Codex under `/hooks`.
+
+## OpenCode
+
+OpenCode runs plugins rather than hook commands, so dtk installs a small plugin that rewrites
+`dotnet build|test|restore|clean|format|list package` commands to use `dtk`. It needs OpenCode 1.x, not the v2 beta,
+and was verified against OpenCode 1.18.31.
+
+### Installation
+
+From your project root, run:
+
+```sh
+dtk init opencode
+```
+
+This creates three files:
+
+- `AGENTS.md` — a `dtk` instructions section, created if the file does not exist yet (an existing `AGENTS.md`
+  gets it only with `--force`)
+- `.agents/skills/dotnet-token-killer/SKILL.md` — the dtk skill
+- `.opencode/plugins/dtk.js` — the plugin
+
+`dtk init opencode --global` writes `~/.config/opencode/AGENTS.md` and `~/.config/opencode/plugins/dtk.js` (under
+`$XDG_CONFIG_HOME` when it is set) and `~/.agents/skills/dotnet-token-killer/SKILL.md`. OpenCode also reads
+`.claude/skills/`, so a project set up for Claude Code too logs a harmless duplicate-skill warning.
+
+Re-running the command refreshes `dtk.js` if dtk wrote it and leaves an edited copy alone unless you pass `--force`.
+
+### How It Works
+
+Before OpenCode runs a `bash` command that mentions `dotnet`, the plugin passes it to `dtk hook opencode` and runs
+the `dtk dotnet …` command it gets back. Other commands never start `dtk`. The plugin looks for `dtk` on `PATH` only,
+never in the project directory. If `dtk` is not on `PATH`, fails or takes longer than five seconds, the original command
+runs unchanged. OpenCode checks its permission rules against the rewritten
+command.
 
 ## Cursor
 

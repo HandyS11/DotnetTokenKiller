@@ -96,6 +96,8 @@ internal static class CliConfigurator
             .WithExample(InitCommand, "gemini")
             .WithExample(InitCommand, "codex")
             .WithExample(InitCommand, "codex", "--global")
+            .WithExample(InitCommand, "opencode")
+            .WithExample(InitCommand, "opencode", "--global")
             .WithExample(InitCommand, "cursor")
             .WithExample(InitCommand, "windsurf")
             .WithExample(InitCommand, "aider")
