@@ -67,7 +67,7 @@ Unknown subcommands pass through to `dotnet` unchanged.
 - Format filtering — shows only violations with workspace-relative paths
 - `list package` filtering — collapses per-TFM duplication across plain, `--outdated`,
   `--deprecated`, and `--vulnerable` (~80.9% savings)
-- 9 AI agent integrations — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, Cursor, Windsurf, Aider, JetBrains AI
+- 10 AI agent integrations — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Cursor, Windsurf, Aider, JetBrains AI
 - Token analytics — tracks per-command savings over time with `dtk gain`
 - Self-diagnostics — `dtk doctor` validates your setup in one command
 - Shell completion — bash, zsh, fish, and PowerShell
@@ -81,7 +81,7 @@ once and every project your agent touches picks it up automatically:
 dtk init claude --global   # ~/.claude
 ```
 
-`--global` is supported for `claude`, `gemini`, `codex`, `aider`, and `copilot-cli`. The other providers
+`--global` is supported for `claude`, `gemini`, `codex`, `opencode`, `aider`, and `copilot-cli`. The other providers
 (`copilot`, `cursor`, `windsurf`, `jetbrains`) are repository-scoped — run `dtk init <provider>`
 inside the project.
 

@@ -141,13 +141,13 @@ public sealed class CompletionCommandTests
     [InlineData("zsh")]
     [InlineData("fish")]
     [InlineData("powershell")]
-    public async Task ExecuteAsync_EveryShell_CompletesTheCodexProvider(string shell)
+    public async Task ExecuteAsync_EveryShell_CompletesTheNewHarnessProviders(string shell)
     {
         var (command, _, writer) = Create();
 
         await command.RunAsync(new CompletionCommandSettings { Shell = shell }, CancellationToken.None);
 
-        writer.ToString().Should().Contain("codex");
+        writer.ToString().Should().Contain("codex").And.Contain("opencode");
     }
 
     [Fact]

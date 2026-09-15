@@ -88,6 +88,11 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 the hook only after the user approves it under `/hooks`, keyed by a hash of the definition, so `dtk hook codex` and its
 `timeout` must never change; `dtk doctor` warns until `config.toml` records an approval.
 
+`dtk init opencode` writes the same `AGENTS.md` section and skill plus a generated, stamped `.opencode/plugins/dtk.js`
+(`--global`: `$XDG_CONFIG_HOME/opencode` or `~/.config/opencode`). OpenCode has no hook commands: the plugin's
+`tool.execute.before` spawns `dtk hook opencode` (no shell) for `bash` commands containing `dotnet` and mutates
+`output.args.command` in place. `OpenCodePluginTests` run it under Node; CI sets `DTK_NODE_REQUIRED=1`.
+
 ## Git Hooks
 
 The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.props` files. Install it once with:

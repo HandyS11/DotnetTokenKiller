@@ -157,13 +157,14 @@ dtk init copilot     # GitHub Copilot instructions section
 dtk init copilot-cli # GitHub Copilot CLI hook + instructions section
 dtk init gemini      # Gemini CLI hook + settings merge
 dtk init codex       # Codex CLI hook + AGENTS.md section + skill
+dtk init opencode    # OpenCode plugin + AGENTS.md section + skill
 dtk init cursor      # Cursor rules file
 dtk init windsurf    # Windsurf rules file
 dtk init aider       # Aider instructions + .aider.conf.yml section
 dtk init jetbrains   # JetBrains AI guidelines section
 ```
 
-All commands accept `--force`/`-f` to overwrite existing files and `--dir <path>`/`-d` to target a specific directory. `--global`/`-g` installs into your home config instead of the project — supported for **claude**, **gemini**, **codex**, **aider**, and **copilot-cli** (the providers with a home config) — and cannot be combined with `--dir`:
+All commands accept `--force`/`-f` to overwrite existing files and `--dir <path>`/`-d` to target a specific directory. `--global`/`-g` installs into your home config instead of the project — supported for **claude**, **gemini**, **codex**, **opencode**, **aider**, and **copilot-cli** (the providers with a home config) — and cannot be combined with `--dir`:
 
 ```sh
 dtk init claude --global      # ~/.claude, applies to every project
