@@ -230,7 +230,7 @@ public sealed class HookPayloadsTests
     public void Antigravity_Rewrite_AsksWithAnOverwriteOfOnlyTheCommandLine()
     {
         var reply = Reply(HookPayloadKind.AntigravityCli,
-            """{"toolCall":{"name":"run_command","args":{"CommandLine":"dotnet test","Cwd":"/w","WaitMsBeforeAsync":500}},"stepIdx":3}""");
+            """{"artifactDirectoryPath":"/home/u/.gemini/antigravity-cli/brain/72c8f41f-64fa-43fb-8f24-bc62834d372f","conversationId":"72c8f41f-64fa-43fb-8f24-bc62834d372f","modelName":"gemini-3.8-flash-high","stepIdx":2,"toolCall":{"args":{"CommandLine":"dotnet test","Cwd":"/tmp/ws","WaitMsBeforeAsync":5000,"toolAction":"Running command in terminal","toolSummary":"Run dotnet test"},"name":"run_command"}}""");
 
         var root = JsonNode.Parse(reply!)!.AsObject();
         root["decision"]!.GetValue<string>().Should().Be("ask", "allow would auto-approve a command the user's rules may not allow");
