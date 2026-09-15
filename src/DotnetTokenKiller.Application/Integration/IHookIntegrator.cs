@@ -20,7 +20,10 @@ internal enum HookPayloadKind
     GeminiCli = 1,
 
     /// <summary>GitHub Copilot CLI's <c>preToolUse</c> payload.</summary>
-    CopilotCli = 2
+    CopilotCli = 2,
+
+    /// <summary>OpenAI Codex CLI's <c>PreToolUse</c> payload.</summary>
+    CodexCli = 3
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>

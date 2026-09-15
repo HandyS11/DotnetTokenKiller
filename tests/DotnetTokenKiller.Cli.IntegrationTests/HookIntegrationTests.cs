@@ -53,7 +53,20 @@ public class HookIntegrationTests
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex>");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_Codex_RewritesWithTheMandatoryAllowAsync()
+    {
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"dotnet test"}}""", "hook", "codex");
+
+        exitCode.Should().Be(0);
+        stderr.Should().BeEmpty();
+        var output = JsonNode.Parse(stdout)!["hookSpecificOutput"]!;
+        output["permissionDecision"]!.GetValue<string>().Should().Be("allow");
+        output["updatedInput"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
