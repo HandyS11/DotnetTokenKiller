@@ -119,7 +119,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
             : [];
 
         await IntegratorHelpers.RetireLegacyHookScriptAsync(
-            hook.LegacyScriptPath, replacedLegacy, hookFiles, context, cancellationToken).ConfigureAwait(false);
+            hook.LegacyScriptPath!, replacedLegacy, hookFiles, context, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Whether an existing registration file mentions the Python hook script, read before dtk rewrites it.</summary>

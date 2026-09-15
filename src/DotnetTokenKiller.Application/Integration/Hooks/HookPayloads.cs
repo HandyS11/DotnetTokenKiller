@@ -18,7 +18,7 @@ internal static class HookPayloads
     /// <summary>Gemini CLI's reply when nothing about the payload calls for a rewrite.</summary>
     private const string GeminiAllowReply = """{"decision":"allow"}""";
 
-    /// <summary>Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>) to its payload shape.</summary>
+    /// <summary>Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>) to its payload shape.</summary>
     /// <param name="provider">The name passed to <c>dtk hook</c>.</param>
     /// <param name="kind">The payload shape, when the name is known.</param>
     internal static bool TryGetKind(string provider, out HookPayloadKind kind)
@@ -28,6 +28,7 @@ internal static class HookPayloads
             "claude" => (true, HookPayloadKind.ClaudeCode),
             "gemini" => (true, HookPayloadKind.GeminiCli),
             "copilot-cli" => (true, HookPayloadKind.CopilotCli),
+            "codex" => (true, HookPayloadKind.CodexCli),
             _ => (false, default)
         };
         return known;
@@ -61,6 +62,7 @@ internal static class HookPayloads
                 HookPayloadKind.ClaudeCode => ReplyToClaude(root),
                 HookPayloadKind.GeminiCli => ReplyToGemini(root),
                 HookPayloadKind.CopilotCli => ReplyToCopilot(root),
+                HookPayloadKind.CodexCli => ReplyToCodex(root),
                 _ => null
             };
         }
@@ -140,6 +142,42 @@ internal static class HookPayloads
             ["modifiedArgs"] = toolArgs
         }.ToJsonString();
     }
+
+    private static string? ReplyToCodex(JsonNode? root)
+    {
+        if (root is not JsonObject payload
+            || NamesAnotherTool(payload, "tool_name", "Bash")
+            || payload["tool_input"] is not JsonObject toolInput
+            || !TryRewrite(toolInput, out _, out var rewritten))
+        {
+            return null;
+        }
+
+        var updatedInput = (JsonObject)toolInput.DeepClone();
+        updatedInput["command"] = rewritten;
+        return new JsonObject
+        {
+            ["hookSpecificOutput"] = new JsonObject
+            {
+                ["hookEventName"] = "PreToolUse",
+                // Codex rejects updatedInput unless the reply also allows; it still applies its approval policy and
+                // sandbox to the rewritten command.
+                ["permissionDecision"] = "allow",
+                ["updatedInput"] = updatedInput
+            }
+        }.ToJsonString();
+    }
+
+    /// <summary>
+    /// Whether <paramref name="payload"/> names a tool other than <paramref name="expected"/> under <paramref name="key"/>.
+    /// A payload without the key names none, which is what doctor's probe sends.
+    /// </summary>
+    /// <param name="payload">The hook payload.</param>
+    /// <param name="key">The property holding the tool name.</param>
+    /// <param name="expected">The shell tool's name.</param>
+    private static bool NamesAnotherTool(JsonObject payload, string key, string expected) =>
+        payload[key] is not null
+        && (payload[key] is not JsonValue value || !value.TryGetValue<string>(out var name) || name != expected);
 
     private static bool TryRewrite(JsonObject arguments, out string command, out string rewritten)
     {

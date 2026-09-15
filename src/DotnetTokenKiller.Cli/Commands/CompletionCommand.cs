@@ -34,7 +34,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             _init_completion || return
 
             local dotnet_cmds="__DOTNET_CMDS_BASH__"
-            local init_providers="claude copilot copilot-cli gemini cursor windsurf aider jetbrains"
+            local init_providers="claude copilot copilot-cli gemini codex cursor windsurf aider jetbrains"
             local config_subcmds="show set"
             local top_cmds="dotnet pipe init config doctor completion gain log reset --version --help"
 
@@ -105,6 +105,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                 'copilot:Install dtk instructions for GitHub Copilot'
                 'copilot-cli:Install dtk hook and instructions for GitHub Copilot CLI'
                 'gemini:Install dtk instructions and hook for Gemini CLI'
+                'codex:Install dtk hook and instructions for Codex CLI'
                 'cursor:Install dtk rules for Cursor'
                 'windsurf:Install dtk rules for Windsurf'
                 'aider:Install dtk rules for Aider'
@@ -164,6 +165,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a copilot   -d 'Install dtk instructions for GitHub Copilot'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a copilot-cli -d 'Install dtk hook and instructions for GitHub Copilot CLI'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a gemini    -d 'Install dtk instructions and hook for Gemini CLI'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a codex     -d 'Install dtk hook and instructions for Codex CLI'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a cursor    -d 'Install dtk rules for Cursor'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a windsurf  -d 'Install dtk rules for Windsurf'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a aider     -d 'Install dtk rules for Aider'
@@ -193,7 +195,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
 
             $topCmds = @('dotnet', 'pipe', 'init', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')
             $dotnetCmds = @(__DOTNET_CMDS_PS__)
-            $providers = @('claude', 'copilot', 'copilot-cli', 'gemini', 'cursor', 'windsurf', 'aider', 'jetbrains')
+            $providers = @('claude', 'copilot', 'copilot-cli', 'gemini', 'codex', 'cursor', 'windsurf', 'aider', 'jetbrains')
             $configCmds = @('show', 'set')
             $shells = @('bash', 'zsh', 'fish', 'powershell')
 

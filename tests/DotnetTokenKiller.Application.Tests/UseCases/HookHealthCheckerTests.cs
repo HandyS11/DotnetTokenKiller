@@ -48,6 +48,24 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private IReadOnlyList<IHookIntegrator> Integrators => [new GeminiCliIntegrator(Home)];
 
+    private CodexIntegrator Codex => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
+    private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
+
+    private string CodexGlobalHooksPath => Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
+
+    /// <summary>Writes a global <c>hooks.json</c> whose first group runs rtk's hook, putting dtk's at 1:0.</summary>
+    private async Task WriteCodexGlobalHooksAfterAForeignGroupAsync()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(CodexGlobalHooksPath)!);
+        await File.WriteAllTextAsync(CodexGlobalHooksPath, """
+            {"hooks":{"PreToolUse":[
+              {"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook codex"}]},
+              {"matcher":"Bash","hooks":[{"type":"command","command":"dtk hook codex","timeout":10}]}
+            ]}}
+            """);
+    }
+
     private async Task IntegrateAsync(HookScope scope = HookScope.Project)
     {
         var integrator = new GeminiCliIntegrator(Home);
@@ -173,7 +191,7 @@ public sealed class HookHealthCheckerTests : IDisposable
         await File.WriteAllTextAsync(installation.RegistrationPath, """
             {"hooks":{"BeforeTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"python3 \"$GEMINI_PROJECT_DIR\"/.gemini/hooks/dotnet-to-dtk.py"}]}]}}
             """);
-        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath);
+        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath!);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
@@ -199,7 +217,7 @@ public sealed class HookHealthCheckerTests : IDisposable
     {
         var scope = isGlobal ? HookScope.Global : HookScope.Project;
         var installation = Integrators[0].DescribeHooks(_tempDir, scope)[0];
-        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath);
+        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath!);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
@@ -214,7 +232,7 @@ public sealed class HookHealthCheckerTests : IDisposable
         await IntegrateAsync();
         var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
         await File.WriteAllTextAsync(installation.RegistrationPath, "{}");
-        LegacyHookFixtures.WriteEditedScript(installation.LegacyScriptPath);
+        LegacyHookFixtures.WriteEditedScript(installation.LegacyScriptPath!);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
@@ -406,5 +424,184 @@ public sealed class HookHealthCheckerTests : IDisposable
         var probe = checks.First(c => c.Name == "gemini hook probe (project)");
         probe.Passed.Should().BeFalse();
         probe.Message.Should().Contain($"could not run {_dtkOnPath}").And.Contain("No such file or directory");
+    }
+
+    [Fact]
+    public async Task RunAsync_InstallationWithoutALegacyScriptAndNoRegistration_IsNotReported()
+    {
+        var integrator = new FixedHooks(new HookInstallation(
+            "codex", HookScope.Project, Path.Combine(_tempDir, ".codex", "hooks.json"), "dtk hook codex", null, HookPayloadKind.ClaudeCode));
+
+        var checks = await _sut.RunAsync([integrator], _tempDir, default);
+
+        checks.Should().ContainSingle().Which.Name.Should().Be("hook integration");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexHookNotApprovedInAnUntrustedProject_WarnsTwiceWithoutFailing()
+    {
+        await Codex.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal(
+            "codex hook (project)", "codex hook probe (project)", "codex hook approval (project)", "codex project trust (project)");
+        checks.Should().OnlyContain(c => c.Passed);
+        checks.Skip(2).Should().OnlyContain(c => c.IsWarning);
+        checks[2].Message.Should().Contain("/hooks");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexHookApprovedInATrustedProject_HasNoWarnings()
+    {
+        await Codex.IntegrateAsync(_tempDir, force: false, default);
+        var hooksPath = Codex.DescribeHooks(_tempDir, HookScope.Project)[0].RegistrationPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(CodexConfigPath)!);
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [projects.'{_tempDir}']
+            trust_level = "trusted"
+
+            [hooks.state.'{hooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Should().HaveCount(4).And.OnlyContain(c => c.Passed && !c.IsWarning);
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexHookTurnedOffUnderHooks_WarnsThatItIsTurnedOff()
+    {
+        await Codex.IntegrateGlobalAsync(force: false, default);
+        var hooksPath = Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{hooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            enabled = false
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeTrue();
+        approval.Message.Should().Contain("turned off").And.Contain("/hooks");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexApprovalOnlyForAForeignHandlerBeforeDtks_WarnsNotYetApproved()
+    {
+        // Codex keys each handler by its group and handler position, so approving rtk's hook at 0:0 says
+        // nothing about dtk's at 1:0.
+        await WriteCodexGlobalHooksAfterAForeignGroupAsync();
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{CodexGlobalHooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeTrue();
+        approval.Message.Should().Contain("not yet approved");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexApprovalForDtksOwnHandlerPosition_Passes()
+    {
+        await WriteCodexGlobalHooksAfterAForeignGroupAsync();
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{CodexGlobalHooksPath}:pre_tool_use:1:0']
+            trusted_hash = "sha256:abc"
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeFalse();
+        approval.Message.Should().Contain("approval recorded");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexForeignHandlerTurnedOffBeforeDtks_DoesNotReportDtksAsTurnedOff()
+    {
+        await WriteCodexGlobalHooksAfterAForeignGroupAsync();
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{CodexGlobalHooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            enabled = false
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Single(c => c.Name == "codex hook approval (global)").Message.Should().Contain("not yet approved");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexGlobalHook_ChecksApprovalButNotProjectTrust()
+    {
+        await Codex.IntegrateGlobalAsync(force: false, default);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal(
+            "codex hook (global)", "codex hook probe (global)", "codex hook approval (global)");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexConfigUnreadable_WarnsThatApprovalIsUnknown()
+    {
+        await Codex.IntegrateGlobalAsync(force: false, default);
+        await File.WriteAllTextAsync(CodexConfigPath, "[hooks\nnot toml");
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeTrue();
+        approval.Message.Should().Contain(CodexConfigPath).And.Contain("could not be read");
+    }
+
+    [Fact]
+    public async Task RunAsync_ApprovalInspectorThrows_WarnsOnceNamingTheProviderInsteadOfFailing()
+    {
+        var hooksPath = Path.Combine(_tempDir, ".codex", "hooks.json");
+        var integrator = new ThrowingApprovalInspector(new HookInstallation(
+            "codex", HookScope.Project, hooksPath, "dtk hook codex", null, HookPayloadKind.CodexCli));
+        Directory.CreateDirectory(Path.GetDirectoryName(hooksPath)!);
+        await File.WriteAllTextAsync(hooksPath,
+            """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"command":"dtk hook codex"}]}]}}""");
+
+        var checks = await _sut.RunAsync([integrator], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal(
+            "codex hook (project)", "codex hook probe (project)", "codex hook approval (project)");
+        checks[2].IsWarning.Should().BeTrue("doctor reports what it could not inspect rather than crashing");
+        checks[2].Message.Should().Contain("codex").And.Contain("inspector exploded");
+    }
+
+    /// <summary>
+    /// A hook integrator whose approval inspection throws. Hand-written, as <see cref="FixedHooks"/> is.
+    /// </summary>
+    /// <param name="described">The installation to describe in its own scope.</param>
+    private sealed class ThrowingApprovalInspector(HookInstallation described)
+        : IHookIntegrator, IHookApprovalInspector
+    {
+        public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
+            scope == described.Scope ? [described] : [];
+
+        public IReadOnlyList<HookApprovalFinding> InspectApproval(
+            HookInstallation installation, string projectDirectory) =>
+            throw new InvalidOperationException("inspector exploded");
+    }
+
+    /// <summary>
+    /// An integrator describing fixed installations. A hand-written fake, because NSubstitute cannot proxy the internal
+    /// <see cref="IHookIntegrator"/> (the Application assembly grants no internals to DynamicProxyGenAssembly2).
+    /// </summary>
+    /// <param name="installations">The installations to describe, filtered by scope.</param>
+    private sealed class FixedHooks(params HookInstallation[] installations) : IHookIntegrator
+    {
+        public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
+            [.. installations.Where(installation => installation.Scope == scope)];
     }
 }

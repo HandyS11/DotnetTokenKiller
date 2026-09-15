@@ -35,16 +35,6 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
     /// <summary>The command name every registration runs.</summary>
     private const string DtkCommand = "dtk";
 
-    /// <summary>
-    /// Doctor only reads settings files, so it accepts what their harnesses accept rather than failing a file
-    /// with a comment as unreadable.
-    /// </summary>
-    private static readonly JsonDocumentOptions LenientJson = new()
-    {
-        CommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true
-    };
-
     /// <summary>How long the probe waits before declaring the hook wedged.</summary>
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
 
@@ -70,12 +60,14 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
                 {
                     var registration = await ReadRegistrationAsync(installation, cancellationToken).ConfigureAwait(false);
-                    if (registration.Kind == RegistrationKind.Absent && !File.Exists(installation.LegacyScriptPath))
+                    if (registration.Kind == RegistrationKind.Absent
+                        && (installation.LegacyScriptPath is null || !File.Exists(installation.LegacyScriptPath)))
                     {
                         continue;
                     }
 
-                    checks.AddRange(await CheckAsync(installation, registration, cancellationToken).ConfigureAwait(false));
+                    checks.AddRange(await CheckAsync(integrator, installation, registration, projectDirectory, cancellationToken)
+                        .ConfigureAwait(false));
                 }
             }
         }
@@ -93,7 +85,8 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
     }
 
     private async Task<IReadOnlyList<DiagnosticCheck>> CheckAsync(
-        HookInstallation installation, Registration registration, CancellationToken cancellationToken)
+        IHookIntegrator integrator, HookInstallation installation, Registration registration, string projectDirectory,
+        CancellationToken cancellationToken)
     {
         var name = CheckName(installation, "hook");
 
@@ -110,10 +103,44 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
             RegistrationKind.Current =>
             [
                 new DiagnosticCheck(name, true, "registered"),
-                await ProbeAsync(installation, cancellationToken).ConfigureAwait(false)
+                await ProbeAsync(installation, cancellationToken).ConfigureAwait(false),
+                .. ApprovalChecks(integrator, installation, projectDirectory)
             ],
             _ => [new DiagnosticCheck(name, false, $"{registration.Problem}. Run '{RemedyCommand(installation)}'.")]
         };
+    }
+
+    /// <summary>The harness's approval requirements for a current registration, as checks; empty for most harnesses.</summary>
+    /// <param name="integrator">The provider that described the installation.</param>
+    /// <param name="installation">The registered installation.</param>
+    /// <param name="projectDirectory">The directory to treat as the project root.</param>
+    private static IReadOnlyList<DiagnosticCheck> ApprovalChecks(
+        IHookIntegrator integrator, HookInstallation installation, string projectDirectory)
+    {
+        if (integrator is not IHookApprovalInspector inspector)
+        {
+            return [];
+        }
+
+        // Doctor must never crash: whatever reading the harness's own config throws becomes one warning.
+        try
+        {
+            return
+            [
+                .. inspector.InspectApproval(installation, projectDirectory).Select(finding => finding.Satisfied
+                    ? new DiagnosticCheck(CheckName(installation, finding.Label), true, finding.Message)
+                    : DiagnosticCheck.Warning(CheckName(installation, finding.Label), finding.Message))
+            ];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return
+            [
+                DiagnosticCheck.Warning(
+                    CheckName(installation, "hook approval"),
+                    $"dtk could not check whether {installation.ProviderName} will run this hook: {ex.Message}")
+            ];
+        }
     }
 
     /// <summary>What the registration file says about this hook.</summary>
@@ -167,7 +194,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         // enumerated, so the search belongs inside the same guard as the parse.
         try
         {
-            var root = JsonNode.Parse(content, documentOptions: LenientJson);
+            var root = JsonNode.Parse(content, documentOptions: IntegratorHelpers.LenientJson);
 
             if (FindStringContaining(root, IntegratorHelpers.LegacyHookScriptName) is not null)
             {

@@ -82,35 +82,34 @@ public sealed class CopilotCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsInstructionsAndReportsRestUnchanged()
+    public async Task IntegrateAsync_SecondRun_NoForce_ReportsEverythingUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        // The registration JSON is deterministic, so a repeat run finds it byte-identical and
-        // reports it unchanged rather than skipped — dtk must never print false "use --force"
-        // advice for a file --force would not change. Only the section-based instructions file has
-        // no such comparison and still reports skipped.
+        // Both the section-based instructions file and the registration JSON already hold dtk's
+        // current content: dtk can prove there is nothing to write in either, so neither is
+        // reported skipped — dtk must never print false "use --force" advice for a file --force
+        // would not change.
         result.CreatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().ContainSingle();
-        result.UnchangedFiles.Should().Equal(HookJsonPath);
+        result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().HaveCount(2).And.Contain(HookJsonPath);
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesInstructionsAndReportsRestUnchanged()
+    public async Task IntegrateAsync_SecondRun_WithForce_ReportsEverythingUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        // The section-based instructions file has no identical-content check and is always
-        // rewritten under --force. The registration JSON has nothing to write over identical
-        // content, so it reports unchanged rather than updated.
+        // Both files already hold dtk's current content, so there is nothing to write over even
+        // under --force.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().ContainSingle();
+        result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
-        result.UnchangedFiles.Should().Equal(HookJsonPath);
+        result.UnchangedFiles.Should().HaveCount(2).And.Contain(HookJsonPath);
     }
 
     [Fact]

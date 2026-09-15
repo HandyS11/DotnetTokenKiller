@@ -20,7 +20,10 @@ internal enum HookPayloadKind
     GeminiCli = 1,
 
     /// <summary>GitHub Copilot CLI's <c>preToolUse</c> payload.</summary>
-    CopilotCli = 2
+    CopilotCli = 2,
+
+    /// <summary>OpenAI Codex CLI's <c>PreToolUse</c> payload.</summary>
+    CodexCli = 3
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>
@@ -28,17 +31,20 @@ internal enum HookPayloadKind
 /// <param name="Scope">Whether this describes the project or the home-config install.</param>
 /// <param name="RegistrationPath">
 /// The JSON file that registers the hook with the host CLI — a merged <c>settings.json</c> for Claude Code and
-/// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI.
+/// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI, a merged <c>.codex/hooks.json</c> for Codex CLI.
 /// </param>
 /// <param name="Command">The exact command dtk registers, e.g. <c>dtk hook gemini; exit 0</c>.</param>
-/// <param name="LegacyScriptPath">Where dtk installed the Python hook this registration replaces.</param>
+/// <param name="LegacyScriptPath">
+/// Where dtk installed the Python hook this registration replaces, or <see langword="null"/> for a provider that
+/// never had one.
+/// </param>
 /// <param name="PayloadKind">Payload shape to use when probing this hook.</param>
 internal sealed record HookInstallation(
     string ProviderName,
     HookScope Scope,
     string RegistrationPath,
     string Command,
-    string LegacyScriptPath,
+    string? LegacyScriptPath,
     HookPayloadKind PayloadKind);
 
 /// <summary>

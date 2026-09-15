@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IProviderIntegrator, GitHubCopilotIntegrator>();
         services.AddTransient<IProviderIntegrator, CopilotCliIntegrator>();
         services.AddTransient<IProviderIntegrator, GeminiCliIntegrator>();
+        services.AddTransient<IProviderIntegrator, CodexIntegrator>();
         services.AddTransient<IProviderIntegrator, CursorIntegrator>();
         services.AddTransient<IProviderIntegrator, WindsurfIntegrator>();
         services.AddTransient<IProviderIntegrator, AiderIntegrator>();

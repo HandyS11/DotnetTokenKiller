@@ -142,7 +142,7 @@ public sealed class SubcommandBindingTests
             "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage "
             + "when running `dotnet` build, test, restore, clean, format, and list package commands.";
 
-        ClaudeCodeIntegrator.SkillMarkdown.Should().Contain(
+        SharedInstructionArtifacts.SkillMarkdown.Should().Contain(
             $"description: '{expectedDescription}'",
             "the skill's frontmatter description is what Claude Code matches user intent against, so "
             + "a subcommand missing from it means the skill never fires for that subcommand");
@@ -155,7 +155,7 @@ public sealed class SubcommandBindingTests
         // 'dtk dotnet list package --outdated' — so the skill named 'list package' in one sentence
         // and then contradicted itself in its own examples. Embedding the shared body is what makes
         // that impossible; this test is what keeps it embedded.
-        ClaudeCodeIntegrator.SkillMarkdown.Should().Contain(
+        SharedInstructionArtifacts.SkillMarkdown.Should().Contain(
             IntegrationInstructions.UsageBody,
             "the skill must embed the shared usage body verbatim rather than restate it, or its "
             + "examples drift from every other provider's");

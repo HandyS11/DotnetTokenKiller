@@ -9,7 +9,9 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <param name="EventKey">Key of the hook event array within the hooks object (e.g. "PreToolUse").</param>
 /// <param name="Matcher">The matcher value for the registered hook entry.</param>
 /// <param name="Command">The command dtk registers, and the value used to detect an existing registration.</param>
-internal sealed record HookRegistrationSpec(string SettingsPath, string EventKey, string Matcher, string Command);
+/// <param name="TimeoutSeconds">A <c>timeout</c> written on the handler, or <see langword="null"/> to write none.</param>
+internal sealed record HookRegistrationSpec(
+    string SettingsPath, string EventKey, string Matcher, string Command, int? TimeoutSeconds = null);
 
 internal static class IntegratorHelpers
 {
@@ -31,6 +33,16 @@ internal static class IntegratorHelpers
     {
         WriteIndented = true,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    /// <summary>
+    /// Parse options for reading settings files without writing them, as doctor does: it accepts what their harnesses
+    /// accept rather than failing a file with a comment as unreadable.
+    /// </summary>
+    internal static readonly JsonDocumentOptions LenientJson = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
     };
 
     /// <summary>
@@ -233,6 +245,8 @@ internal static class IntegratorHelpers
     /// untouched (matching <see cref="WriteFileAsync"/>'s contract).
     /// If the file already exists and <c>context.Force</c> is <see langword="true"/>: replaces the
     /// dtk-managed span when the marker is present, or appends the section when it is not.
+    /// If the file's dtk-managed span (its first marker through the end marker after it) is already exactly
+    /// <paramref name="section"/> (line endings normalized): reports it unchanged and writes nothing, force or not.
     /// If the file does not exist: creates it with the section as the only content.
     /// </summary>
     /// <param name="path">Path to the target file.</param>
@@ -250,6 +264,15 @@ internal static class IntegratorHelpers
         CancellationToken cancellationToken)
     {
         var exists = File.Exists(path);
+
+        if (exists
+            && await TryReadExistingAsync(path, cancellationToken).ConfigureAwait(false) is { } existing
+            && IsSectionCurrent(existing, sectionMarker, sectionEndMarker, section))
+        {
+            // Nothing to write, with or without --force; reporting it skipped would advise a --force that changes nothing.
+            context.Unchanged.Add(path);
+            return;
+        }
 
         if (ShouldSkipWrite(exists, context.Force))
         {
@@ -272,6 +295,29 @@ internal static class IntegratorHelpers
 
         await File.WriteAllTextAsync(path, updated, cancellationToken).ConfigureAwait(false);
         context.Updated.Add(path);
+    }
+
+    /// <summary>
+    /// Whether the dtk-managed span in <paramref name="content"/> — the first begin marker through the first end
+    /// marker after it, the span a <c>--force</c> write replaces — is exactly <paramref name="section"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only that span counts: a copy of the section elsewhere in the file, such as one quoted in a code fence, must not
+    /// make a stale section look current. A section is its markers and what lies between them, so a trailing newline
+    /// the section carries outside its end marker is not compared.
+    /// </remarks>
+    /// <param name="content">The existing file content, line endings normalized to <c>\n</c>.</param>
+    /// <param name="marker">String that marks the beginning of the dtk-managed block.</param>
+    /// <param name="endMarker">String that marks the end of the dtk-managed block.</param>
+    /// <param name="section">Full text of the dtk-managed block dtk would write.</param>
+    private static bool IsSectionCurrent(string content, string marker, string endMarker, string section)
+    {
+        var start = content.IndexOf(marker, StringComparison.Ordinal);
+        var end = start < 0 ? -1 : content.IndexOf(endMarker, start, StringComparison.Ordinal);
+
+        return end >= 0
+               && content.AsSpan(start, end + endMarker.Length - start)
+                   .SequenceEqual(section.ReplaceLineEndings("\n").TrimEnd('\n'));
     }
 
     private static string AppendSection(string current, string section)
@@ -308,18 +354,22 @@ internal static class IntegratorHelpers
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Whether the merge replaced or removed an entry running <see cref="LegacyHookScriptName"/>.</returns>
     internal static Task<bool> WriteHookRegistrationAsync(
-        HookRegistrationSpec spec, IntegrationContext context, CancellationToken cancellationToken) =>
-        MergeJsonSettingsAsync(
+        HookRegistrationSpec spec, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        var handler = new JsonObject { ["type"] = "command", [CommandKey] = spec.Command };
+        if (spec.TimeoutSeconds is { } timeout)
+        {
+            handler["timeout"] = timeout;
+        }
+
+        return MergeJsonSettingsAsync(
             spec.SettingsPath,
             spec.EventKey,
-            new JsonObject
-            {
-                ["matcher"] = spec.Matcher,
-                [HooksKey] = new JsonArray(new JsonObject { ["type"] = "command", [CommandKey] = spec.Command })
-            },
+            new JsonObject { ["matcher"] = spec.Matcher, [HooksKey] = new JsonArray(handler) },
             spec.Command,
             context,
             cancellationToken);
+    }
 
     /// <summary>
     /// Deletes the Python hook script dtk installed before <c>dtk hook</c>, when dtk can prove it wrote it.

@@ -136,6 +136,20 @@ public sealed class CompletionCommandTests
         script.Should().Contain("copilot-cli");
     }
 
+    [Theory]
+    [InlineData("bash")]
+    [InlineData("zsh")]
+    [InlineData("fish")]
+    [InlineData("powershell")]
+    public async Task ExecuteAsync_EveryShell_CompletesTheCodexProvider(string shell)
+    {
+        var (command, _, writer) = Create();
+
+        await command.RunAsync(new CompletionCommandSettings { Shell = shell }, CancellationToken.None);
+
+        writer.ToString().Should().Contain("codex");
+    }
+
     [Fact]
     public async Task ExecuteAsync_UnknownShell_ReturnsOneAndPrintsError()
     {

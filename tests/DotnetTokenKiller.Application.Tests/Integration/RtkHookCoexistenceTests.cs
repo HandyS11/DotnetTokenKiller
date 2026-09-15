@@ -294,4 +294,46 @@ public sealed class RtkHookCoexistenceTests : IDisposable
         outcome.Should().Be(RtkReconcileOutcome.None);
         File.Exists(RtkConfigPath).Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData("""{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook codex"}]}]}}""")]
+    [InlineData("""{"rtk-rewrite":{"PreToolUse":[{"matcher":"run_command","hooks":[{"command":"rtk hook antigravity"}]}]}}""")]
+    [InlineData("const result = await $`rtk rewrite ${command}`.quiet().nothrow()")]
+    public async Task ReconcileFilesAsync_HarnessFileRunsAnRtkRewrite_ExcludesDotnet(string content)
+    {
+        var file = Path.Combine(ProjectDir, "harness", "hooks.json");
+        await WriteAsync(file, content);
+
+        var outcome = await CreateSut().ReconcileFilesAsync([Path.Combine(ProjectDir, "missing.json"), file], CancellationToken.None);
+
+        outcome.CreatedConfigPath.Should().Be(RtkConfigPath);
+        (await File.ReadAllTextAsync(RtkConfigPath)).Should().Contain("exclude_commands = [\"dotnet\"]");
+    }
+
+    [Theory]
+    [InlineData("""{"hooks":{"PreToolUse":[{"hooks":[{"command":"dtk hook codex"}]}]}}""")]
+    [InlineData("# we used to run rtk here")]
+    [InlineData("trtk hook codex")]
+    public async Task ReconcileFilesAsync_NoRtkRewrite_ChangesNothing(string content)
+    {
+        var file = Path.Combine(ProjectDir, "harness", "hooks.json");
+        await WriteAsync(file, content);
+
+        var outcome = await CreateSut().ReconcileFilesAsync([file], CancellationToken.None);
+
+        outcome.Should().Be(RtkReconcileOutcome.None);
+        File.Exists(RtkConfigPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ApplyTo_CopiesPathsAndNotesIntoTheContext()
+    {
+        var context = new IntegrationContext(false);
+
+        new RtkReconcileOutcome("created.toml", "updated.toml", ["note"]).ApplyTo(context);
+
+        context.Created.Should().Equal("created.toml");
+        context.Updated.Should().Equal("updated.toml");
+        context.Notes.Should().Equal("note");
+    }
 }

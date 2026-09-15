@@ -31,78 +31,6 @@ namespace DotnetTokenKiller.Application.Integration;
 internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
     : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
 {
-    /// <summary>
-    /// The skill's frontmatter <c>description:</c> line. This is Claude Code's <em>skill-trigger</em>
-    /// text — the one string that decides whether the skill surfaces for a given user intent — so it
-    /// is derived from <see cref="IntegrationInstructions.SubcommandProse"/> rather than hand-written.
-    /// A hardcoded list here meant a user who ran <c>dtk init claude</c> got a skill that never
-    /// fired for package-listing intent, which is invisible from inside dtk.
-    /// </summary>
-    private static readonly string SkillDescription =
-        "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage when "
-        + $"running `dotnet` {IntegrationInstructions.SubcommandProse} commands.";
-
-    /// <summary>
-    /// The skill written to <c>.claude/skills/dotnet-token-killer/SKILL.md</c>. Internal (rather than
-    /// private) so <c>SubcommandBindingTests</c> can pin <see cref="SkillDescription"/> the same way
-    /// it pins <see cref="CopilotCliIntegrator.CopilotSection"/> — this file is a derived artifact
-    /// with no compile-time link to the canonical subcommand list.
-    /// </summary>
-    internal static readonly string SkillMarkdown =
-        $"""
-        ---
-        name: dotnet-token-killer
-        description: '{SkillDescription}'
-        ---
-
-        # DotnetTokenKiller (dtk)
-
-        `dtk` wraps `dotnet` commands and filters output to actionable signal only, saving 50-97% of tokens by stripping SDK banners, MSBuild noise, progress lines, and duplicate diagnostics.
-
-        ## Installation
-
-        ```sh
-        dotnet tool install -g DotnetTokenKiller  # requires .NET 10 SDK
-        ```
-
-        ## Usage
-
-        Drop-in replacement for {IntegrationInstructions.SubcommandBacktickProse}:
-
-        {IntegrationInstructions.UsageBody}
-
-        ## Flags
-
-        | Flag         | Purpose                                           |
-        |--------------|---------------------------------------------------|
-        | `--show-log` | Print path to full unfiltered log after a run     |
-        | `-v`         | Echo the resolved command line before running     |
-        | `--vv`       | Also dump raw dotnet output and elapsed time      |
-
-        ## Key Behaviors
-
-        - Paths are workspace-relative (`src/Foo.cs`, not absolute)
-        - Build errors grouped by file; warnings grouped by diagnostic code with frequency counts
-        - Works with xUnit, NUnit, MSTest, and Reqnroll
-        - Run `dtk dotnet clean` first for a full warning report (incremental builds skip unchanged files)
-
-        ## Token Savings
-
-        ```sh
-        dtk gain               # last 30 days
-        dtk gain --days 7
-        dtk gain --project     # current project only
-        dtk gain --json
-        ```
-        """;
-
-    /// <summary>
-    /// Substring present in every generation of the skill file, used to recognize an unstamped copy
-    /// installed by dtk 0.6.0 or earlier. It is the frontmatter <c>name:</c> line, which has never
-    /// changed and cannot without breaking Claude Code's skill lookup.
-    /// </summary>
-    internal const string SkillLegacySignature = "name: dotnet-token-killer";
-
     /// <summary>The per-user settings file Claude Code reads beside <c>settings.json</c>, which dtk never edits.</summary>
     private const string LocalSettingsFileName = "settings.local.json";
 
@@ -145,10 +73,10 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         await IntegratorHelpers.WriteGeneratedFileAsync(
             new GeneratedArtifact(
-                Path.Combine(baseDirectory, "skills", "dotnet-token-killer", "SKILL.md"),
-                SkillMarkdown,
+                SharedInstructionArtifacts.SkillPath(Path.Combine(baseDirectory, "skills")),
+                SharedInstructionArtifacts.SkillMarkdown,
                 StampStyle.HtmlComment,
-                SkillLegacySignature),
+                SharedInstructionArtifacts.SkillLegacySignature),
             context, cancellationToken).ConfigureAwait(false);
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
@@ -159,24 +87,14 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         // dtk merges settings.json only; Claude Code also runs the hooks in settings.local.json beside it.
         await IntegratorHelpers.RetireLegacyHookScriptAsync(
-            hook.LegacyScriptPath,
+            hook.LegacyScriptPath!,
             replacedLegacy,
             [hook.RegistrationPath, Path.Combine(Path.GetDirectoryName(hook.RegistrationPath)!, LocalSettingsFileName)],
             context,
             cancellationToken).ConfigureAwait(false);
 
         var rtkOutcome = await rtk.ReconcileAsync(hookDirectory, cancellationToken).ConfigureAwait(false);
-        if (rtkOutcome.CreatedConfigPath is not null)
-        {
-            context.Created.Add(rtkOutcome.CreatedConfigPath);
-        }
-
-        if (rtkOutcome.UpdatedConfigPath is not null)
-        {
-            context.Updated.Add(rtkOutcome.UpdatedConfigPath);
-        }
-
-        context.Notes.AddRange(rtkOutcome.Notes);
+        rtkOutcome.ApplyTo(context);
 
         return context.ToResult();
     }

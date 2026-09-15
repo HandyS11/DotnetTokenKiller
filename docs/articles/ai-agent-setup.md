@@ -13,11 +13,12 @@ Pass `--global` (`-g`) to install into your home directory instead of a project,
 ```sh
 dtk init claude      --global   # ~/.claude
 dtk init gemini      --global   # ~/.gemini
+dtk init codex       --global   # ~/.codex (or $CODEX_HOME), ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
 
-`--global` is supported only for the providers with a home config — **claude**, **gemini**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
+`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
 
 ## Claude Code
 
@@ -225,6 +226,76 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and l
 `dtk` filters output to actionable signal only, reducing noise by 50-97%.
 <!-- /dtk -->
 ```
+
+## Codex CLI
+
+A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`. It needs
+Codex CLI 0.131 or later, the first release whose hooks can change a command, and was verified against Codex CLI 0.154.
+
+### Installation
+
+From your project root, run:
+
+```sh
+dtk init codex
+```
+
+This creates three files:
+
+- `AGENTS.md` — a `dtk` instructions section, created if the file does not exist yet; an existing `AGENTS.md`
+  gets the section only when you pass `--force`, and keeps the rest of its content
+- `.agents/skills/dotnet-token-killer/SKILL.md` — the dtk skill, which Codex loads when it is relevant
+- `.codex/hooks.json` — registers `dtk hook codex` under `PreToolUse` (merges with any existing hooks)
+
+`dtk init codex --global` writes `~/.codex/AGENTS.md` and `~/.codex/hooks.json` (under `$CODEX_HOME` when it is
+set) and `~/.agents/skills/dotnet-token-killer/SKILL.md`. The `AGENTS.md` section and the skill are shared: providers
+that write the same files leave one copy of each.
+
+In a linked git worktree, Codex reads hooks from the main checkout's `.codex/` folder, so run `dtk init codex` in the
+main checkout (or commit `.codex/hooks.json`).
+
+### Approving the hook
+
+Codex runs a hook only after you approve that exact definition. Open Codex after `dtk init codex`: it lists the new
+hook for review at startup, and `/hooks` shows it at any time. Until you approve it, `codex exec` skips the hook
+without saying so and commands run unrewritten. Codex also reads a project's `.codex/` folder only once you trust the
+project. `dtk doctor` warns while either is missing, and while the hook is turned off under `/hooks`.
+
+dtk does not approve the hook for you: the approval is Codex's record that you reviewed what runs before every shell
+command.
+
+### How It Works
+
+Before each shell command, Codex sends it to `dtk hook codex`, which replies with `dtk dotnet …` for a matching
+`dotnet …` command. Codex still applies its approval policy and sandbox to the rewritten command. A "don't ask again"
+approval you saved for a `dotnet …` command does not match the rewritten `dtk dotnet …` command, so Codex may ask
+again once.
+
+### Manual Installation
+
+Add the following to `.codex/hooks.json` (or `~/.codex/hooks.json`). Codex runs the original command when a hook
+fails, so the command needs no guard:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dtk hook codex",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Then approve it in Codex under `/hooks`.
 
 ## Cursor
 

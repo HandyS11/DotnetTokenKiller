@@ -9,7 +9,14 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <param name="Name">Short display name for the check.</param>
 /// <param name="Passed">Whether the check passed.</param>
 /// <param name="Message">Human-readable detail message.</param>
-public sealed record DiagnosticCheck(string Name, bool Passed, string Message);
+/// <param name="IsWarning">Whether a passing check still deserves the user's attention; a warning never fails doctor.</param>
+public sealed record DiagnosticCheck(string Name, bool Passed, string Message, bool IsWarning = false)
+{
+    /// <summary>Creates a passing check marked as a warning.</summary>
+    /// <param name="name">Short display name for the check.</param>
+    /// <param name="message">Human-readable detail message.</param>
+    public static DiagnosticCheck Warning(string name, string message) => new(name, true, message, IsWarning: true);
+}
 
 /// <summary>Runs a series of self-diagnostic checks to verify dtk is set up correctly.</summary>
 /// <remarks>

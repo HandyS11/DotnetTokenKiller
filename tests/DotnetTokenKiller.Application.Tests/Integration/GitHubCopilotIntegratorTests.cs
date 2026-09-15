@@ -42,7 +42,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_FileWithMarker_NoForce_SkipsFile()
+    public async Task IntegrateAsync_FileWithMarker_NoForce_ReportsUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
@@ -50,19 +50,21 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
 
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
+        result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
     }
 
     [Fact]
-    public async Task IntegrateAsync_FileWithMarker_WithForce_UpdatesFile()
+    public async Task IntegrateAsync_FileWithMarker_WithForce_ReportsUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
+        result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().ContainSingle().Which.Should().Be(InstructionsPath);
     }
 
     [Fact]

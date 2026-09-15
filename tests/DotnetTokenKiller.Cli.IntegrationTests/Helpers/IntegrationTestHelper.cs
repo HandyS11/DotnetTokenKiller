@@ -343,8 +343,16 @@ internal static class IntegrationTestHelper
 
         if (stdin is not null)
         {
-            await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
-            process.StandardInput.Close();
+            try
+            {
+                await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
+                process.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+                // dtk may exit without reading stdin (e.g. `dtk pipe` with an unknown subcommand), closing the pipe
+                // under the write. The exit code and output are the result, as in RunDtkSeparatingStreamsInDirAsync.
+            }
         }
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();

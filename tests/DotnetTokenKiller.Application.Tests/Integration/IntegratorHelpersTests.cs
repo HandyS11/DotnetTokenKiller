@@ -217,6 +217,88 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Skipped.Should().ContainSingle();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WriteSectionBasedFileAsync_SectionAlreadyCurrent_ReportsUnchangedWithoutWriting(bool force)
+    {
+        var context = new IntegrationContext(force);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string section = "<!-- dtk -->\nNEW\n<!-- /dtk -->";
+        var original = $"# Header\n{section}\n# Footer";
+        await File.WriteAllTextAsync(path, original);
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be(original);
+        context.Unchanged.Should().Equal(path);
+        context.Skipped.Should().BeEmpty("--force would change nothing, so advising it would be false");
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_CrlfCopyOfTheCurrentSection_ReportsUnchanged()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "# Header\r\n<!-- dtk -->\r\nNEW\r\n<!-- /dtk -->\r\n");
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", "<!-- dtk -->\nNEW\n<!-- /dtk -->", context, CancellationToken.None);
+
+        context.Unchanged.Should().Equal(path);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WriteSectionBasedFileAsync_StaleSectionWithTheCurrentOneQuotedLater_IsNotReportedUnchanged(bool force)
+    {
+        // Only the marker-delimited span dtk manages decides "current": a copy of the section quoted elsewhere in the
+        // file (here in a code fence) must not hide the stale one, or --force would skip replacing it.
+        var context = new IntegrationContext(force);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string section = "<!-- dtk -->\nNEW\n<!-- /dtk -->";
+        var original = $"# Header\n<!-- dtk -->\nOLD\n<!-- /dtk -->\n\n```md\n{section}\n```\n";
+        await File.WriteAllTextAsync(path, original);
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        context.Unchanged.Should().BeEmpty();
+        var content = await File.ReadAllTextAsync(path);
+        if (force)
+        {
+            context.Updated.Should().Equal(path);
+            content.Should().Be($"# Header\n{section}\n\n```md\n{section}\n```\n");
+        }
+        else
+        {
+            context.Skipped.Should().Equal(path);
+            content.Should().Be(original);
+        }
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_CurrentSectionEndingInANewline_ReportsUnchanged()
+    {
+        // Some sections carry a trailing newline (Copilot CLI's), which is not part of the marker-delimited span.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string section = "<!-- dtk -->\nNEW\n<!-- /dtk -->\n";
+        await File.WriteAllTextAsync(path, section);
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        context.Unchanged.Should().Equal(path);
+    }
+
     [Fact]
     public async Task WriteSectionBasedFileAsync_ExistingWithMarker_WithForce_ReplacesSection()
     {
@@ -1571,6 +1653,33 @@ public sealed class IntegratorHelpersTests : IDisposable
             """);
         context.Created.Should().Equal(path);
         Directory.EnumerateFiles(_tempDir).Should().Equal(path);
+    }
+
+    [Fact]
+    public async Task WriteHookRegistrationAsync_WithTimeout_WritesItOnTheHandler()
+    {
+        var path = Path.Combine(_tempDir, "hooks.json");
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook codex", TimeoutSeconds: 10), context, CancellationToken.None);
+
+        var handler = JsonNode.Parse(await File.ReadAllTextAsync(path))!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!;
+        handler["command"]!.GetValue<string>().Should().Be("dtk hook codex");
+        handler["timeout"]!.GetValue<int>().Should().Be(10);
+    }
+
+    [Fact]
+    public async Task WriteHookRegistrationAsync_WithoutTimeout_WritesNoTimeoutKey()
+    {
+        var path = Path.Combine(_tempDir, "settings.json");
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude"), context, CancellationToken.None);
+
+        var handler = JsonNode.Parse(await File.ReadAllTextAsync(path))!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!.AsObject();
+        handler.ContainsKey("timeout").Should().BeFalse("existing providers' registrations must stay byte-identical");
     }
 
     [Theory]

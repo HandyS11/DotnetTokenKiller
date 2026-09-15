@@ -43,35 +43,31 @@ public sealed class GeminiCliIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsGeminiMdOnly()
+    public async Task IntegrateAsync_SecondRun_NoForce_ReportsEverythingUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        // GEMINI.md is section-based and reports skipped when already present without --force.
-        // settings.json's merge is idempotent — the hook entry is already registered, so dtk can
-        // prove there is nothing to write there — so it reports unchanged, not skipped.
+        // GEMINI.md already holds the current section and settings.json already registers the hook: dtk can prove
+        // there is nothing to write in either, so neither is reported skipped.
         result.CreatedFiles.Should().BeEmpty();
         result.UpdatedFiles.Should().BeEmpty();
-        result.SkippedFiles.Should().ContainSingle();
-        result.UnchangedFiles.Should().Equal(SettingsPath);
+        result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().Equal(GeminiMdPath, SettingsPath);
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesGeminiMdOnly()
+    public async Task IntegrateAsync_SecondRun_WithForce_ReportsEverythingUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        // GEMINI.md is overwritten because section-based writes always replace under --force.
-        // settings.json's merge is idempotent and the hook entry is already present, so it is
-        // unchanged, not skipped — force-independent by nature, so --force changes nothing there.
         result.CreatedFiles.Should().BeEmpty();
-        result.UpdatedFiles.Should().ContainSingle();
+        result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
-        result.UnchangedFiles.Should().Equal(SettingsPath);
+        result.UnchangedFiles.Should().Equal(GeminiMdPath, SettingsPath);
     }
 
     [Fact]

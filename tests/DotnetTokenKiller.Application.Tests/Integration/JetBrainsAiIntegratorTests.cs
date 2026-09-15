@@ -30,25 +30,26 @@ public sealed class JetBrainsAiIntegratorTests : IDisposable
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_NoForce_SkipsFile()
+    public async Task IntegrateAsync_SecondRun_NoForce_ReportsUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
-        result.SkippedFiles.Should().ContainSingle();
+        result.UnchangedFiles.Should().ContainSingle();
+        result.SkippedFiles.Should().BeEmpty();
         result.CreatedFiles.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task IntegrateAsync_SecondRun_WithForce_UpdatesFile()
+    public async Task IntegrateAsync_SecondRun_WithForce_ReportsUnchanged()
     {
         await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
 
         var result = await _sut.IntegrateAsync(_tempDir, true, CancellationToken.None);
 
-        result.UpdatedFiles.Should().ContainSingle();
-        result.CreatedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().ContainSingle();
+        result.UpdatedFiles.Should().BeEmpty();
         result.SkippedFiles.Should().BeEmpty();
     }
 

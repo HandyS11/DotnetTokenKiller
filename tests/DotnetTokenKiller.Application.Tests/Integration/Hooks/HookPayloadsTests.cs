@@ -12,6 +12,7 @@ public sealed class HookPayloadsTests
     [InlineData("claude", HookPayloadKind.ClaudeCode)]
     [InlineData("gemini", HookPayloadKind.GeminiCli)]
     [InlineData("copilot-cli", HookPayloadKind.CopilotCli)]
+    [InlineData("codex", HookPayloadKind.CodexCli)]
     internal void TryGetKind_KnownProvider_Resolves(string provider, HookPayloadKind expected)
     {
         HookPayloads.TryGetKind(provider, out var kind).Should().BeTrue();
@@ -160,6 +161,45 @@ public sealed class HookPayloadsTests
     public void Copilot_DuplicateJsonKey_PrintsNothing(string payload)
     {
         Reply(HookPayloadKind.CopilotCli, payload).Should().BeNull();
+    }
+
+    [Fact]
+    public void Codex_Rewrite_AllowsWithTheWholeToolInputAsUpdatedInput()
+    {
+        var reply = Reply(HookPayloadKind.CodexCli,
+            """{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"dotnet build","extra":1}}""");
+
+        var output = JsonNode.Parse(reply!)!["hookSpecificOutput"]!;
+        output["hookEventName"]!.GetValue<string>().Should().Be("PreToolUse");
+        output["permissionDecision"]!.GetValue<string>().Should().Be("allow", "Codex rejects updatedInput without it");
+        output["updatedInput"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build");
+        output["updatedInput"]!["extra"]!.GetValue<int>().Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("""{"tool_name":"Bash","tool_input":{"command":"ls"}}""")]
+    [InlineData("""{"tool_name":"apply_patch","tool_input":{"command":"dotnet build"}}""")]
+    [InlineData("""{"tool_name":42,"tool_input":{"command":"dotnet build"}}""")]
+    [InlineData("""{"tool_name":"Bash","tool_input":{"command":""}}""")]
+    [InlineData("""{"tool_name":"Bash"}""")]
+    [InlineData("[]")]
+    [InlineData("{")]
+    public void Codex_NothingToRewrite_PrintsNothing(string payload)
+    {
+        Reply(HookPayloadKind.CodexCli, payload).Should().BeNull();
+    }
+
+    [Fact]
+    public void Codex_PayloadWithoutAToolName_StillRewrites()
+    {
+        // doctor's probe sends only tool_input.
+        Reply(HookPayloadKind.CodexCli, """{"tool_input":{"command":"dotnet test"}}""").Should().Contain("dtk dotnet test");
+    }
+
+    [Fact]
+    public void Codex_DuplicateJsonKey_PrintsNothing()
+    {
+        Reply(HookPayloadKind.CodexCli, """{"tool_name":"Bash","tool_input":{"command":"a","command":"b"}}""").Should().BeNull();
     }
 
     private static string? Reply(HookPayloadKind kind, string payload) =>

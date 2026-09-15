@@ -37,22 +37,37 @@ internal sealed class DoctorCommand(
         var checks = await doctorUseCase.RunAsync(dbPath, teeDirectory, Environment.CurrentDirectory, cancellationToken)
             .ConfigureAwait(false);
 
-        var allPassed = true;
+        return Render(console, checks);
+    }
+
+    /// <summary>Prints one line per check and a summary, and returns doctor's exit code.</summary>
+    /// <param name="console">The output sink.</param>
+    /// <param name="checks">The checks to print.</param>
+    /// <returns>1 when any check failed, otherwise 0; warnings do not count as failures.</returns>
+    internal static int Render(IAnsiConsole console, IReadOnlyList<DiagnosticCheck> checks)
+    {
         foreach (var check in checks)
         {
-            var icon = check.Passed ? "[green]✔[/]" : "[red]✘[/]";
-            console.MarkupLine($"  {icon}  [bold]{Markup.Escape(check.Name)}[/]: {Markup.Escape(check.Message)}");
-            if (!check.Passed)
+            var icon = (check.Passed, check.IsWarning) switch
             {
-                allPassed = false;
-            }
+                (false, _) => "[red]✘[/]",
+                (true, true) => "[yellow]![/]",
+                _ => "[green]✔[/]"
+            };
+            console.MarkupLine($"  {icon}  [bold]{Markup.Escape(check.Name)}[/]: {Markup.Escape(check.Message)}");
         }
 
-        console.WriteLine();
-        console.MarkupLine(allPassed
-            ? "[green]All checks passed.[/]"
-            : "[red]Some checks failed. Review the output above.[/]");
+        var failed = checks.Count(check => !check.Passed);
+        var warnings = checks.Count(check => check.Passed && check.IsWarning);
 
-        return allPassed ? 0 : 1;
+        console.WriteLine();
+        console.MarkupLine((failed, warnings) switch
+        {
+            ( > 0, _) => "[red]Some checks failed. Review the output above.[/]",
+            (_, > 0) => $"[green]All checks passed[/][yellow], with {warnings} warning(s).[/]",
+            _ => "[green]All checks passed.[/]"
+        });
+
+        return failed > 0 ? 1 : 0;
     }
 }
