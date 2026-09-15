@@ -24,18 +24,6 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </remarks>
 internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
 {
-    private const string SectionMarker = "<!-- dtk -->";
-    private const string SectionEndMarker = "<!-- /dtk -->";
-
-    private static readonly string GeminiSection =
-        $"""
-        {SectionMarker}
-        ## DotnetTokenKiller (dtk)
-
-        {IntegrationInstructions.Markdown}
-        {SectionEndMarker}
-        """;
-
     /// <inheritdoc/>
     public string ProviderName => "gemini";
 
@@ -85,7 +73,7 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             contextFilePath,
-            SectionMarker, SectionEndMarker, GeminiSection,
+            SharedInstructionArtifacts.SectionMarker, SharedInstructionArtifacts.SectionEndMarker, SharedInstructionArtifacts.Section,
             context, cancellationToken).ConfigureAwait(false);
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
