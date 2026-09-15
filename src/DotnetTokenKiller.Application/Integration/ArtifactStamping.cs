@@ -10,7 +10,10 @@ internal enum StampStyle
     HashComment = 0,
 
     /// <summary>An HTML comment, for Markdown artifacts such as <c>SKILL.md</c>.</summary>
-    HtmlComment = 1
+    HtmlComment = 1,
+
+    /// <summary>A <c>//</c> line comment, for JavaScript artifacts such as the OpenCode plugin.</summary>
+    SlashComment = 2
 }
 
 /// <summary>
@@ -66,6 +69,7 @@ internal static class ArtifactStamping
         var line = style switch
         {
             StampStyle.HtmlComment => $"<!-- {stamp} -->",
+            StampStyle.SlashComment => $"// {stamp}",
             _ => $"# {stamp}"
         };
 
@@ -74,9 +78,9 @@ internal static class ArtifactStamping
 
     /// <summary>
     /// The exact characters that may follow the hash on a well-formed stamp line, one per
-    /// <see cref="StampStyle"/> — <see cref="StampStyle.HashComment"/> has nothing after the hash
-    /// but the newline; <see cref="StampStyle.HtmlComment"/> closes the HTML comment first. Tried
-    /// in order regardless of which style produced the content, since <see cref="TryParse"/> is not
+    /// <see cref="StampStyle"/> — <see cref="StampStyle.HashComment"/> and <see cref="StampStyle.SlashComment"/>
+    /// have nothing after the hash but the newline; <see cref="StampStyle.HtmlComment"/> closes the HTML comment first.
+    /// Tried in order regardless of which style produced the content, since <see cref="TryParse"/> is not
     /// told which style it is verifying.
     /// </summary>
     private static readonly string[] LineTerminators = ["\n", " -->\n"];

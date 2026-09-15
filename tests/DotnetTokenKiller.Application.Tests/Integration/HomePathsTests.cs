@@ -54,4 +54,24 @@ public sealed class HomePathsTests
 
         new HomePaths(home, _ => value).CodexDir.Should().Be(Path.Combine(home, ".codex"));
     }
+
+    [Fact]
+    public void OpenCodeConfigDir_DefaultsToDotConfigOpencode()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "dtk-home-test");
+
+        new HomePaths(home).OpenCodeConfigDir.Should().Be(Path.Combine(home, ".config", "opencode"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OpenCodeConfigDir_HonorsOnlyAnAbsoluteXdgConfigHome(bool rooted)
+    {
+        var home = Path.Combine(Path.GetTempPath(), "dtk-home-test");
+        var xdg = rooted ? Path.Combine(Path.GetTempPath(), "xdg") : "relative/xdg";
+
+        var expected = rooted ? Path.Combine(xdg, "opencode") : Path.Combine(home, ".config", "opencode");
+        new HomePaths(home, name => name == "XDG_CONFIG_HOME" ? xdg : null).OpenCodeConfigDir.Should().Be(expected);
+    }
 }
