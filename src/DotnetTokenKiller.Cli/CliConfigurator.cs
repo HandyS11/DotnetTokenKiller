@@ -33,6 +33,9 @@ internal static class CliConfigurator
     /// <summary>The <c>completion</c> command name.</summary>
     public const string CompletionCommand = "completion";
 
+    /// <summary>The <c>init</c> option that installs into the user's global configuration.</summary>
+    private const string GlobalOption = "--global";
+
     /// <summary>Version reported by <c>--version</c>, read from the assembly's informational version.</summary>
     public static string DefaultVersion =>
         typeof(CliConfigurator).Assembly
@@ -92,14 +95,14 @@ internal static class CliConfigurator
             .WithExample(InitCommand, "claude", "--dir", "/path/to/project", "--force")
             .WithExample(InitCommand, "copilot")
             .WithExample(InitCommand, "copilot-cli")
-            .WithExample(InitCommand, "copilot-cli", "--global")
+            .WithExample(InitCommand, "copilot-cli", GlobalOption)
             .WithExample(InitCommand, "gemini")
             .WithExample(InitCommand, "codex")
-            .WithExample(InitCommand, "codex", "--global")
+            .WithExample(InitCommand, "codex", GlobalOption)
             .WithExample(InitCommand, "opencode")
-            .WithExample(InitCommand, "opencode", "--global")
+            .WithExample(InitCommand, "opencode", GlobalOption)
             .WithExample(InitCommand, "antigravity")
-            .WithExample(InitCommand, "antigravity", "--global")
+            .WithExample(InitCommand, "antigravity", GlobalOption)
             .WithExample(InitCommand, "cursor")
             .WithExample(InitCommand, "windsurf")
             .WithExample(InitCommand, "aider")

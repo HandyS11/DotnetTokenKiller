@@ -24,6 +24,12 @@ internal static class HookPayloads
     /// </summary>
     private const string? AntigravityNeutralReply = null;
 
+    /// <summary>The payload property holding Claude Code's, Gemini CLI's and Codex CLI's tool input.</summary>
+    private const string ToolInputProperty = "tool_input";
+
+    /// <summary>The tool input property holding the shell command.</summary>
+    private const string CommandProperty = "command";
+
     /// <summary>
     /// Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>,
     /// <c>antigravity</c>) to its payload shape.
@@ -92,14 +98,14 @@ internal static class HookPayloads
     private static string? ReplyToClaude(JsonNode? root)
     {
         if (root is not JsonObject payload
-            || payload["tool_input"] is not JsonObject toolInput
+            || payload[ToolInputProperty] is not JsonObject toolInput
             || !TryRewrite(toolInput, out _, out var rewritten))
         {
             return null;
         }
 
         var updatedInput = (JsonObject)toolInput.DeepClone();
-        updatedInput["command"] = rewritten;
+        updatedInput[CommandProperty] = rewritten;
         return new JsonObject
         {
             ["hookSpecificOutput"] = new JsonObject
@@ -114,12 +120,12 @@ internal static class HookPayloads
     {
         var reply = new JsonObject { ["decision"] = "allow" };
         if (root is JsonObject payload
-            && payload["tool_input"] is JsonObject toolInput
+            && payload[ToolInputProperty] is JsonObject toolInput
             && TryRewrite(toolInput, out _, out var rewritten))
         {
             reply["hookSpecificOutput"] = new JsonObject
             {
-                ["tool_input"] = new JsonObject { ["command"] = rewritten }
+                [ToolInputProperty] = new JsonObject { [CommandProperty] = rewritten }
             };
         }
 
@@ -148,7 +154,7 @@ internal static class HookPayloads
             return null;
         }
 
-        toolArgs["command"] = rewritten;
+        toolArgs[CommandProperty] = rewritten;
         return new JsonObject
         {
             ["permissionDecision"] = DotnetCommandRewriter.IsSimpleCommand(command) ? "allow" : "ask",
@@ -160,14 +166,14 @@ internal static class HookPayloads
     {
         if (root is not JsonObject payload
             || NamesAnotherTool(payload, "tool_name", "Bash")
-            || payload["tool_input"] is not JsonObject toolInput
+            || payload[ToolInputProperty] is not JsonObject toolInput
             || !TryRewrite(toolInput, out _, out var rewritten))
         {
             return null;
         }
 
         var updatedInput = (JsonObject)toolInput.DeepClone();
-        updatedInput["command"] = rewritten;
+        updatedInput[CommandProperty] = rewritten;
         return new JsonObject
         {
             ["hookSpecificOutput"] = new JsonObject
@@ -193,7 +199,7 @@ internal static class HookPayloads
             return null;
         }
 
-        return new JsonObject { ["command"] = rewritten }.ToJsonString();
+        return new JsonObject { [CommandProperty] = rewritten }.ToJsonString();
     }
 
     /// <summary>
@@ -234,7 +240,7 @@ internal static class HookPayloads
         && (payload[key] is not JsonValue value || !value.TryGetValue<string>(out var name) || name != expected);
 
     private static bool TryRewrite(JsonObject arguments, out string command, out string rewritten) =>
-        TryRewrite(arguments, "command", out command, out rewritten);
+        TryRewrite(arguments, CommandProperty, out command, out rewritten);
 
     private static bool TryRewrite(JsonObject arguments, string key, out string command, out string rewritten)
     {

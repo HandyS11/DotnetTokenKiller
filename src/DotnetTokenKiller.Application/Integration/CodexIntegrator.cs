@@ -35,8 +35,11 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
     /// <summary>Seconds Codex waits for the hook. Part of the approval hash: never change it.</summary>
     private const int HookTimeoutSeconds = 10;
 
+    /// <summary>The name of the finding that reports whether Codex will run dtk's handler.</summary>
+    private const string HookApprovalCheck = "hook approval";
+
     /// <summary>Reported when Codex has recorded no approval for dtk's handler.</summary>
-    private static readonly HookApprovalFinding NotYetApproved = new("hook approval", false,
+    private static readonly HookApprovalFinding NotYetApproved = new(HookApprovalCheck, false,
         "not yet approved — Codex skips this hook until you review it under /hooks");
 
     /// <inheritdoc/>
@@ -69,7 +72,7 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
         {
             return
             [
-                new HookApprovalFinding("hook approval", false,
+                new HookApprovalFinding(HookApprovalCheck, false,
                     $"{configPath} could not be read, so dtk cannot tell whether Codex will run this hook")
             ];
         }
@@ -99,12 +102,12 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
 
         if (config.HasHookApproval(path, group, handler))
         {
-            return new HookApprovalFinding("hook approval", true,
+            return new HookApprovalFinding(HookApprovalCheck, true,
                 $"approval recorded in {configPath} (dtk cannot tell whether it matches the current definition)");
         }
 
         return config.IsHookTurnedOff(path, group, handler)
-            ? new HookApprovalFinding("hook approval", false,
+            ? new HookApprovalFinding(HookApprovalCheck, false,
                 "turned off — Codex skips this hook until you turn it back on under /hooks")
             : NotYetApproved;
     }
