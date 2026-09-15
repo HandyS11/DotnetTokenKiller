@@ -256,7 +256,7 @@ set) and `~/.agents/skills/dotnet-token-killer/SKILL.md`. The `AGENTS.md` sectio
 Codex runs a hook only after you approve that exact definition. Open Codex after `dtk init codex`: it lists the new
 hook for review at startup, and `/hooks` shows it at any time. Until you approve it, `codex exec` skips the hook
 without saying so and commands run unrewritten. Codex also reads a project's `.codex/` folder only once you trust the
-project. `dtk doctor` warns while either is missing.
+project. `dtk doctor` warns while either is missing, and while the hook is turned off under `/hooks`.
 
 dtk does not approve the hook for you: the approval is Codex's record that you reviewed what runs before every shell
 command.

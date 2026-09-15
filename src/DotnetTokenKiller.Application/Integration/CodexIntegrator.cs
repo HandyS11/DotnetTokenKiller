@@ -68,14 +68,7 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
             ];
         }
 
-        var findings = new List<HookApprovalFinding>
-        {
-            config.HasHookApproval(installation.RegistrationPath)
-                ? new HookApprovalFinding("hook approval", true,
-                    $"approval recorded in {configPath} (dtk cannot tell whether it matches the current definition)")
-                : new HookApprovalFinding("hook approval", false,
-                    "not yet approved — Codex skips this hook until you review it under /hooks")
-        };
+        var findings = new List<HookApprovalFinding> { ApprovalFinding(config, installation.RegistrationPath, configPath) };
 
         if (installation.Scope == HookScope.Project)
         {
@@ -87,6 +80,21 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
         }
 
         return findings;
+    }
+
+    private static HookApprovalFinding ApprovalFinding(CodexConfig config, string registrationPath, string configPath)
+    {
+        if (config.HasHookApproval(registrationPath))
+        {
+            return new HookApprovalFinding("hook approval", true,
+                $"approval recorded in {configPath} (dtk cannot tell whether it matches the current definition)");
+        }
+
+        return config.IsHookTurnedOff(registrationPath)
+            ? new HookApprovalFinding("hook approval", false,
+                "turned off — Codex skips this hook until you turn it back on under /hooks")
+            : new HookApprovalFinding("hook approval", false,
+                "not yet approved — Codex skips this hook until you review it under /hooks");
     }
 
     /// <inheritdoc/>

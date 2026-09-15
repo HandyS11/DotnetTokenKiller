@@ -457,6 +457,24 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_CodexHookTurnedOffUnderHooks_WarnsThatItIsTurnedOff()
+    {
+        await Codex.IntegrateGlobalAsync(force: false, default);
+        var hooksPath = Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{hooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            enabled = false
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeTrue();
+        approval.Message.Should().Contain("turned off").And.Contain("/hooks");
+    }
+
+    [Fact]
     public async Task RunAsync_CodexGlobalHook_ChecksApprovalButNotProjectTrust()
     {
         await Codex.IntegrateGlobalAsync(force: false, default);
