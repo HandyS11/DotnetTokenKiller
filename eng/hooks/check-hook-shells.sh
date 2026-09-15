@@ -24,6 +24,7 @@ export MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
 printf '%s' '{"tool_input":{"command":"dotnet build"}}' > "$work/tool-input.json"
 printf '%s' '{"toolName":"bash","toolArgs":{"command":"dotnet build"}}' > "$work/copilot.json"
 printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"dotnet build"}}' > "$work/codex.json"
+printf '%s' '{"toolCall":{"name":"run_command","args":{"CommandLine":"dotnet build"}},"stepIdx":1}' > "$work/antigravity.json"
 
 # Gemini CLI appends this to every command it runs through PowerShell.
 gemini_suffix='; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
@@ -38,6 +39,7 @@ without_dtk=${without_dtk%:}
 bash_cmd=$(command -v bash || command -v sh)
 pwsh_cmd=$(command -v pwsh || true)
 powershell_cmd=$(command -v powershell.exe || true)
+cmd_cmd=$(command -v cmd.exe || true)
 
 # check <label> <payload file> <rewrite|no-rewrite> <PATH> <program> <args...>
 check() {
@@ -94,6 +96,14 @@ for ps in "$pwsh_cmd" "$powershell_cmd"; do
     [ -n "$ps" ] || continue
     check "codex, $(basename "$ps")" "$work/codex.json" rewrite "$with_dtk" "$ps" -NoProfile -Command 'dtk hook codex'
 done
+
+# Antigravity CLI: sh -c on Unix and cmd /c on Windows; it blocks the tool call when a hook fails, hence || exit 0.
+check "antigravity, sh" "$work/antigravity.json" rewrite "$with_dtk" sh -c 'dtk hook antigravity || exit 0'
+check "antigravity, sh, dtk missing" "$work/antigravity.json" no-rewrite "$without_dtk" sh -c 'dtk hook antigravity || exit 0'
+if [ -n "$cmd_cmd" ]; then
+    check "antigravity, cmd" "$work/antigravity.json" rewrite "$with_dtk" "$cmd_cmd" /c 'dtk hook antigravity || exit 0'
+    check "antigravity, cmd, dtk missing" "$work/antigravity.json" no-rewrite "$without_dtk" "$cmd_cmd" /c 'dtk hook antigravity || exit 0'
+fi
 
 if [ "$failures" -ne 0 ]; then
     echo "check-hook-shells.sh: $failures check(s) failed" >&2
