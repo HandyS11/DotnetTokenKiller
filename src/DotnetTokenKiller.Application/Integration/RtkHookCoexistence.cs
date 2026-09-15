@@ -69,6 +69,41 @@ internal sealed partial class RtkHookCoexistence
             : RtkReconcileOutcome.None;
     }
 
+    /// <summary>
+    /// Detect an rtk rewrite in any of a harness's hook or plugin files and, if one is present, reconcile rtk's config.
+    /// </summary>
+    /// <param name="harnessFiles">The files where rtk registers itself for the harness being integrated.</param>
+    /// <param name="cancellationToken">Token used to cancel the config read/write.</param>
+    public async Task<RtkReconcileOutcome> ReconcileFilesAsync(
+        IReadOnlyList<string> harnessFiles, CancellationToken cancellationToken)
+    {
+        return IsRtkRewriteReferencedIn(harnessFiles)
+            ? await ReconcileRtkConfigAsync(cancellationToken).ConfigureAwait(false)
+            : RtkReconcileOutcome.None;
+    }
+
+    /// <summary>
+    /// True when any file runs an rtk rewrite: <c>rtk hook …</c> in a hook registration, or <c>rtk rewrite …</c> in a
+    /// plugin that shells out to it. A text search, because the files are JSON, TOML or JavaScript depending on the
+    /// harness; rtk routes every one of those entry points through the decision that honors <c>exclude_commands</c>.
+    /// </summary>
+    /// <param name="harnessFiles">The files to search; missing or unreadable ones count as no rtk.</param>
+    internal static bool IsRtkRewriteReferencedIn(IEnumerable<string> harnessFiles) =>
+        harnessFiles.Any(FileMentionsRtkRewrite);
+
+    private static bool FileMentionsRtkRewrite(string path)
+    {
+        try
+        {
+            return File.Exists(path) && RtkRewriteInvocationRegex().IsMatch(File.ReadAllText(path));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Another tool's file we cannot read: we cannot tell, so assume no rtk.
+            return false;
+        }
+    }
+
     /// <summary>Ensure rtk's config excludes <c>dotnet</c>, preserving all other content.</summary>
     /// <param name="cancellationToken">Token used to cancel the config read/write.</param>
     internal async Task<RtkReconcileOutcome> ReconcileRtkConfigAsync(CancellationToken cancellationToken)
@@ -245,6 +280,9 @@ internal sealed partial class RtkHookCoexistence
     [GeneratedRegex(@"(?:^|[\s/\\""'])rtk(?:\.exe)?\s+hook\b")]
     private static partial Regex RtkHookCommandRegex();
 
+    [GeneratedRegex(@"(?:^|[\s/\\""'`])rtk(?:\.exe)?\s+(?:hook|rewrite)\b")]
+    private static partial Regex RtkRewriteInvocationRegex();
+
     [GeneratedRegex(@"(?m)^(?<prefix>\s*exclude_commands\s*=\s*)\[[^\]]*\]")]
     private static partial Regex ExcludeArrayRegex();
 
@@ -263,4 +301,21 @@ internal sealed record RtkReconcileOutcome(
 {
     /// <summary>Nothing was detected or changed.</summary>
     internal static RtkReconcileOutcome None { get; } = new(null, null, []);
+
+    /// <summary>Records what the reconciliation changed in an integration run's result.</summary>
+    /// <param name="context">The run's context.</param>
+    internal void ApplyTo(IntegrationContext context)
+    {
+        if (CreatedConfigPath is not null)
+        {
+            context.Created.Add(CreatedConfigPath);
+        }
+
+        if (UpdatedConfigPath is not null)
+        {
+            context.Updated.Add(UpdatedConfigPath);
+        }
+
+        context.Notes.AddRange(Notes);
+    }
 }

@@ -94,17 +94,7 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
             cancellationToken).ConfigureAwait(false);
 
         var rtkOutcome = await rtk.ReconcileAsync(hookDirectory, cancellationToken).ConfigureAwait(false);
-        if (rtkOutcome.CreatedConfigPath is not null)
-        {
-            context.Created.Add(rtkOutcome.CreatedConfigPath);
-        }
-
-        if (rtkOutcome.UpdatedConfigPath is not null)
-        {
-            context.Updated.Add(rtkOutcome.UpdatedConfigPath);
-        }
-
-        context.Notes.AddRange(rtkOutcome.Notes);
+        rtkOutcome.ApplyTo(context);
 
         return context.ToResult();
     }
