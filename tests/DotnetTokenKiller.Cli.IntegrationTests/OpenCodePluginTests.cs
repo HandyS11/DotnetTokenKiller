@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Cli.IntegrationTests.Aot;
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
 using Xunit;
@@ -116,10 +116,6 @@ public sealed class OpenCodePluginTests : IDisposable
         var psi = new ProcessStartInfo(node)
         {
             WorkingDirectory = _dir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            StandardOutputEncoding = Encoding.UTF8,
             // Only the dtk under test is reachable, plus the POSIX tools a fake dtk script uses. Node's own
             // directory is deliberately left out: an installed dtk sharing it would defeat
             // DtkMissingFromPath. The apphost finds the .NET runtime through DOTNET_ROOT or the install
@@ -130,12 +126,11 @@ public sealed class OpenCodePluginTests : IDisposable
         psi.ArgumentList.Add(tool);
         psi.ArgumentList.Add(command);
 
-        using var process = Process.Start(psi)!;
-        var stdout = await process.StandardOutput.ReadToEndAsync();
-        var stderr = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        // ParityProcess drains stdout and stderr concurrently before awaiting either, avoiding the deadlock
+        // a naive sequential read risks if the child fills the unread pipe before closing the other.
+        var result = await ParityProcess.RunAsync(psi, stdin: null);
 
-        process.ExitCode.Should().Be(0, "the plugin must never throw; stderr: {0}", stderr);
-        return JsonNode.Parse(stdout)!;
+        result.ExitCode.Should().Be(0, "the plugin must never throw; stderr: {0}", result.Stderr);
+        return JsonNode.Parse(result.Stdout)!;
     }
 }
