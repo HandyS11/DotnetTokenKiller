@@ -30,8 +30,9 @@ printf '%s' '{"toolCall":{"name":"run_command","args":{"CommandLine":"dotnet bui
 gemini_suffix='; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
 
 with_dtk="$dtk_dir:$PATH"
-# PATH without any directory holding a dtk, so the fail-open checks cannot find one installed elsewhere.
-without_dtk=$(printf '%s' "$PATH" | tr ':' '\n' | while IFS= read -r entry; do
+# PATH without any directory holding a dtk, so the fail-open checks cannot find one installed elsewhere. The
+# trailing newline matters: `read` skips an unterminated last line, which dropped /bin, Alpine's only sh.
+without_dtk=$(printf '%s\n' "$PATH" | tr ':' '\n' | while IFS= read -r entry; do
     [ -n "$entry" ] && { [ -x "$entry/dtk" ] || [ -x "$entry/dtk.exe" ]; } || printf '%s:' "$entry"
 done)
 without_dtk=${without_dtk%:}
