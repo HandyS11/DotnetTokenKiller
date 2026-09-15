@@ -145,4 +145,4 @@ project was set up by an older dtk; run `dtk init <provider>` to migrate it.
 
 - [Usage Guide](usage.md) — all flags and command details
 - [Configuration](configuration.md) — customize behavior via CLI or JSON config
-- [AI Agent Setup](ai-agent-setup.md) — integrate with Claude Code, Copilot, Gemini, Codex CLI, OpenCode, Cursor, Windsurf, Aider, or JetBrains AI
+- [AI Agent Setup](ai-agent-setup.md) — integrate with Claude Code, Copilot, Gemini, Codex CLI, OpenCode, Antigravity CLI, Cursor, Windsurf, Aider, or JetBrains AI
