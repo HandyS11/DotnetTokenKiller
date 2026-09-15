@@ -245,8 +245,8 @@ internal static class IntegratorHelpers
     /// untouched (matching <see cref="WriteFileAsync"/>'s contract).
     /// If the file already exists and <c>context.Force</c> is <see langword="true"/>: replaces the
     /// dtk-managed span when the marker is present, or appends the section when it is not.
-    /// If the file already contains exactly <paramref name="section"/> (line endings normalized): reports it
-    /// unchanged and writes nothing, force or not.
+    /// If the file's dtk-managed span (its first marker through the end marker after it) is already exactly
+    /// <paramref name="section"/> (line endings normalized): reports it unchanged and writes nothing, force or not.
     /// If the file does not exist: creates it with the section as the only content.
     /// </summary>
     /// <param name="path">Path to the target file.</param>
@@ -267,7 +267,7 @@ internal static class IntegratorHelpers
 
         if (exists
             && await TryReadExistingAsync(path, cancellationToken).ConfigureAwait(false) is { } existing
-            && existing.Contains(section.ReplaceLineEndings("\n"), StringComparison.Ordinal))
+            && IsSectionCurrent(existing, sectionMarker, sectionEndMarker, section))
         {
             // Nothing to write, with or without --force; reporting it skipped would advise a --force that changes nothing.
             context.Unchanged.Add(path);
@@ -295,6 +295,29 @@ internal static class IntegratorHelpers
 
         await File.WriteAllTextAsync(path, updated, cancellationToken).ConfigureAwait(false);
         context.Updated.Add(path);
+    }
+
+    /// <summary>
+    /// Whether the dtk-managed span in <paramref name="content"/> — the first begin marker through the first end
+    /// marker after it, the span a <c>--force</c> write replaces — is exactly <paramref name="section"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only that span counts: a copy of the section elsewhere in the file, such as one quoted in a code fence, must not
+    /// make a stale section look current. A section is its markers and what lies between them, so a trailing newline
+    /// the section carries outside its end marker is not compared.
+    /// </remarks>
+    /// <param name="content">The existing file content, line endings normalized to <c>\n</c>.</param>
+    /// <param name="marker">String that marks the beginning of the dtk-managed block.</param>
+    /// <param name="endMarker">String that marks the end of the dtk-managed block.</param>
+    /// <param name="section">Full text of the dtk-managed block dtk would write.</param>
+    private static bool IsSectionCurrent(string content, string marker, string endMarker, string section)
+    {
+        var start = content.IndexOf(marker, StringComparison.Ordinal);
+        var end = start < 0 ? -1 : content.IndexOf(endMarker, start, StringComparison.Ordinal);
+
+        return end >= 0
+               && content.AsSpan(start, end + endMarker.Length - start)
+                   .SequenceEqual(section.ReplaceLineEndings("\n").TrimEnd('\n'));
     }
 
     private static string AppendSection(string current, string section)

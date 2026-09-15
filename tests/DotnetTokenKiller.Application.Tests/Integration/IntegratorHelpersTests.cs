@@ -252,6 +252,53 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Unchanged.Should().Equal(path);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WriteSectionBasedFileAsync_StaleSectionWithTheCurrentOneQuotedLater_IsNotReportedUnchanged(bool force)
+    {
+        // Only the marker-delimited span dtk manages decides "current": a copy of the section quoted elsewhere in the
+        // file (here in a code fence) must not hide the stale one, or --force would skip replacing it.
+        var context = new IntegrationContext(force);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string section = "<!-- dtk -->\nNEW\n<!-- /dtk -->";
+        var original = $"# Header\n<!-- dtk -->\nOLD\n<!-- /dtk -->\n\n```md\n{section}\n```\n";
+        await File.WriteAllTextAsync(path, original);
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        context.Unchanged.Should().BeEmpty();
+        var content = await File.ReadAllTextAsync(path);
+        if (force)
+        {
+            context.Updated.Should().Equal(path);
+            content.Should().Be($"# Header\n{section}\n\n```md\n{section}\n```\n");
+        }
+        else
+        {
+            context.Skipped.Should().Equal(path);
+            content.Should().Be(original);
+        }
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_CurrentSectionEndingInANewline_ReportsUnchanged()
+    {
+        // Some sections carry a trailing newline (Copilot CLI's), which is not part of the marker-delimited span.
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string section = "<!-- dtk -->\nNEW\n<!-- /dtk -->\n";
+        await File.WriteAllTextAsync(path, section);
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        context.Unchanged.Should().Equal(path);
+    }
+
     [Fact]
     public async Task WriteSectionBasedFileAsync_ExistingWithMarker_WithForce_ReplacesSection()
     {
