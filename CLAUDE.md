@@ -83,6 +83,11 @@ jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Synt
 that runs `dtk hook copilot-cli`, rewriting `dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`).
 Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is `dtk hook <provider>`.
 
+`dtk init codex` writes a shared `AGENTS.md` section, the `.agents/skills/dotnet-token-killer` skill and a
+`PreToolUse` hook in `.codex/hooks.json` (`--global`: `$CODEX_HOME` or `~/.codex`, and `~/.agents/skills`). Codex runs
+the hook only after the user approves it under `/hooks`, keyed by a hash of the definition, so `dtk hook codex` and its
+`timeout` must never change; `dtk doctor` warns until `config.toml` records an approval.
+
 ## Git Hooks
 
 The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.props` files. Install it once with:

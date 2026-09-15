@@ -85,7 +85,7 @@ context consumed.
 - **Log retrieval** — `dtk log` returns a previous run's full output instead of re-running the build
 - **Filter coverage** — `dtk gain --coverage` ranks every command by unfiltered tokens at stake, so
   the next filter is chosen from data
-- **8 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Cursor, Windsurf, Aider, JetBrains AI
+- **9 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, Cursor, Windsurf, Aider, JetBrains AI
 - **Token analytics** — tracks per-command savings over time with `dtk gain`
 - **Self-diagnostics** — `dtk doctor` validates your setup, including feeding a sample payload
   through your installed hook to prove it still fires
@@ -202,12 +202,13 @@ the integration applies across **all** projects:
 ```sh
 dtk init claude      --global   # ~/.claude
 dtk init gemini      --global   # ~/.gemini
+dtk init codex       --global   # ~/.codex, ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
 
 Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
-for **claude**, **gemini**, **aider**, and **copilot-cli** (the providers with a home config).
+for **claude**, **gemini**, **codex**, **aider**, and **copilot-cli** (the providers with a home config).
 
 ### Per-project install
 
@@ -220,6 +221,7 @@ For the other providers — or when you want dtk scoped to a single repository �
 | **GitHub Copilot**     | `dtk init copilot`     | Section in `.github/copilot-instructions.md`               |
 | **GitHub Copilot CLI** | `dtk init copilot-cli` | preToolUse hook in .github/hooks/ running dtk hook copilot-cli + instructions section |
 | **Gemini CLI**         | `dtk init gemini`      | BeforeTool hook running dtk hook gemini, settings merge, GEMINI.md section |
+| **Codex CLI**          | `dtk init codex`       | PreToolUse hook in .codex/hooks.json running dtk hook codex, AGENTS.md section, skill (approve it under /hooks) |
 | **Cursor**             | `dtk init cursor`      | `.cursor/rules/dtk.mdc`                                    |
 | **Windsurf**           | `dtk init windsurf`    | `.windsurf/rules/dtk.md`                                   |
 | **Aider**              | `dtk init aider`       | Instructions file, `.aider.conf.yml` section               |
