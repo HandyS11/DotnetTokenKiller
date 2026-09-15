@@ -23,6 +23,7 @@ export MSYS_NO_PATHCONV MSYS2_ARG_CONV_EXCL
 
 printf '%s' '{"tool_input":{"command":"dotnet build"}}' > "$work/tool-input.json"
 printf '%s' '{"toolName":"bash","toolArgs":{"command":"dotnet build"}}' > "$work/copilot.json"
+printf '%s' '{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"dotnet build"}}' > "$work/codex.json"
 
 # Gemini CLI appends this to every command it runs through PowerShell.
 gemini_suffix='; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }'
@@ -83,6 +84,14 @@ for ps in "$pwsh_cmd" "$powershell_cmd"; do
     [ -n "$ps" ] || continue
     check "copilot-cli, $(basename "$ps")" "$work/copilot.json" rewrite "$with_dtk" "$ps" -NoProfile -Command 'dtk hook copilot-cli; exit 0'
     check "copilot-cli, $(basename "$ps"), dtk missing" "$work/copilot.json" no-rewrite "$without_dtk" "$ps" -NoProfile -Command 'dtk hook copilot-cli; exit 0'
+done
+
+# Codex CLI: the session's shell without a login (sh/bash -c on Unix, powershell -NoProfile -Command on Windows); the
+# bare command, because Codex runs the original command when a hook fails.
+check "codex, bash" "$work/codex.json" rewrite "$with_dtk" "$bash_cmd" -c 'dtk hook codex'
+for ps in "$pwsh_cmd" "$powershell_cmd"; do
+    [ -n "$ps" ] || continue
+    check "codex, $(basename "$ps")" "$work/codex.json" rewrite "$with_dtk" "$ps" -NoProfile -Command 'dtk hook codex'
 done
 
 if [ "$failures" -ne 0 ]; then

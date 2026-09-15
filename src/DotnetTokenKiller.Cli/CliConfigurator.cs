@@ -94,6 +94,8 @@ internal static class CliConfigurator
             .WithExample(InitCommand, "copilot-cli")
             .WithExample(InitCommand, "copilot-cli", "--global")
             .WithExample(InitCommand, "gemini")
+            .WithExample(InitCommand, "codex")
+            .WithExample(InitCommand, "codex", "--global")
             .WithExample(InitCommand, "cursor")
             .WithExample(InitCommand, "windsurf")
             .WithExample(InitCommand, "aider")
