@@ -631,7 +631,8 @@ public class InitCommandTests
     /// Builds a real (non-stub) Claude integration command rooted at an isolated home, so repeat
     /// runs against <paramref name="dir"/> exercise the actual freshness detection in
     /// <see cref="IntegratorHelpers.WriteGeneratedFileAsync"/> and
-    /// <see cref="IntegratorHelpers.MergeJsonSettingsAsync"/> rather than a canned
+    /// <see cref="IntegratorHelpers.MergeJsonSettingsAsync(string, string, string, System.Text.Json.Nodes.JsonObject, string, IntegrationContext, CancellationToken)"/>
+    /// rather than a canned
     /// <see cref="IntegrationResult"/>.
     /// </summary>
     /// <param name="dir">The project directory to integrate into.</param>
