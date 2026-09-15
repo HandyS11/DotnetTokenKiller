@@ -23,7 +23,10 @@ internal enum HookPayloadKind
     CopilotCli = 2,
 
     /// <summary>OpenAI Codex CLI's <c>PreToolUse</c> payload.</summary>
-    CodexCli = 3
+    CodexCli = 3,
+
+    /// <summary>dtk's own OpenCode plugin payload: <c>{"command": …}</c>.</summary>
+    OpenCode = 4
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>

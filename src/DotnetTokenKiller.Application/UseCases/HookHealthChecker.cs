@@ -315,6 +315,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 ["toolName"] = "bash",
                 ["toolArgs"] = new JsonObject { ["command"] = command }
             },
+            HookPayloadKind.OpenCode => new JsonObject { ["command"] = command },
             _ => new JsonObject
             {
                 ["tool_input"] = new JsonObject { ["command"] = command }

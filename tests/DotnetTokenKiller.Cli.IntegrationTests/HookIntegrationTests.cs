@@ -53,7 +53,7 @@ public class HookIntegrationTests
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode>");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -79,6 +79,17 @@ public class HookIntegrationTests
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
         stderr.Should().BeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_OpenCode_RewritesAsync()
+    {
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"command":"dotnet format --verify-no-changes"}""", "hook", "opencode");
+
+        exitCode.Should().Be(0);
+        stderr.Should().BeEmpty();
+        JsonNode.Parse(stdout)!["command"]!.GetValue<string>().Should().Be("dtk dotnet format --verify-no-changes");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

@@ -18,7 +18,7 @@ internal static class HookPayloads
     /// <summary>Gemini CLI's reply when nothing about the payload calls for a rewrite.</summary>
     private const string GeminiAllowReply = """{"decision":"allow"}""";
 
-    /// <summary>Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>) to its payload shape.</summary>
+    /// <summary>Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>) to its payload shape.</summary>
     /// <param name="provider">The name passed to <c>dtk hook</c>.</param>
     /// <param name="kind">The payload shape, when the name is known.</param>
     internal static bool TryGetKind(string provider, out HookPayloadKind kind)
@@ -29,6 +29,7 @@ internal static class HookPayloads
             "gemini" => (true, HookPayloadKind.GeminiCli),
             "copilot-cli" => (true, HookPayloadKind.CopilotCli),
             "codex" => (true, HookPayloadKind.CodexCli),
+            "opencode" => (true, HookPayloadKind.OpenCode),
             _ => (false, default)
         };
         return known;
@@ -63,6 +64,7 @@ internal static class HookPayloads
                 HookPayloadKind.GeminiCli => ReplyToGemini(root),
                 HookPayloadKind.CopilotCli => ReplyToCopilot(root),
                 HookPayloadKind.CodexCli => ReplyToCodex(root),
+                HookPayloadKind.OpenCode => ReplyToOpenCode(root),
                 _ => null
             };
         }
@@ -166,6 +168,21 @@ internal static class HookPayloads
                 ["updatedInput"] = updatedInput
             }
         }.ToJsonString();
+    }
+
+    /// <summary>
+    /// Replies to dtk's generated OpenCode plugin. The contract is dtk's own, because dtk writes both ends: only the
+    /// command crosses the process boundary.
+    /// </summary>
+    /// <param name="root">The parsed payload.</param>
+    private static string? ReplyToOpenCode(JsonNode? root)
+    {
+        if (root is not JsonObject payload || !TryRewrite(payload, out _, out var rewritten))
+        {
+            return null;
+        }
+
+        return new JsonObject { ["command"] = rewritten }.ToJsonString();
     }
 
     /// <summary>
