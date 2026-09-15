@@ -217,6 +217,41 @@ public sealed class IntegratorHelpersTests : IDisposable
         context.Skipped.Should().ContainSingle();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WriteSectionBasedFileAsync_SectionAlreadyCurrent_ReportsUnchangedWithoutWriting(bool force)
+    {
+        var context = new IntegrationContext(force);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        const string section = "<!-- dtk -->\nNEW\n<!-- /dtk -->";
+        var original = $"# Header\n{section}\n# Footer";
+        await File.WriteAllTextAsync(path, original);
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", section, context, CancellationToken.None);
+
+        (await File.ReadAllTextAsync(path)).Should().Be(original);
+        context.Unchanged.Should().Equal(path);
+        context.Skipped.Should().BeEmpty("--force would change nothing, so advising it would be false");
+        context.Updated.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteSectionBasedFileAsync_CrlfCopyOfTheCurrentSection_ReportsUnchanged()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "instructions.md");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, "# Header\r\n<!-- dtk -->\r\nNEW\r\n<!-- /dtk -->\r\n");
+
+        await IntegratorHelpers.WriteSectionBasedFileAsync(
+            path, "<!-- dtk -->", "<!-- /dtk -->", "<!-- dtk -->\nNEW\n<!-- /dtk -->", context, CancellationToken.None);
+
+        context.Unchanged.Should().Equal(path);
+    }
+
     [Fact]
     public async Task WriteSectionBasedFileAsync_ExistingWithMarker_WithForce_ReplacesSection()
     {

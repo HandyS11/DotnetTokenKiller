@@ -233,6 +233,8 @@ internal static class IntegratorHelpers
     /// untouched (matching <see cref="WriteFileAsync"/>'s contract).
     /// If the file already exists and <c>context.Force</c> is <see langword="true"/>: replaces the
     /// dtk-managed span when the marker is present, or appends the section when it is not.
+    /// If the file already contains exactly <paramref name="section"/> (line endings normalized): reports it
+    /// unchanged and writes nothing, force or not.
     /// If the file does not exist: creates it with the section as the only content.
     /// </summary>
     /// <param name="path">Path to the target file.</param>
@@ -250,6 +252,15 @@ internal static class IntegratorHelpers
         CancellationToken cancellationToken)
     {
         var exists = File.Exists(path);
+
+        if (exists
+            && await TryReadExistingAsync(path, cancellationToken).ConfigureAwait(false) is { } existing
+            && existing.Contains(section.ReplaceLineEndings("\n"), StringComparison.Ordinal))
+        {
+            // Nothing to write, with or without --force; reporting it skipped would advise a --force that changes nothing.
+            context.Unchanged.Add(path);
+            return;
+        }
 
         if (ShouldSkipWrite(exists, context.Force))
         {

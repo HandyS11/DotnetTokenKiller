@@ -100,6 +100,21 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
         await IntegratorHelpers.WriteFileAsync(
             instructionsPath, InstructionsMarkdown, context, cancellationToken).ConfigureAwait(false);
 
+        if (!force && File.Exists(confPath))
+        {
+            var confLines = (await File.ReadAllTextAsync(confPath, cancellationToken).ConfigureAwait(false)).Split('\n');
+            if (FindExternalReadKeyIndex(confLines) >= 0)
+            {
+                // --force would still merge readTarget into this external "read:" key (see
+                // IntegrateAsync_MarkerAndExternalReadKey_WithForce_EndsWithSingleReadKey), so
+                // WriteSectionBasedFileAsync's generic "section already current" check cannot be
+                // trusted here: it would see the current dtk section byte-for-byte and report the
+                // file unchanged even though --force would change it. Skip explicitly instead.
+                context.Skipped.Add(confPath);
+                return context.ToResult();
+            }
+        }
+
         var confSection = await PrepareConfSectionAsync(confPath, readTarget, force, cancellationToken)
             .ConfigureAwait(false);
 
