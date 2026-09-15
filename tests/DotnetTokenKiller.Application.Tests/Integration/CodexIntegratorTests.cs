@@ -134,4 +134,19 @@ public sealed class CodexIntegratorTests : IDisposable
         result.CreatedFiles.Should().Contain(RtkConfigPath);
         (await File.ReadAllTextAsync(RtkConfigPath)).Should().Contain("exclude_commands = [\"dotnet\"]");
     }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_StaleDotCodexHooksMentioningRtk_UnderCustomCodexHome_DoesNotReconcileRtk()
+    {
+        _environment["CODEX_HOME"] = Path.Combine(_tempDir, "codex-home");
+        var staleHooksPath = Path.Combine(HomeDir, ".codex", "hooks.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(staleHooksPath)!);
+        await File.WriteAllTextAsync(staleHooksPath,
+            """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook codex"}]}]}}""");
+
+        var result = await CreateSut().IntegrateGlobalAsync(false, default);
+
+        File.Exists(RtkConfigPath).Should().BeFalse("~/.codex/hooks.json is not what Codex reads when CODEX_HOME points elsewhere");
+        result.CreatedFiles.Should().NotContain(RtkConfigPath);
+    }
 }

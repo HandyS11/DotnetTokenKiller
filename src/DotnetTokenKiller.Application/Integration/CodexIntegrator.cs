@@ -100,11 +100,16 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
             }
         }
 
+        // The current scope's own registration path, plus the global one, deduplicated. Building the
+        // project-scope candidate from `hookDirectory` (as an earlier version did) breaks for
+        // IntegrateGlobalAsync, where hookDirectory is home.Home: that would probe ~/.codex/hooks.json even
+        // when $CODEX_HOME points elsewhere, reconciling rtk's config over a file Codex never reads.
+        // `hook.RegistrationPath` is already the correct path for whichever scope this run is (project or
+        // global); the extra global lookup only matters when scope is Project, so a project run also sees
+        // an rtk hook left in the global hooks.json.
         var rtkOutcome = await rtk.ReconcileFilesAsync(
-            [
-                DescribeHooks(hookDirectory, HookScope.Project)[0].RegistrationPath,
-                DescribeHooks(hookDirectory, HookScope.Global)[0].RegistrationPath
-            ],
+            [.. new[] { hook.RegistrationPath, DescribeHooks(hookDirectory, HookScope.Global)[0].RegistrationPath }
+                .Distinct(StringComparer.Ordinal)],
             cancellationToken).ConfigureAwait(false);
         rtkOutcome.ApplyTo(context);
 
