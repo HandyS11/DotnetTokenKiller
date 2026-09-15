@@ -363,6 +363,7 @@ public class InitCommandTests
     [InlineData("copilot-cli")]
     [InlineData("gemini")]
     [InlineData("codex")]
+    [InlineData("opencode")]
     [InlineData("cursor")]
     [InlineData("windsurf")]
     [InlineData("aider")]
