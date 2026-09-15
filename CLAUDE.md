@@ -97,8 +97,8 @@ CI sets `DTK_NODE_REQUIRED=1`.
 
 `dtk init antigravity` writes the shared `AGENTS.md` section and skill plus a `"dtk"` hook group in `.agents/hooks.json`
 (`--global`: `~/.gemini/config/hooks.json`, with the section in `~/.gemini/GEMINI.md`). `dtk hook antigravity` replies
-`{"decision":"ask","overwrite":{"CommandLine":…}}` — never `allow`, which auto-approves. Hooks run through `sh -c`/`cmd /c`
-and a failing hook blocks the command, hence `|| exit 0`. Gate G results are in the PR that added it.
+`{"decision":"ask","overwrite":{"CommandLine":…}}` — never `allow`, which auto-approves. Hooks run through
+`sh -c`/`cmd /c` and a failing hook blocks the command, hence `|| exit 0`. Gate G results are in the PR that added it.
 
 ## Git Hooks
 

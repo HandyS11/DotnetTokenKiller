@@ -353,13 +353,14 @@ This creates three files:
 - `AGENTS.md` — a `dtk` instructions section, created if the file does not exist yet (an existing `AGENTS.md`
   gets it only with `--force`)
 - `.agents/skills/dotnet-token-killer/SKILL.md` — the dtk skill
-- `.agents/hooks.json` — a `dtk` hook group running `dtk hook antigravity || exit 0` for `run_command` (other hook groups in the file are left alone)
+- `.agents/hooks.json` — a `dtk` hook group running `dtk hook antigravity || exit 0` for `run_command` (other
+  hook groups in the file are left alone)
 
 Antigravity loads a workspace's `.agents/hooks.json` only once you trust the workspace.
 
 `dtk init antigravity --global` writes the hook to `~/.gemini/config/hooks.json`, the skill to
-`~/.gemini/config/skills/dotnet-token-killer/SKILL.md`, and the instructions section to `~/.gemini/GEMINI.md` — the same
-section `dtk init gemini --global` writes, so the two never conflict.
+`~/.gemini/config/skills/dotnet-token-killer/SKILL.md`, and the instructions section to `~/.gemini/GEMINI.md` — the
+same section `dtk init gemini --global` writes, so the two never conflict.
 
 ### How It Works
 
@@ -370,13 +371,19 @@ commands, which Antigravity does when a hook fails.
 
 ### Permissions and print mode
 
-Antigravity matches your permission rules against the *rewritten* command: an allow rule such as `command(dotnet)`
+Antigravity matches your permission rules against the rewritten command: an allow rule such as `command(dotnet)`
 does not cover `dtk dotnet build`, so a rewritten command prompts, and approving it with "Always Allow" offers
-commands that start with `dtk`.
+commands that start with `dtk`. Allow `command(dtk)` wherever you already allow `command(dotnet)` to cover it up
+front: `command(dtk)` allows every dtk command, which includes running any `dotnet` command through it, so it
+grants no more than `command(dotnet)` already did. dtk itself never writes permission rules.
 
 Print mode (`agy -p`) loads only the global `~/.gemini/config/hooks.json`, never a project's `.agents/hooks.json`, so
 headless runs are rewritten only with `dtk init antigravity --global`. Print mode cannot prompt, so the rewritten
-command also needs an allow rule of its own to run there.
+command also needs an allow rule of its own to run there — except under `--dangerously-skip-permissions`, which
+still runs the rewritten command, with no prompt or denial.
+
+Keep a dtk 0.8.0 or later first on `PATH`: an older dtk prints an error on stdout, and Antigravity blocks a
+command when its hook prints something that is not JSON. `dtk doctor`'s hook probe reports it.
 
 ### Manual Installation
 

@@ -204,7 +204,7 @@ dtk init claude      --global   # ~/.claude
 dtk init gemini      --global   # ~/.gemini
 dtk init codex       --global   # ~/.codex, ~/.agents/skills
 dtk init opencode    --global   # ~/.config/opencode, ~/.agents/skills
-dtk init antigravity --global   # ~/.gemini/config
+dtk init antigravity --global   # ~/.gemini/config, ~/.gemini/GEMINI.md
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
