@@ -364,6 +364,7 @@ public class InitCommandTests
     [InlineData("gemini")]
     [InlineData("codex")]
     [InlineData("opencode")]
+    [InlineData("antigravity")]
     [InlineData("cursor")]
     [InlineData("windsurf")]
     [InlineData("aider")]

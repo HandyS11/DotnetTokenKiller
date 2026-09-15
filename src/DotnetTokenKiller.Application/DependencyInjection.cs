@@ -47,6 +47,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IProviderIntegrator, GeminiCliIntegrator>();
         services.AddTransient<IProviderIntegrator, CodexIntegrator>();
         services.AddTransient<IProviderIntegrator, OpenCodeIntegrator>();
+        services.AddTransient<IProviderIntegrator, AntigravityIntegrator>();
         services.AddTransient<IProviderIntegrator, CursorIntegrator>();
         services.AddTransient<IProviderIntegrator, WindsurfIntegrator>();
         services.AddTransient<IProviderIntegrator, AiderIntegrator>();

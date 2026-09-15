@@ -35,6 +35,7 @@ public sealed class HookPayloadsTests
     {
         HookCommands.Invocation("claude").Should().Be("dtk hook claude");
         HookCommands.FailOpen("gemini").Should().Be("dtk hook gemini; exit 0");
+        HookCommands.OrExitZero("antigravity").Should().Be("dtk hook antigravity || exit 0");
     }
 
     [Fact]
