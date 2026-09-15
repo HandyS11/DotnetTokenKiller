@@ -14,6 +14,7 @@ public sealed class HookPayloadsTests
     [InlineData("copilot-cli", HookPayloadKind.CopilotCli)]
     [InlineData("codex", HookPayloadKind.CodexCli)]
     [InlineData("opencode", HookPayloadKind.OpenCode)]
+    [InlineData("antigravity", HookPayloadKind.AntigravityCli)]
     internal void TryGetKind_KnownProvider_Resolves(string provider, HookPayloadKind expected)
     {
         HookPayloads.TryGetKind(provider, out var kind).Should().BeTrue();
@@ -223,6 +224,44 @@ public sealed class HookPayloadsTests
     public void OpenCode_NothingToRewrite_PrintsNothing(string payload)
     {
         Reply(HookPayloadKind.OpenCode, payload).Should().BeNull();
+    }
+
+    [Fact]
+    public void Antigravity_Rewrite_AsksWithAnOverwriteOfOnlyTheCommandLine()
+    {
+        var reply = Reply(HookPayloadKind.AntigravityCli,
+            """{"toolCall":{"name":"run_command","args":{"CommandLine":"dotnet test","Cwd":"/w","WaitMsBeforeAsync":500}},"stepIdx":3}""");
+
+        var root = JsonNode.Parse(reply!)!.AsObject();
+        root["decision"]!.GetValue<string>().Should().Be("ask", "allow would auto-approve a command the user's rules may not allow");
+        root["overwrite"]!.AsObject().Count.Should().Be(1, "overwrite is a shallow merge into the tool arguments");
+        root["overwrite"]!["CommandLine"]!.GetValue<string>().Should().Be("dtk dotnet test");
+        root.ContainsKey("reason").Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("""{"toolCall":{"name":"run_command","args":{"CommandLine":"ls"}}}""")]
+    [InlineData("""{"toolCall":{"name":"view_file","args":{"CommandLine":"dotnet build"}}}""")]
+    [InlineData("""{"toolCall":{"args":{"CommandLine":"dotnet build"}}}""")]
+    [InlineData("""{"toolCall":{"name":"run_command","args":{"command":"dotnet build"}}}""")]
+    [InlineData("""{"toolCall":{"name":"run_command"}}""")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("{")]
+    [InlineData("""{"toolCall":{"name":"run_command","args":{"CommandLine":"a","CommandLine":"b"}}}""")]
+    public void Antigravity_NothingToRewrite_PrintsTheNeutralReply(string payload)
+    {
+        Reply(HookPayloadKind.AntigravityCli, payload).Should().BeNull();
+    }
+
+    [Fact]
+    public void Antigravity_NonAsciiCommand_RoundTripsExactly()
+    {
+        var reply = Reply(HookPayloadKind.AntigravityCli,
+            """{"toolCall":{"name":"run_command","args":{"CommandLine":"dotnet build # répertoire ’ok’"}}}""");
+
+        JsonNode.Parse(reply!)!["overwrite"]!["CommandLine"]!.GetValue<string>()
+            .Should().Be("dtk dotnet build # répertoire ’ok’");
     }
 
     private static string? Reply(HookPayloadKind kind, string payload) =>

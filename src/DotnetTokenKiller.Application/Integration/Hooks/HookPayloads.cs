@@ -18,7 +18,16 @@ internal static class HookPayloads
     /// <summary>Gemini CLI's reply when nothing about the payload calls for a rewrite.</summary>
     private const string GeminiAllowReply = """{"decision":"allow"}""";
 
-    /// <summary>Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>) to its payload shape.</summary>
+    /// <summary>
+    /// Antigravity CLI's reply when there is nothing to rewrite: nothing at all, which gate G1 showed leaves the call to
+    /// the user's own permissions. Never <c>allow</c>, which would auto-approve the command.
+    /// </summary>
+    private const string? AntigravityNeutralReply = null;
+
+    /// <summary>
+    /// Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>,
+    /// <c>antigravity</c>) to its payload shape.
+    /// </summary>
     /// <param name="provider">The name passed to <c>dtk hook</c>.</param>
     /// <param name="kind">The payload shape, when the name is known.</param>
     internal static bool TryGetKind(string provider, out HookPayloadKind kind)
@@ -30,6 +39,7 @@ internal static class HookPayloads
             "copilot-cli" => (true, HookPayloadKind.CopilotCli),
             "codex" => (true, HookPayloadKind.CodexCli),
             "opencode" => (true, HookPayloadKind.OpenCode),
+            "antigravity" => (true, HookPayloadKind.AntigravityCli),
             _ => (false, default)
         };
         return known;
@@ -65,6 +75,7 @@ internal static class HookPayloads
                 HookPayloadKind.CopilotCli => ReplyToCopilot(root),
                 HookPayloadKind.CodexCli => ReplyToCodex(root),
                 HookPayloadKind.OpenCode => ReplyToOpenCode(root),
+                HookPayloadKind.AntigravityCli => ReplyToAntigravity(root),
                 _ => null
             };
         }
@@ -186,6 +197,32 @@ internal static class HookPayloads
     }
 
     /// <summary>
+    /// Replies to Google Antigravity CLI's <c>run_command</c> tool call with an <c>ask</c> decision and a shallow
+    /// overwrite of just <c>CommandLine</c>: gate G1 showed an empty reply leaves the call to the user's own
+    /// permissions, but Antigravity has no analogue of Gemini's "allow with an updated command", so <c>ask</c> is the
+    /// closest verb that still lets the rewrite through without auto-approving a command the user's rules may not.
+    /// </summary>
+    /// <param name="root">The parsed payload.</param>
+    private static string? ReplyToAntigravity(JsonNode? root)
+    {
+        if (root is not JsonObject payload
+            || payload["toolCall"] is not JsonObject toolCall
+            || toolCall["name"] is not JsonValue name || !name.TryGetValue<string>(out var toolName) || toolName != "run_command"
+            || toolCall["args"] is not JsonObject arguments
+            || !TryRewrite(arguments, "CommandLine", out _, out var rewritten))
+        {
+            return AntigravityNeutralReply;
+        }
+
+        return new JsonObject
+        {
+            // "ask" defers to the user's permission rules and "Always Allow" choices; "allow" would auto-approve.
+            ["decision"] = "ask",
+            ["overwrite"] = new JsonObject { ["CommandLine"] = rewritten }
+        }.ToJsonString();
+    }
+
+    /// <summary>
     /// Whether <paramref name="payload"/> names a tool other than <paramref name="expected"/> under <paramref name="key"/>.
     /// A payload without the key names none, which is what doctor's probe sends.
     /// </summary>
@@ -196,11 +233,14 @@ internal static class HookPayloads
         payload[key] is not null
         && (payload[key] is not JsonValue value || !value.TryGetValue<string>(out var name) || name != expected);
 
-    private static bool TryRewrite(JsonObject arguments, out string command, out string rewritten)
+    private static bool TryRewrite(JsonObject arguments, out string command, out string rewritten) =>
+        TryRewrite(arguments, "command", out command, out rewritten);
+
+    private static bool TryRewrite(JsonObject arguments, string key, out string command, out string rewritten)
     {
         command = string.Empty;
         rewritten = string.Empty;
-        if (arguments["command"] is not JsonValue value || !value.TryGetValue(out string? text) || text.Length == 0)
+        if (arguments[key] is not JsonValue value || !value.TryGetValue(out string? text) || text.Length == 0)
         {
             return false;
         }

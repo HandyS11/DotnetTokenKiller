@@ -26,7 +26,10 @@ internal enum HookPayloadKind
     CodexCli = 3,
 
     /// <summary>dtk's own OpenCode plugin payload: <c>{"command": …}</c>.</summary>
-    OpenCode = 4
+    OpenCode = 4,
+
+    /// <summary>Google Antigravity CLI's <c>PreToolUse</c> payload.</summary>
+    AntigravityCli = 5
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>

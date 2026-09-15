@@ -53,7 +53,7 @@ public class HookIntegrationTests
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity>");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -98,6 +98,30 @@ public class HookIntegrationTests
         // A command dtk does not rewrite gets no reply at all, so the plugin leaves the command as OpenCode gave it.
         var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
             """{"command":"ls -la"}""", "hook", "opencode");
+
+        exitCode.Should().Be(0);
+        stdout.Should().BeEmpty();
+        stderr.Should().BeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_Antigravity_AsksWithTheOverwriteAsync()
+    {
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"toolCall":{"name":"run_command","args":{"CommandLine":"dotnet restore"}}}""", "hook", "antigravity");
+
+        exitCode.Should().Be(0);
+        stderr.Should().BeEmpty();
+        var root = JsonNode.Parse(stdout)!;
+        root["decision"]!.GetValue<string>().Should().Be("ask");
+        root["overwrite"]!["CommandLine"]!.GetValue<string>().Should().Be("dtk dotnet restore");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_Antigravity_NothingToRewrite_PrintsNothingAsync()
+    {
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"toolCall":{"name":"run_command","args":{"CommandLine":"ls"}}}""", "hook", "antigravity");
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
