@@ -16,6 +16,9 @@ public sealed class HookHealthCheckerTests : IDisposable
     /// <summary>The arguments the probe must pass to <c>dtk</c> for the Copilot CLI hook.</summary>
     private static readonly string[] CopilotCliHookArguments = ["hook", "copilot-cli"];
 
+    /// <summary>The arguments the probe must pass to <c>dtk</c> for the OpenCode hook.</summary>
+    private static readonly string[] OpenCodeHookArguments = ["hook", "opencode"];
+
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-hookhealth-{Guid.NewGuid()}");
     private readonly HookHealthChecker _sut;
@@ -49,6 +52,8 @@ public sealed class HookHealthCheckerTests : IDisposable
     private IReadOnlyList<IHookIntegrator> Integrators => [new GeminiCliIntegrator(Home)];
 
     private CodexIntegrator Codex => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
+    private OpenCodeIntegrator OpenCode => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
 
     private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
 
@@ -364,6 +369,63 @@ public sealed class HookHealthCheckerTests : IDisposable
             Arg.Is<string>(payload => payload.Contains("\"toolName\":\"bash\"", StringComparison.Ordinal)
                                       && payload.Contains("toolArgs", StringComparison.Ordinal)),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_CurrentOpenCodePlugin_PassesAndProbesWithTheOpenCodePayload()
+    {
+        await OpenCode.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([OpenCode], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal("opencode hook (project)", "opencode hook probe (project)");
+        checks.Should().OnlyContain(c => c.Passed && !c.IsWarning);
+        await _runner.Received(1).RunCapturedWithInputAsync(
+            _dtkOnPath!,
+            Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(OpenCodeHookArguments)),
+            Arg.Is<string>(payload => payload.StartsWith("{\"command\":", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_PluginFromAnOlderDtk_FailsStaleWithTheInitRemedy()
+    {
+        var path = OpenCode.DescribeHooks(_tempDir, HookScope.Project)[0].RegistrationPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var older = OpenCodePlugin.Body.Replace("5000", "4000", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(older, StampStyle.SlashComment));
+
+        var checks = await _sut.RunAsync([OpenCode], _tempDir, default);
+
+        checks.Should().ContainSingle();
+        checks[0].Passed.Should().BeFalse();
+        checks[0].Message.Should().Contain("stale").And.Contain("dtk init opencode");
+        await _runner.DidNotReceiveWithAnyArgs().RunCapturedWithInputAsync(default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task RunAsync_LocallyEditedPluginStillRunningDtk_PassesAsModifiedAndIsProbed()
+    {
+        await OpenCode.IntegrateAsync(_tempDir, force: false, default);
+        var path = OpenCode.DescribeHooks(_tempDir, HookScope.Project)[0].RegistrationPath;
+        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path)).Replace("5000", "9000", StringComparison.Ordinal));
+
+        var checks = await _sut.RunAsync([OpenCode], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal("opencode hook (project)", "opencode hook probe (project)");
+        checks[0].Message.Should().Be("registered (modified locally)");
+    }
+
+    [Fact]
+    public async Task RunAsync_ForeignFileAtThePluginPath_IsNotReported()
+    {
+        var path = OpenCode.DescribeHooks(_tempDir, HookScope.Project)[0].RegistrationPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, "export const Other = async () => ({});");
+
+        var checks = await _sut.RunAsync([OpenCode], _tempDir, default);
+
+        checks.Should().ContainSingle().Which.Name.Should().Be("hook integration");
     }
 
     [Fact]

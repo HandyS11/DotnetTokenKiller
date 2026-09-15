@@ -10,6 +10,7 @@ namespace DotnetTokenKiller.Application.UseCases;
 
 /// <summary>
 /// Checks that the rewrite hooks dtk installed are registered and that the <c>dtk</c> on <c>PATH</c> answers them.
+/// A generated plugin registration is classified by its provenance stamp instead.
 /// </summary>
 /// <remarks>
 /// A registration is only a command string, <c>dtk hook &lt;provider&gt;</c>; what breaks silently is the
@@ -106,6 +107,13 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 await ProbeAsync(installation, cancellationToken).ConfigureAwait(false),
                 .. ApprovalChecks(integrator, installation, projectDirectory)
             ],
+            RegistrationKind.Stale => [new DiagnosticCheck(name, false, registration.Problem + ".")],
+            RegistrationKind.Modified =>
+            [
+                new DiagnosticCheck(name, true, "registered (modified locally)"),
+                await ProbeAsync(installation, cancellationToken).ConfigureAwait(false),
+                .. ApprovalChecks(integrator, installation, projectDirectory)
+            ],
             _ => [new DiagnosticCheck(name, false, $"{registration.Problem}. Run '{RemedyCommand(installation)}'.")]
         };
     }
@@ -156,18 +164,28 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         Legacy = 2,
 
         /// <summary>A registration running <c>dtk hook &lt;provider&gt;</c>.</summary>
-        Current = 3
+        Current = 3,
+
+        /// <summary>A generated plugin dtk wrote, from an older template.</summary>
+        Stale = 4,
+
+        /// <summary>A generated plugin edited since dtk wrote it, which still runs <c>dtk hook &lt;provider&gt;</c>.</summary>
+        Modified = 5
     }
 
     /// <summary>The classification of one registration file.</summary>
     /// <param name="Kind">What the file holds.</param>
-    /// <param name="Problem">Why no current registration was found, for <see cref="RegistrationKind.Absent"/> and <see cref="RegistrationKind.Unreadable"/>.</param>
+    /// <param name="Problem">
+    /// Why no current registration was found, for <see cref="RegistrationKind.Absent"/>,
+    /// <see cref="RegistrationKind.Unreadable"/> and <see cref="RegistrationKind.Stale"/>.
+    /// </param>
     private sealed record Registration(RegistrationKind Kind, string Problem);
 
     /// <summary>
-    /// Classifies the registration by searching every string in its JSON — which spans Claude Code's and
-    /// Gemini CLI's nested <c>hooks[event][].hooks[].command</c> and Copilot CLI's <c>hooks.preToolUse[].bash</c>
-    /// with no per-provider branching.
+    /// Classifies the registration. A generated plugin (<see cref="HookInstallation.PluginArtifact"/> non-null) is
+    /// classified by its provenance stamp; every other registration is a JSON file, classified by searching every
+    /// string in it — which spans Claude Code's and Gemini CLI's nested <c>hooks[event][].hooks[].command</c> and
+    /// Copilot CLI's <c>hooks.preToolUse[].bash</c> with no per-provider branching.
     /// </summary>
     /// <param name="installation">The installation whose registration to read.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -190,6 +208,11 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
             return new Registration(RegistrationKind.Unreadable, $"{path} could not be read: {ex.Message}");
         }
 
+        if (installation.PluginArtifact is { } artifact)
+        {
+            return ClassifyPlugin(artifact, content, path, installation);
+        }
+
         // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is
         // enumerated, so the search belongs inside the same guard as the parse.
         try
@@ -209,6 +232,31 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         {
             return new Registration(RegistrationKind.Unreadable, $"{path} could not be read as JSON: {ex.Message}");
         }
+    }
+
+    /// <summary>Classifies a generated plugin by its provenance stamp; it is JavaScript, so there is no JSON to search.</summary>
+    /// <param name="artifact">The plugin as the running dtk would generate it.</param>
+    /// <param name="content">The file on disk.</param>
+    /// <param name="path">Its path, for messages.</param>
+    /// <param name="installation">The installation, for the remedy command.</param>
+    private static Registration ClassifyPlugin(GeneratedArtifact artifact, string content, string path, HookInstallation installation)
+    {
+        var normalized = content.ReplaceLineEndings("\n");
+
+        if (normalized == ArtifactStamping.Apply(artifact.Body, artifact.Style))
+        {
+            return new Registration(RegistrationKind.Current, string.Empty);
+        }
+
+        if (ArtifactStamping.IsAuthentic(normalized))
+        {
+            return new Registration(RegistrationKind.Stale,
+                $"stale — {path} was written by an older dtk. Run '{RemedyCommand(installation)}'");
+        }
+
+        return normalized.Contains(OpenCodePlugin.InvocationSignature, StringComparison.Ordinal)
+            ? new Registration(RegistrationKind.Modified, string.Empty)
+            : new Registration(RegistrationKind.Absent, $"not registered — {path} does not run '{installation.Command}'");
     }
 
     /// <summary>Depth-first search for a string value containing <paramref name="needle"/>.</summary>
