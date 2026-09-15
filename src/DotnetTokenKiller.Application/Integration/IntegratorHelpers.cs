@@ -36,6 +36,16 @@ internal static class IntegratorHelpers
     };
 
     /// <summary>
+    /// Parse options for reading settings files without writing them, as doctor does: it accepts what their harnesses
+    /// accept rather than failing a file with a comment as unreadable.
+    /// </summary>
+    internal static readonly JsonDocumentOptions LenientJson = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
+    /// <summary>
     /// Writes a whole-file artifact, refreshing it whenever there is something to change and
     /// leaving it alone otherwise.
     /// </summary>

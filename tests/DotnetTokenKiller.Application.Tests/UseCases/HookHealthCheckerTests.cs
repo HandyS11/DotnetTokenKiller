@@ -52,6 +52,20 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
 
+    private string CodexGlobalHooksPath => Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
+
+    /// <summary>Writes a global <c>hooks.json</c> whose first group runs rtk's hook, putting dtk's at 1:0.</summary>
+    private async Task WriteCodexGlobalHooksAfterAForeignGroupAsync()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(CodexGlobalHooksPath)!);
+        await File.WriteAllTextAsync(CodexGlobalHooksPath, """
+            {"hooks":{"PreToolUse":[
+              {"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook codex"}]},
+              {"matcher":"Bash","hooks":[{"type":"command","command":"dtk hook codex","timeout":10}]}
+            ]}}
+            """);
+    }
+
     private async Task IntegrateAsync(HookScope scope = HookScope.Project)
     {
         var integrator = new GeminiCliIntegrator(Home);
@@ -472,6 +486,55 @@ public sealed class HookHealthCheckerTests : IDisposable
         var approval = checks.Single(c => c.Name == "codex hook approval (global)");
         approval.IsWarning.Should().BeTrue();
         approval.Message.Should().Contain("turned off").And.Contain("/hooks");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexApprovalOnlyForAForeignHandlerBeforeDtks_WarnsNotYetApproved()
+    {
+        // Codex keys each handler by its group and handler position, so approving rtk's hook at 0:0 says
+        // nothing about dtk's at 1:0.
+        await WriteCodexGlobalHooksAfterAForeignGroupAsync();
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{CodexGlobalHooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeTrue();
+        approval.Message.Should().Contain("not yet approved");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexApprovalForDtksOwnHandlerPosition_Passes()
+    {
+        await WriteCodexGlobalHooksAfterAForeignGroupAsync();
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{CodexGlobalHooksPath}:pre_tool_use:1:0']
+            trusted_hash = "sha256:abc"
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeFalse();
+        approval.Message.Should().Contain("approval recorded");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexForeignHandlerTurnedOffBeforeDtks_DoesNotReportDtksAsTurnedOff()
+    {
+        await WriteCodexGlobalHooksAfterAForeignGroupAsync();
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [hooks.state.'{CodexGlobalHooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            enabled = false
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Single(c => c.Name == "codex hook approval (global)").Message.Should().Contain("not yet approved");
     }
 
     [Fact]

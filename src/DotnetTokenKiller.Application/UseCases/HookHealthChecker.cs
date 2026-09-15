@@ -35,16 +35,6 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
     /// <summary>The command name every registration runs.</summary>
     private const string DtkCommand = "dtk";
 
-    /// <summary>
-    /// Doctor only reads settings files, so it accepts what their harnesses accept rather than failing a file
-    /// with a comment as unreadable.
-    /// </summary>
-    private static readonly JsonDocumentOptions LenientJson = new()
-    {
-        CommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true
-    };
-
     /// <summary>How long the probe waits before declaring the hook wedged.</summary>
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
 
@@ -191,7 +181,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         // enumerated, so the search belongs inside the same guard as the parse.
         try
         {
-            var root = JsonNode.Parse(content, documentOptions: LenientJson);
+            var root = JsonNode.Parse(content, documentOptions: IntegratorHelpers.LenientJson);
 
             if (FindStringContaining(root, IntegratorHelpers.LegacyHookScriptName) is not null)
             {

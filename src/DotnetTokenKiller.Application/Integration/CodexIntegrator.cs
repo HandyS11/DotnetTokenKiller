@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain.Integration;
 
@@ -32,6 +34,10 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
 
     /// <summary>Seconds Codex waits for the hook. Part of the approval hash: never change it.</summary>
     private const int HookTimeoutSeconds = 10;
+
+    /// <summary>Reported when Codex has recorded no approval for dtk's handler.</summary>
+    private static readonly HookApprovalFinding NotYetApproved = new("hook approval", false,
+        "not yet approved — Codex skips this hook until you review it under /hooks");
 
     /// <inheritdoc/>
     public string ProviderName => "codex";
@@ -68,7 +74,7 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
             ];
         }
 
-        var findings = new List<HookApprovalFinding> { ApprovalFinding(config, installation.RegistrationPath, configPath) };
+        var findings = new List<HookApprovalFinding> { ApprovalFinding(config, installation, configPath) };
 
         if (installation.Scope == HookScope.Project)
         {
@@ -82,19 +88,74 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
         return findings;
     }
 
-    private static HookApprovalFinding ApprovalFinding(CodexConfig config, string registrationPath, string configPath)
+    private static HookApprovalFinding ApprovalFinding(
+        CodexConfig config, HookInstallation installation, string configPath)
     {
-        if (config.HasHookApproval(registrationPath))
+        var path = installation.RegistrationPath;
+        if (FindHandler(path, installation.Command) is not (var group, var handler))
+        {
+            return NotYetApproved;
+        }
+
+        if (config.HasHookApproval(path, group, handler))
         {
             return new HookApprovalFinding("hook approval", true,
                 $"approval recorded in {configPath} (dtk cannot tell whether it matches the current definition)");
         }
 
-        return config.IsHookTurnedOff(registrationPath)
+        return config.IsHookTurnedOff(path, group, handler)
             ? new HookApprovalFinding("hook approval", false,
                 "turned off — Codex skips this hook until you turn it back on under /hooks")
-            : new HookApprovalFinding("hook approval", false,
-                "not yet approved — Codex skips this hook until you review it under /hooks");
+            : NotYetApproved;
+    }
+
+    /// <summary>
+    /// The position Codex keys a handler's approval by: the index of its group in <c>hooks.PreToolUse</c> and its index
+    /// in that group's <c>hooks</c>, counting every entry as written. Returns the first handler whose command runs
+    /// <paramref name="command"/>, or <see langword="null"/> when none does or the file cannot be read.
+    /// </summary>
+    /// <param name="registrationPath">The <c>hooks.json</c> to search.</param>
+    /// <param name="command">The command dtk registers.</param>
+    private static (int Group, int Handler)? FindHandler(string registrationPath, string command)
+    {
+        // Parsed as leniently as doctor read the registration, and guarded the same way: JsonNode.Parse accepts a
+        // repeated key and throws ArgumentException only when the object is first read.
+        try
+        {
+            if (JsonNode.Parse(File.ReadAllText(registrationPath), documentOptions: IntegratorHelpers.LenientJson)
+                    is not JsonObject root
+                || root["hooks"] is not JsonObject hooks
+                || hooks["PreToolUse"] is not JsonArray groups)
+            {
+                return null;
+            }
+
+            for (var group = 0; group < groups.Count; group++)
+            {
+                if (groups[group] is not JsonObject matcherGroup || matcherGroup["hooks"] is not JsonArray handlers)
+                {
+                    continue;
+                }
+
+                for (var handler = 0; handler < handlers.Count; handler++)
+                {
+                    if (handlers[handler] is JsonObject entry
+                        && entry["command"] is JsonValue value
+                        && value.TryGetValue<string>(out var text)
+                        && text.Contains(command, StringComparison.Ordinal))
+                    {
+                        return (group, handler);
+                    }
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <inheritdoc/>

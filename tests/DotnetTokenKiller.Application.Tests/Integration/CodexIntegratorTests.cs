@@ -123,6 +123,28 @@ public sealed class CodexIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task InspectApproval_ApprovedHandlerThatIsNotDtks_IsNotApproved()
+    {
+        // The only approval in config.toml belongs to a handler that does not run dtk: dtk's hook is not approved.
+        Directory.CreateDirectory(Path.GetDirectoryName(HooksPath)!);
+        await File.WriteAllTextAsync(HooksPath,
+            """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook codex"}]}]}}""");
+        var configPath = Path.Combine(HomeDir, ".codex", "config.toml");
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        await File.WriteAllTextAsync(configPath, $"""
+            [hooks.state.'{HooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            """);
+        var sut = CreateSut();
+
+        var findings = sut.InspectApproval(sut.DescribeHooks(ProjectDir, HookScope.Project)[0], ProjectDir);
+
+        var approval = findings.Should().ContainSingle(f => f.Label == "hook approval").Subject;
+        approval.Satisfied.Should().BeFalse();
+        approval.Message.Should().Contain("not yet approved");
+    }
+
+    [Fact]
     public async Task IntegrateAsync_RtkHookInCodexHooks_ExcludesDotnetInRtkConfig()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(HooksPath)!);

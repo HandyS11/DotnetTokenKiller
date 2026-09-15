@@ -21,12 +21,12 @@ public sealed class CodexConfigTests : IDisposable
         var config = CodexConfig.Load(ConfigPath);
 
         config.IsReadable.Should().BeTrue();
-        config.HasHookApproval(HooksPath).Should().BeFalse();
+        config.HasHookApproval(HooksPath, 0, 0).Should().BeFalse();
         config.TrustsProject(ProjectDir).Should().BeFalse();
     }
 
     [Fact]
-    public async Task HasHookApproval_StateKeyForThatFile_IsTrue()
+    public async Task HasHookApproval_StateKeyForThatHandler_IsTrueOnlyForItsFileAndPosition()
     {
         // Literal TOML strings, so a Windows path's backslashes need no escaping.
         await File.WriteAllTextAsync(ConfigPath, $"""
@@ -36,8 +36,22 @@ public sealed class CodexConfigTests : IDisposable
 
         var config = CodexConfig.Load(ConfigPath);
 
-        config.HasHookApproval(HooksPath).Should().BeTrue();
-        config.HasHookApproval(Path.Combine(_tempDir, "other", "hooks.json")).Should().BeFalse();
+        config.HasHookApproval(HooksPath, 0, 0).Should().BeTrue();
+        config.HasHookApproval(Path.Combine(_tempDir, "other", "hooks.json"), 0, 0).Should().BeFalse();
+        config.HasHookApproval(HooksPath, 1, 0).Should().BeFalse("Codex approves one handler, not the file");
+        config.HasHookApproval(HooksPath, 0, 1).Should().BeFalse("Codex approves one handler, not its group");
+    }
+
+    [Fact]
+    public async Task IsHookTurnedOff_AnotherHandlerTurnedOff_IsFalse()
+    {
+        await File.WriteAllTextAsync(ConfigPath, $"""
+            [hooks.state.'{HooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            enabled = false
+            """);
+
+        CodexConfig.Load(ConfigPath).IsHookTurnedOff(HooksPath, 1, 0).Should().BeFalse();
     }
 
     [Fact]
@@ -52,8 +66,8 @@ public sealed class CodexConfigTests : IDisposable
 
         var config = CodexConfig.Load(ConfigPath);
 
-        config.HasHookApproval(HooksPath).Should().BeFalse();
-        config.IsHookTurnedOff(HooksPath).Should().BeTrue();
+        config.HasHookApproval(HooksPath, 0, 0).Should().BeFalse();
+        config.IsHookTurnedOff(HooksPath, 0, 0).Should().BeTrue();
     }
 
     [Fact]
@@ -67,8 +81,8 @@ public sealed class CodexConfigTests : IDisposable
 
         var config = CodexConfig.Load(ConfigPath);
 
-        config.HasHookApproval(HooksPath).Should().BeTrue();
-        config.IsHookTurnedOff(HooksPath).Should().BeFalse();
+        config.HasHookApproval(HooksPath, 0, 0).Should().BeTrue();
+        config.IsHookTurnedOff(HooksPath, 0, 0).Should().BeFalse();
     }
 
     [Fact]
@@ -79,7 +93,7 @@ public sealed class CodexConfigTests : IDisposable
             enabled = true
             """);
 
-        CodexConfig.Load(ConfigPath).HasHookApproval(HooksPath).Should().BeFalse();
+        CodexConfig.Load(ConfigPath).HasHookApproval(HooksPath, 0, 0).Should().BeFalse();
     }
 
     [Fact]
@@ -159,6 +173,64 @@ public sealed class CodexConfigTests : IDisposable
         CodexConfig.Load(ConfigPath).TrustsProject(ProjectDir).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TrustsProject_KeyDifferingOnlyInCase_MatchesOnlyWhenIgnoringCase(bool ignoreCase)
+    {
+        // Codex lowercases project trust keys on Windows, when writing them and when looking them up.
+        await File.WriteAllTextAsync(ConfigPath, $"""
+            [projects.'{ProjectDir.ToUpperInvariant()}']
+            trust_level = "trusted"
+            """);
+
+        CodexConfig.Load(ConfigPath, ignoreCase).TrustsProject(ProjectDir).Should().Be(ignoreCase);
+    }
+
+    [Fact]
+    public async Task Load_ComparesPathKeysIgnoringCaseOnlyOnWindows()
+    {
+        await File.WriteAllTextAsync(ConfigPath, $"""
+            [projects.'{ProjectDir.ToUpperInvariant()}']
+            trust_level = "trusted"
+            """);
+
+        CodexConfig.Load(ConfigPath).TrustsProject(ProjectDir).Should().Be(OperatingSystem.IsWindows());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TrustsProject_IgnoringCase_PrefersTheLowercaseKeyAsCodexDoes(bool lowercaseFirst)
+    {
+        // Codex looks up the lowercased path first, and only then any key that lowercases to it.
+        var lowercase = $"""
+            [projects.'{LowercaseAscii(ProjectDir)}']
+            trust_level = "untrusted"
+            """;
+        var uppercase = $"""
+            [projects.'{ProjectDir.ToUpperInvariant()}']
+            trust_level = "trusted"
+            """;
+        await File.WriteAllTextAsync(
+            ConfigPath, lowercaseFirst ? $"{lowercase}\n\n{uppercase}" : $"{uppercase}\n\n{lowercase}");
+
+        CodexConfig.Load(ConfigPath, ignoreCase: true).TrustsProject(ProjectDir).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task HasHookApproval_StateKeyPathDifferingOnlyInCase_MatchesOnlyWhenIgnoringCase(bool ignoreCase)
+    {
+        await File.WriteAllTextAsync(ConfigPath, $"""
+            [hooks.state.'{HooksPath.ToUpperInvariant()}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            """);
+
+        CodexConfig.Load(ConfigPath, ignoreCase).HasHookApproval(HooksPath, 0, 0).Should().Be(ignoreCase);
+    }
+
     [Fact]
     public async Task Load_InvalidToml_IsNotReadable()
     {
@@ -166,6 +238,9 @@ public sealed class CodexConfigTests : IDisposable
 
         CodexConfig.Load(ConfigPath).IsReadable.Should().BeFalse();
     }
+
+    private static string LowercaseAscii(string value) =>
+        string.Concat(value.Select(c => char.IsAsciiLetterUpper(c) ? (char)(c | 0x20) : c));
 
     private static void CreateRepository(string directory)
     {
