@@ -85,25 +85,6 @@ internal sealed class OpenCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
         .. new[] { HookScope.Project, HookScope.Global }
             .SelectMany(scope => RtkPluginFolderNames.Select(folder => Path.Combine(ConfigDirectory(hookDirectory, scope), folder)))
             .Where(Directory.Exists)
-            .SelectMany(EnumerateFilesSafely)
+            .SelectMany(folder => IntegratorHelpers.EnumerateSafely(folder, Directory.EnumerateFiles))
     ];
-
-    /// <summary>
-    /// <see cref="Directory.EnumerateFiles(string)"/>, tolerant of another tool's directory dtk cannot read: an
-    /// <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> yields no files rather than failing
-    /// integration. Mirrors <see cref="RtkHookCoexistence"/>'s "cannot tell → no rtk" rule. The listing is
-    /// materialized inside the try, since the lazy enumerator otherwise throws on first move outside it.
-    /// </summary>
-    /// <param name="folder">The directory to list.</param>
-    private static List<string> EnumerateFilesSafely(string folder)
-    {
-        try
-        {
-            return [.. Directory.EnumerateFiles(folder)];
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return [];
-        }
-    }
 }

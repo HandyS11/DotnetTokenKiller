@@ -372,6 +372,23 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_AntigravityInstall_IsRegisteredAndProbedWithTheToolCallShape()
+    {
+        var antigravity = new AntigravityIntegrator(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+        await antigravity.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([antigravity], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal("antigravity hook (project)", "antigravity hook probe (project)");
+        checks.Should().OnlyContain(c => c.Passed);
+        await _runner.Received(1).RunCapturedWithInputAsync(
+            _dtkOnPath!,
+            Arg.Any<IReadOnlyList<string>>(),
+            Arg.Is<string>(payload => payload.Contains("\"CommandLine\"", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RunAsync_CurrentOpenCodePlugin_PassesAndProbesWithTheOpenCodePayload()
     {
         await OpenCode.IntegrateAsync(_tempDir, force: false, default);

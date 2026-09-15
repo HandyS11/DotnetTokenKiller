@@ -36,7 +36,7 @@ public sealed class HookEntryPointTests
 
         exitCode.Should().Be(0, "a harness blocks the tool call on a non-zero hook exit");
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity>");
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class HookEntryPointTests
 
         exitCode.Should().Be(0);
         opened.Should().BeFalse("a person who types 'dtk hook claude' must not be left waiting on stdin");
-        error.ToString().Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode>");
+        error.ToString().Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity>");
     }
 
     [Fact]

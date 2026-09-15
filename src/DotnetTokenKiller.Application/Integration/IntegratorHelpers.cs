@@ -10,8 +10,12 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <param name="Matcher">The matcher value for the registered hook entry.</param>
 /// <param name="Command">The command dtk registers, and the value used to detect an existing registration.</param>
 /// <param name="TimeoutSeconds">A <c>timeout</c> written on the handler, or <see langword="null"/> to write none.</param>
+/// <param name="ContainerKey">
+/// The top-level property holding the event arrays: "hooks" for Claude Code, Gemini CLI and Codex CLI; a hook
+/// group name for Antigravity CLI.
+/// </param>
 internal sealed record HookRegistrationSpec(
-    string SettingsPath, string EventKey, string Matcher, string Command, int? TimeoutSeconds = null);
+    string SettingsPath, string EventKey, string Matcher, string Command, int? TimeoutSeconds = null, string ContainerKey = "hooks");
 
 internal static class IntegratorHelpers
 {
@@ -19,7 +23,8 @@ internal static class IntegratorHelpers
     private const string CommandKey = "command";
 
     /// <summary>
-    /// Serializer options for settings files merged by <see cref="MergeJsonSettingsAsync"/>.
+    /// Serializer options for settings files merged by
+    /// <see cref="MergeJsonSettingsAsync(string, string, string, JsonObject, string, IntegrationContext, CancellationToken)"/>.
     /// <see cref="JavaScriptEncoder.UnsafeRelaxedJsonEscaping"/> still escapes what JSON requires
     /// (<c>"</c> as <c>\"</c>, <c>\</c>, control characters), so the output stays valid JSON; it just
     /// stops also escaping <c>&lt; &gt; &amp; ' +</c> and non-ASCII characters to <c>\uXXXX</c>, which
@@ -142,6 +147,28 @@ internal static class IntegratorHelpers
     /// <param name="fileExists">Whether the target file already exists.</param>
     /// <param name="force">Whether the integration is running with the force flag.</param>
     internal static bool ShouldSkipWrite(bool fileExists, bool force) => fileExists && !force;
+
+    /// <summary>
+    /// Runs a directory listing, tolerant of another tool's directory dtk cannot read: an
+    /// <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> yields no entries rather than
+    /// failing integration. Mirrors <see cref="RtkHookCoexistence"/>'s "cannot tell → no rtk" rule. The listing is
+    /// materialized inside the try, since the lazy enumerator otherwise throws on first move outside it. Shared by
+    /// <c>OpenCodeIntegrator</c> (<see cref="Directory.EnumerateFiles(string)"/>, over a plugin folder) and
+    /// <c>AntigravityIntegrator</c> (<see cref="Directory.EnumerateDirectories(string)"/>, over a <c>plugins</c> folder).
+    /// </summary>
+    /// <param name="folder">The directory to list.</param>
+    /// <param name="enumerate">The listing to attempt, e.g. <see cref="Directory.EnumerateFiles(string)"/>.</param>
+    internal static List<string> EnumerateSafely(string folder, Func<string, IEnumerable<string>> enumerate)
+    {
+        try
+        {
+            return [.. enumerate(folder)];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
 
     /// <summary>
     /// Substring present in every generation of the Python hook dtk installed before <c>dtk hook</c>,
@@ -364,6 +391,7 @@ internal static class IntegratorHelpers
 
         return MergeJsonSettingsAsync(
             spec.SettingsPath,
+            spec.ContainerKey,
             spec.EventKey,
             new JsonObject { ["matcher"] = spec.Matcher, [HooksKey] = new JsonArray(handler) },
             spec.Command,
@@ -511,9 +539,15 @@ internal static class IntegratorHelpers
         await RemoveLegacyHookScriptAsync(scriptPath, context, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc cref="MergeJsonSettingsAsync(string, string, string, JsonObject, string, IntegrationContext, CancellationToken)"/>
+    /// <summary>Merges a hook entry into a JSON settings file under the default "hooks" container.</summary>
+    internal static Task<bool> MergeJsonSettingsAsync(
+        string path, string hookEventKey, JsonObject hookEntry, string hookCommand, IntegrationContext context, CancellationToken cancellationToken)
+        => MergeJsonSettingsAsync(path, HooksKey, hookEventKey, hookEntry, hookCommand, context, cancellationToken);
+
     /// <summary>
     /// Merges a hook entry into a JSON settings file under
-    /// <c>hooks[<paramref name="hookEventKey"/>]</c>.
+    /// <c><paramref name="containerKey"/>[<paramref name="hookEventKey"/>]</c>.
     /// Existing content is preserved; registration is detected by matching
     /// <paramref name="hookCommand"/> against each entry's <c>"command"</c> field. An entry is dtk's
     /// own when its command equals <paramref name="hookCommand"/> after removing every <c>"</c>
@@ -548,7 +582,11 @@ internal static class IntegratorHelpers
     /// is left untouched.
     /// </summary>
     /// <param name="path">Path to the settings.json file.</param>
-    /// <param name="hookEventKey">Key of the hook event array within the hooks object (e.g. "PreToolUse").</param>
+    /// <param name="containerKey">
+    /// The top-level property holding the event arrays: "hooks" for Claude Code, Gemini CLI and Codex CLI; a
+    /// hook group name for Antigravity CLI.
+    /// </param>
+    /// <param name="hookEventKey">Key of the hook event array within the container object (e.g. "PreToolUse").</param>
     /// <param name="hookEntry">The JSON object to append to the hook event array.</param>
     /// <param name="hookCommand">The command string used to detect whether the hook is already registered.</param>
     /// <param name="context">Integration context carrying the result accumulators.</param>
@@ -560,6 +598,7 @@ internal static class IntegratorHelpers
     /// <exception cref="InvalidOperationException">The settings file contains invalid JSON or an unexpected root type.</exception>
     internal static async Task<bool> MergeJsonSettingsAsync(
         string path,
+        string containerKey,
         string hookEventKey,
         JsonObject hookEntry,
         string hookCommand,
@@ -569,13 +608,13 @@ internal static class IntegratorHelpers
         var exists = File.Exists(path);
         var root = await ReadRootObjectAsync(path, exists, cancellationToken).ConfigureAwait(false);
 
-        root.TryGetPropertyValue(HooksKey, out var hooksNode);
+        root.TryGetPropertyValue(containerKey, out var hooksNode);
         var hooks = hooksNode switch
         {
             null => [],
             JsonObject hooksObj => hooksObj,
             _ => throw new InvalidOperationException(
-                $"The settings file '{path}' has a '{HooksKey}' property of unexpected type '{hooksNode.GetType().Name}'; expected a JSON object.")
+                $"The settings file '{path}' has a '{containerKey}' property of unexpected type '{hooksNode.GetType().Name}'; expected a JSON object.")
         };
 
         hooks.TryGetPropertyValue(hookEventKey, out var eventNode);
@@ -584,7 +623,7 @@ internal static class IntegratorHelpers
             null => [],
             JsonArray arr => arr,
             _ => throw new InvalidOperationException(
-                $"The settings file '{path}' has a '{HooksKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
+                $"The settings file '{path}' has a '{containerKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
         };
 
         var matches = FindEquivalentEntries(hookArray, hookCommand);
@@ -619,7 +658,7 @@ internal static class IntegratorHelpers
         }
 
         hooks[hookEventKey] = hookArray;
-        root[HooksKey] = hooks;
+        root[containerKey] = hooks;
 
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(

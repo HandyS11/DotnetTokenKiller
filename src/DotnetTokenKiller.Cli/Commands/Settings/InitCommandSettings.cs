@@ -9,7 +9,7 @@ internal sealed class InitCommandSettings : CommandSettings
     /// <summary>Gets the AI assistant provider to integrate with.</summary>
     [CommandArgument(0, "<provider>")]
     [Description(
-        "AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex, opencode, cursor, windsurf, aider, jetbrains)")]
+        "AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex, opencode, antigravity, cursor, windsurf, aider, jetbrains)")]
     public string Provider { get; init; } = string.Empty;
 
     /// <summary>Gets the target project directory (defaults to the current directory).</summary>
@@ -24,6 +24,6 @@ internal sealed class InitCommandSettings : CommandSettings
 
     /// <summary>Gets a value indicating whether to install into the user's home config instead of the project.</summary>
     [CommandOption("-g|--global")]
-    [Description("Install into the user's home config (claude, copilot-cli, gemini, codex, opencode, aider) instead of a project")]
+    [Description("Install into the user's home config (claude, copilot-cli, gemini, codex, opencode, antigravity, aider) instead of a project")]
     public bool Global { get; init; }
 }

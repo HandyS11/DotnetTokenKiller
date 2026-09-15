@@ -74,4 +74,14 @@ public sealed class HomePathsTests
         var expected = rooted ? Path.Combine(xdg, "opencode") : Path.Combine(home, ".config", "opencode");
         new HomePaths(home, name => name == "XDG_CONFIG_HOME" ? xdg : null).OpenCodeConfigDir.Should().Be(expected);
     }
+
+    [Fact]
+    public void AntigravityDirs_LiveUnderDotGemini()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "dtk-home-test");
+        var sut = new HomePaths(home);
+
+        sut.AntigravityConfigDir.Should().Be(Path.Combine(home, ".gemini", "config"));
+        sut.AntigravitySkillsDir.Should().Be(Path.Combine(home, ".gemini", "config", "skills"));
+    }
 }

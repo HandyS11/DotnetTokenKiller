@@ -147,7 +147,7 @@ public sealed class CompletionCommandTests
 
         await command.RunAsync(new CompletionCommandSettings { Shell = shell }, CancellationToken.None);
 
-        writer.ToString().Should().Contain("codex").And.Contain("opencode");
+        writer.ToString().Should().Contain("codex").And.Contain("opencode").And.Contain("antigravity");
     }
 
     [Fact]

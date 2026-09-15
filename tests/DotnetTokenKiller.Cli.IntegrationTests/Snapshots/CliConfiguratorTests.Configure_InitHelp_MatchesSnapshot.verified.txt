@@ -15,6 +15,8 @@ EXAMPLES:
     dtk init codex --global
     dtk init opencode
     dtk init opencode --global
+    dtk init antigravity
+    dtk init antigravity --global
     dtk init cursor
     dtk init windsurf
     dtk init aider
@@ -22,11 +24,11 @@ EXAMPLES:
 
 ARGUMENTS:
     <provider>    AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex,     
-                  opencode, cursor, windsurf, aider, jetbrains)                                     
+                  opencode, antigravity, cursor, windsurf, aider, jetbrains)                        
 
 OPTIONS:
     -h, --help      Prints help information                                                         
     -d, --dir       Target project root directory (default: current directory)                      
     -f, --force     Overwrite existing files instead of skipping them                               
     -g, --global    Install into the user's home config (claude, copilot-cli, gemini, codex,        
-                    opencode, aider) instead of a project                                           
+                    opencode, antigravity, aider) instead of a project                              

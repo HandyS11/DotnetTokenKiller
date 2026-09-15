@@ -95,6 +95,11 @@ the hook only after the user approves it under `/hooks`, keyed by a hash of the 
 would try the project directory first, before OpenCode's permission check. `OpenCodePluginTests` run it under Node;
 CI sets `DTK_NODE_REQUIRED=1`.
 
+`dtk init antigravity` writes the shared `AGENTS.md` section and skill plus a `"dtk"` hook group in `.agents/hooks.json`
+(`--global`: `~/.gemini/config/hooks.json`, with the section in `~/.gemini/GEMINI.md`). `dtk hook antigravity` replies
+`{"decision":"ask","overwrite":{"CommandLine":…}}` — never `allow`, which auto-approves. Hooks run through
+`sh -c`/`cmd /c` and a failing hook blocks the command, hence `|| exit 0`. Gate G results are in the PR that added it.
+
 ## Git Hooks
 
 The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.props` files. Install it once with:

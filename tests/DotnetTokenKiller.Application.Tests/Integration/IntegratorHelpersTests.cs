@@ -1682,6 +1682,54 @@ public sealed class IntegratorHelpersTests : IDisposable
         handler.ContainsKey("timeout").Should().BeFalse("existing providers' registrations must stay byte-identical");
     }
 
+    [Fact]
+    public async Task WriteHookRegistrationAsync_ContainerKey_MergesIntoThatGroupAndLeavesOtherGroups()
+    {
+        var path = Path.Combine(_tempDir, "hooks.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path,
+            """{"audit":{"PreToolUse":[{"matcher":"run_command","hooks":[{"type":"command","command":"audit.sh"}]}]}}""");
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "run_command", "dtk hook antigravity || exit 0", 10, ContainerKey: "dtk"),
+            context, CancellationToken.None);
+
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        root["audit"]!["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("audit.sh");
+        root["dtk"]!["PreToolUse"]![0]!["matcher"]!.GetValue<string>().Should().Be("run_command");
+        root["dtk"]!["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("dtk hook antigravity || exit 0");
+        root.AsObject().ContainsKey("hooks").Should().BeFalse();
+        context.Updated.Should().Equal(path);
+    }
+
+    [Fact]
+    public async Task WriteHookRegistrationAsync_ContainerKey_SecondRunIsUnchanged()
+    {
+        var path = Path.Combine(_tempDir, "hooks.json");
+        var spec = new HookRegistrationSpec(path, "PreToolUse", "run_command", "dtk hook antigravity || exit 0", 10, ContainerKey: "dtk");
+        await IntegratorHelpers.WriteHookRegistrationAsync(spec, new IntegrationContext(false), CancellationToken.None);
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(spec, context, CancellationToken.None);
+
+        context.Unchanged.Should().Equal(path);
+    }
+
+    [Fact]
+    public async Task MergeJsonSettingsAsync_ContainerOfTheWrongType_NamesTheContainerKey()
+    {
+        var path = Path.Combine(_tempDir, "hooks.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path, """{"dtk":[]}""");
+
+        var act = () => IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "run_command", "dtk hook antigravity", ContainerKey: "dtk"),
+            new IntegrationContext(false), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*'dtk' property of unexpected type*");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

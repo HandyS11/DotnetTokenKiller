@@ -11,12 +11,14 @@ namespace DotnetTokenKiller.Cli;
 /// and the service container, and it never loads config, tracking or the tokenizer. It reads stdin as raw
 /// bytes, because <see cref="Console.In"/> decodes with the OEM code page on Windows and would corrupt a
 /// non-ASCII command on the way back out. It always exits 0: Gemini CLI and Copilot CLI block the tool call
-/// when a hook exits non-zero, so every failure here means "no rewrite".
+/// when a hook exits non-zero, and Antigravity CLI blocks it on a non-zero exit or on stdout that is not
+/// valid JSON, so every failure here means "no rewrite".
 /// </remarks>
 internal static class HookEntryPoint
 {
     private const string Usage =
-        "usage: dtk hook <claude|gemini|copilot-cli|codex|opencode> (run by an AI agent's pre-tool hook; reads the payload on stdin)";
+        "usage: dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity> "
+        + "(run by an AI agent's pre-tool hook; reads the payload on stdin)";
 
     /// <summary>Handles <c>dtk hook</c> with the process's own standard streams.</summary>
     /// <param name="args">The arguments after <c>hook</c>.</param>

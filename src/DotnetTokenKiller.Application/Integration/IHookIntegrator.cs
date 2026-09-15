@@ -26,7 +26,10 @@ internal enum HookPayloadKind
     CodexCli = 3,
 
     /// <summary>dtk's own OpenCode plugin payload: <c>{"command": …}</c>.</summary>
-    OpenCode = 4
+    OpenCode = 4,
+
+    /// <summary>Google Antigravity CLI's <c>PreToolUse</c> payload.</summary>
+    AntigravityCli = 5
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>
@@ -35,6 +38,7 @@ internal enum HookPayloadKind
 /// <param name="RegistrationPath">
 /// The file that registers the hook with the host CLI — a merged <c>settings.json</c> for Claude Code and
 /// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI, a merged <c>.codex/hooks.json</c> for Codex CLI,
+/// a merged <c>.agents/hooks.json</c> (project) or <c>~/.gemini/config/hooks.json</c> (global) for Antigravity CLI,
 /// or — when <see cref="PluginArtifact"/> is non-null — the generated plugin file itself, for OpenCode.
 /// </param>
 /// <param name="Command">The exact command dtk registers, e.g. <c>dtk hook gemini; exit 0</c>.</param>

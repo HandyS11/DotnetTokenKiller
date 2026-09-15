@@ -42,6 +42,15 @@ internal sealed class HomePaths
     /// <summary>Gets the user-level Gemini CLI config directory (<c>~/.gemini</c>).</summary>
     internal string GeminiDir => Path.Combine(Home, ".gemini");
 
+    /// <summary>
+    /// Gets the user-level config directory Antigravity CLI, the Antigravity app and the IDE share for hooks
+    /// (<c>~/.gemini/config</c>).
+    /// </summary>
+    internal string AntigravityConfigDir => Path.Combine(GeminiDir, "config");
+
+    /// <summary>Gets the user-level skills directory Antigravity CLI reads.</summary>
+    internal string AntigravitySkillsDir => Path.Combine(AntigravityConfigDir, "skills");
+
     /// <summary>Gets the user-level Aider config file path (<c>~/.aider.conf.yml</c>).</summary>
     internal string AiderConfPath => Path.Combine(Home, ".aider.conf.yml");
 
