@@ -87,6 +87,20 @@ public sealed class OpenCodeIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_PluginFromAnOlderDtk_IsRefreshedWithoutForce()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(PluginPath)!);
+        var older = OpenCodePlugin.Body.Replace("5000", "4000", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(PluginPath, ArtifactStamping.Apply(older, StampStyle.SlashComment));
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UpdatedFiles.Should().Contain(PluginPath);
+        result.SkippedFiles.Should().NotContain(PluginPath);
+        (await File.ReadAllTextAsync(PluginPath)).Should().Be(ArtifactStamping.Apply(OpenCodePlugin.Body, StampStyle.SlashComment));
+    }
+
+    [Fact]
     public async Task IntegrateAsync_UnstampedPluginStillRunningDtk_IsSkippedWithoutForce()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(PluginPath)!);

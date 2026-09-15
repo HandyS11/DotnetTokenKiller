@@ -301,7 +301,8 @@ Then approve it in Codex under `/hooks`.
 ## OpenCode
 
 OpenCode runs plugins rather than hook commands, so dtk installs a small plugin that rewrites
-`dotnet build|test|restore|clean|format|list package` commands to use `dtk`. It targets OpenCode 1.x.
+`dotnet build|test|restore|clean|format|list package` commands to use `dtk`. It needs OpenCode 1.x, not the v2 beta,
+and was verified against OpenCode 1.18.31.
 
 ### Installation
 

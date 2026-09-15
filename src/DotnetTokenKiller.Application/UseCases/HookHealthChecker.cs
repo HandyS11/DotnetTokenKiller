@@ -251,7 +251,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         if (ArtifactStamping.IsAuthentic(normalized))
         {
             return new Registration(RegistrationKind.Stale,
-                $"stale — {path} was written by an older dtk. Run '{RemedyCommand(installation)}'");
+                $"stale — {path} was written by a different dtk version. Run '{RemedyCommand(installation)}'");
         }
 
         return normalized.Contains(OpenCodePlugin.InvocationSignature, StringComparison.Ordinal)

@@ -93,6 +93,18 @@ public class HookIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_OpenCode_NothingToRewrite_PrintsNothingAsync()
+    {
+        // A command dtk does not rewrite gets no reply at all, so the plugin leaves the command as OpenCode gave it.
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"command":"ls -la"}""", "hook", "opencode");
+
+        exitCode.Should().Be(0);
+        stdout.Should().BeEmpty();
+        stderr.Should().BeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Hook_DoesNotTouchTrackingOrConfigAsync()
     {
         // The hook fires on every shell tool call, so it must never open the tracking database or read config.

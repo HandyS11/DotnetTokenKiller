@@ -19,11 +19,13 @@ public sealed class OpenCodePluginTests : IDisposable
 
     public OpenCodePluginTests()
     {
-        Directory.CreateDirectory(_dir);
-        File.WriteAllText(Path.Combine(_dir, "dtk.js"), ArtifactStamping.Apply(OpenCodePlugin.Body, StampStyle.SlashComment));
-        File.WriteAllText(Path.Combine(_dir, "package.json"), """{"type":"module"}""");
+        // The layout OpenCode produces: the plugin under .opencode/plugins/, beside the package.json OpenCode writes with
+        // no "type", so Node loads the plugin as ESM by syntax detection (warning on stderr), as users get it.
+        var plugins = Directory.CreateDirectory(Path.Combine(_dir, ".opencode", "plugins")).FullName;
+        File.WriteAllText(Path.Combine(plugins, "dtk.js"), ArtifactStamping.Apply(OpenCodePlugin.Body, StampStyle.SlashComment));
+        File.WriteAllText(Path.Combine(_dir, ".opencode", "package.json"), """{"dependencies":{"@opencode-ai/plugin":"1.18.31"}}""");
         File.WriteAllText(Path.Combine(_dir, "driver.mjs"), """
-            import { DtkPlugin } from "./dtk.js";
+            import { DtkPlugin } from "./.opencode/plugins/dtk.js";
             const [tool, command] = process.argv.slice(2);
             const hooks = await DtkPlugin({});
             const output = { args: { command, workdir: "w" } };
