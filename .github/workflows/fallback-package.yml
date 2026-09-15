@@ -123,6 +123,8 @@ jobs:
       # Windows installs this package, so the whole suite runs against it there.
       - name: Run the integration suite against the installed binary
         if: runner.os == 'Windows'
+        env:
+          DTK_NODE_REQUIRED: '1'
         run: >-
           DTK_TEST_BINARY="$DTK_INSTALLED"
           dotnet test tests/DotnetTokenKiller.Cli.IntegrationTests -c Release --no-build --verbosity normal
