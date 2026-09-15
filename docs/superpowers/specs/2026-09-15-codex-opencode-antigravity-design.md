@@ -117,6 +117,11 @@ per-provider:
   `^[a-z0-9]+(-[a-z0-9]+)*$` rule and Codex's 64-character limit, and its frontmatter carries the
   `description` all three require.
 - Neither artifact mentions any harness's hook, because all three share them.
+- `WriteSectionBasedFileAsync` today reports an existing file `skipped` (or `updated` under `--force`) even when its
+  dtk section is already current, which would advise a pointless `--force` on every shared `AGENTS.md`. It now reports
+  such a file `unchanged` and writes nothing, force or not. This also changes the second-run report of the existing
+  `gemini`, `copilot-cli`, `jetbrains` and possibly `aider` providers, whose tests are updated to match. An existing
+  `AGENTS.md` without the dtk section still gets it only with `--force`, as `GEMINI.md` does today.
 - OpenCode also reads `.claude/skills/`, so a repository holding both Claude's and the shared skill
   makes OpenCode log `duplicate skill name` and keep one of two byte-identical files
   (`packages/opencode/src/skill/index.ts`). dtk does not special-case it.
@@ -333,8 +338,9 @@ research ran OpenCode against a fake model.
 
 ## 5. `doctor`
 
-- **Registration formats.** `HookInstallation` gains a format discriminator, and `LegacyScriptPath`
-  becomes optional (none of the new providers ever had a Python hook).
+- **Registration formats.** `HookInstallation` gains an optional `PluginArtifact` (the generated file that is the
+  registration; `null` for JSON), and `LegacyScriptPath` becomes optional (none of the new providers ever had a
+  Python hook).
   - *JSON* (Codex, Antigravity): the existing depth-first search for a string containing
     `dtk hook <provider>` works unchanged, across both schemas.
   - *Plugin* (OpenCode): **registered** when the stamp verifies and the body matches the current
@@ -403,9 +409,11 @@ Three pull requests, merged in order, each branched from `develop` after the pre
 not stacked, because this repository squash-merges only.
 
 1. **`codex`**, carrying the shared work: the `AGENTS.md` section constant, the `.agents` skill, the
-   `HookInstallation` format discriminator, `DiagnosticCheck`'s warning state, and `HomePaths`
-   additions. Gate C runs locally and is recorded in the PR.
-2. **`opencode`**: the generated plugin, `StampStyle.SlashComment`, and the plugin execution test.
+   `unchanged` report for current sections, the optional `LegacyScriptPath`, registration timeouts,
+   `DiagnosticCheck`'s warning state, file-based rtk reconciliation, and `HomePaths` additions. Gate C runs
+   locally and is recorded in the PR.
+2. **`opencode`**: the generated plugin, `HookInstallation.PluginArtifact`, `StampStyle.SlashComment`, and the
+   plugin execution test.
 3. **`antigravity`**: the container-key parameter on `MergeJsonSettingsAsync`, the group merge, and
    the guard. Gate G runs against the user's signed-in `agy` and is recorded in the PR.
 
