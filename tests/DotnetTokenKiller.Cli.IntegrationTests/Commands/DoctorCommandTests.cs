@@ -241,6 +241,46 @@ public sealed class DoctorCommandTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Render_WarningsOnly_ExitsZeroAndSaysSo()
+    {
+        var console = new TestConsole();
+
+        var exitCode = DoctorCommand.Render(console,
+        [
+            new DiagnosticCheck("codex hook (project)", true, "registered"),
+            DiagnosticCheck.Warning("codex hook approval (project)", "not yet approved")
+        ]);
+
+        exitCode.Should().Be(0, "a warning never fails doctor");
+        console.Output.Should().Contain("!  codex hook approval (project): not yet approved");
+        console.Output.Should().Contain("All checks passed, with 1 warning(s).");
+    }
+
+    [Fact]
+    public void Render_AFailureAndAWarning_ExitsOne()
+    {
+        var console = new TestConsole();
+
+        var exitCode = DoctorCommand.Render(console,
+        [
+            new DiagnosticCheck("dotnet SDK", false, "missing"),
+            DiagnosticCheck.Warning("codex hook approval (project)", "not yet approved")
+        ]);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("Some checks failed");
+    }
+
+    [Fact]
+    public void Warning_PassesAndIsMarked()
+    {
+        var check = DiagnosticCheck.Warning("n", "m");
+
+        check.Passed.Should().BeTrue();
+        check.IsWarning.Should().BeTrue();
+    }
+
     private (DoctorCommand command, TestConsole console) Create(int dotnetExitCode)
     {
         var console = new TestConsole();
