@@ -48,6 +48,10 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private IReadOnlyList<IHookIntegrator> Integrators => [new GeminiCliIntegrator(Home)];
 
+    private CodexIntegrator Codex => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
+    private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
+
     private async Task IntegrateAsync(HookScope scope = HookScope.Project)
     {
         var integrator = new GeminiCliIntegrator(Home);
@@ -417,6 +421,63 @@ public sealed class HookHealthCheckerTests : IDisposable
         var checks = await _sut.RunAsync([integrator], _tempDir, default);
 
         checks.Should().ContainSingle().Which.Name.Should().Be("hook integration");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexHookNotApprovedInAnUntrustedProject_WarnsTwiceWithoutFailing()
+    {
+        await Codex.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal(
+            "codex hook (project)", "codex hook probe (project)", "codex hook approval (project)", "codex project trust (project)");
+        checks.Should().OnlyContain(c => c.Passed);
+        checks.Skip(2).Should().OnlyContain(c => c.IsWarning);
+        checks[2].Message.Should().Contain("/hooks");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexHookApprovedInATrustedProject_HasNoWarnings()
+    {
+        await Codex.IntegrateAsync(_tempDir, force: false, default);
+        var hooksPath = Codex.DescribeHooks(_tempDir, HookScope.Project)[0].RegistrationPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(CodexConfigPath)!);
+        await File.WriteAllTextAsync(CodexConfigPath, $"""
+            [projects.'{_tempDir}']
+            trust_level = "trusted"
+
+            [hooks.state.'{hooksPath}:pre_tool_use:0:0']
+            trusted_hash = "sha256:abc"
+            """);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Should().HaveCount(4).And.OnlyContain(c => c.Passed && !c.IsWarning);
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexGlobalHook_ChecksApprovalButNotProjectTrust()
+    {
+        await Codex.IntegrateGlobalAsync(force: false, default);
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal(
+            "codex hook (global)", "codex hook probe (global)", "codex hook approval (global)");
+    }
+
+    [Fact]
+    public async Task RunAsync_CodexConfigUnreadable_WarnsThatApprovalIsUnknown()
+    {
+        await Codex.IntegrateGlobalAsync(force: false, default);
+        await File.WriteAllTextAsync(CodexConfigPath, "[hooks\nnot toml");
+
+        var checks = await _sut.RunAsync([Codex], _tempDir, default);
+
+        var approval = checks.Single(c => c.Name == "codex hook approval (global)");
+        approval.IsWarning.Should().BeTrue();
+        approval.Message.Should().Contain(CodexConfigPath).And.Contain("could not be read");
     }
 
     /// <summary>

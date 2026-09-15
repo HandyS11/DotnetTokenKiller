@@ -20,7 +20,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
 internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IHookApprovalInspector
 {
     /// <summary>Printed when this run wrote the hook, which Codex will not run until the user approves it.</summary>
     internal const string ApprovalNote =
@@ -51,6 +51,42 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
                 LegacyScriptPath: null,
                 HookPayloadKind.CodexCli)
         ];
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<HookApprovalFinding> InspectApproval(HookInstallation installation, string projectDirectory)
+    {
+        var configPath = Path.Combine(home.CodexDir, "config.toml");
+        var config = CodexConfig.Load(configPath);
+
+        if (!config.IsReadable)
+        {
+            return
+            [
+                new HookApprovalFinding("hook approval", false,
+                    $"{configPath} could not be read, so dtk cannot tell whether Codex will run this hook")
+            ];
+        }
+
+        var findings = new List<HookApprovalFinding>
+        {
+            config.HasHookApproval(installation.RegistrationPath)
+                ? new HookApprovalFinding("hook approval", true,
+                    $"approval recorded in {configPath} (dtk cannot tell whether it matches the current definition)")
+                : new HookApprovalFinding("hook approval", false,
+                    "not yet approved — Codex skips this hook until you review it under /hooks")
+        };
+
+        if (installation.Scope == HookScope.Project)
+        {
+            var codexDir = Path.GetDirectoryName(installation.RegistrationPath);
+            findings.Add(config.TrustsProject(projectDirectory)
+                ? new HookApprovalFinding("project trust", true, $"{projectDirectory} is a trusted project")
+                : new HookApprovalFinding("project trust", false,
+                    $"Codex reads {codexDir} only in trusted projects — trust this project when Codex asks"));
+        }
+
+        return findings;
     }
 
     /// <inheritdoc/>
