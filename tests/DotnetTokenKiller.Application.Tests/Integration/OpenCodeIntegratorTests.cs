@@ -46,8 +46,12 @@ public sealed class OpenCodeIntegratorTests : IDisposable
     {
         const string body = OpenCodePlugin.Body;
 
-        body.Should().Contain("import { spawn } from \"node:child_process\";");
-        body.Should().Contain(OpenCodePlugin.InvocationSignature);
+        body.Split('\n').Where(line => line.StartsWith("import ", StringComparison.Ordinal)).Should().Equal(
+            "import { spawn } from \"node:child_process\";",
+            "import { accessSync, constants, statSync } from \"node:fs\";",
+            "import { delimiter, isAbsolute, join } from \"node:path\";");
+        body.Should().Contain("spawn(dtk, " + OpenCodePlugin.InvocationSignature, "dtk runs by the absolute path found on PATH")
+            .And.NotContain("spawn(\"dtk\"", "given a bare name, spawn on Windows searches the current directory first");
         body.Should().Contain("input?.tool !== \"bash\"").And.Contain("command.includes(\"dotnet\")");
         body.Should().Contain("output.args.command = rewritten").And.NotContain("output.args =");
         body.Should().NotContain("$`").And.NotContain("which").And.NotContain("shell: true");

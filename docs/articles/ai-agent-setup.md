@@ -327,8 +327,9 @@ Re-running the command refreshes `dtk.js` if dtk wrote it and leaves an edited c
 ### How It Works
 
 Before OpenCode runs a `bash` command that mentions `dotnet`, the plugin passes it to `dtk hook opencode` and runs
-the `dtk dotnet …` command it gets back. Other commands never start `dtk`. If `dtk` is missing, fails or takes longer
-than five seconds, the original command runs unchanged. OpenCode checks its permission rules against the rewritten
+the `dtk dotnet …` command it gets back. Other commands never start `dtk`. The plugin looks for `dtk` on `PATH` only,
+never in the project directory. If `dtk` is not on `PATH`, fails or takes longer than five seconds, the original command
+runs unchanged. OpenCode checks its permission rules against the rewritten
 command.
 
 ## Cursor

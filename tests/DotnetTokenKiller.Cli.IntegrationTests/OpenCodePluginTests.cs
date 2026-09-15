@@ -65,6 +65,20 @@ public sealed class OpenCodePluginTests : IDisposable
         result["command"]!.GetValue<string>().Should().Be("dotnet build");
     }
 
+    [NodeFact]
+    public async Task DtkOnlyInTheWorkingDirectory_IsNeverRunAsync()
+    {
+        // OpenCode's working directory is the project, and the plugin runs before OpenCode's permission check, so a
+        // dtk committed to a repository must not run. Given a bare name, spawn on Windows searches the current
+        // directory before PATH, and on Unix an empty PATH entry means the current directory; the plugin must look
+        // on PATH alone. The working directory here holds a runnable dtk that would rewrite the command.
+        var empty = Directory.CreateDirectory(Path.Combine(_dir, "empty")).FullName;
+
+        var result = await RunAsync("bash", "dotnet build", string.Join(Path.PathSeparator, empty, string.Empty), RealDtkDirectory);
+
+        result["command"]!.GetValue<string>().Should().Be("dotnet build");
+    }
+
     [NodeUnixFact]
     public async Task OtherToolOrNoDotnet_NeverStartsDtkAsync()
     {
@@ -109,20 +123,23 @@ public sealed class OpenCodePluginTests : IDisposable
         return bin;
     }
 
-    private async Task<JsonNode> RunAsync(string tool, string command, string pathDirectory)
+    private Task<JsonNode> RunAsync(string tool, string command, string pathDirectory) =>
+        RunAsync(tool, command, pathDirectory, _dir);
+
+    private async Task<JsonNode> RunAsync(string tool, string command, string pathDirectory, string workingDirectory)
     {
         var node = ExecutableSearch.FindOnProcessPath("node")
                    ?? throw new InvalidOperationException("node is not on PATH");
         var psi = new ProcessStartInfo(node)
         {
-            WorkingDirectory = _dir,
+            WorkingDirectory = workingDirectory,
             // Only the dtk under test is reachable, plus the POSIX tools a fake dtk script uses. Node's own
             // directory is deliberately left out: an installed dtk sharing it would defeat
             // DtkMissingFromPath. The apphost finds the .NET runtime through DOTNET_ROOT or the install
             // location, never PATH, and the child inherits this process's environment apart from PATH.
             Environment = { ["PATH"] = string.Join(Path.PathSeparator, pathDirectory, "/bin", "/usr/bin") }
         };
-        psi.ArgumentList.Add("driver.mjs");
+        psi.ArgumentList.Add(Path.Combine(_dir, "driver.mjs"));
         psi.ArgumentList.Add(tool);
         psi.ArgumentList.Add(command);
 

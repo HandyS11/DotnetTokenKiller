@@ -91,7 +91,9 @@ the hook only after the user approves it under `/hooks`, keyed by a hash of the 
 `dtk init opencode` writes the same `AGENTS.md` section and skill plus a generated, stamped `.opencode/plugins/dtk.js`
 (`--global`: `$XDG_CONFIG_HOME/opencode` or `~/.config/opencode`). OpenCode has no hook commands: the plugin's
 `tool.execute.before` spawns `dtk hook opencode` (no shell) for `bash` commands containing `dotnet` and mutates
-`output.args.command` in place. `OpenCodePluginTests` run it under Node; CI sets `DTK_NODE_REQUIRED=1`.
+`output.args.command` in place. It spawns the absolute path it finds on `PATH`, never a bare `dtk`: on Windows that
+would try the project directory first, before OpenCode's permission check. `OpenCodePluginTests` run it under Node;
+CI sets `DTK_NODE_REQUIRED=1`.
 
 ## Git Hooks
 
