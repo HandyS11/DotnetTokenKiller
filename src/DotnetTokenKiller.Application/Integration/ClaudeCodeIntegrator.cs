@@ -87,7 +87,7 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         // dtk merges settings.json only; Claude Code also runs the hooks in settings.local.json beside it.
         await IntegratorHelpers.RetireLegacyHookScriptAsync(
-            hook.LegacyScriptPath,
+            hook.LegacyScriptPath!,
             replacedLegacy,
             [hook.RegistrationPath, Path.Combine(Path.GetDirectoryName(hook.RegistrationPath)!, LocalSettingsFileName)],
             context,

@@ -70,7 +70,8 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
                 {
                     var registration = await ReadRegistrationAsync(installation, cancellationToken).ConfigureAwait(false);
-                    if (registration.Kind == RegistrationKind.Absent && !File.Exists(installation.LegacyScriptPath))
+                    if (registration.Kind == RegistrationKind.Absent
+                        && (installation.LegacyScriptPath is null || !File.Exists(installation.LegacyScriptPath)))
                     {
                         continue;
                     }

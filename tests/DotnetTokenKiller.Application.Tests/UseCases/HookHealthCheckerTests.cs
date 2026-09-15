@@ -173,7 +173,7 @@ public sealed class HookHealthCheckerTests : IDisposable
         await File.WriteAllTextAsync(installation.RegistrationPath, """
             {"hooks":{"BeforeTool":[{"matcher":"run_shell_command","hooks":[{"type":"command","command":"python3 \"$GEMINI_PROJECT_DIR\"/.gemini/hooks/dotnet-to-dtk.py"}]}]}}
             """);
-        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath);
+        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath!);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
@@ -199,7 +199,7 @@ public sealed class HookHealthCheckerTests : IDisposable
     {
         var scope = isGlobal ? HookScope.Global : HookScope.Project;
         var installation = Integrators[0].DescribeHooks(_tempDir, scope)[0];
-        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath);
+        LegacyHookFixtures.WriteStampedScript(installation.LegacyScriptPath!);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
@@ -214,7 +214,7 @@ public sealed class HookHealthCheckerTests : IDisposable
         await IntegrateAsync();
         var installation = Integrators[0].DescribeHooks(_tempDir, HookScope.Project)[0];
         await File.WriteAllTextAsync(installation.RegistrationPath, "{}");
-        LegacyHookFixtures.WriteEditedScript(installation.LegacyScriptPath);
+        LegacyHookFixtures.WriteEditedScript(installation.LegacyScriptPath!);
 
         var checks = await _sut.RunAsync(Integrators, _tempDir, default);
 
@@ -406,5 +406,27 @@ public sealed class HookHealthCheckerTests : IDisposable
         var probe = checks.First(c => c.Name == "gemini hook probe (project)");
         probe.Passed.Should().BeFalse();
         probe.Message.Should().Contain($"could not run {_dtkOnPath}").And.Contain("No such file or directory");
+    }
+
+    [Fact]
+    public async Task RunAsync_InstallationWithoutALegacyScriptAndNoRegistration_IsNotReported()
+    {
+        var integrator = new FixedHooks(new HookInstallation(
+            "codex", HookScope.Project, Path.Combine(_tempDir, ".codex", "hooks.json"), "dtk hook codex", null, HookPayloadKind.ClaudeCode));
+
+        var checks = await _sut.RunAsync([integrator], _tempDir, default);
+
+        checks.Should().ContainSingle().Which.Name.Should().Be("hook integration");
+    }
+
+    /// <summary>
+    /// An integrator describing fixed installations. A hand-written fake, because NSubstitute cannot proxy the internal
+    /// <see cref="IHookIntegrator"/> (the Application assembly grants no internals to DynamicProxyGenAssembly2).
+    /// </summary>
+    /// <param name="installations">The installations to describe, filtered by scope.</param>
+    private sealed class FixedHooks(params HookInstallation[] installations) : IHookIntegrator
+    {
+        public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
+            [.. installations.Where(installation => installation.Scope == scope)];
     }
 }

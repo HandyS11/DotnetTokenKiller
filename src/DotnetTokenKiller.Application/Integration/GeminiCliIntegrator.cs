@@ -83,7 +83,7 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
             context, cancellationToken).ConfigureAwait(false);
 
         await IntegratorHelpers.RetireLegacyHookScriptAsync(
-            hook.LegacyScriptPath, replacedLegacy, [hook.RegistrationPath], context, cancellationToken).ConfigureAwait(false);
+            hook.LegacyScriptPath!, replacedLegacy, [hook.RegistrationPath], context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }

@@ -31,14 +31,17 @@ internal enum HookPayloadKind
 /// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI.
 /// </param>
 /// <param name="Command">The exact command dtk registers, e.g. <c>dtk hook gemini; exit 0</c>.</param>
-/// <param name="LegacyScriptPath">Where dtk installed the Python hook this registration replaces.</param>
+/// <param name="LegacyScriptPath">
+/// Where dtk installed the Python hook this registration replaces, or <see langword="null"/> for a provider that
+/// never had one.
+/// </param>
 /// <param name="PayloadKind">Payload shape to use when probing this hook.</param>
 internal sealed record HookInstallation(
     string ProviderName,
     HookScope Scope,
     string RegistrationPath,
     string Command,
-    string LegacyScriptPath,
+    string? LegacyScriptPath,
     HookPayloadKind PayloadKind);
 
 /// <summary>

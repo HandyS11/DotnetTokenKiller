@@ -1608,6 +1608,33 @@ public sealed class IntegratorHelpersTests : IDisposable
         Directory.EnumerateFiles(_tempDir).Should().Equal(path);
     }
 
+    [Fact]
+    public async Task WriteHookRegistrationAsync_WithTimeout_WritesItOnTheHandler()
+    {
+        var path = Path.Combine(_tempDir, "hooks.json");
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook codex", TimeoutSeconds: 10), context, CancellationToken.None);
+
+        var handler = JsonNode.Parse(await File.ReadAllTextAsync(path))!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!;
+        handler["command"]!.GetValue<string>().Should().Be("dtk hook codex");
+        handler["timeout"]!.GetValue<int>().Should().Be(10);
+    }
+
+    [Fact]
+    public async Task WriteHookRegistrationAsync_WithoutTimeout_WritesNoTimeoutKey()
+    {
+        var path = Path.Combine(_tempDir, "settings.json");
+        var context = new IntegrationContext(false);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "Bash", "dtk hook claude"), context, CancellationToken.None);
+
+        var handler = JsonNode.Parse(await File.ReadAllTextAsync(path))!["hooks"]!["PreToolUse"]![0]!["hooks"]![0]!.AsObject();
+        handler.ContainsKey("timeout").Should().BeFalse("existing providers' registrations must stay byte-identical");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

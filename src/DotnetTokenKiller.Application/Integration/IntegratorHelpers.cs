@@ -9,7 +9,9 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <param name="EventKey">Key of the hook event array within the hooks object (e.g. "PreToolUse").</param>
 /// <param name="Matcher">The matcher value for the registered hook entry.</param>
 /// <param name="Command">The command dtk registers, and the value used to detect an existing registration.</param>
-internal sealed record HookRegistrationSpec(string SettingsPath, string EventKey, string Matcher, string Command);
+/// <param name="TimeoutSeconds">A <c>timeout</c> written on the handler, or <see langword="null"/> to write none.</param>
+internal sealed record HookRegistrationSpec(
+    string SettingsPath, string EventKey, string Matcher, string Command, int? TimeoutSeconds = null);
 
 internal static class IntegratorHelpers
 {
@@ -319,18 +321,22 @@ internal static class IntegratorHelpers
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Whether the merge replaced or removed an entry running <see cref="LegacyHookScriptName"/>.</returns>
     internal static Task<bool> WriteHookRegistrationAsync(
-        HookRegistrationSpec spec, IntegrationContext context, CancellationToken cancellationToken) =>
-        MergeJsonSettingsAsync(
+        HookRegistrationSpec spec, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        var handler = new JsonObject { ["type"] = "command", [CommandKey] = spec.Command };
+        if (spec.TimeoutSeconds is { } timeout)
+        {
+            handler["timeout"] = timeout;
+        }
+
+        return MergeJsonSettingsAsync(
             spec.SettingsPath,
             spec.EventKey,
-            new JsonObject
-            {
-                ["matcher"] = spec.Matcher,
-                [HooksKey] = new JsonArray(new JsonObject { ["type"] = "command", [CommandKey] = spec.Command })
-            },
+            new JsonObject { ["matcher"] = spec.Matcher, [HooksKey] = new JsonArray(handler) },
             spec.Command,
             context,
             cancellationToken);
+    }
 
     /// <summary>
     /// Deletes the Python hook script dtk installed before <c>dtk hook</c>, when dtk can prove it wrote it.
