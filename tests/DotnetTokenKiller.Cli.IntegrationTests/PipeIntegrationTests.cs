@@ -66,6 +66,20 @@ public class PipeIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Pipe_UnknownSubcommand_WithStdinLargerThanThePipeBuffer_FailsWithKnownListAsync()
+    {
+        // dtk rejects the subcommand without reading stdin, closing the pipe under the test's write. A small payload
+        // usually fits in the pipe buffer and wins that race; one larger than any pipe buffer loses it on every OS,
+        // as the small one sometimes did on Windows.
+        var payload = new string('x', 1024 * 1024);
+
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(payload, "pipe", "publish");
+
+        exitCode.Should().Be(1);
+        output.Should().Contain("build").And.Contain("list package");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Pipe_MultiTokenSubcommand_IsAcceptedAsync()
     {
         var (_, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithStdinAsync(
