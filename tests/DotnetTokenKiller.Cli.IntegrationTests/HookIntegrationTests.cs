@@ -70,6 +70,18 @@ public class HookIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_Codex_NothingToRewrite_PrintsNothingAsync()
+    {
+        // A command dtk does not rewrite gets no reply at all, leaving the call to Codex's own approval policy.
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"tool_name":"Bash","tool_input":{"command":"ls"}}""", "hook", "codex");
+
+        exitCode.Should().Be(0);
+        stdout.Should().BeEmpty();
+        stderr.Should().BeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Hook_DoesNotTouchTrackingOrConfigAsync()
     {
         // The hook fires on every shell tool call, so it must never open the tracking database or read config.

@@ -122,12 +122,25 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
             return [];
         }
 
-        return
-        [
-            .. inspector.InspectApproval(installation, projectDirectory).Select(finding => finding.Satisfied
-                ? new DiagnosticCheck(CheckName(installation, finding.Label), true, finding.Message)
-                : DiagnosticCheck.Warning(CheckName(installation, finding.Label), finding.Message))
-        ];
+        // Doctor must never crash: whatever reading the harness's own config throws becomes one warning.
+        try
+        {
+            return
+            [
+                .. inspector.InspectApproval(installation, projectDirectory).Select(finding => finding.Satisfied
+                    ? new DiagnosticCheck(CheckName(installation, finding.Label), true, finding.Message)
+                    : DiagnosticCheck.Warning(CheckName(installation, finding.Label), finding.Message))
+            ];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return
+            [
+                DiagnosticCheck.Warning(
+                    CheckName(installation, "hook approval"),
+                    $"dtk could not check whether {installation.ProviderName} will run this hook: {ex.Message}")
+            ];
+        }
     }
 
     /// <summary>What the registration file says about this hook.</summary>

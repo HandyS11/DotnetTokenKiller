@@ -561,6 +561,39 @@ public sealed class HookHealthCheckerTests : IDisposable
         approval.Message.Should().Contain(CodexConfigPath).And.Contain("could not be read");
     }
 
+    [Fact]
+    public async Task RunAsync_ApprovalInspectorThrows_WarnsOnceNamingTheProviderInsteadOfFailing()
+    {
+        var hooksPath = Path.Combine(_tempDir, ".codex", "hooks.json");
+        var integrator = new ThrowingApprovalInspector(new HookInstallation(
+            "codex", HookScope.Project, hooksPath, "dtk hook codex", null, HookPayloadKind.CodexCli));
+        Directory.CreateDirectory(Path.GetDirectoryName(hooksPath)!);
+        await File.WriteAllTextAsync(hooksPath,
+            """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"command":"dtk hook codex"}]}]}}""");
+
+        var checks = await _sut.RunAsync([integrator], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal(
+            "codex hook (project)", "codex hook probe (project)", "codex hook approval (project)");
+        checks[2].IsWarning.Should().BeTrue("doctor reports what it could not inspect rather than crashing");
+        checks[2].Message.Should().Contain("codex").And.Contain("inspector exploded");
+    }
+
+    /// <summary>
+    /// A hook integrator whose approval inspection throws. Hand-written, as <see cref="FixedHooks"/> is.
+    /// </summary>
+    /// <param name="described">The installation to describe in its own scope.</param>
+    private sealed class ThrowingApprovalInspector(HookInstallation described)
+        : IHookIntegrator, IHookApprovalInspector
+    {
+        public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
+            scope == described.Scope ? [described] : [];
+
+        public IReadOnlyList<HookApprovalFinding> InspectApproval(
+            HookInstallation installation, string projectDirectory) =>
+            throw new InvalidOperationException("inspector exploded");
+    }
+
     /// <summary>
     /// An integrator describing fixed installations. A hand-written fake, because NSubstitute cannot proxy the internal
     /// <see cref="IHookIntegrator"/> (the Application assembly grants no internals to DynamicProxyGenAssembly2).
