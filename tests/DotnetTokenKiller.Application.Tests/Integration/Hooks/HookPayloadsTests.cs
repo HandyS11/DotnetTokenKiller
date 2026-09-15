@@ -250,6 +250,11 @@ public sealed class HookPayloadsTests
     [InlineData("[]")]
     [InlineData("{")]
     [InlineData("""{"toolCall":{"name":"run_command","args":{"CommandLine":"a","CommandLine":"b"}}}""")]
+    [InlineData("""{"toolCall":{"name":"run_command","args":{"CommandLine":""}}}""")]
+    [InlineData("""{"toolCall":{"name":"run_command","args":{"CommandLine":7}}}""")]
+    [InlineData("""{"toolCall":{"name":"run_command","args":"x"}}""")]
+    [InlineData("""{"toolCall":{"name":"run_command","args":[]}}""")]
+    [InlineData("""{"toolCall":{"name":42,"args":{"CommandLine":"dotnet build"}}}""")]
     public void Antigravity_NothingToRewrite_PrintsTheNeutralReply(string payload)
     {
         Reply(HookPayloadKind.AntigravityCli, payload).Should().BeNull();

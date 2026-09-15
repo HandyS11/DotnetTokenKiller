@@ -16,7 +16,8 @@ namespace DotnetTokenKiller.Application.Integration;
 ///   </description></item>
 /// </list>
 /// The global install writes the section into <c>~/.gemini/GEMINI.md</c>, the same file and text as
-/// <c>dtk init gemini --global</c>, which Antigravity CLI reads as a global rule.
+/// <c>dtk init gemini --global</c>: gate G9 verified Antigravity CLI loads <c>~/.gemini/GEMINI.md</c> as a
+/// user-global rule.
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
 internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths home)
@@ -24,6 +25,14 @@ internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths ho
 {
     /// <summary>Printed when this run wrote a project hook, which Antigravity loads only in trusted workspaces.</summary>
     internal const string WorkspaceTrustNote = "Antigravity loads .agents/hooks.json only in workspaces you have trusted.";
+
+    /// <summary>
+    /// Printed whenever this run created or updated the hook registration file, in either scope: Antigravity matches
+    /// permission rules against the rewritten command, so an allow rule written for <c>dotnet</c> does not cover it.
+    /// </summary>
+    internal const string PermissionRulesNote =
+        "Antigravity checks permission rules against the rewritten command: where you allow command(dotnet), also "
+        + "allow command(dtk), or rewritten commands will prompt (and be denied under agy -p).";
 
     /// <summary>The hook group dtk owns inside a shared <c>hooks.json</c>.</summary>
     private const string GroupName = "dtk";
@@ -81,27 +90,38 @@ internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths ho
                 hook.RegistrationPath, "PreToolUse", "run_command", hook.Command, HookTimeoutSeconds, ContainerKey: GroupName),
             context, cancellationToken).ConfigureAwait(false);
 
-        if (scope == HookScope.Project
-            && (context.Created.Contains(hook.RegistrationPath) || context.Updated.Contains(hook.RegistrationPath)))
+        if (context.Created.Contains(hook.RegistrationPath) || context.Updated.Contains(hook.RegistrationPath))
         {
-            context.Notes.Add(WorkspaceTrustNote);
+            if (scope == HookScope.Project)
+            {
+                context.Notes.Add(WorkspaceTrustNote);
+            }
+
+            context.Notes.Add(PermissionRulesNote);
         }
 
-        var rtkOutcome = await rtk.ReconcileFilesAsync(RtkCandidates(hookDirectory), cancellationToken).ConfigureAwait(false);
+        var rtkOutcome = await rtk.ReconcileFilesAsync(RtkCandidates(hook.RegistrationPath), cancellationToken).ConfigureAwait(false);
         rtkOutcome.ApplyTo(context);
 
         return context.ToResult();
     }
 
     /// <summary>Where rtk registers itself for Antigravity: a hooks file, or a plugin's hooks file, in either scope.</summary>
-    /// <param name="hookDirectory">The project root.</param>
-    private List<string> RtkCandidates(string hookDirectory)
+    /// <param name="registrationPath">
+    /// This run's own hook registration path; its directory is the current scope's config directory (a trusted
+    /// workspace's <c>.agents</c>, or <c>~/.gemini/config</c>). Combined with <see cref="HomePaths.AntigravityConfigDir"/>
+    /// and deduplicated, so a project run also sees an rtk hook left in the global config, the way
+    /// <see cref="CodexIntegrator"/> does for <c>.codex/hooks.json</c>, and a global run no longer probes
+    /// <c>~/.agents/hooks.json</c>, which Antigravity never reads.
+    /// </param>
+    private List<string> RtkCandidates(string registrationPath)
     {
-        var configDirectories = new[] { Path.Combine(hookDirectory, ".agents"), home.AntigravityConfigDir };
+        string[] configDirectories =
+            [.. new[] { Path.GetDirectoryName(registrationPath)!, home.AntigravityConfigDir }.Distinct(StringComparer.Ordinal)];
         var plugins = configDirectories
             .Select(directory => Path.Combine(directory, "plugins"))
             .Where(Directory.Exists)
-            .SelectMany(directory => Directory.EnumerateDirectories(directory))
+            .SelectMany(directory => IntegratorHelpers.EnumerateSafely(directory, Directory.EnumerateDirectories))
             .Select(plugin => Path.Combine(plugin, "hooks.json"));
 
         return [.. configDirectories.Select(directory => Path.Combine(directory, "hooks.json")), .. plugins];

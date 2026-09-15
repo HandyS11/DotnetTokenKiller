@@ -38,6 +38,7 @@ internal enum HookPayloadKind
 /// <param name="RegistrationPath">
 /// The file that registers the hook with the host CLI — a merged <c>settings.json</c> for Claude Code and
 /// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI, a merged <c>.codex/hooks.json</c> for Codex CLI,
+/// a merged <c>.agents/hooks.json</c> (project) or <c>~/.gemini/config/hooks.json</c> (global) for Antigravity CLI,
 /// or — when <see cref="PluginArtifact"/> is non-null — the generated plugin file itself, for OpenCode.
 /// </param>
 /// <param name="Command">The exact command dtk registers, e.g. <c>dtk hook gemini; exit 0</c>.</param>

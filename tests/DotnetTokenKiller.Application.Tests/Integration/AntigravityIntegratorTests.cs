@@ -35,7 +35,7 @@ public sealed class AntigravityIntegratorTests : IDisposable
         var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
 
         result.CreatedFiles.Should().Equal(AgentsPath, SkillPath, HooksPath);
-        result.Notes.Should().Equal(AntigravityIntegrator.WorkspaceTrustNote);
+        result.Notes.Should().Equal(AntigravityIntegrator.WorkspaceTrustNote, AntigravityIntegrator.PermissionRulesNote);
 
         var group = JsonNode.Parse(await File.ReadAllTextAsync(HooksPath))!["dtk"]!["PreToolUse"]!.AsArray().Should().ContainSingle().Subject!;
         group["matcher"]!.GetValue<string>().Should().Be("run_command");
@@ -56,6 +56,31 @@ public sealed class AntigravityIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_SecondRun_WithForce_ReportsEverythingUnchanged()
+    {
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, true, default);
+
+        result.CreatedFiles.Should().BeEmpty();
+        result.UpdatedFiles.Should().BeEmpty();
+        result.SkippedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().Equal(AgentsPath, SkillPath, HooksPath);
+        result.Notes.Should().BeEmpty("an unchanged hook needs no fresh permission-rules or trust reminder");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_MalformedHooksJson_Throws()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(HooksPath)!);
+        await File.WriteAllTextAsync(HooksPath, "{ not json");
+
+        var act = () => CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task IntegrateGlobalAsync_SharesGeminisSectionAndWritesTheGlobalHookAndSkill()
     {
         await new GeminiCliIntegrator(Home).IntegrateGlobalAsync(false, default);
@@ -69,7 +94,7 @@ public sealed class AntigravityIntegratorTests : IDisposable
         result.CreatedFiles.Should().Equal(
             SharedInstructionArtifacts.SkillPath(Home.AntigravitySkillsDir),
             Path.Combine(HomeDir, ".gemini", "config", "hooks.json"));
-        result.Notes.Should().BeEmpty("workspace trust applies to project hooks only");
+        result.Notes.Should().Equal([AntigravityIntegrator.PermissionRulesNote], "workspace trust applies to project hooks only");
     }
 
     [Fact]
@@ -81,6 +106,19 @@ public sealed class AntigravityIntegratorTests : IDisposable
             """{"rtk-rewrite":{"PreToolUse":[{"matcher":"run_command","hooks":[{"type":"command","command":"rtk hook antigravity"}]}]}}""");
 
         var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.CreatedFiles.Should().Contain(RtkConfigPath);
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_RtkAntigravityPlugin_ExcludesDotnetInRtkConfig()
+    {
+        var rtkHooks = Path.Combine(HomeDir, ".gemini", "config", "plugins", "rtk", "hooks.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(rtkHooks)!);
+        await File.WriteAllTextAsync(rtkHooks,
+            """{"rtk-rewrite":{"PreToolUse":[{"matcher":"run_command","hooks":[{"type":"command","command":"rtk hook antigravity"}]}]}}""");
+
+        var result = await CreateSut().IntegrateGlobalAsync(false, default);
 
         result.CreatedFiles.Should().Contain(RtkConfigPath);
     }

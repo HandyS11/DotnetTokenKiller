@@ -149,6 +149,28 @@ internal static class IntegratorHelpers
     internal static bool ShouldSkipWrite(bool fileExists, bool force) => fileExists && !force;
 
     /// <summary>
+    /// Runs a directory listing, tolerant of another tool's directory dtk cannot read: an
+    /// <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> yields no entries rather than
+    /// failing integration. Mirrors <see cref="RtkHookCoexistence"/>'s "cannot tell → no rtk" rule. The listing is
+    /// materialized inside the try, since the lazy enumerator otherwise throws on first move outside it. Shared by
+    /// <c>OpenCodeIntegrator</c> (<see cref="Directory.EnumerateFiles(string)"/>, over a plugin folder) and
+    /// <c>AntigravityIntegrator</c> (<see cref="Directory.EnumerateDirectories(string)"/>, over a <c>plugins</c> folder).
+    /// </summary>
+    /// <param name="folder">The directory to list.</param>
+    /// <param name="enumerate">The listing to attempt, e.g. <see cref="Directory.EnumerateFiles(string)"/>.</param>
+    internal static List<string> EnumerateSafely(string folder, Func<string, IEnumerable<string>> enumerate)
+    {
+        try
+        {
+            return [.. enumerate(folder)];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
     /// Substring present in every generation of the Python hook dtk installed before <c>dtk hook</c>,
     /// used to prove an unstamped copy is dtk's before deleting it.
     /// </summary>
@@ -525,7 +547,7 @@ internal static class IntegratorHelpers
 
     /// <summary>
     /// Merges a hook entry into a JSON settings file under
-    /// <c>hooks[<paramref name="hookEventKey"/>]</c>.
+    /// <c><paramref name="containerKey"/>[<paramref name="hookEventKey"/>]</c>.
     /// Existing content is preserved; registration is detected by matching
     /// <paramref name="hookCommand"/> against each entry's <c>"command"</c> field. An entry is dtk's
     /// own when its command equals <paramref name="hookCommand"/> after removing every <c>"</c>
