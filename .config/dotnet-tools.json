@@ -10,21 +10,21 @@
       "rollForward": true
     },
     "dotnettokenkiller": {
-      "version": "0.7.1",
+      "version": "0.8.0",
       "commands": [
         "dtk"
       ],
       "rollForward": true
     },
     "jetbrains.resharper.globaltools": {
-      "version": "2026.2.1",
+      "version": "2026.2.2",
       "commands": [
         "jb"
       ],
       "rollForward": true
     },
     "dotnet-stryker": {
-      "version": "4.16.0",
+      "version": "5.0.0",
       "commands": [
         "dotnet-stryker"
       ],
