@@ -11,10 +11,10 @@
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3"/>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8"/>
     <PackageVersion Include="coverlet.collector" Version="10.0.1"/>
-    <PackageVersion Include="FluentAssertions" Version="8.10.0"/>
+    <PackageVersion Include="FluentAssertions" Version="8.11.0"/>
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12"/>
     <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.12"/>
-    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12"/>
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5"/>
     <!-- Windows' own SQLite, for the Native AOT dtk.exe that is installed alone as the win-x64 package's shim. -->
     <PackageVersion Include="SQLitePCLRaw.bundle_winsqlite3" Version="2.1.11"/>
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12"/>
@@ -23,7 +23,7 @@
     <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0"/>
     <PackageVersion Include="NSubstitute" Version="6.2.0"/>
     <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.401"/>
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0"/>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1"/>
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23"/>
     <PackageVersion Include="Roslynator.Analyzers" Version="5.0.0"/>
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="5.0.0"/>
