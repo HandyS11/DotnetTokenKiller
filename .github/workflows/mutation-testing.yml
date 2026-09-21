@@ -35,7 +35,7 @@ jobs:
       - name: Run Stryker
         env:
           STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
-        run: dotnet stryker
+        run: dotnet stryker --concurrency 4
 
       - name: Upload mutation report
         if: always()
