@@ -15,7 +15,8 @@ public class DotnetSubcommandsTests
     [Fact]
     public void Ordered_IsTheDisplayOrderUsedByTheCli()
     {
-        DotnetSubcommands.Ordered.Should().Equal("build", "test", "restore", "clean", "format", "list package");
+        DotnetSubcommands.Ordered.Should().Equal(
+            "build", "test", "restore", "clean", "format", "list package", "publish", "pack");
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public class DotnetSubcommandsTests
     [Fact]
     public void TryMatch_UnknownSubcommand_ReturnsFalse()
     {
-        DotnetSubcommands.TryMatch(["publish"], out var match).Should().BeFalse();
+        DotnetSubcommands.TryMatch(["run"], out var match).Should().BeFalse();
 
         match.Should().Be(default(SubcommandMatch));
     }

@@ -24,4 +24,10 @@ public static class FilterKeys
 
     /// <summary>Key for the <c>dotnet list package</c> output filter.</summary>
     public const string ListPackage = DotnetSubcommands.ListPackage;
+
+    /// <summary>Key for the <c>dotnet publish</c> output filter.</summary>
+    public const string Publish = DotnetSubcommands.Publish;
+
+    /// <summary>Key for the <c>dotnet pack</c> output filter.</summary>
+    public const string Pack = DotnetSubcommands.Pack;
 }

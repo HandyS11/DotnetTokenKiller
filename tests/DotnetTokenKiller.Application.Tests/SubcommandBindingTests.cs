@@ -53,7 +53,7 @@ public sealed class SubcommandBindingTests
     {
         // Pinned to literals rather than derived from DotnetSubcommands.Ordered, so a subcommand added there
         // must be added here too — and this test proves the hook rewrites it.
-        string[] expected = ["build", "test", "restore", "clean", "format", "list package"];
+        string[] expected = ["build", "test", "restore", "clean", "format", "list package", "publish", "pack"];
 
         DotnetSubcommands.Ordered.Should().Equal(expected);
         foreach (var sub in expected)
@@ -92,11 +92,11 @@ public sealed class SubcommandBindingTests
         // Pinned literals, for the same reason as the hook assertions above: deriving these from
         // DotnetSubcommands.Ordered would make the expectation move in lockstep with the source, and
         // the test could never fail. Adding a subcommand means editing these by hand.
-        const string expectedProse = "build, test, restore, clean, format, and list package";
-        const string expectedAlternation = "build|test|restore|clean|format|list package";
-        const string expectedSlashAlternation = "build/test/restore/clean/format/list package";
+        const string expectedProse = "build, test, restore, clean, format, list package, publish, and pack";
+        const string expectedAlternation = "build|test|restore|clean|format|list package|publish|pack";
+        const string expectedSlashAlternation = "build/test/restore/clean/format/list package/publish/pack";
         const string expectedBacktickProse =
-            "`dotnet build`, `test`, `restore`, `clean`, `format`, and `list package`";
+            "`dotnet build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, and `pack`";
 
         IntegrationInstructions.SubcommandProse.Should().Be(
             expectedProse,
@@ -140,7 +140,7 @@ public sealed class SubcommandBindingTests
         // for that intent, and nothing inside dtk can observe that.
         const string expectedDescription =
             "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage "
-            + "when running `dotnet` build, test, restore, clean, format, and list package commands.";
+            + "when running `dotnet` build, test, restore, clean, format, list package, publish, and pack commands.";
 
         SharedInstructionArtifacts.SkillMarkdown.Should().Contain(
             $"description: '{expectedDescription}'",

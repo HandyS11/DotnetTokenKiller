@@ -6,8 +6,8 @@
 
 **A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
 down to only what matters.**
-Prefix `build`, `test`, `restore`, `clean`, `format`, and `list package` with `dtk` for 60–90% fewer
-tokens — per-command filters, token analytics, and one-command setup for 8 AI coding agents.
+Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, and `pack` with `dtk` for
+60–90% fewer tokens — per-command filters, token analytics, and one-command setup for 8 AI coding agents.
 
 [![CI](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml)
 [![CD](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml)
@@ -80,6 +80,8 @@ context consumed.
 - **Format filtering** — shows only violations with workspace-relative paths
 - **`list package` filtering** — collapses per-TFM duplication across plain, `--outdated`,
   `--deprecated`, and `--vulnerable` (~80.9% savings)
+- **Publish/Pack filtering** — the build's error/warning summary, plus the publish directories or
+  created packages on success
 - **Pipe mode** — `dtk pipe <subcommand>` filters output dtk did not produce: CI logs, or any
   invocation the hook missed
 - **Log retrieval** — `dtk log` returns a previous run's full output instead of re-running the build
@@ -139,9 +141,12 @@ dtk dotnet clean
 dtk dotnet format
 dtk dotnet format --verify-no-changes
 dtk dotnet list package --outdated
+dtk dotnet publish -c Release
+dtk dotnet pack
 ```
 
-Unknown subcommands pass through to `dotnet` unchanged.
+Unknown subcommands pass through to `dotnet` unchanged, as do `dotnet publish --interactive` and
+`dotnet pack --interactive`, which keep the terminal so a credential provider can prompt.
 
 ### Filtering output dtk did not produce
 
@@ -184,7 +189,7 @@ A run that dtk did not finish — because you pressed Ctrl-C, or an agent's tool
 still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying
 the output ends where dtk was killed.
 
-Passthrough subcommands dtk measures but does not filter (`publish`, `ef migrations`, and similar)
+Passthrough subcommands dtk measures but does not filter (`msbuild`, `ef migrations`, and similar)
 are tee'd like any other run. Interactive passthrough (`run`, `watch`) stays attached to the
 terminal and is not tee'd, so `dtk log` will not find it.
 

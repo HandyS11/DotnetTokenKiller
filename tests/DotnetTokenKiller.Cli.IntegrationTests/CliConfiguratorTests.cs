@@ -112,6 +112,18 @@ public sealed class CliConfiguratorTests
     }
 
     [Fact]
+    public Task Configure_DotnetPublishHelp_MatchesSnapshot()
+    {
+        return Verify(RunHelp("dotnet", "publish", "--help"));
+    }
+
+    [Fact]
+    public Task Configure_DotnetPackHelp_MatchesSnapshot()
+    {
+        return Verify(RunHelp("dotnet", "pack", "--help"));
+    }
+
+    [Fact]
     public Task Configure_DotnetListBranchHelp_MatchesSnapshot()
     {
         return Verify(RunHelp("dotnet", "list", "--help"));

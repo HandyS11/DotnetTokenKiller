@@ -21,8 +21,15 @@ public static class PassthroughSubcommands
     public static readonly IReadOnlySet<string> Measurable =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "publish", "pack", "list", "tool", "workload", "sln", "msbuild", "ef"
+            "list", "tool", "workload", "sln", "msbuild", "ef"
         };
+
+    /// <summary>
+    /// Filtered subcommands that are passed through all the same when run with <c>--interactive</c>,
+    /// which they use to prompt for private-feed credentials.
+    /// </summary>
+    private static readonly HashSet<string> PassedThroughWhenInteractive =
+        new(StringComparer.OrdinalIgnoreCase) { DotnetSubcommands.Publish, DotnetSubcommands.Pack };
 
     /// <summary>
     /// Real <c>dotnet</c> subcommands. A first token outside this set is not a subcommand — most
@@ -124,9 +131,9 @@ public static class PassthroughSubcommands
     /// <remarks>
     /// <c>RunStreamedAsync</c> (the path a measurable command takes) closes the child's stdin so a
     /// child reading stdin sees EOF rather than hanging. That is wrong for <c>--interactive</c>,
-    /// which <c>dotnet publish</c>/<c>pack</c> use to prompt for private-feed credentials, so those
-    /// invocations are excluded here even though their subcommand is otherwise on the allowlist —
-    /// they fall back to the inherited-stdio passthrough path and record as
+    /// which dotnet commands use to prompt for private-feed credentials, so those invocations are
+    /// excluded here even though their subcommand is otherwise on the allowlist — they fall back to
+    /// the inherited-stdio passthrough path and record as
     /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> instead.
     /// </remarks>
     public static bool IsMeasurable(IReadOnlyList<string> dotnetArgs)
@@ -138,8 +145,35 @@ public static class PassthroughSubcommands
             return false;
         }
 
-        return !dotnetArgs.Any(arg => string.Equals(arg, "--interactive", StringComparison.OrdinalIgnoreCase));
+        return !HasInteractiveFlag(dotnetArgs);
     }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when this invocation of a filtered subcommand must be passed
+    /// through rather than filtered: <c>dotnet publish</c> or <c>dotnet pack</c> run with
+    /// <c>--interactive</c>.
+    /// </summary>
+    /// <param name="dotnetArgs">
+    /// The arguments passed to <c>dotnet</c>, starting at the subcommand.
+    /// </param>
+    /// <remarks>
+    /// A filtered run captures the child's output until it exits and closes its stdin, so a
+    /// credential provider's prompt (or the device code it prints) would never reach the user. These
+    /// two were passed through, with the terminal attached, before dtk filtered them, and their
+    /// <c>--interactive</c> runs keep doing so; they record as
+    /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> via <see cref="IsMeasurable"/>.
+    /// </remarks>
+    public static bool IsInteractiveFilteredRun(IReadOnlyList<string> dotnetArgs)
+    {
+        ArgumentNullException.ThrowIfNull(dotnetArgs);
+
+        return dotnetArgs.Count > 0
+               && PassedThroughWhenInteractive.Contains(dotnetArgs[0])
+               && HasInteractiveFlag(dotnetArgs);
+    }
+
+    private static bool HasInteractiveFlag(IReadOnlyList<string> dotnetArgs) =>
+        dotnetArgs.Any(arg => string.Equals(arg, "--interactive", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Returns the allowlist's own spelling of <paramref name="value"/>, so a name recorded from

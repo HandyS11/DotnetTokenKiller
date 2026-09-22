@@ -1,0 +1,6 @@
+  Determining projects to restore...
+  Restored /repo/samples/SampleApp.Lib/SampleApp.Lib.csproj (in 223 ms).
+  Restored /repo/samples/SampleApp.MultiProject/SampleApp.MultiProject.csproj (in 223 ms).
+  SampleApp.Lib -> /repo/samples/SampleApp.Lib/bin/Release/net10.0/SampleApp.Lib.dll
+  SampleApp.MultiProject -> /repo/samples/SampleApp.MultiProject/bin/Release/net10.0/SampleApp.MultiProject.dll
+  SampleApp.MultiProject -> /repo/samples/SampleApp.MultiProject/bin/Release/net10.0/publish/

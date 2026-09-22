@@ -97,6 +97,22 @@ public class PassthroughIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Passthrough_InteractivePublish_IsNotFilteredAndRecordsAnUnmeasuredRow()
+    {
+        // dtk filters `dotnet publish`, but not with --interactive: filtering captures the output and
+        // closes stdin, so a credential provider could never prompt. --help keeps the run from building.
+        var (output, exitCode, dbPath) =
+            await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "publish", "--interactive", "--help");
+
+        exitCode.Should().Be(0);
+        output.Should().Contain("--interactive", "the SDK's own publish help is printed, not dtk's");
+        var rows = await ReadCommandRowsAsync(dbPath);
+        rows.Should().ContainSingle();
+        rows[0].Command.Should().Be("publish");
+        rows[0].Outcome.Should().Be("PassthroughUnmeasured");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Passthrough_MeasurableSubcommand_StillPrintsOutput()
     {
         // Streaming must not swallow what the user would otherwise have seen. `list reference` rather

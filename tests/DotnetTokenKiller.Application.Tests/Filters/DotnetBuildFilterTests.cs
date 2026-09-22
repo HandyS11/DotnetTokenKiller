@@ -1,4 +1,3 @@
-using System.Reflection;
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
@@ -203,11 +202,7 @@ public class DotnetBuildFilterTests
     [Fact]
     public void Apply_FormatElapsed_WhenTimeSpanPatternDoesNotMatch_ReturnsEmpty()
     {
-        // Covers FormatElapsed early return (lines 181-182) via reflection
-        var method = typeof(DotnetBuildFilter)
-            .GetMethod("FormatElapsed", BindingFlags.NonPublic | BindingFlags.Static)!;
-
-        var result = (string)method.Invoke(null, ["Time Elapsed invalid-no-digits"])!;
+        var result = MsBuildDiagnosticReport.FormatElapsed("Time Elapsed invalid-no-digits");
 
         result.Should().BeEmpty();
     }

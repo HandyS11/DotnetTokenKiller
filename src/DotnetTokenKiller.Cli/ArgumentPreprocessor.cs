@@ -69,14 +69,16 @@ internal static class ArgumentPreprocessor
 
     /// <summary>
     /// Returns <see langword="true"/> when the invocation should bypass the Spectre app
-    /// and forward directly to <c>dotnet</c>.
+    /// and forward directly to <c>dotnet</c>: a subcommand dtk does not filter, or a filtered one
+    /// that <see cref="PassthroughSubcommands.IsInteractiveFilteredRun"/> keeps attached to the terminal.
     /// </summary>
     /// <param name="args">The raw CLI arguments.</param>
     internal static bool IsPassthrough(string[] args)
     {
         return args.Length >= 2 &&
                string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
-               !DotnetSubcommands.TryMatch(args[1..], out _);
+               (!DotnetSubcommands.TryMatch(args[1..], out _) ||
+                PassthroughSubcommands.IsInteractiveFilteredRun(args[1..]));
     }
 
     /// <summary>
