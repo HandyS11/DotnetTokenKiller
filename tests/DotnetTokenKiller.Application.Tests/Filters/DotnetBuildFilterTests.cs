@@ -1,5 +1,6 @@
 using System.Reflection;
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -90,10 +91,15 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_AnsiCodesInInput_StrippedFromOutput()
+    public void Apply_AlreadyStrippedAnsiInput_ParsesCorrectly()
     {
-        const string ansiInput = "\x1b[32mBuild succeeded.\x1b[0m\n";
-        var result = _sut.Apply(ansiInput, exitCode: 0);
+        // The filter no longer strips ANSI itself: FilteredOutputPipeline strips once, before any
+        // filter runs, so this pins that the parser handles text that has already been through
+        // AnsiStrip.Strip cleanly, with no stray escape artifacts confusing the "nothing parsed" path.
+        var stripped = AnsiStrip.Strip("\x1b[32mBuild succeeded.\x1b[0m\n");
+
+        var result = _sut.Apply(stripped, exitCode: 0);
+
         result.Should().NotContain("\x1b[");
         result.Should().Be("\u2713 dotnet build\n");
     }

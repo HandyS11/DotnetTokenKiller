@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -61,10 +62,14 @@ public class DotnetFormatFilterTests
     }
 
     [Fact]
-    public void Apply_AnsiOnlyInput_ReturnsNothingToFormat()
+    public void Apply_AlreadyStrippedAnsiOnlyInput_ReturnsNothingToFormat()
     {
-        const string input = "\x1b[32m\x1b[0m\n";
-        _sut.Apply(input, exitCode: 0).Should().Be("✓ dotnet format (nothing to format)\n");
+        // The filter no longer strips ANSI itself — FilteredOutputPipeline strips once, before any
+        // filter runs — so this pins that ANSI-only text, once stripped down to a blank line,
+        // still hits the "nothing to format" heuristic rather than being parsed as a violation.
+        var stripped = AnsiStrip.Strip("\x1b[32m\x1b[0m\n");
+
+        _sut.Apply(stripped, exitCode: 0).Should().Be("✓ dotnet format (nothing to format)\n");
     }
 
     [Fact]

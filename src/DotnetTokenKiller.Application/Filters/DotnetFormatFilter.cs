@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
-using DotnetTokenKiller.Domain.Text;
 
 namespace DotnetTokenKiller.Application.Filters;
 
@@ -21,12 +20,12 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
 
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
-    /// <summary>Applies the filter to the raw format output.</summary>
-    /// <param name="rawOutput">The raw format output to filter.</param>
+    /// <summary>Applies the filter to the format output.</summary>
+    /// <param name="strippedOutput">The format output to filter, with ANSI escape sequences already stripped.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
-    public string Apply(string rawOutput, int exitCode)
+    public string Apply(string strippedOutput, int exitCode)
     {
-        var stripped = string.IsNullOrEmpty(rawOutput) ? string.Empty : AnsiStrip.Strip(rawOutput);
+        var stripped = strippedOutput ?? string.Empty;
 
         // Heuristic: dotnet format produces no output when nothing needs formatting.
         // Synthesise a positive confirmation so agents receive an explicit success signal —

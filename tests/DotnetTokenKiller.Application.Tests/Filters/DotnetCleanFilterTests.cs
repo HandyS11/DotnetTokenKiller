@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -79,11 +80,18 @@ public class DotnetCleanFilterTests
     }
 
     [Fact]
-    public void Apply_AnsiInput_StripsAnsiBeforeProcessing()
+    public void Apply_AlreadyStrippedAnsiErrorInput_ExtractsErrorContent()
     {
-        const string input = "\x1b[32mBuild succeeded.\x1b[0m\n    0 Warning(s)\n    0 Error(s)\n";
-        var result = _sut.Apply(input, exitCode: 0);
-        result.Should().Be("✓ dotnet clean\n");
+        // The filter no longer strips ANSI itself — FilteredOutputPipeline strips once, before any
+        // filter runs — so this pins that the error-line parser handles text that has already been
+        // through AnsiStrip.Strip cleanly, with no stray escape artifacts confusing the match.
+        var stripped = AnsiStrip.Strip(
+            "\x1b[31merror MSB4057: The target \"Clean\" does not exist in the project.\x1b[0m\nBuild FAILED.\n");
+
+        var result = _sut.Apply(stripped, exitCode: 1);
+
+        result.Should().Contain("error MSB4057");
+        result.Should().NotContain("\x1b[");
     }
 
     [Fact]

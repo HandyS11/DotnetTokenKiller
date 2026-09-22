@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
-using DotnetTokenKiller.Domain.Text;
 
 namespace DotnetTokenKiller.Application.Filters;
 
@@ -25,17 +24,17 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
 
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
-    /// <summary>Applies the filter to the raw build output.</summary>
-    /// <param name="rawOutput">The raw build output to filter.</param>
+    /// <summary>Applies the filter to the build output.</summary>
+    /// <param name="strippedOutput">The build output to filter, with ANSI escape sequences already stripped.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
-    public string Apply(string rawOutput, int exitCode)
+    public string Apply(string strippedOutput, int exitCode)
     {
-        if (string.IsNullOrEmpty(rawOutput))
+        if (string.IsNullOrEmpty(strippedOutput))
         {
             return string.Empty;
         }
 
-        var parsed = ParseLines(AnsiStrip.Strip(rawOutput).Split('\n'));
+        var parsed = ParseLines(strippedOutput.Split('\n'));
         var errors = parsed.Diagnostics.Where(d => d.Level == ErrorLevel).ToList();
         var warnings = parsed.Diagnostics.Where(d => d.Level == WarningLevel).ToList();
         var context = BuildContext(parsed.ProjectCount, parsed.Elapsed);
