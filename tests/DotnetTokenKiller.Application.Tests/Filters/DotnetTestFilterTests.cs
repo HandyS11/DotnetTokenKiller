@@ -840,7 +840,8 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_DotNet9MtpSummary_IsParsed()
     {
-        // .NET 9 Microsoft.Testing.Platform output: lowercase "failed" lines and a "Test summary:" line.
+        // A lowercase MTP "failed" line with the terminal logger's one-line "Test summary:" (which a
+        // real SDK prints for VSTest-mode runs, not MTP ones): each is parsed on its own.
         const string raw =
             "failed MyTests.T1 (12ms)\nTest summary: total: 10, failed: 1, succeeded: 9, skipped: 0, duration: 2.3s";
         var result = _sut.Apply(raw, exitCode: 1);
@@ -986,8 +987,8 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_MtpSummaryReportsMoreFailuresThanHeaders_UsesSummaryCounts()
     {
-        // MTP accumulator counterpart: pins AccumulateMtpSummary's failed/skipped '+=' arithmetic
-        // by making the summary counts exceed the single parsed MTP failure line.
+        // Terminal-logger counterpart: pins AccumulateTerminalLoggerSummary's failed/skipped '+='
+        // arithmetic by making the summary counts exceed the single parsed MTP failure line.
         const string input =
             "failed MyTests.T1 (5ms)\nTest summary: total: 8, failed: 3, succeeded: 3, skipped: 2, duration: 1s";
 
@@ -1017,6 +1018,127 @@ public class DotnetTestFilterTests
             "Passed!  - Failed:     0, Passed:     0, Skipped:     5, Total:     5, Duration: 10 ms - T.dll";
         var result = new DotnetTestFilter().Apply(raw, exitCode: 0);
         result.Should().Contain("5 skipped").And.NotContain("0 tests found");
+    }
+
+    // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects under
+    // Microsoft.Testing.Platform ("test": {"runner": "Microsoft.Testing.Platform"} in global.json),
+    // with the machine path replaced by /test/project/root.
+
+    [Fact]
+    public void Apply_MtpAllPassFixture_ReportsPassedAndSkipped()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_all_pass.txt");
+
+        _sut.Apply(fixture, exitCode: 0).Should().Be("✓ dotnet test: 3 passed, 1 skipped (1 project, 0.32s)\n");
+    }
+
+    [Fact]
+    public void Apply_MtpFailuresFixture_ReportsTheFailureOnceWithTheUserSourceFrame()
+    {
+        // MTP prints the assertion message twice (before and after the "from <assembly>" line), and
+        // its first stack frames are MSTest's own, with deterministic "/_/" source paths that exist on
+        // no machine. The report keeps one copy of the message and the first frame in user code.
+        var fixture = LoadFixture("dotnet_test_mtp_failures.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        result.Should().Be(
+            """
+            FAILURES (1):
+              Parse_Negative_ReturnsValue [14ms]
+                Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
+                at Beta.Tests/Test1.cs:line 14
+            dotnet test: 1 failed, 2 passed (1 project, 0.33s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_MtpZeroTestsFixture_ReportsZeroTestsFound()
+    {
+        // MTP exits 8 when zero tests ran; its "Zero tests ran" verdict is what makes that exit
+        // code a "nothing matched" warning rather than a blank report.
+        var fixture = LoadFixture("dotnet_test_mtp_zero.txt");
+
+        _sut.Apply(fixture, exitCode: 8).Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+    }
+
+    [Fact]
+    public void Apply_MtpMultiProjectFixture_CountsBothAssembliesFromTheSingleSummary()
+    {
+        // One "Test run summary:" block covers the whole run; the project count comes from the
+        // "Running tests from" lines, and the per-assembly lines inside the block are not failures.
+        var fixture = LoadFixture("dotnet_test_mtp_multiproject.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        result.Should().Be(
+            """
+            FAILURES (1):
+              Parse_Negative_ReturnsValue [13ms]
+                Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
+                at Beta.Tests/Test1.cs:line 14
+            dotnet test: 1 failed, 5 passed, 1 skipped (2 projects, 0.34s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_MtpPartialZeroTests_NonZeroExitWithoutFailures_IsBlank()
+    {
+        // Real shape (trimmed): one assembly ran zero tests, the other passed, and MTP exits 8 with a
+        // "Failed!" verdict. No failure to report and a non-zero exit: blank, so the pipeline's
+        // raw-tail fallback shows what happened instead of a clean-looking pass line.
+        const string raw = """
+                           Running tests from /r/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+                           Running tests from /r/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+                           /r/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64) Zero tests ran (160ms)
+                           /r/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) passed (176ms)
+
+                           Test run summary: Failed!
+                             /r/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64) Zero tests ran (160ms)
+                             /r/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) passed (176ms)
+
+                             error: 1
+
+                             total: 4
+                             failed: 0
+                             succeeded: 3
+                             skipped: 1
+                             duration: 342ms
+                           """;
+
+        _sut.Apply(raw, exitCode: 8).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("320ms", "0.32s")]
+    [InlineData("4s 250ms", "4.25s")]
+    [InlineData("1m 02s 500ms", "62.50s")]
+    public void Apply_MtpSummaryBlock_ParsesDuration(string duration, string expectedElapsed)
+    {
+        var raw = "Test run summary: Passed!\n  total: 2\n  failed: 0\n  succeeded: 2\n  skipped: 0\n"
+                  + $"  duration: {duration}\n";
+
+        _sut.Apply(raw, exitCode: 0).Should().Be($"✓ dotnet test: 2 passed (1 project, {expectedElapsed})\n");
+    }
+
+    [Fact]
+    public void Apply_MtpFailedDataRow_KeepsTheWholeDisplayName()
+    {
+        // A data-driven test's display name carries its arguments, spaces included.
+        const string raw = """
+                           failed Add (1, 2) (3ms)
+                             Assert.AreEqual failed. Expected:<4>. Actual:<3>.
+                           Test run summary: Failed!
+                             total: 1
+                             failed: 1
+                             succeeded: 0
+                             skipped: 0
+                             duration: 100ms
+                           """;
+
+        _sut.Apply(raw, exitCode: 2).Should().Contain("  Add (1, 2) [3ms]\n");
     }
 
     private static string LoadFixture(string resourceName)

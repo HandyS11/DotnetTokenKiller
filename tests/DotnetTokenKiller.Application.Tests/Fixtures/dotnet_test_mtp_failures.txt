@@ -1,0 +1,29 @@
+Running tests from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+failed Parse_Negative_ReturnsValue (14ms)
+  Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+  Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowAssertAreEqualFailed(Object expected, Object actual, String userMessage) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:665
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, IEqualityComparer`1 comparer, String message, String expectedExpression, String actualExpression) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:492
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, String message, String expectedExpression, String actualExpression) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:405
+    at Beta.Tests.ParserTests.Parse_Negative_ReturnsValue() in /test/project/root/Beta.Tests/Test1.cs:14
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64) failed with 1 error(s) (163ms)
+Exit code: 2
+  Standard output: MSTest v4.0.2 (UTC 11/11/2025) [linux-x64 - .NET 10.0.12]
+  Telemetry
+  ---------
+  Microsoft Testing Platform collects usage data in order to help us improve your experience. The data is collected by Microsoft and are not shared with anyone.
+  You can opt-out of telemetry by setting the TESTINGPLATFORM_TELEMETRY_OPTOUT or DOTNET_CLI_TELEMETRY_OPTOUT environment variable to '1' or 'true' using your favorite shell.
+  
+  Read more about Microsoft Testing Platform telemetry: https://aka.ms/testingplatform/telemetry
+  Test Parallelization enabled for /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (Workers: 10, Scope: MethodLevel)
+
+Test run summary: Failed!
+  total: 3
+  failed: 1
+  succeeded: 2
+  skipped: 0
+  duration: 334ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

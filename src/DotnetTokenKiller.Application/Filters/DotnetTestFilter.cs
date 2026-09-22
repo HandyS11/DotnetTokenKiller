@@ -50,15 +50,29 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
                 continue;
             }
 
-            var mtpSummaryMatch = MtpSummaryPattern().Match(line);
-            if (mtpSummaryMatch.Success)
+            var terminalLoggerSummaryMatch = TerminalLoggerSummaryPattern().Match(line);
+            if (terminalLoggerSummaryMatch.Success)
             {
-                AccumulateMtpSummary(mtpSummaryMatch, state);
+                AccumulateTerminalLoggerSummary(terminalLoggerSummaryMatch, state);
                 i++;
                 continue;
             }
 
-            if (NoTestsPattern().IsMatch(line))
+            var mtpRunSummaryMatch = MtpRunSummaryHeaderPattern().Match(line);
+            if (mtpRunSummaryMatch.Success)
+            {
+                i = ParseMtpRunSummary(lines, i, mtpRunSummaryMatch, state);
+                continue;
+            }
+
+            if (MtpRunningTestsPattern().IsMatch(line))
+            {
+                state.MtpAssembliesRun++;
+                i++;
+                continue;
+            }
+
+            if (NoTestsPattern().IsMatch(line) || MtpAssemblyZeroTestsPattern().IsMatch(line))
             {
                 state.ZeroTestsFound = true;
                 i++;
@@ -121,16 +135,19 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         // MTP has no "Error Message:"/"Stack Trace:" labels — collect the indented continuation
         // lines that follow the failure header until the next failure line, a summary, or a
-        // non-indented line, pulling a source reference out of the first stack frame we see.
+        // non-indented line, pulling a source reference out of the first user stack frame we see.
+        // MTP prints the message, then "from <assembly> (<tfm>|<arch>)", then the message again
+        // above the stack trace: everything after the "from" line is read for frames only.
         var msgLines = new List<string>();
         var sourceRef = string.Empty;
+        var messageEnded = false;
         while (i < lines.Length)
         {
             var current = lines[i].TrimEnd('\r');
             if (current.Length == 0 || !char.IsWhiteSpace(current[0])
                                     || MtpFailedTestPattern().IsMatch(current)
                                     || FailedTestHeaderPattern().IsMatch(current)
-                                    || MtpSummaryPattern().IsMatch(current)
+                                    || TerminalLoggerSummaryPattern().IsMatch(current)
                                     || SummaryPattern().IsMatch(current))
             {
                 break;
@@ -138,18 +155,17 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
             if (string.IsNullOrEmpty(sourceRef))
             {
-                var frameMatch = StackFrameFilePattern().Match(current);
-                if (frameMatch.Success)
-                {
-                    sourceRef =
-                        $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, RootPath)}:line {frameMatch.Groups["line"].Value}";
-                }
+                sourceRef = TryGetSourceRef(current);
             }
 
-            var trimmed = current.Trim();
-            if (!string.IsNullOrEmpty(trimmed) && !StackFrameFilePattern().IsMatch(current))
+            if (MtpFromAssemblyPattern().IsMatch(current))
             {
-                msgLines.Add(trimmed);
+                messageEnded = true;
+            }
+            else if (!messageEnded && !StackFrameLinePattern().IsMatch(current)
+                                   && !string.IsNullOrWhiteSpace(current))
+            {
+                msgLines.Add(current.Trim());
             }
 
             i++;
@@ -197,18 +213,79 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
             if (string.IsNullOrEmpty(sourceRef))
             {
-                var frameMatch = StackFrameFilePattern().Match(current);
-                if (frameMatch.Success)
-                {
-                    sourceRef =
-                        $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, RootPath)}:line {frameMatch.Groups["line"].Value}";
-                }
+                sourceRef = TryGetSourceRef(current);
             }
 
             i++;
         }
 
         return (sourceRef, i);
+    }
+
+    /// <summary>
+    /// Returns "<c>path:line N</c>" for a stack frame in user code, or an empty string. Frames whose
+    /// file sits under "<c>/_/</c>" are skipped: that is the deterministic source root packages are
+    /// built with (MSTest's own assertion frames), a path that exists on no machine.
+    /// </summary>
+    /// <param name="line">One line of a stack trace.</param>
+    private string TryGetSourceRef(string line)
+    {
+        var frameMatch = StackFrameFilePattern().Match(line);
+        if (!frameMatch.Success || frameMatch.Groups["file"].Value.StartsWith("/_/", StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        return $"{TextHelpers.ShortenPath(frameMatch.Groups["file"].Value, RootPath)}:line {frameMatch.Groups["line"].Value}";
+    }
+
+    private static int ParseMtpRunSummary(string[] lines, int i, Match headerMatch, ParseState state)
+    {
+        state.MtpZeroTestsVerdict = headerMatch.Groups["verdict"].Value
+            .StartsWith("Zero tests ran", StringComparison.OrdinalIgnoreCase);
+        i++;
+
+        // The block's fields ("  total: 7", …, "  duration: 343ms") follow the header, after any
+        // per-assembly result lines and blank lines; it ends at the first non-indented line.
+        while (i < lines.Length)
+        {
+            var current = lines[i].TrimEnd('\r');
+            if (current.Length > 0 && !char.IsWhiteSpace(current[0]))
+            {
+                break;
+            }
+
+            var countMatch = MtpSummaryCountPattern().Match(current);
+            if (countMatch.Success)
+            {
+                var count = int.Parse(countMatch.Groups["count"].Value, CultureInfo.InvariantCulture);
+                switch (countMatch.Groups["key"].Value.ToLowerInvariant())
+                {
+                    case "failed":
+                        state.TotalFailed += count;
+                        break;
+                    case "succeeded":
+                        state.TotalPassed += count;
+                        break;
+                    case "skipped":
+                        state.TotalSkipped += count;
+                        break;
+                }
+            }
+
+            var durationMatch = MtpSummaryDurationPattern().Match(current);
+            if (durationMatch.Success)
+            {
+                state.TotalDurationMs += ParseDurationToMs(durationMatch.Groups[DurationGroup].Value);
+            }
+
+            i++;
+        }
+
+        // One block covers the whole run, so the project count is the number of assemblies the run
+        // announced ("Running tests from …"), at least one.
+        state.ProjectCount += Math.Max(1, state.MtpAssembliesRun);
+        return i;
     }
 
     private static void AccumulateSummary(Match summaryMatch, ParseState state)
@@ -228,7 +305,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
                 part.Groups["unit"].Value));
     }
 
-    private static void AccumulateMtpSummary(Match summaryMatch, ParseState state)
+    private static void AccumulateTerminalLoggerSummary(Match summaryMatch, ParseState state)
     {
         state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
         state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
@@ -273,7 +350,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // not load-bearing.
         var noTestEvidence = state is { TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0 }
                              && state.Failures.Count == 0;
-        if (exitCode == 0 && noTestEvidence && (state.ZeroTestsFound || state.ProjectCount > 0))
+        // MTP exits non-zero (8) when zero tests ran, so its run-level "Zero tests ran" verdict stands
+        // in for the zero exit: that exit code means exactly this outcome, not a failure to hide.
+        if ((exitCode == 0 || state.MtpZeroTestsVerdict) && noTestEvidence
+                                                         && (state.ZeroTestsFound || state.ProjectCount > 0))
         {
             return state.ZeroTestsFound
                 ? "⚠ dotnet test: 0 tests found (no assembly matched)\n"
@@ -380,8 +460,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
 
-    // A single "<number> <unit>" pair within a possibly multi-part duration string.
-    [GeneratedRegex(@"(?<value>[\d.]+)\s+(?<unit>ms|s|m|h)", RegexOptions.IgnoreCase)]
+    // A single "<number> <unit>" pair within a possibly multi-part duration string: VSTest spaces
+    // the unit ("1 m 2 s"), MTP does not ("1m 02s 500ms").
+    [GeneratedRegex(@"(?<value>[\d.]+)\s*(?<unit>ms|s|m|h)", RegexOptions.IgnoreCase)]
     private static partial Regex DurationPartPattern();
 
     // "  Failed FullyQualifiedTestName [12 ms]", "[< 1 ms]", "[1 s]", or "[1 m 30 s]".
@@ -389,19 +470,53 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     [GeneratedRegex(@"^\s+Failed\s+(?<name>.+?)\s+\[(?<duration>(?:< )?[\d.]+ (?:ms|s|m(?: \d+ s)?))\]\s*$")]
     private static partial Regex FailedTestHeaderPattern();
 
-    // .NET 9 Microsoft.Testing.Platform failure line: "failed FullyQualifiedTestName (12ms)"
-    [GeneratedRegex(@"^failed\s+(?<name>\S+)(?:\s+\((?<duration>[^)]+)\))?")]
+    // Microsoft.Testing.Platform failure line: "failed TestDisplayName (12ms)". The display name
+    // may hold spaces and parentheses (a data row: "failed Add (1, 2) (3ms)"); the duration is the
+    // trailing parenthesized group that starts with a digit.
+    [GeneratedRegex(@"^failed\s+(?<name>.+?)(?:\s+\((?<duration>\d[\dhms. ]*)\))?\s*$")]
     private static partial Regex MtpFailedTestPattern();
 
-    // .NET 9 MTP summary: "Test summary: total: 10, failed: 1, succeeded: 9, skipped: 0, duration: 2.3s"
+    // MTP: the "from <assembly> (<tfm>|<arch>)" line between a failure's message and its stack trace.
+    [GeneratedRegex(@"^\s+from\s.+\.(?:dll|exe)(?:\s\([^)]*\))?\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex MtpFromAssemblyPattern();
+
+    // MTP: "Running tests from /path/Tests.dll (net10.0|x64)", one per test assembly run.
+    [GeneratedRegex(@"^Running tests from\s")]
+    private static partial Regex MtpRunningTestsPattern();
+
+    // MTP: an assembly that ran nothing, "/path/Tests.dll (net10.0|x64) Zero tests ran (160ms)".
+    [GeneratedRegex(@"\.(?:dll|exe)\s\([^)]*\)\s+Zero tests ran\b", RegexOptions.IgnoreCase)]
+    private static partial Regex MtpAssemblyZeroTestsPattern();
+
+    // MTP run summary header: "Test run summary: Passed!", "Failed!" or "Zero tests ran". Its fields
+    // follow on indented lines.
+    [GeneratedRegex(@"^Test run summary:\s*(?<verdict>.*)$", RegexOptions.IgnoreCase)]
+    private static partial Regex MtpRunSummaryHeaderPattern();
+
+    // MTP run summary count field: "  failed: 1", "  succeeded: 5", "  skipped: 1".
+    [GeneratedRegex(@"^\s+(?<key>failed|succeeded|skipped):\s*(?<count>\d+)\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex MtpSummaryCountPattern();
+
+    // MTP run summary duration field: "  duration: 343ms", "  duration: 1m 02s 500ms".
+    [GeneratedRegex(@"^\s+duration:\s*(?<duration>\d.*?)\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex MtpSummaryDurationPattern();
+
+    // VSTest-mode `dotnet test` under the MSBuild terminal logger (--tl:on, or an interactive
+    // terminal) prints a one-line summary; confirmed with the .NET 10.0.401 SDK:
+    // "Test summary: total: 10, failed: 1, succeeded: 9, skipped: 0, duration: 2.3s"
     [GeneratedRegex(
         @"^Test summary: total: (?<total>\d+), failed: (?<failed>\d+), succeeded: (?<passed>\d+), skipped: (?<skipped>\d+)(?:, duration: (?<duration>[\d.]+)\s*(?<unit>ms|s|m|h))?",
         RegexOptions.IgnoreCase)]
-    private static partial Regex MtpSummaryPattern();
+    private static partial Regex TerminalLoggerSummaryPattern();
 
-    // Stack frame with CS file: "   at Class.Method() in /path/to/File.cs:line 42"
-    [GeneratedRegex(@"in (?<file>.+\.cs):line (?<line>\d+)")]
+    // Stack frame with CS file: "   at Class.Method() in /path/to/File.cs:line 42" (VSTest) or
+    // "    at Class.Method() in /path/to/File.cs:42" (MTP).
+    [GeneratedRegex(@"in (?<file>.+\.cs):(?:line )?(?<line>\d+)")]
     private static partial Regex StackFrameFilePattern();
+
+    // Any stack frame line, with or without a source file: "    at Class.Method()".
+    [GeneratedRegex(@"^\s+at\s+\S")]
+    private static partial Regex StackFrameLinePattern();
 
     // "  Error Message:"
     [GeneratedRegex(@"^\s+Error Message:\s*$")]
@@ -424,6 +539,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         public int ProjectCount { get; set; }
         public double TotalDurationMs { get; set; }
         public bool ZeroTestsFound { get; set; }
+
+        /// <summary>Test assemblies an MTP run announced with "Running tests from".</summary>
+        public int MtpAssembliesRun { get; set; }
+
+        /// <summary>The MTP run summary's verdict was "Zero tests ran".</summary>
+        public bool MtpZeroTestsVerdict { get; set; }
     }
 
     private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);

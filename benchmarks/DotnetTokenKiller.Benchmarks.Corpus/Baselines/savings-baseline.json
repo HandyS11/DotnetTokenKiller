@@ -157,6 +157,50 @@
       "savingsPercent": 77.6
     },
     {
+      "id": "test/mtp-all-pass",
+      "fixture": "dotnet_test_mtp_all_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 1243,
+      "rawTokens": 347,
+      "filteredTokens": 23,
+      "savedTokens": 324,
+      "savingsPercent": 93.4
+    },
+    {
+      "id": "test/mtp-failures",
+      "fixture": "dotnet_test_mtp_failures.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2444,
+      "rawTokens": 598,
+      "filteredTokens": 84,
+      "savedTokens": 514,
+      "savingsPercent": 86
+    },
+    {
+      "id": "test/mtp-multiproject",
+      "fixture": "dotnet_test_mtp_multiproject.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2520,
+      "rawTokens": 669,
+      "filteredTokens": 88,
+      "savedTokens": 581,
+      "savingsPercent": 86.8
+    },
+    {
+      "id": "test/mtp-zero",
+      "fixture": "dotnet_test_mtp_zero.txt",
+      "filterKey": "test",
+      "exitCode": 8,
+      "rawBytes": 502,
+      "rawTokens": 172,
+      "filteredTokens": 16,
+      "savedTokens": 156,
+      "savingsPercent": 90.7
+    },
+    {
       "id": "test/multiproject-partial",
       "fixture": "dotnet_test_multiproject_partial_match.txt",
       "filterKey": "test",

@@ -34,6 +34,10 @@ public static class SavingsScenarios
         new("restore/raw", "dotnet_restore_raw.txt", FilterKeys.Restore, 0),
         new("test/all-pass", "dotnet_test_all_pass.txt", FilterKeys.Test, 0),
         new("test/failures", "dotnet_test_failures.txt", FilterKeys.Test, 1),
+        new("test/mtp-all-pass", "dotnet_test_mtp_all_pass.txt", FilterKeys.Test, 0),
+        new("test/mtp-failures", "dotnet_test_mtp_failures.txt", FilterKeys.Test, 2),
+        new("test/mtp-multiproject", "dotnet_test_mtp_multiproject.txt", FilterKeys.Test, 2),
+        new("test/mtp-zero", "dotnet_test_mtp_zero.txt", FilterKeys.Test, 8),
         new("test/multiproject-partial", "dotnet_test_multiproject_partial_match.txt", FilterKeys.Test, 0),
         new("test/zero", "dotnet_test_zero.txt", FilterKeys.Test, 0),
     ];

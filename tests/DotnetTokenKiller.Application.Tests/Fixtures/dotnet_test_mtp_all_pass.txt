@@ -1,0 +1,15 @@
+/test/project/root/Alpha.Tests/Test1.cs(7,37): warning MSTEST0032: Review or remove the assertion as its condition is known to be always true (https://learn.microsoft.com/dotnet/core/testing/mstest-analyzers/mstest0032) [/test/project/root/Alpha.Tests/Alpha.Tests.csproj]
+/test/project/root/Alpha.Tests/Test1.cs(10,49): warning MSTEST0032: Review or remove the assertion as its condition is known to be always true (https://learn.microsoft.com/dotnet/core/testing/mstest-analyzers/mstest0032) [/test/project/root/Alpha.Tests/Alpha.Tests.csproj]
+/test/project/root/Alpha.Tests/Test1.cs(13,46): warning MSTEST0032: Review or remove the assertion as its condition is known to be always true (https://learn.microsoft.com/dotnet/core/testing/mstest-analyzers/mstest0032) [/test/project/root/Alpha.Tests/Alpha.Tests.csproj]
+Running tests from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+skipped Divide_ByZero_Throws
+  not implemented yet
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) passed (155ms)
+
+Test run summary: Passed!
+  total: 4
+  failed: 0
+  succeeded: 3
+  skipped: 1
+  duration: 320ms
