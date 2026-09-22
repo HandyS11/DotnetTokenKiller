@@ -15,7 +15,24 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// </remarks>
 internal static class HookPayloads
 {
-    /// <summary>Gemini CLI's reply when nothing about the payload calls for a rewrite.</summary>
+    /// <summary>
+    /// Gemini CLI's reply when nothing about the payload calls for a rewrite. Unlike Copilot CLI's
+    /// <c>permissionDecision: "allow"</c> (a real bypass, so <see cref="ReplyToCopilot"/> gates it on
+    /// <see cref="DotnetCommandRewriter.IsSimpleCommand"/>), a <c>BeforeTool</c> hook's <c>"allow"</c> decision does
+    /// not bypass Gemini CLI's own confirmation: the scheduler only ever special-cases a hook decision of
+    /// <c>"ask"</c> (forced into <c>PolicyDecision.ASK_USER</c>) or <c>"deny"</c>/<c>"block"</c> (rejected before
+    /// the policy check runs); anything else, including <c>"allow"</c>, is indistinguishable from no decision at
+    /// all and leaves the call to the policy engine — the user's own trust rules and approval mode — exactly like
+    /// <see cref="AntigravityNeutralReply"/> leaves Antigravity's. See
+    /// github.com/google-gemini/gemini-cli packages/core/src/scheduler/hook-utils.ts (`evaluateBeforeToolHook`
+    /// only maps `isAskDecision()` to `hookDecision = 'ask'`; nothing maps `"allow"`) and
+    /// packages/core/src/scheduler/scheduler.ts (`_processToolCall`: `decision = policyDecision` unless
+    /// `hookDecision === 'ask'`, which alone forces `PolicyDecision.ASK_USER`), confirmed against
+    /// packages/core/src/confirmation-bus/message-bus.ts (a hook's `forcedDecision` can only ever be
+    /// `'ask_user'`, and only an already-trusted bus honors it — "Remove forcedDecision to prevent policy
+    /// bypass" guards the untrusted path). docs/hooks/reference.md's own `BeforeTool` section documents only
+    /// `"deny"`/`"block"` as having an effect, which agrees.
+    /// </summary>
     private const string GeminiAllowReply = """{"decision":"allow"}""";
 
     /// <summary>

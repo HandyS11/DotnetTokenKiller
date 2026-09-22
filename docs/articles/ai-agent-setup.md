@@ -193,6 +193,10 @@ dtk init gemini --dir /path/to/project
 
 With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, or `dotnet list package`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
 
+dtk always replies `{"decision":"allow", ...}`, but that does not bypass your own confirmation: Gemini CLI's
+`BeforeTool` hook contract only treats `"ask"` and `"deny"`/`"block"` specially, so `"allow"` is inert there and
+the policy engine (your trust rules and approval mode) still decides whether the rewritten command runs.
+
 ### Manual Installation
 
 Add the following to `.gemini/settings.json`. Gemini CLI blocks the shell command when a hook exits
