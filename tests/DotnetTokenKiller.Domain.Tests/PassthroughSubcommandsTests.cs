@@ -175,6 +175,43 @@ public class PassthroughSubcommandsTests
         PassthroughSubcommands.CommandName(args).Should().Be(args[0]);
     }
 
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "--connection", "Server=db" })]
+    [InlineData((object)new[] { "EF", "DATABASE", "DROP" })]
+    public void IsMeasurable_IsFalse_ForEfDatabaseDropWithoutForce(string[] args)
+    {
+        // dotnet ef database drop reads a confirmation from stdin (Console.ReadLine in
+        // DatabaseDropCommand.cs) unless -f/--force is given. Capturing it with stdin closed would
+        // make that read see EOF immediately instead of letting the user answer.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop", "--force" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "-f" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "--connection", "Server=db", "-f" })]
+    [InlineData((object)new[] { "ef", "DATABASE", "DROP", "--FORCE" })]
+    public void IsMeasurable_IsTrue_ForEfDatabaseDropWithForce(string[] args)
+    {
+        // --force (or -f) skips the confirmation read, so capturing the run is safe again.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "migrations", "remove" })]
+    [InlineData((object)new[] { "ef", "migrations", "remove", "--force" })]
+    [InlineData((object)new[] { "ef", "database", "update" })]
+    [InlineData((object)new[] { "ef", "database" })]
+    [InlineData((object)new[] { "ef", "dbcontext", "drop" })]
+    public void IsMeasurable_IsUnaffectedByThePromptingEfCheck_ForOtherEfInvocations(string[] args)
+    {
+        // dotnet ef migrations remove does not prompt: MigrationsScaffolder.RemoveMigration throws
+        // instead of reading input when --force is absent and the migration was already applied.
+        // Only the documented "database drop" pair is gated.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeTrue();
+    }
+
     [Fact]
     public void EveryMeasurableSubcommand_IsAlsoARecognisedVerb()
     {
