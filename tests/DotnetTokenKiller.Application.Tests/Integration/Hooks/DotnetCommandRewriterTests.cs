@@ -33,6 +33,18 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("DTK dotnet build", "DTK dtk dotnet build")]
     [InlineData("dtk.EXE dotnet build", "dtk.EXE dtk dotnet build")]
     [InlineData("dotnet build-server shutdown", "dtk dotnet build-server shutdown")]
+    [InlineData("out=\"$(dotnet build 2>&1)\"", "out=\"$(dtk dotnet build 2>&1)\"")]
+    [InlineData("echo \"$(echo \"$(dotnet test)\")\"", "echo \"$(echo \"$(dtk dotnet test)\")\"")]
+    [InlineData("echo \"`dotnet build`\"", "echo \"`dtk dotnet build`\"")]
+    [InlineData("dotnet build '$(x)'", "dtk dotnet build '$(x)'")]
+    [InlineData("echo 1 # it's fine\ndotnet build", "echo 1 # it's fine\ndtk dotnet build")]
+    [InlineData("cat <<EOF\ndotnet build\nEOF\ndotnet build", "cat <<EOF\ndotnet build\nEOF\ndtk dotnet build")]
+    [InlineData("cat <<-EOF\n\tdotnet build\n\tEOF\ndotnet test", "cat <<-EOF\n\tdotnet build\n\tEOF\ndtk dotnet test")]
+    [InlineData("cat <<'A' <<B\ndotnet build\nA\ndotnet test\nB\ndotnet clean", "cat <<'A' <<B\ndotnet build\nA\ndotnet test\nB\ndtk dotnet clean")]
+    [InlineData("dotnet build <<EOF\nx\nEOF", "dtk dotnet build <<EOF\nx\nEOF")]
+    [InlineData("cat <<< x; dotnet build", "cat <<< x; dtk dotnet build")]
+    [InlineData("echo a#b; dotnet build", "echo a#b; dtk dotnet build")]
+    [InlineData("echo $'it\\'s'; dtk dotnet build", "echo $'it\\'s'; dtk dotnet build")]
     public void Rewrite_QualifyingInvocation_IsPrefixedWithDtk(string command, string expected)
     {
         DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
@@ -63,6 +75,15 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("~/.dotnet/tools/dtk dotnet build")]
     [InlineData(@"C:\tools\dtk.exe dotnet restore")]
     [InlineData("")]
+    [InlineData("cat > s.sh <<'EOF'\ndotnet build\nEOF")]
+    [InlineData("cat > s.sh <<\"EOF\"\ndotnet build\nEOF")]
+    [InlineData("cat > s.sh <<EOF\ndotnet build\nEOF")]
+    [InlineData("cat > s.sh <<-EOF\n\tdotnet build\n\tEOF")]
+    [InlineData("cat <<EOF\ndotnet build")]
+    [InlineData("echo 1 # dotnet build")]
+    [InlineData("echo \"\\$(dotnet build)\"")]
+    [InlineData("echo '$(dtk dotnet build)'")]
+    [InlineData("\"$(dtk dotnet build)\"")]
     public void Rewrite_NonQualifyingInvocation_IsReturnedUnchanged(string command)
     {
         DotnetCommandRewriter.Rewrite(command).Should().BeSameAs(command);
@@ -79,7 +100,26 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("$(dotnet build)", false)]
     [InlineData("dotnet build\nls", false)]
     [InlineData("dotnet build 2>&1", false)]
-    public void IsSimpleCommand_MatchesThePythonHook(string command, bool expected)
+    [InlineData("dotnet build \"$(rm -rf ~)\"", false)]
+    [InlineData("dotnet build \"`id`\"", false)]
+    [InlineData("dotnet build `id`", false)]
+    [InlineData("dotnet build $(id)", false)]
+    [InlineData("dotnet build \"$((1+2))\"", false)]
+    [InlineData("echo \"$(echo \"$(dotnet test)\")\"", false)]
+    [InlineData("dotnet build '$(x)'", true)]
+    [InlineData("dotnet build '`id`'", true)]
+    [InlineData("dotnet build \"\\$(x)\"", true)]
+    [InlineData("dotnet build \\$\\(x\\)", true)]
+    [InlineData("dotnet build \"a;b\" # c; d", true)]
+    [InlineData("dotnet build # c\nls", false)]
+    [InlineData("dotnet build a\\ #; rm -rf ~", false)]
+    [InlineData("dotnet build a#; rm -rf ~", false)]
+    [InlineData("dotnet build $'\\''; rm -rf ~", false)]
+    [InlineData("dotnet build <<EOF", false)]
+    [InlineData("cat <<'EOF'\nx\nEOF", false)]
+    [InlineData("dotnet build \"unterminated", false)]
+    [InlineData("dotnet build 'unterminated", false)]
+    public void IsSimpleCommand_OnlyAcceptsASingleInvocation(string command, bool expected)
     {
         DotnetCommandRewriter.IsSimpleCommand(command).Should().Be(expected);
     }

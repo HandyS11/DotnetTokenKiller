@@ -10,13 +10,23 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// hooks <c>dtk hook</c> answers.
 /// </summary>
 /// <remarks>
-/// A behavior-identical port of <c>rewrite()</c> and <c>_is_simple_command()</c> from the Python hooks dtk
-/// generated before <c>dtk hook</c>. A match is <c>dotnet</c>, whitespace, and a subcommand (any whitespace
-/// run between a multi-token subcommand's tokens, the longest subcommand tried first, a word boundary after
-/// it). It is left alone when the character before it cannot end a previous command (a path such as
-/// <c>/usr/lib/dotnet/dotnet build</c>), when it sits inside quotes, or when <c>dtk</c> already runs it.
-/// Python's <c>\s</c> and <c>\w</c> are Unicode-aware, which <see cref="IsPythonSpace"/> and
-/// <see cref="IsPythonWord"/> reproduce.
+/// <para>
+/// A match is <c>dotnet</c>, whitespace, and a subcommand (any whitespace run between a multi-token
+/// subcommand's tokens, the longest subcommand tried first, a word boundary after it). It is left alone when
+/// the character before it cannot end a previous command (a path such as <c>/usr/lib/dotnet/dotnet build</c>),
+/// when <c>dtk</c> already runs it, or when it is not shell code at all. <see cref="IsPythonSpace"/> and
+/// <see cref="IsPythonWord"/> keep the Unicode-aware <c>\s</c> and <c>\w</c> of the Python hooks dtk generated
+/// before <c>dtk hook</c>, which this class started as a port of.
+/// </para>
+/// <para>
+/// One left-to-right pass of <see cref="ShellScanner"/> decides what is shell code. It understands backslash
+/// escapes, single quotes, ANSI-C <c>$'…'</c> strings, double quotes, <c>$(…)</c> and backtick command
+/// substitutions (each starting a fresh command, even inside double quotes), parentheses, <c>#</c> comments
+/// that start a word, and here-document bodies (<c>&lt;&lt;</c> and <c>&lt;&lt;-</c>, with quoted or unquoted
+/// delimiters), which are data and never rewritten. <c>${…}</c> expansions, <c>case</c> patterns and
+/// arithmetic are not parsed; where they mislead the scanner, it errs towards leaving a command unrewritten
+/// and towards <see cref="IsSimpleCommand"/> answering <see langword="false"/>.
+/// </para>
 /// </remarks>
 internal static class DotnetCommandRewriter
 {
@@ -40,29 +50,29 @@ internal static class DotnetCommandRewriter
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        if (!command.Contains(Dotnet, StringComparison.Ordinal))
+        {
+            return command;
+        }
+
         StringBuilder? rewritten = null;
         var copied = 0;
-        var start = command.IndexOf(Dotnet, StringComparison.Ordinal);
+        var scanner = new ShellScanner(command);
 
-        while (start >= 0)
+        while (scanner.MoveNext(out var start, out var token))
         {
-            if (!IsWordBefore(command, start)
-                && TryMatchSubcommand(command, start + Dotnet.Length, out var subcommandStart, out var end))
+            if (token == ShellToken.Code
+                && command[start] == 'd'
+                && command.AsSpan(start).StartsWith(Dotnet, StringComparison.Ordinal)
+                && !IsWordBefore(command, start)
+                && TryMatchSubcommand(command, start + Dotnet.Length, out var subcommandStart, out var end)
+                && IsCommandPosition(command, start))
             {
-                if (IsCommandPosition(command, start))
-                {
-                    rewritten ??= new StringBuilder(command.Length + 4);
-                    rewritten.Append(command, copied, start - copied)
-                        .Append(Prefix)
-                        .Append(command, subcommandStart, end - subcommandStart);
-                    copied = end;
-                }
-
-                start = command.IndexOf(Dotnet, end, StringComparison.Ordinal);
-            }
-            else
-            {
-                start = command.IndexOf(Dotnet, start + 1, StringComparison.Ordinal);
+                rewritten ??= new StringBuilder(command.Length + 4);
+                rewritten.Append(command, copied, start - copied)
+                    .Append(Prefix)
+                    .Append(command, subcommandStart, end - subcommandStart);
+                copied = end;
             }
         }
 
@@ -70,33 +80,26 @@ internal static class DotnetCommandRewriter
     }
 
     /// <summary>
-    /// Whether <paramref name="command"/> is a single invocation with no unquoted operator that could run
-    /// another command beside it. Copilot CLI auto-approves only such commands.
+    /// Whether <paramref name="command"/> is a single invocation with nothing that could run another command
+    /// beside it: no unquoted operator, no command substitution (even inside double quotes), no here-document
+    /// and no unterminated quote. Copilot CLI auto-approves only such commands, so anything the scanner cannot
+    /// vouch for is not simple.
     /// </summary>
     /// <param name="command">The original, unrewritten command.</param>
     internal static bool IsSimpleCommand(string command)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var i = 0;
-        while (i < command.Length)
+        var scanner = new ShellScanner(command);
+        while (scanner.MoveNext(out var index, out var token))
         {
-            var c = command[i];
-            if (c == '\\')
-            {
-                i += 2;
-                continue;
-            }
-
-            if (Chaining.Contains(c) && !IsInsideQuotes(command, i))
+            if (token != ShellToken.Code || Chaining.Contains(command[index]))
             {
                 return false;
             }
-
-            i++;
         }
 
-        return true;
+        return scanner.IsTerminated;
     }
 
     private static bool TryMatchSubcommand(string command, int position, out int subcommandStart, out int end)
@@ -146,17 +149,12 @@ internal static class DotnetCommandRewriter
         return true;
     }
 
-    /// <summary>The boundary, quote and already-prefixed checks of the Python <c>_replace</c>.</summary>
+    /// <summary>Whether the <c>dotnet</c> at <paramref name="start"/> follows a command boundary and is not run by <c>dtk</c>.</summary>
     /// <param name="command">The full command being scanned.</param>
     /// <param name="start">The index of the <c>dotnet</c> token being considered.</param>
     private static bool IsCommandPosition(string command, int start)
     {
         if (start > 0 && !Boundaries.Contains(command[start - 1]))
-        {
-            return false;
-        }
-
-        if (IsInsideQuotes(command, start))
         {
             return false;
         }
@@ -172,38 +170,6 @@ internal static class DotnetCommandRewriter
         var word = preceding[(preceding.LastIndexOfAny(Boundaries) + 1)..];
         var program = word[(word.LastIndexOfAny('/', '\\') + 1)..];
         return program is not ("dtk" or "dtk.exe");
-    }
-
-    /// <summary>Whether <paramref name="index"/> falls inside a quoted region, honoring backslash escapes outside single quotes.</summary>
-    /// <param name="command">The full command being scanned.</param>
-    /// <param name="index">The index to test.</param>
-    private static bool IsInsideQuotes(string command, int index)
-    {
-        var inSingle = false;
-        var inDouble = false;
-        var i = 0;
-        while (i < index)
-        {
-            var c = command[i];
-            if (c == '\\' && !inSingle)
-            {
-                i += 2;
-                continue;
-            }
-
-            if (c == '\'' && !inDouble)
-            {
-                inSingle = !inSingle;
-            }
-            else if (c == '"' && !inSingle)
-            {
-                inDouble = !inDouble;
-            }
-
-            i++;
-        }
-
-        return inSingle || inDouble;
     }
 
     private static int SkipSpaces(string command, int index)
@@ -237,4 +203,305 @@ internal static class DotnetCommandRewriter
         || Rune.GetUnicodeCategory(rune) is UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter
             or UnicodeCategory.TitlecaseLetter or UnicodeCategory.ModifierLetter or UnicodeCategory.OtherLetter
             or UnicodeCategory.DecimalDigitNumber or UnicodeCategory.LetterNumber or UnicodeCategory.OtherNumber;
+
+    /// <summary>What <see cref="ShellScanner"/> found at an index.</summary>
+    private enum ShellToken
+    {
+        /// <summary>An unquoted, unescaped character of shell code, outside comments and here-document bodies.</summary>
+        Code = 0,
+
+        /// <summary>The <c>$(</c> or backtick that opens a command substitution, quoted or not.</summary>
+        Substitution = 1,
+
+        /// <summary>The <c>&lt;&lt;</c> of a here-document redirection.</summary>
+        HereDocument = 2
+    }
+
+    /// <summary>A construct <see cref="ShellScanner"/> is inside of.</summary>
+    private enum Frame : byte
+    {
+        /// <summary>No construct: the command itself.</summary>
+        TopLevel = 0,
+
+        /// <summary>A double-quoted string.</summary>
+        DoubleQuote = 1,
+
+        /// <summary>A <c>$(</c> substitution or a <c>(</c> subshell, closed by <c>)</c>.</summary>
+        Parenthesis = 2,
+
+        /// <summary>A backtick substitution.</summary>
+        Backtick = 3
+    }
+
+    /// <summary>A here-document waiting for the end of its line, when its body starts.</summary>
+    /// <param name="Delimiter">The delimiter word, quotes and escapes removed.</param>
+    /// <param name="StripTabs">Whether <c>&lt;&lt;-</c> strips leading tabs from each body line.</param>
+    private readonly record struct HereDocument(string Delimiter, bool StripTabs);
+
+    /// <summary>
+    /// Walks a shell command once, left to right, reporting each character of shell code and each construct
+    /// that can run or feed a command, and skipping quoted text, comments and here-document bodies.
+    /// </summary>
+    /// <param name="command">The command to scan.</param>
+    private ref struct ShellScanner(string command)
+    {
+        private Stack<Frame>? _frames;
+        private List<HereDocument>? _pendingHereDocuments;
+        private int _position;
+        private bool _wordStart = true;
+        /// <summary>Whether every quote, substitution and here-document the scan opened was closed.</summary>
+        internal readonly bool IsTerminated => !Unterminated && Top == Frame.TopLevel;
+
+        /// <summary>Whether a quote, a here-document delimiter or a here-document body ran to the end of the command.</summary>
+        private bool Unterminated { readonly get; set; }
+
+        private readonly Frame Top => _frames is { Count: > 0 } frames ? frames.Peek() : Frame.TopLevel;
+
+        /// <summary>Advances to the next reported index.</summary>
+        /// <param name="index">The index of the character or construct found.</param>
+        /// <param name="token">What was found there.</param>
+        /// <returns><see langword="false"/> once the command is exhausted.</returns>
+        internal bool MoveNext(out int index, out ShellToken token)
+        {
+            while (_position < command.Length)
+            {
+                index = _position;
+                if (Top == Frame.DoubleQuote ? TryScanQuoted(out token) : TryScanCode(out token))
+                {
+                    return true;
+                }
+            }
+
+            index = -1;
+            token = ShellToken.Code;
+            return false;
+        }
+
+        private bool TryScanQuoted(out ShellToken token)
+        {
+            switch (command[_position++])
+            {
+                case '\\':
+                    _position++;
+                    break;
+                case '"':
+                    _frames!.Pop();
+                    _wordStart = false;
+                    break;
+                case '`':
+                    return OpenSubstitution(Frame.Backtick, out token);
+                case '$' when Peek() == '(':
+                    _position++;
+                    return OpenSubstitution(Frame.Parenthesis, out token);
+            }
+
+            token = ShellToken.Code;
+            return false;
+        }
+
+        private bool TryScanCode(out ShellToken token)
+        {
+            var c = command[_position++];
+            token = ShellToken.Code;
+            switch (c)
+            {
+                case '\\':
+                    _position++;
+                    _wordStart = false;
+                    return false;
+                case '\'':
+                    SkipQuoted('\'', false);
+                    return false;
+                case '$' when Peek() == '\'':
+                    _position++;
+                    SkipQuoted('\'', true);
+                    return false;
+                case '$' when Peek() == '(':
+                    _position++;
+                    return OpenSubstitution(Frame.Parenthesis, out token);
+                case '"':
+                    Push(Frame.DoubleQuote);
+                    _wordStart = false;
+                    return false;
+                case '`' when Top == Frame.Backtick:
+                    _frames!.Pop();
+                    _wordStart = false;
+                    return true;
+                case '`':
+                    return OpenSubstitution(Frame.Backtick, out token);
+                case '#' when _wordStart:
+                    var lineEnd = command.IndexOf('\n', _position);
+                    _position = lineEnd < 0 ? command.Length : lineEnd;
+                    return false;
+                case '(':
+                    Push(Frame.Parenthesis);
+                    _wordStart = true;
+                    return true;
+                case ')':
+                    if (Top == Frame.Parenthesis)
+                    {
+                        _frames!.Pop();
+                    }
+
+                    _wordStart = false;
+                    return true;
+                case '<' when Peek() == '<' && Peek(1) == '<':
+                    _position += 2;
+                    _wordStart = false;
+                    return true;
+                case '<' when Peek() == '<':
+                    _position++;
+                    ReadHereDocumentDelimiter();
+                    token = ShellToken.HereDocument;
+                    return true;
+                case '\n':
+                    _wordStart = true;
+                    SkipHereDocumentBodies();
+                    return true;
+                default:
+                    _wordStart = c is ' ' or '\t' or ';' or '&' or '|';
+                    return true;
+            }
+        }
+
+        private bool OpenSubstitution(Frame frame, out ShellToken token)
+        {
+            Push(frame);
+            _wordStart = true;
+            token = ShellToken.Substitution;
+            return true;
+        }
+
+        private void Push(Frame frame) => (_frames ??= new Stack<Frame>()).Push(frame);
+
+        private readonly char Peek(int offset = 0) =>
+            _position + offset < command.Length ? command[_position + offset] : '\0';
+
+        /// <summary>Skips past the closing <paramref name="quote"/>, honoring backslash escapes only when <paramref name="escapes"/> is set.</summary>
+        /// <param name="quote">The closing quote character.</param>
+        /// <param name="escapes">Whether a backslash escapes the next character, as in <c>$'…'</c>.</param>
+        private void SkipQuoted(char quote, bool escapes)
+        {
+            _wordStart = false;
+            while (_position < command.Length)
+            {
+                var c = command[_position++];
+                if (escapes && c == '\\')
+                {
+                    _position++;
+                }
+                else if (c == quote)
+                {
+                    return;
+                }
+            }
+
+            Unterminated = true;
+        }
+
+        /// <summary>Reads the delimiter word after <c>&lt;&lt;</c> or <c>&lt;&lt;-</c> and queues its body.</summary>
+        private void ReadHereDocumentDelimiter()
+        {
+            _wordStart = false;
+            var stripTabs = Peek() == '-';
+            if (stripTabs)
+            {
+                _position++;
+            }
+
+            while (Peek() is ' ' or '\t')
+            {
+                _position++;
+            }
+
+            var delimiter = new StringBuilder();
+            while (_position < command.Length)
+            {
+                var c = command[_position];
+                if (c is ' ' or '\t' or '\n' or ';' or '&' or '|' or '(' or ')' or '<' or '>')
+                {
+                    break;
+                }
+
+                _position++;
+                if (c is '\'' or '"')
+                {
+                    AppendQuoted(delimiter, c);
+                }
+                else if (c == '\\' && _position < command.Length)
+                {
+                    delimiter.Append(command[_position++]);
+                }
+                else
+                {
+                    delimiter.Append(c);
+                }
+            }
+
+            if (delimiter.Length == 0)
+            {
+                Unterminated = true;
+                return;
+            }
+
+            (_pendingHereDocuments ??= []).Add(new HereDocument(delimiter.ToString(), stripTabs));
+        }
+
+        /// <summary>Appends a quoted part of a here-document delimiter, without its quotes.</summary>
+        /// <param name="delimiter">The delimiter being read.</param>
+        /// <param name="quote">The opening quote character.</param>
+        private void AppendQuoted(StringBuilder delimiter, char quote)
+        {
+            while (_position < command.Length)
+            {
+                var c = command[_position++];
+                if (c == quote)
+                {
+                    return;
+                }
+
+                if (quote == '"' && c == '\\' && Peek() is '\\' or '"' or '$' or '`')
+                {
+                    c = command[_position++];
+                }
+
+                delimiter.Append(c);
+            }
+
+            Unterminated = true;
+        }
+
+        /// <summary>At the start of a line, skips the bodies of the here-documents the previous line opened.</summary>
+        private void SkipHereDocumentBodies()
+        {
+            if (_pendingHereDocuments is not { Count: > 0 } pending)
+            {
+                return;
+            }
+
+            foreach (var hereDocument in pending)
+            {
+                SkipHereDocumentBody(hereDocument);
+            }
+
+            pending.Clear();
+        }
+
+        private void SkipHereDocumentBody(HereDocument hereDocument)
+        {
+            while (_position < command.Length)
+            {
+                var lineEnd = command.IndexOf('\n', _position);
+                var end = lineEnd < 0 ? command.Length : lineEnd;
+                var line = command.AsSpan(_position, end - _position);
+                _position = lineEnd < 0 ? end : end + 1;
+                if ((hereDocument.StripTabs ? line.TrimStart('\t') : line).SequenceEqual(hereDocument.Delimiter))
+                {
+                    return;
+                }
+            }
+
+            Unterminated = true;
+        }
+    }
 }
