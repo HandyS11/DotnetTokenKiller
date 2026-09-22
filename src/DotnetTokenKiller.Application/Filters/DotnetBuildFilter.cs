@@ -176,12 +176,23 @@ public sealed partial class DotnetBuildFilter(string? rootPath = null) : IOutput
             diagMatch.Groups["code"].Value,
             TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen));
 
+        // The trailing "[project]" suffix can carry extra MSBuild properties after "::", most
+        // commonly the TFM a multi-targeted build re-reports the same diagnostic for (e.g.
+        // "/p/A.csproj::TargetFramework=net8.0"). Drop that part for the key so those repeats still
+        // collapse, but keep the project path itself: two different projects can report an identical
+        // file/line/code/message (a linked GlobalUsings.cs shared via <Compile Include>, for
+        // instance) and must not be merged into a single entry that hides one project's failure.
+        var project = diagMatch.Groups["project"].Value;
+        var tfmSeparatorIndex = project.IndexOf("::", StringComparison.Ordinal);
+        var projectPath = tfmSeparatorIndex < 0 ? project : project[..tfmSeparatorIndex];
+
         // Key off what gets rendered, not the raw capture. Two diagnostics differing only past the
         // truncation limit, or whose paths shorten to the same relative path, render as identical
         // lines — keyed on the raw text both survive and the reader sees the same error twice. The
         // message is in the key because the code is optional: without it, two unrelated codeless
         // diagnostics reported at the same position would collapse into one.
-        if (seen.Add($"{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{diagnostic.Message}"))
+        if (seen.Add(
+                $"{projectPath}:{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{diagnostic.Message}"))
         {
             diagnostics.Add(diagnostic);
         }
