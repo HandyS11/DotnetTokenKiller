@@ -87,13 +87,17 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
                 var regionOffset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
                 var regionLength = Encoding.UTF8.GetByteCount(region);
 
+                var truncatedRegion = TeeLogHeader.RenderTruncated(false);
+                var truncatedCharIndex = rendered.IndexOf(truncatedRegion, StringComparison.Ordinal);
+                var truncatedOffset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, truncatedCharIndex));
+
                 await stream.WriteAsync(Encoding.UTF8.GetBytes(rendered), cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
                 // BodyBytesWritten can never exceed MaxFileSizeBytes, so a hardcoded 500-byte guard
                 // would silently discard every log once the configured cap drops below it — clamp
                 // the guard to whichever is smaller instead.
-                return new FileTeeSession(stream, filePath, regionOffset, regionLength,
+                return new FileTeeSession(stream, filePath, regionOffset, regionLength, truncatedOffset,
                     new TeeSessionPolicy(
                         MaxBodyBytes: teeConfig.MaxFileSizeBytes,
                         MinBodyBytes: Math.Min(500L, teeConfig.MaxFileSizeBytes),

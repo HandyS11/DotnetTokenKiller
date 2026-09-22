@@ -154,6 +154,26 @@ public sealed class FileTeeServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task BeginAsync_WiresTheTruncatedFieldOffsetCorrectly_SoTheWriterMarksTheHeader_WhenTheCapIsHit()
+    {
+        // FileTeeSessionTests exercises the writer's own truncation logic against a hand-built
+        // offset; this proves BeginAsync computes and passes the real one correctly end to end,
+        // through the public API a production caller actually uses.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: 100));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+        for (var i = 0; i < 20; i++)
+        {
+            await session.Writer.WriteLineAsync(new string('x', 40).AsMemory(), CancellationToken.None);
+        }
+
+        var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
+        TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
+        header.Truncated.Should().BeTrue();
+        Encoding.UTF8.GetByteCount(TeeLogHeader.StripHeader(text)).Should().BeLessThanOrEqualTo(100);
+    }
+
+    [Fact]
     public async Task BeginAsync_ReturnsANullSession_WhenTeeIsOff()
     {
         var sut = CreateSut(new TeeConfig(TeeMode.Never));

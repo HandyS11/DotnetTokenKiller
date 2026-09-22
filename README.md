@@ -189,6 +189,10 @@ A run that dtk did not finish — because you pressed Ctrl-C, or an agent's tool
 still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying
 the output ends where dtk was killed.
 
+A log that hit `tee.maxFileSizeBytes` stops growing but stays readable: the body ends with a
+`[dtk: output truncated at <N> bytes]` marker, and `dtk log` shows a note that the output was
+truncated.
+
 Passthrough subcommands dtk measures but does not filter (`msbuild`, `ef migrations`, and similar)
 are tee'd like any other run. Interactive passthrough (`run`, `watch`) stays attached to the
 terminal and is not tee'd, so `dtk log` will not find it.

@@ -433,4 +433,38 @@ public sealed class LogCommandTests
         output.Should().Contain("exit unknown");
         output.Should().NotContain("run did not finish");
     }
+
+    [Fact]
+    public async Task Run_WarnsAboutTruncatedOutput_ForATruncatedLog()
+    {
+        var entry = Entry(5, "build") with
+        {
+            Header = new TeeLogHeader("dotnet build MyApp.slnx", Cwd, 0, RunSource.Run, At(5), Truncated: true)
+        };
+        var bodies = new Dictionary<string, string>
+        {
+            [entry.FilePath] = "compiling...\n[dtk: output truncated at 1048576 bytes]\n"
+        };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        writer.ToString().Should().Contain("output was truncated");
+    }
+
+    [Fact]
+    public async Task Run_OmitsTheTruncatedWarning_ForALogThatNeverHitTheCap()
+    {
+        // Entry() builds a header with Truncated defaulting to false; the warning must not appear
+        // for the overwhelming majority of logs that never reached the byte cap.
+        var entry = Entry(5, "build");
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "done\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        writer.ToString().Should().NotContain("output was truncated");
+    }
 }

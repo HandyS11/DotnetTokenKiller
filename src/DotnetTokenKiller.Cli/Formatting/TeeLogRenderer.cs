@@ -86,6 +86,13 @@ internal static class TeeLogRenderer
                 .ConfigureAwait(false);
         }
 
+        if (entry.Header?.Truncated == true)
+        {
+            await output.WriteLineAsync(
+                    "output was truncated — it reached the configured byte cap".AsMemory(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var summary = view.ShownLines >= view.TotalLines
             ? $"showing all {view.TotalLines.ToString(CultureInfo.InvariantCulture)} lines"
             : $"showing last {view.ShownLines.ToString(CultureInfo.InvariantCulture)} of "

@@ -30,6 +30,70 @@ public sealed class TeeLogHeaderTests
     }
 
     [Fact]
+    public void Render_ThenTryParse_RoundTripsTheTruncatedFlag()
+    {
+        var original = Sample() with { Truncated = true };
+
+        TeeLogHeader.TryParse(original.Render(), out var header).Should().BeTrue();
+
+        header.Truncated.Should().BeTrue();
+    }
+
+    [Fact]
+    public void TryParse_DefaultsTruncatedToFalse_ForAV2HeaderWithoutTheField()
+    {
+        // A header written before this field existed — or by an older dtk that never learned to
+        // write it — must still parse, with truncation assumed false rather than the header being
+        // rejected outright.
+        const string withoutTruncated =
+            "# dtk-log v2\n"
+            + "# command: dotnet build MyApp.slnx\n"
+            + "# cwd: /home/user/projects/MyApp\n"
+            + "# source: Run\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "# status: complete\n"
+            + "# exit:   0\n"
+            + "---\n"
+            + "body\n";
+
+        TeeLogHeader.TryParse(withoutTruncated, out var parsed).Should().BeTrue();
+
+        parsed.Truncated.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Render_IncludesTheTruncatedField_ReflectingTheValue()
+    {
+        (Sample() with { Truncated = true }).Render().Should().Contain("# truncated: true");
+        (Sample() with { Truncated = false }).Render().Should().Contain("# truncated: false");
+    }
+
+    [Fact]
+    public void RenderTruncated_ProducesTheSameLength_ForTrueAndFalse()
+    {
+        // FileTeeSession overwrites this field in place at a fixed byte offset once the byte cap is
+        // hit. If the two forms differed in length, that overwrite would corrupt whatever follows.
+        TeeLogHeader.RenderTruncated(true).Length.Should().Be(TeeLogHeader.RenderTruncated(false).Length);
+    }
+
+    [Fact]
+    public void TryParse_ReturnsFalse_WhenTruncatedIsNotABoolean()
+    {
+        const string text =
+            "# dtk-log v2\n"
+            + "# command: dotnet build\n"
+            + "# cwd: /tmp\n"
+            + "# source: Run\n"
+            + "# utc: 2026-07-28T09:14:02.0000000+00:00\n"
+            + "# truncated: maybe\n"
+            + "# status: complete\n"
+            + "# exit:   0\n"
+            + "---\n";
+
+        TeeLogHeader.TryParse(text, out _).Should().BeFalse();
+    }
+
+    [Fact]
     public void Render_StartsWithVersionLine_AndEndsWithDelimiter()
     {
         var rendered = Sample().Render();
@@ -211,6 +275,7 @@ public sealed class TeeLogHeaderTests
         parsed.ExitCode.Should().Be(1);
         parsed.Status.Should().Be(TeeLogStatus.Complete);
         parsed.CommandLine.Should().Be("dotnet build MyApp.slnx");
+        parsed.Truncated.Should().BeFalse();
     }
 
     [Fact]
