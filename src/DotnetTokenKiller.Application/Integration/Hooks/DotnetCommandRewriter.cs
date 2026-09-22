@@ -11,21 +11,27 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A match is <c>dotnet</c>, whitespace, and a subcommand (any whitespace run between a multi-token
-/// subcommand's tokens, the longest subcommand tried first, a word boundary after it). It is left alone when
-/// the character before it cannot end a previous command (a path such as <c>/usr/lib/dotnet/dotnet build</c>),
-/// when <c>dtk</c> already runs it, or when it is not shell code at all. <see cref="IsPythonSpace"/> and
-/// <see cref="IsPythonWord"/> keep the Unicode-aware <c>\s</c> and <c>\w</c> of the Python hooks dtk generated
-/// before <c>dtk hook</c>, which this class started as a port of.
+/// A match is <c>dotnet</c>, whitespace other than a line break, and a subcommand (the same whitespace between
+/// a multi-token subcommand's tokens, the longest subcommand tried first, a word boundary after it). It is left
+/// alone when the character before it cannot end a previous command (a path such as
+/// <c>/usr/lib/dotnet/dotnet build</c>), when <c>dtk</c> already runs it, or when it is not shell code at all.
+/// <see cref="IsPythonSpace"/> and <see cref="IsPythonWord"/> keep the Unicode-aware <c>\s</c> and <c>\w</c> of
+/// the Python hooks dtk generated before <c>dtk hook</c>, which this class started as a port of.
 /// </para>
 /// <para>
 /// One left-to-right pass of <see cref="ShellScanner"/> decides what is shell code. It understands backslash
-/// escapes, single quotes, ANSI-C <c>$'…'</c> strings, double quotes, <c>$(…)</c> and backtick command
-/// substitutions (each starting a fresh command, even inside double quotes), parentheses, <c>#</c> comments
-/// that start a word, and here-document bodies (<c>&lt;&lt;</c> and <c>&lt;&lt;-</c>, with quoted or unquoted
-/// delimiters), which are data and never rewritten. <c>${…}</c> expansions, <c>case</c> patterns and
-/// arithmetic are not parsed; where they mislead the scanner, it errs towards leaving a command unrewritten
-/// and towards <see cref="IsSimpleCommand"/> answering <see langword="false"/>.
+/// escapes, single quotes, ANSI-C <c>$'…'</c> and locale <c>$"…"</c> strings, <c>$$</c>, double quotes,
+/// <c>$(…)</c> and backtick command substitutions (each starting a fresh command, even inside double quotes),
+/// parentheses, <c>#</c> comments that start a word, and here-document bodies (<c>&lt;&lt;</c> and
+/// <c>&lt;&lt;-</c>, with quoted or unquoted delimiters), which are data and never rewritten. <c>${…}</c>
+/// expansions, <c>case</c> patterns and arithmetic are not parsed; where they mislead the scanner, a
+/// <c>dotnet</c> command may be left unrewritten.
+/// </para>
+/// <para>
+/// <see cref="IsSimpleCommand"/> does not rely on that precision. It decides an auto-approval, so it accepts
+/// only a command whose first word is <c>dotnet</c> and in which the scanner met nothing but plain words,
+/// quoted text and blanks; comments, ANSI-C and locale strings, <c>${…}</c>, substitutions, here-documents,
+/// redirections, operators and unterminated quotes all make a command not simple.
 /// </para>
 /// </remarks>
 internal static class DotnetCommandRewriter
@@ -36,8 +42,8 @@ internal static class DotnetCommandRewriter
     /// <summary>Characters that may precede <c>dotnet</c> where a command starts.</summary>
     private static readonly SearchValues<char> Boundaries = SearchValues.Create(" \t;&|({`\n");
 
-    /// <summary>Unquoted characters that chain, pipe or subshell another command.</summary>
-    private static readonly SearchValues<char> Chaining = SearchValues.Create(";&|`\n()");
+    /// <summary>Unquoted characters that chain, pipe, subshell or redirect, none of which a simple command has.</summary>
+    private static readonly SearchValues<char> NotSimple = SearchValues.Create(";&|`\n()<>");
 
     /// <summary>Each subcommand's tokens, longest name first; a stable sort keeps equal lengths alphabetical.</summary>
     private static readonly string[][] SubcommandTokens =
@@ -80,26 +86,35 @@ internal static class DotnetCommandRewriter
     }
 
     /// <summary>
-    /// Whether <paramref name="command"/> is a single invocation with nothing that could run another command
-    /// beside it: no unquoted operator, no command substitution (even inside double quotes), no here-document
-    /// and no unterminated quote. Copilot CLI auto-approves only such commands, so anything the scanner cannot
-    /// vouch for is not simple.
+    /// Whether <paramref name="command"/> is a single <c>dotnet</c> invocation with nothing that could run
+    /// another command beside it or write elsewhere: its first word is <c>dotnet</c>, and it has no unquoted
+    /// operator or redirection, no command substitution (even inside double quotes), no here-document, comment,
+    /// ANSI-C or locale string or <c>${…}</c> expansion, and no unterminated quote. Copilot CLI auto-approves
+    /// only such commands, so anything the scanner cannot vouch for is not simple.
     /// </summary>
     /// <param name="command">The original, unrewritten command.</param>
     internal static bool IsSimpleCommand(string command)
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        var trimmed = command.AsSpan().TrimStart(" \t");
+        if (!trimmed.StartsWith(Dotnet, StringComparison.Ordinal)
+            || trimmed.Length == Dotnet.Length
+            || trimmed[Dotnet.Length] is not (' ' or '\t'))
+        {
+            return false;
+        }
+
         var scanner = new ShellScanner(command);
         while (scanner.MoveNext(out var index, out var token))
         {
-            if (token != ShellToken.Code || Chaining.Contains(command[index]))
+            if (token != ShellToken.Code || NotSimple.Contains(command[index]))
             {
                 return false;
             }
         }
 
-        return scanner.IsTerminated;
+        return scanner.IsTerminated();
     }
 
     private static bool TryMatchSubcommand(string command, int position, out int subcommandStart, out int end)
@@ -161,7 +176,7 @@ internal static class DotnetCommandRewriter
 
         var preceding = command.AsSpan(0, start);
         var length = preceding.Length;
-        while (length > 0 && IsPythonSpace(preceding[length - 1]))
+        while (length > 0 && IsInlineSpace(preceding[length - 1]))
         {
             length--;
         }
@@ -174,13 +189,20 @@ internal static class DotnetCommandRewriter
 
     private static int SkipSpaces(string command, int index)
     {
-        while (index < command.Length && IsPythonSpace(command[index]))
+        while (index < command.Length && IsInlineSpace(command[index]))
         {
             index++;
         }
 
         return index;
     }
+
+    /// <summary>
+    /// Whitespace that can separate words on one line: <see cref="IsPythonSpace"/> without the line breaks
+    /// <c>\n</c> and <c>\r</c>, since <c>dotnet</c> and a word on the next line are two commands.
+    /// </summary>
+    /// <param name="c">The character to test.</param>
+    private static bool IsInlineSpace(char c) => c is not ('\n' or '\r') && IsPythonSpace(c);
 
     private static bool IsWordBefore(string command, int index) =>
         index > 0
@@ -214,7 +236,13 @@ internal static class DotnetCommandRewriter
         Substitution = 1,
 
         /// <summary>The <c>&lt;&lt;</c> of a here-document redirection.</summary>
-        HereDocument = 2
+        HereDocument = 2,
+
+        /// <summary>
+        /// A construct parsed for rewriting but never trusted for approval: a <c>#</c> comment, an ANSI-C
+        /// <c>$'…'</c> or locale <c>$"…"</c> string, or the <c>$</c> of a <c>${…}</c> expansion.
+        /// </summary>
+        Unvetted = 3
     }
 
     /// <summary>A construct <see cref="ShellScanner"/> is inside of.</summary>
@@ -249,11 +277,10 @@ internal static class DotnetCommandRewriter
         private List<HereDocument>? _pendingHereDocuments;
         private int _position;
         private bool _wordStart = true;
-        /// <summary>Whether every quote, substitution and here-document the scan opened was closed.</summary>
-        internal readonly bool IsTerminated => !Unterminated && Top == Frame.TopLevel;
+        private bool _unterminated;
 
-        /// <summary>Whether a quote, a here-document delimiter or a here-document body ran to the end of the command.</summary>
-        private bool Unterminated { readonly get; set; }
+        /// <summary>Whether every quote, substitution and here-document the scan opened was closed.</summary>
+        internal readonly bool IsTerminated() => !_unterminated && Top == Frame.TopLevel;
 
         private readonly Frame Top => _frames is { Count: > 0 } frames ? frames.Peek() : Frame.TopLevel;
 
@@ -290,6 +317,12 @@ internal static class DotnetCommandRewriter
                     break;
                 case '`':
                     return OpenSubstitution(Frame.Backtick, out token);
+                case '$' when Peek() == '$':
+                    _position++;
+                    break;
+                case '$' when Peek() == '{':
+                    token = ShellToken.Unvetted;
+                    return true;
                 case '$' when Peek() == '(':
                     _position++;
                     return OpenSubstitution(Frame.Parenthesis, out token);
@@ -312,10 +345,25 @@ internal static class DotnetCommandRewriter
                 case '\'':
                     SkipQuoted('\'', false);
                     return false;
+                case '$' when Peek() == '$':
+                    _position++;
+                    _wordStart = false;
+                    return true;
                 case '$' when Peek() == '\'':
                     _position++;
                     SkipQuoted('\'', true);
-                    return false;
+                    token = ShellToken.Unvetted;
+                    return true;
+                case '$' when Peek() == '"':
+                    _position++;
+                    Push(Frame.DoubleQuote);
+                    _wordStart = false;
+                    token = ShellToken.Unvetted;
+                    return true;
+                case '$' when Peek() == '{':
+                    _wordStart = false;
+                    token = ShellToken.Unvetted;
+                    return true;
                 case '$' when Peek() == '(':
                     _position++;
                     return OpenSubstitution(Frame.Parenthesis, out token);
@@ -332,7 +380,8 @@ internal static class DotnetCommandRewriter
                 case '#' when _wordStart:
                     var lineEnd = command.IndexOf('\n', _position);
                     _position = lineEnd < 0 ? command.Length : lineEnd;
-                    return false;
+                    token = ShellToken.Unvetted;
+                    return true;
                 case '(':
                     Push(Frame.Parenthesis);
                     _wordStart = true;
@@ -396,7 +445,7 @@ internal static class DotnetCommandRewriter
                 }
             }
 
-            Unterminated = true;
+            _unterminated = true;
         }
 
         /// <summary>Reads the delimiter word after <c>&lt;&lt;</c> or <c>&lt;&lt;-</c> and queues its body.</summary>
@@ -440,7 +489,7 @@ internal static class DotnetCommandRewriter
 
             if (delimiter.Length == 0)
             {
-                Unterminated = true;
+                _unterminated = true;
                 return;
             }
 
@@ -468,7 +517,7 @@ internal static class DotnetCommandRewriter
                 delimiter.Append(c);
             }
 
-            Unterminated = true;
+            _unterminated = true;
         }
 
         /// <summary>At the start of a line, skips the bodies of the here-documents the previous line opened.</summary>
@@ -501,7 +550,7 @@ internal static class DotnetCommandRewriter
                 }
             }
 
-            Unterminated = true;
+            _unterminated = true;
         }
     }
 }
