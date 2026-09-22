@@ -11,12 +11,12 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A match is <c>dotnet</c>, whitespace other than a line break, and a subcommand (the same whitespace between
-/// a multi-token subcommand's tokens, the longest subcommand tried first, a word boundary after it). It is left
-/// alone when the character before it cannot end a previous command (a path such as
-/// <c>/usr/lib/dotnet/dotnet build</c>), when <c>dtk</c> already runs it, or when it is not shell code at all.
-/// <see cref="IsPythonSpace"/> and <see cref="IsPythonWord"/> keep the Unicode-aware <c>\s</c> and <c>\w</c> of
-/// the Python hooks dtk generated before <c>dtk hook</c>, which this class started as a port of.
+/// A match is <c>dotnet</c>, blanks (spaces or tabs), and a subcommand (blanks between a multi-token
+/// subcommand's tokens, the longest subcommand tried first, a word boundary after it). It is left alone when
+/// the character before it cannot end a previous command (a path such as <c>/usr/lib/dotnet/dotnet build</c>),
+/// when <c>dtk</c> already runs it, or when it is not shell code at all. <see cref="IsPythonWord"/> keeps the
+/// Unicode-aware <c>\w</c> of the Python hooks dtk generated before <c>dtk hook</c>, which this class started as
+/// a port of.
 /// </para>
 /// <para>
 /// One left-to-right pass of <see cref="ShellScanner"/> decides what is shell code. It understands backslash
@@ -24,14 +24,16 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// <c>$(…)</c> and backtick command substitutions (each starting a fresh command, even inside double quotes),
 /// parentheses, <c>#</c> comments that start a word, and here-document bodies (<c>&lt;&lt;</c> and
 /// <c>&lt;&lt;-</c>, with quoted or unquoted delimiters), which are data and never rewritten. <c>${…}</c>
-/// expansions, <c>case</c> patterns and arithmetic are not parsed; where they mislead the scanner, a
-/// <c>dotnet</c> command may be left unrewritten.
+/// expansions, <c>case</c> patterns and arithmetic are not parsed. Where they mislead the scanner, it can
+/// leave a <c>dotnet</c> command unrewritten or rewrite text that is really data (quotes nested inside
+/// <c>"${…}"</c> are read as closing the string).
 /// </para>
 /// <para>
 /// <see cref="IsSimpleCommand"/> does not rely on that precision. It decides an auto-approval, so it accepts
 /// only a command whose first word is <c>dotnet</c> and in which the scanner met nothing but plain words,
-/// quoted text and blanks; comments, ANSI-C and locale strings, <c>${…}</c>, substitutions, here-documents,
-/// redirections, operators and unterminated quotes all make a command not simple.
+/// quoted text and blanks. Comments, ANSI-C and locale strings, <c>${…}</c>, <c>$[…]</c>, <c>!</c> (history
+/// expansion, in shells that enable it), substitutions, here-documents, redirections, operators and
+/// unterminated quotes all make a command not simple, so a mis-scan can cost a rewrite but never an approval.
 /// </para>
 /// </remarks>
 internal static class DotnetCommandRewriter
@@ -89,7 +91,8 @@ internal static class DotnetCommandRewriter
     /// Whether <paramref name="command"/> is a single <c>dotnet</c> invocation with nothing that could run
     /// another command beside it or write elsewhere: its first word is <c>dotnet</c>, and it has no unquoted
     /// operator or redirection, no command substitution (even inside double quotes), no here-document, comment,
-    /// ANSI-C or locale string or <c>${…}</c> expansion, and no unterminated quote. Copilot CLI auto-approves
+    /// ANSI-C or locale string, <c>${…}</c> or <c>$[…]</c> expansion or <c>!</c> outside single quotes, and no
+    /// unterminated quote. Copilot CLI auto-approves
     /// only such commands, so anything the scanner cannot vouch for is not simple.
     /// </summary>
     /// <param name="command">The original, unrewritten command.</param>
@@ -176,7 +179,7 @@ internal static class DotnetCommandRewriter
 
         var preceding = command.AsSpan(0, start);
         var length = preceding.Length;
-        while (length > 0 && IsInlineSpace(preceding[length - 1]))
+        while (length > 0 && IsBlank(preceding[length - 1]))
         {
             length--;
         }
@@ -189,7 +192,7 @@ internal static class DotnetCommandRewriter
 
     private static int SkipSpaces(string command, int index)
     {
-        while (index < command.Length && IsInlineSpace(command[index]))
+        while (index < command.Length && IsBlank(command[index]))
         {
             index++;
         }
@@ -198,11 +201,11 @@ internal static class DotnetCommandRewriter
     }
 
     /// <summary>
-    /// Whitespace that can separate words on one line: <see cref="IsPythonSpace"/> without the line breaks
-    /// <c>\n</c> and <c>\r</c>, since <c>dotnet</c> and a word on the next line are two commands.
+    /// A shell blank, space or tab: the only characters that separate words on one line. A line break ends the
+    /// command, and other whitespace (<c>\v</c>, no-break space, …) is part of a word.
     /// </summary>
     /// <param name="c">The character to test.</param>
-    private static bool IsInlineSpace(char c) => c is not ('\n' or '\r') && IsPythonSpace(c);
+    private static bool IsBlank(char c) => c is ' ' or '\t';
 
     private static bool IsWordBefore(string command, int index) =>
         index > 0
@@ -213,10 +216,6 @@ internal static class DotnetCommandRewriter
         index < command.Length
         && Rune.DecodeFromUtf16(command.AsSpan(index), out var rune, out _) == OperationStatus.Done
         && IsPythonWord(rune);
-
-    /// <summary>Python's <c>str.isspace()</c>, which also counts the separators U+001C–U+001F.</summary>
-    /// <param name="c">The character to test.</param>
-    private static bool IsPythonSpace(char c) => char.IsWhiteSpace(c) || c is >= '\u001c' and <= '\u001f';
 
     /// <summary>Python's <c>\w</c>: an underscore, a letter, or any numeric character, including superscripts.</summary>
     /// <param name="rune">The code point to test.</param>
@@ -240,7 +239,8 @@ internal static class DotnetCommandRewriter
 
         /// <summary>
         /// A construct parsed for rewriting but never trusted for approval: a <c>#</c> comment, an ANSI-C
-        /// <c>$'…'</c> or locale <c>$"…"</c> string, or the <c>$</c> of a <c>${…}</c> expansion.
+        /// <c>$'…'</c> or locale <c>$"…"</c> string, the <c>$</c> of a <c>${…}</c> expansion or of legacy
+        /// <c>$[…]</c> arithmetic, or a <c>!</c>, which history expansion rewrites in shells that enable it.
         /// </summary>
         Unvetted = 3
     }
@@ -320,7 +320,8 @@ internal static class DotnetCommandRewriter
                 case '$' when Peek() == '$':
                     _position++;
                     break;
-                case '$' when Peek() == '{':
+                case '$' when Peek() is '{' or '[':
+                case '!':
                     token = ShellToken.Unvetted;
                     return true;
                 case '$' when Peek() == '(':
@@ -360,7 +361,8 @@ internal static class DotnetCommandRewriter
                     _wordStart = false;
                     token = ShellToken.Unvetted;
                     return true;
-                case '$' when Peek() == '{':
+                case '$' when Peek() is '{' or '[':
+                case '!':
                     _wordStart = false;
                     token = ShellToken.Unvetted;
                     return true;

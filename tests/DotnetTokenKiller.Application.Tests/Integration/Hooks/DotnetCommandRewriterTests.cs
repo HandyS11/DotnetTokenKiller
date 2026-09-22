@@ -16,7 +16,6 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet list   package", "dtk dotnet list   package")]
     [InlineData("dotnet   build", "dtk dotnet build")]
     [InlineData("dotnet\tformat", "dtk dotnet format")]
-    [InlineData("dotnet\u00a0build", "dtk dotnet build")]
     [InlineData("cd src && dotnet test", "cd src && dtk dotnet test")]
     [InlineData("`dotnet build`", "`dtk dotnet build`")]
     [InlineData("echo dtk; dotnet build", "echo dtk; dtk dotnet build")]
@@ -51,6 +50,8 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("echo $\"it's\"; dotnet build", "echo $\"it's\"; dtk dotnet build")]
     [InlineData("dtk\ndotnet build", "dtk\ndtk dotnet build")]
     [InlineData("dotnet list\tpackage", "dtk dotnet list\tpackage")]
+    [InlineData("! dotnet build", "! dtk dotnet build")]
+    [InlineData("echo \"hi!\"; dotnet build $[1]", "echo \"hi!\"; dtk dotnet build $[1]")]
     public void Rewrite_QualifyingInvocation_IsPrefixedWithDtk(string command, string expected)
     {
         DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
@@ -92,6 +93,11 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("\"$(dtk dotnet build)\"")]
     [InlineData("dotnet\nbuild")]
     [InlineData("dotnet\r\nbuild")]
+    [InlineData("dotnet\u00a0build")]
+    [InlineData("dotnet\vbuild")]
+    [InlineData("dotnet\fbuild")]
+    [InlineData("dotnet\u2028build")]
+    [InlineData("dotnet list\u00a0package")]
     [InlineData("dotnet list\npackage")]
     [InlineData("cat <<EOF; dotnet\nbuild\nEOF")]
     public void Rewrite_NonQualifyingInvocation_IsReturnedUnchanged(string command)
@@ -137,6 +143,14 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet build ${x}", false)]
     [InlineData("dotnet build \"${x/'\"'/y}\"", false)]
     [InlineData("dotnet build # c", false)]
+    [InlineData("dotnet build \"!#;echo PWNED;#\"", false)]
+    [InlineData("dotnet build !!", false)]
+    [InlineData("dotnet build \"hi!\"", false)]
+    [InlineData("dotnet build '!x'", true)]
+    [InlineData("dotnet build \\!x", true)]
+    [InlineData("dotnet build $[HOME]", false)]
+    [InlineData("dotnet build \"$[HOME]\"", false)]
+    [InlineData("dotnet build '$[HOME]'", true)]
     [InlineData("dotnet build # c\nls", false)]
     [InlineData("dotnet build a\\ #; rm -rf ~", false)]
     [InlineData("dotnet build a#; rm -rf ~", false)]
