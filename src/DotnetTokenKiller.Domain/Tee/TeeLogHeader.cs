@@ -22,18 +22,12 @@ namespace DotnetTokenKiller.Domain.Tee;
 /// </param>
 /// <param name="Source">Whether dtk ran the command or received its output on stdin.</param>
 /// <param name="TimestampUtc">When the run started, i.e. when the tee session was opened.</param>
-/// <param name="Truncated">
-/// Whether the body was cut short because it reached the configured byte cap. Defaults to
-/// <see langword="false"/> so a header written before this field existed — or one written by an
-/// older dtk that never sets it — still parses as "not truncated" rather than failing to parse.
-/// </param>
 public sealed record TeeLogHeader(
     string CommandLine,
     string ProjectPath,
     int? ExitCode,
     RunSource Source,
-    DateTimeOffset TimestampUtc,
-    bool Truncated = false)
+    DateTimeOffset TimestampUtc)
 {
     /// <summary>The first line of a v2 header.</summary>
     public const string VersionLine = "# dtk-log v2";
@@ -50,9 +44,6 @@ public sealed record TeeLogHeader(
     /// <summary>Width of the exit value, sized to <c>-2147483648</c>.</summary>
     private const int ExitFieldWidth = 11;
 
-    /// <summary>Width of the truncated value, sized to the longer of "true"/"false".</summary>
-    private const int TruncatedFieldWidth = 5;
-
     private const string RunningText = "running";
     private const string CompleteText = "complete";
 
@@ -61,7 +52,6 @@ public sealed record TeeLogHeader(
     private const string ExitKey = "exit";
     private const string SourceKey = "source";
     private const string StatusKey = "status";
-    private const string TruncatedKey = "truncated";
     private const string UtcKey = "utc";
 
     /// <summary>Whether the run this log came from finished.</summary>
@@ -95,28 +85,9 @@ public sealed record TeeLogHeader(
             .Append("# ").Append(SourceKey).Append(": ").Append(Source.ToString()).Append('\n')
             .Append("# ").Append(UtcKey).Append(": ")
             .Append(TimestampUtc.ToString("O", CultureInfo.InvariantCulture)).Append('\n')
-            .Append(RenderTruncated(Truncated))
             .Append(RenderStatusAndExit(ExitCode))
             .Append(Delimiter).Append('\n');
         return sb.ToString();
-    }
-
-    /// <summary>
-    /// Renders the truncated line. A separate field from <see cref="RenderStatusAndExit"/> because
-    /// it can flip from <see langword="false"/> to <see langword="true"/> as soon as the body's byte
-    /// cap is first hit — well before the run finishes and <c>FinalizeAsync</c> rewrites the
-    /// status/exit region — so it needs its own fixed-width, independently overwritable region.
-    /// </summary>
-    /// <param name="truncated">Whether the body was cut short by the byte cap.</param>
-    /// <returns>
-    /// The line including its trailing line feed. The length is identical for both inputs — ASCII
-    /// "true"/"false" padded to <see cref="TruncatedFieldWidth"/> — so it can be overwritten in
-    /// place without touching anything after it.
-    /// </returns>
-    public static string RenderTruncated(bool truncated)
-    {
-        var value = (truncated ? "true" : "false").PadRight(TruncatedFieldWidth);
-        return $"# {TruncatedKey}: {value}\n";
     }
 
     /// <summary>Parses a v1 or v2 header from the start of <paramref name="text"/>.</summary>
@@ -165,17 +136,7 @@ public sealed record TeeLogHeader(
             return false;
         }
 
-        // Optional: absent in v1/v2 headers written before this field existed, and absent from a
-        // header written by an older dtk that has never learned to write it. Present but unparsable
-        // is still rejected, same as every other field — the difference from Command/Cwd/Exit/etc.
-        // is only that TryReadFields never required this key to appear at all.
-        var truncated = false;
-        if (fields.Truncated is not null && !bool.TryParse(fields.Truncated, out truncated))
-        {
-            return false;
-        }
-
-        header = new TeeLogHeader(fields.Command, fields.Cwd, exitCode, runSource, timestamp, truncated);
+        header = new TeeLogHeader(fields.Command, fields.Cwd, exitCode, runSource, timestamp);
         return true;
     }
 
@@ -234,8 +195,6 @@ public sealed record TeeLogHeader(
 
         public string? Status { get; private set; }
 
-        public string? Truncated { get; private set; }
-
         public string? Utc { get; private set; }
 
         /// <summary>Stores one header line's value under its key.</summary>
@@ -263,10 +222,6 @@ public sealed record TeeLogHeader(
                     break;
                 case StatusKey:
                     Status = value.TrimEnd(' ');
-                    break;
-                case TruncatedKey:
-                    // Trimmed at both ends, same reason as Exit/Status: padded to a fixed width.
-                    Truncated = value.TrimEnd(' ');
                     break;
                 case UtcKey:
                     Utc = value;

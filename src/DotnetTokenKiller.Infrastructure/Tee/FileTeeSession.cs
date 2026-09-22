@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Text;
@@ -18,22 +17,15 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// <param name="filePath">The log's path, used for the hint and for deletion.</param>
 /// <param name="statusRegionOffset">Byte offset of the status/exit region within the file.</param>
 /// <param name="statusRegionLength">Byte length of that region.</param>
-/// <param name="truncatedFieldOffset">
-/// Byte offset of the header's truncated field within the file. Rewritten in place by the writer
-/// itself, independently of <see cref="FinalizeAsync"/>, the moment the body's byte cap is first
-/// hit — so an abandoned session (killed before it could finalize) still leaves a log whose header
-/// correctly says it was truncated.
-/// </param>
 /// <param name="policy">The size and retention rules to apply when the run completes.</param>
 public sealed class FileTeeSession(
     FileStream stream,
     string filePath,
     long statusRegionOffset,
     int statusRegionLength,
-    long truncatedFieldOffset,
     TeeSessionPolicy policy) : ITeeSession
 {
-    private readonly SessionWriter _writer = new(stream, policy.MaxBodyBytes, truncatedFieldOffset);
+    private readonly SessionWriter _writer = new(stream, policy.MaxBodyBytes);
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -67,7 +59,16 @@ public sealed class FileTeeSession(
         {
             await stream.FlushAsync(ct).ConfigureAwait(false);
 
-            if ((policy.KeepOnlyOnFailure && exitCode == 0) || _writer.BodyBytesWritten < policy.MinBodyBytes)
+            // A truncated body bypasses the MinBodyBytes floor: hitting the byte cap already proves
+            // the run produced at least that many bytes of output (in practice, likely far more —
+            // the child kept producing output after the point the cap was reached), which is exactly
+            // the kind of run the floor exists to keep, not the one-line "Restored." it exists to
+            // drop. Without this, a cap configured below the floor (itself clamped to the cap in
+            // FileTeeService.BeginAsync so a *plain* small-but-real log can still pass it) discarded
+            // every truncated log outright — the marker line the writer just spent a whole cap's
+            // worth of effort reserving room for would never survive to be read.
+            if ((policy.KeepOnlyOnFailure && exitCode == 0) ||
+                (_writer.BodyBytesWritten < policy.MinBodyBytes && !_writer.Truncated))
             {
                 await DisposeAsync().ConfigureAwait(false);
                 File.Delete(filePath);
@@ -166,8 +167,7 @@ public sealed class FileTeeSession(
     /// </summary>
     /// <param name="stream">The open log file to append to.</param>
     /// <param name="maxBodyBytes">The body's byte budget; writes stop once it is reached.</param>
-    /// <param name="truncatedFieldOffset">Byte offset of the header's truncated field.</param>
-    private sealed class SessionWriter(FileStream stream, long maxBodyBytes, long truncatedFieldOffset) : TextWriter
+    private sealed class SessionWriter(FileStream stream, long maxBodyBytes) : TextWriter
     {
         // Never disposed: a SemaphoreSlim whose AvailableWaitHandle is never touched needs no
         // disposal, and disposing it was the cause of an ObjectDisposedException that could
@@ -177,23 +177,14 @@ public sealed class FileTeeSession(
 #pragma warning restore CA2213
 
         /// <summary>
-        /// The marker line appended once, in place of whatever real output would have followed,
-        /// the moment the body's byte cap is first hit. Its own byte length is known up front — the
-        /// cap value it reports never changes for the life of the session — so room for it can be
-        /// reserved out of <see cref="_contentBudget"/> before any content is written, guaranteeing
-        /// the marker always has room to append even right at the cap.
+        /// The marker's bytes, the content budget left once room for it is set aside, and whether it
+        /// fits within the cap at all — computed once, together, from <c>maxBodyBytes</c>.
+        /// A single tuple field rather than three separate ones: C# forbids a field initializer from
+        /// reading another instance field (only <see langword="static"/> members and the primary
+        /// constructor's own parameters are in scope at that point), so three independent
+        /// initializers would each have had to re-render and re-measure the marker text.
         /// </summary>
-        private readonly byte[] _markerBytes = BuildMarkerBytes(maxBodyBytes);
-
-        /// <summary>
-        /// The byte budget left for real content once room for <see cref="_markerBytes"/> is set
-        /// aside. Can be 0 (never negative) when the cap is smaller than the marker itself, in which
-        /// case no content — and, per <see cref="_markerFits"/>, not even the marker — ever fits.
-        /// </summary>
-        private readonly long _contentBudget = Math.Max(0, maxBodyBytes - BuildMarkerBytes(maxBodyBytes).Length);
-
-        /// <summary>Whether the marker itself fits within the configured cap at all.</summary>
-        private readonly bool _markerFits = BuildMarkerBytes(maxBodyBytes).Length <= maxBodyBytes;
+        private readonly (byte[] MarkerBytes, long ContentBudget, bool MarkerFits) _cap = ComputeCap(maxBodyBytes);
 
         /// <summary>
         /// Written from both pump threads and from <c>FinalizeAsync</c>; volatile so a check on one
@@ -203,10 +194,12 @@ public sealed class FileTeeSession(
         private volatile bool _broken;
 
         /// <summary>
-        /// Set once, the first time the byte cap is hit, so the marker and the header's truncated
-        /// field are each written exactly once no matter how many further lines the pump offers.
+        /// Whether the byte cap has been hit. Also gates the marker write (or, on a cap too small
+        /// even for the marker, nothing) so it happens exactly once no matter how many further lines
+        /// the pump offers. Deliberately set only after that write succeeds; see
+        /// <see cref="RecordTruncationAsync"/>.
         /// </summary>
-        private bool _truncationRecorded;
+        public bool Truncated { get; private set; }
 
         public long BodyBytesWritten { get; private set; }
 
@@ -260,14 +253,13 @@ public sealed class FileTeeSession(
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                if (_truncationRecorded)
+                if (Truncated)
                 {
-                    // The marker (if it fit) and the header's truncated flag were already recorded —
-                    // nothing more can ever be appended.
+                    // The cap was already dealt with — nothing more can ever be appended.
                     return;
                 }
 
-                var remaining = _contentBudget - BodyBytesWritten;
+                var remaining = _cap.ContentBudget - BodyBytesWritten;
                 if (remaining <= 0)
                 {
                     // The previous line used up the last of the content budget and there is more to
@@ -313,39 +305,54 @@ public sealed class FileTeeSession(
         }
 
         /// <summary>
-        /// Records that the byte cap has been hit: appends the truncation marker (when it fits at
-        /// all) and rewrites the header's truncated field in place. Called only once per session,
-        /// from within the gate <see cref="WriteLineAsync"/> already holds.
+        /// Records that the byte cap has been hit: appends the truncation marker, when it fits at
+        /// all. Called only once per session, from within the gate <see cref="WriteLineAsync"/>
+        /// already holds.
         /// </summary>
         /// <param name="cancellationToken">Cancellation token.</param>
         private async Task RecordTruncationAsync(CancellationToken cancellationToken)
         {
-            _truncationRecorded = true;
-
-            if (_markerFits)
+            if (_cap.MarkerFits)
             {
-                // Guaranteed to fit: _contentBudget was sized to leave exactly this much room.
-                await stream.WriteAsync(_markerBytes, cancellationToken).ConfigureAwait(false);
-                BodyBytesWritten += _markerBytes.Length;
+                // Guaranteed to fit: _cap.ContentBudget was sized to leave exactly this much room.
+                await stream.WriteAsync(_cap.MarkerBytes, cancellationToken).ConfigureAwait(false);
+                BodyBytesWritten += _cap.MarkerBytes.Length;
             }
 
-            var flagBytes = Encoding.UTF8.GetBytes(TeeLogHeader.RenderTruncated(true));
-            stream.Seek(truncatedFieldOffset, SeekOrigin.Begin);
-            await stream.WriteAsync(flagBytes, cancellationToken).ConfigureAwait(false);
+            // Set only after the write above (if any) actually completed, not before it: Task 9
+            // wires Ctrl+C cancellation through this same writer, and a cancellation that throws out
+            // of WriteAsync would otherwise leave Truncated permanently true with the
+            // marker never actually on the stream — every future call short-circuits on it above, so
+            // the marker would be lost for good rather than retried. A cancellation during the flush
+            // immediately below is accepted as a narrower risk: the marker bytes are already handed
+            // to the stream by that point, just not yet guaranteed durable on disk.
+            Truncated = true;
 
             // Durable immediately, not deferred to FinalizeAsync: a run killed right after this
-            // point (SIGKILL, a tool-call timeout) must still leave a log whose header and body both
-            // say it was truncated, the same durability guarantee AbandonedSession already relies on
-            // for the running/complete status.
+            // point (SIGKILL, a tool-call timeout) must still leave a log whose body says it was
+            // truncated, the same durability guarantee AbandonedSession already relies on for the
+            // running/complete status.
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        /// <summary>Renders the marker line appended once the byte cap is first hit.</summary>
-        /// <param name="maxBodyBytes">The body's byte budget, reported in the marker text.</param>
-        /// <returns>The UTF-8 bytes of the marker line, including its trailing line feed.</returns>
-        private static byte[] BuildMarkerBytes(long maxBodyBytes) =>
-            Encoding.UTF8.GetBytes(
-                $"[dtk: output truncated at {maxBodyBytes.ToString(CultureInfo.InvariantCulture)} bytes]\n");
+        /// <summary>
+        /// Computes the marker bytes and, from their length, the content budget and whether the
+        /// marker fits within the cap at all.
+        /// </summary>
+        /// <param name="maxBodyBytes">The body's byte budget.</param>
+        /// <returns>
+        /// The marker's UTF-8 bytes (including its trailing line feed); the byte budget left for
+        /// real content once room for the marker is set aside — the full cap, unreduced, when the
+        /// marker cannot fit at all, since reserving room for a marker that will never be written
+        /// would only discard content for nothing; and whether the marker fits within the cap.
+        /// </returns>
+        private static (byte[] MarkerBytes, long ContentBudget, bool MarkerFits) ComputeCap(long maxBodyBytes)
+        {
+            var markerBytes = Encoding.UTF8.GetBytes(TeeTruncationMarker.Render(maxBodyBytes) + "\n");
+            var markerFits = markerBytes.Length <= maxBodyBytes;
+            var contentBudget = markerFits ? Math.Max(0, maxBodyBytes - markerBytes.Length) : maxBodyBytes;
+            return (markerBytes, contentBudget, markerFits);
+        }
 
         public override async Task FlushAsync(CancellationToken cancellationToken)
         {

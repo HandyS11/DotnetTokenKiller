@@ -286,16 +286,12 @@ public sealed class FileTeeLogStoreTests : IDisposable
         var region = TeeLogHeader.RenderStatusAndExit(null);
         var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
         var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
-        var truncatedRegion = TeeLogHeader.RenderTruncated(false);
-        var truncatedCharIndex = rendered.IndexOf(truncatedRegion, StringComparison.Ordinal);
-        var truncatedOffset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, truncatedCharIndex));
         var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
         var headerBytes = Encoding.UTF8.GetBytes(rendered);
         await stream.WriteAsync(headerBytes);
         await stream.FlushAsync();
         await using var session = new FileTeeSession(
-            stream, path, offset, Encoding.UTF8.GetByteCount(region), truncatedOffset,
-            new TeeSessionPolicy(1_048_576L, 0, false));
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
         await session.Writer.WriteLineAsync("in flight".AsMemory(), CancellationToken.None);
         await session.Writer.FlushAsync(CancellationToken.None);
 

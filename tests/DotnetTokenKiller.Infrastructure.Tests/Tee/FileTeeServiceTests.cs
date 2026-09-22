@@ -154,11 +154,11 @@ public sealed class FileTeeServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task BeginAsync_WiresTheTruncatedFieldOffsetCorrectly_SoTheWriterMarksTheHeader_WhenTheCapIsHit()
+    public async Task BeginAsync_WritesTheTruncationMarker_ThroughTheRealServicePath()
     {
-        // FileTeeSessionTests exercises the writer's own truncation logic against a hand-built
-        // offset; this proves BeginAsync computes and passes the real one correctly end to end,
-        // through the public API a production caller actually uses.
+        // FileTeeSessionTests exercises the writer's own truncation logic directly; this proves it
+        // through the public API a production caller actually uses, with a config-driven cap rather
+        // than a hand-built one.
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: 100));
 
         await using var session = await sut.BeginAsync("build", RunningHeader());
@@ -168,9 +168,32 @@ public sealed class FileTeeServiceTests : IDisposable
         }
 
         var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
-        TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
-        header.Truncated.Should().BeTrue();
         Encoding.UTF8.GetByteCount(TeeLogHeader.StripHeader(text)).Should().BeLessThanOrEqualTo(100);
+        TeeLogHeader.StripHeader(text).Should().Contain("[dtk: output truncated at 100 bytes]");
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_KeepsATruncatedLog_ThroughTheRealServicePath_EvenBelowTheDefaultFloor()
+    {
+        // Regression guard, through the real BeginAsync/FinalizeAsync path rather than a hand-built
+        // FileTeeSession. FileTeeService.BeginAsync clamps MinBodyBytes to
+        // Math.Min(500, MaxFileSizeBytes) -- for this 100-byte cap, a floor of exactly 100. A
+        // truncated body does not necessarily land on exactly 100 bytes, though: "é" is a 2-byte
+        // UTF-8 rune, and the cap's 63-byte content budget (100 minus the 37-byte marker for this
+        // three-digit cap) is odd, so the cut can only take whole runes -- 31 of them, 62 bytes, one
+        // short of the budget. Marker included, the body lands at 99 bytes, one under the 100-byte
+        // floor. Without bypassing the floor for a truncated body, this exact (and unremarkable —
+        // nothing here is a contrived edge case beyond the specific byte count) log would be
+        // silently discarded despite the marker the writer just wrote proving real output was lost.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: 100));
+
+        await using var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(new string('é', 40).AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().NotBeNull();
+        Directory.GetFiles(_tempDir).Should().ContainSingle();
     }
 
     [Fact]

@@ -40,16 +40,6 @@ public sealed class FileTeeSessionTests : IDisposable
         RunSource.Run,
         new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
 
-    /// <summary>Locates the byte offset of the truncated field within an already-rendered header.</summary>
-    /// <param name="rendered">The header text, as returned by <see cref="TeeLogHeader.Render"/>.</param>
-    /// <returns>The UTF-8 byte offset, mirroring how FileTeeService.BeginAsync computes it.</returns>
-    private static long TruncatedFieldOffset(string rendered)
-    {
-        var truncatedRegion = TeeLogHeader.RenderTruncated(false);
-        var truncatedCharIndex = rendered.IndexOf(truncatedRegion, StringComparison.Ordinal);
-        return Encoding.UTF8.GetByteCount(rendered.AsSpan(0, truncatedCharIndex));
-    }
-
     /// <summary>Opens a session over a real file, mirroring what FileTeeService.BeginAsync does.</summary>
     /// <param name="maxBodyBytes">The body's byte budget.</param>
     /// <param name="minBodyBytes">Bodies smaller than this are discarded when the run completes.</param>
@@ -75,12 +65,11 @@ public sealed class FileTeeSessionTests : IDisposable
         var region = TeeLogHeader.RenderStatusAndExit(null);
         var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
         var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
-        var truncatedOffset = TruncatedFieldOffset(rendered);
         var bytes = Encoding.UTF8.GetBytes(rendered);
         stream.Write(bytes, 0, bytes.Length);
         stream.Flush();
 
-        var session = new FileTeeSession(stream, path, offset, Encoding.UTF8.GetByteCount(region), truncatedOffset,
+        var session = new FileTeeSession(stream, path, offset, Encoding.UTF8.GetByteCount(region),
             new TeeSessionPolicy(maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles));
         return (session, path);
     }
@@ -243,11 +232,12 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task Writer_MarksTheHeaderTruncated_AsSoonAsTheCapIsHit_WithoutFinalizing()
+    public async Task Writer_WritesTheMarker_AsSoonAsTheCapIsHit_WithoutFinalizing()
     {
-        // The header's truncated field is rewritten in place by the writer itself, independently of
+        // There is no header field for this (see TeeTruncationMarker's remarks): the marker line is
+        // the sole signal, and it is flushed to disk by the writer itself, independently of
         // FinalizeAsync -- exactly like the "Running" status survives a run that never finalizes,
-        // this proves a run killed right after the cap is hit still leaves a header that says so.
+        // this proves a run killed right after the cap is hit still leaves a body that says so.
         var (session, path) = CreateSut(maxBodyBytes: 100, minBodyBytes: 0);
 
         for (var i = 0; i < 20; i++)
@@ -259,14 +249,14 @@ public sealed class FileTeeSessionTests : IDisposable
         var text = await TeeLogFileReader.ReadAllTextAsync(path);
         TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
         header.Status.Should().Be(TeeLogStatus.Running);
-        header.Truncated.Should().BeTrue();
+        TeeLogHeader.StripHeader(text).Should().Contain("[dtk: output truncated at 100 bytes]");
     }
 
     [Fact]
-    public async Task Writer_DoesNotMarkTheHeaderTruncated_WhenOutputExactlyFillsTheCapAndNoMoreIsWritten()
+    public async Task Writer_DoesNotWriteTheMarker_WhenOutputExactlyFillsTheCapAndNoMoreIsWritten()
     {
         // A line landing exactly on the content budget is not proof anything was lost -- it might
-        // simply have been the last line the child ever produced. Recording truncation here would
+        // simply have been the last line the child ever produced. Appending the marker here would
         // be a false positive. 41 is precomputed so the content budget (cap minus the 36-byte marker
         // for this two-digit cap) comes out to exactly 5 bytes -- the length of "abcd\n".
         var (session, path) = CreateSut(maxBodyBytes: 41, minBodyBytes: 0);
@@ -275,13 +265,11 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.FinalizeAsync(0);
 
         var text = await TeeLogFileReader.ReadAllTextAsync(path);
-        TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
-        header.Truncated.Should().BeFalse();
         TeeLogHeader.StripHeader(text).Should().Be("abcd\n");
     }
 
     [Fact]
-    public async Task Writer_RecordsTheMarkerOnlyOnce_WhenManyMoreLinesOverflowTheCap()
+    public async Task Writer_WritesTheMarkerOnlyOnce_WhenManyMoreLinesOverflowTheCap()
     {
         var (session, path) = CreateSut(maxBodyBytes: 100, minBodyBytes: 0);
 
@@ -297,38 +285,58 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task Writer_SkipsTheMarkerButStillMarksTheHeader_WhenTheCapIsSmallerThanTheMarkerItself()
+    public async Task Writer_UsesTheFullCapForContent_WhenTheCapIsSmallerThanTheMarkerItself()
     {
         // A pathologically tiny cap: the marker text itself ("[dtk: output truncated at 5 bytes]\n")
-        // cannot fit at all. The body stays within the cap regardless, and the header still records
-        // that truncation happened even though there was no room to say so in the body.
+        // cannot fit at all. Reserving room for it anyway would only throw content away for a marker
+        // that will never be written, so the writer uses the whole cap for real content instead --
+        // there is no way to signal truncation in this scenario (nothing else exists but the marker
+        // line to do it), but at least the little content that fits is not needlessly sacrificed too.
         var (session, path) = CreateSut(maxBodyBytes: 5, minBodyBytes: 0);
 
         await session.Writer.WriteLineAsync(new string('x', 40).AsMemory(), CancellationToken.None);
         await session.FinalizeAsync(0);
 
-        var text = await TeeLogFileReader.ReadAllTextAsync(path);
-        TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
-        header.Truncated.Should().BeTrue();
-        Encoding.UTF8.GetByteCount(TeeLogHeader.StripHeader(text)).Should().BeLessThanOrEqualTo(5);
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
+        Encoding.UTF8.GetByteCount(body).Should().Be(5);
+        body.Should().Be("xxxxx");
     }
 
     [Fact]
-    public async Task FinalizeAsync_PreservesTheTruncatedFlag_AlongsideTheCompleteStatus()
+    public async Task FinalizeAsync_KeepsATruncatedLog_EvenWhenItsBodyIsUnderTheMinBodyBytesFloor()
     {
-        var (session, path) = CreateSut(maxBodyBytes: 100, minBodyBytes: 0);
+        // Regression guard: hitting the cap already proves the run produced at least that many
+        // bytes of output, so the MinBodyBytes floor (which exists to drop a one-line "Restored.")
+        // must not also discard a log that hit a byte cap configured below the floor -- otherwise
+        // every truncated log on a small cap is silently thrown away, the exact bug the floor's own
+        // clamp (Math.Min(500, MaxFileSizeBytes) in FileTeeService.BeginAsync) exists to prevent.
+        var (session, path) = CreateSut(maxBodyBytes: 100, minBodyBytes: 1000);
+
         for (var i = 0; i < 20; i++)
         {
             await session.Writer.WriteLineAsync(new string('x', 40).AsMemory(), CancellationToken.None);
         }
 
-        await session.FinalizeAsync(3);
+        var hint = await session.FinalizeAsync(0);
 
-        var text = await TeeLogFileReader.ReadAllTextAsync(path);
-        TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
-        header.Status.Should().Be(TeeLogStatus.Complete);
-        header.ExitCode.Should().Be(3);
-        header.Truncated.Should().BeTrue();
+        hint.Should().NotBeNull();
+        File.Exists(path).Should().BeTrue();
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
+        body.Should().Contain("[dtk: output truncated at 100 bytes]");
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_DiscardsAShortLog_WhenItNeverHitTheCap()
+    {
+        // Companion to the truncated-bypass test above: the MinBodyBytes floor must still apply
+        // normally to a run that never hit the cap at all.
+        var (session, path) = CreateSut(maxBodyBytes: 1_048_576L, minBodyBytes: 1000);
+        await session.Writer.WriteLineAsync("tiny".AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().BeNull();
+        File.Exists(path).Should().BeFalse();
     }
 
     [Fact]
@@ -368,7 +376,6 @@ public sealed class FileTeeSessionTests : IDisposable
         var region = TeeLogHeader.RenderStatusAndExit(null);
         var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
         var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
-        var truncatedOffset = TruncatedFieldOffset(rendered);
         var headerBytes = Encoding.UTF8.GetBytes(rendered);
         // Sync on purpose: ThrowingFileStream only overrides the async write path, so writing the
         // header synchronously here (with ThrowOnWrite already set) is what keeps the header
@@ -378,8 +385,7 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Flush();
 #pragma warning restore CA1849, VSTHRD103, S6966
         await using var session = new FileTeeSession(
-            stream, path, offset, Encoding.UTF8.GetByteCount(region), truncatedOffset,
-            new TeeSessionPolicy(1_048_576L, 0, false));
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
 
         var act = async () => await session.Writer.WriteLineAsync("first".AsMemory(), CancellationToken.None);
         await act.Should().NotThrowAsync();
@@ -405,15 +411,13 @@ public sealed class FileTeeSessionTests : IDisposable
         var region = TeeLogHeader.RenderStatusAndExit(null);
         var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
         var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
-        var truncatedOffset = TruncatedFieldOffset(rendered);
         var headerBytes = Encoding.UTF8.GetBytes(rendered);
 #pragma warning disable CA1849, VSTHRD103, S6966
         stream.Write(headerBytes, 0, headerBytes.Length);
         stream.Flush();
 #pragma warning restore CA1849, VSTHRD103, S6966
         await using var session = new FileTeeSession(
-            stream, path, offset, Encoding.UTF8.GetByteCount(region), truncatedOffset,
-            new TeeSessionPolicy(1_048_576L, 0, false));
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
 
         stream.ThrowOnFlush = true;
         var act = async () => await session.Writer.FlushAsync(CancellationToken.None);
@@ -476,15 +480,13 @@ public sealed class FileTeeSessionTests : IDisposable
         var region = TeeLogHeader.RenderStatusAndExit(null);
         var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
         var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
-        var truncatedOffset = TruncatedFieldOffset(rendered);
         var headerBytes = Encoding.UTF8.GetBytes(rendered);
 #pragma warning disable CA1849, VSTHRD103, S6966
         stream.Write(headerBytes, 0, headerBytes.Length);
         stream.Flush();
 #pragma warning restore CA1849, VSTHRD103, S6966
         await using var session = new FileTeeSession(
-            stream, path, offset, Encoding.UTF8.GetByteCount(region), truncatedOffset,
-            new TeeSessionPolicy(1_048_576L, 0, false));
+            stream, path, offset, Encoding.UTF8.GetByteCount(region), new TeeSessionPolicy(1_048_576L, 0, false));
         await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
 
         stream.ThrowOnFlush = true;
@@ -547,12 +549,11 @@ public sealed class FileTeeSessionTests : IDisposable
         var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
         var rendered = RunningHeader().Render();
         var region = TeeLogHeader.RenderStatusAndExit(null);
-        var truncatedOffset = TruncatedFieldOffset(rendered);
         var bytes = Encoding.UTF8.GetBytes(rendered);
         await stream.WriteAsync(bytes);
         await stream.FlushAsync();
         var session = new FileTeeSession(
-            stream, path, statusRegionOffset: 0, Encoding.UTF8.GetByteCount(region), truncatedOffset,
+            stream, path, statusRegionOffset: 0, Encoding.UTF8.GetByteCount(region),
             new TeeSessionPolicy(1_048_576L, 0, false));
         await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
 

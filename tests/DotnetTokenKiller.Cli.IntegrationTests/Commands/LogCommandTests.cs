@@ -437,10 +437,11 @@ public sealed class LogCommandTests
     [Fact]
     public async Task Run_WarnsAboutTruncatedOutput_ForATruncatedLog()
     {
-        var entry = Entry(5, "build") with
-        {
-            Header = new TeeLogHeader("dotnet build MyApp.slnx", Cwd, 0, RunSource.Run, At(5), Truncated: true)
-        };
+        // Detection is body-based, not a header field (a header field would make a new log
+        // unreadable by an older dtk sharing the same tee directory — see TeeTruncationMarker's
+        // remarks): the marker is the true last line the writer ever appends, so a plain Entry()
+        // with an ordinary header is enough here.
+        var entry = Entry(5, "build");
         var bodies = new Dictionary<string, string>
         {
             [entry.FilePath] = "compiling...\n[dtk: output truncated at 1048576 bytes]\n"
@@ -456,8 +457,8 @@ public sealed class LogCommandTests
     [Fact]
     public async Task Run_OmitsTheTruncatedWarning_ForALogThatNeverHitTheCap()
     {
-        // Entry() builds a header with Truncated defaulting to false; the warning must not appear
-        // for the overwhelming majority of logs that never reached the byte cap.
+        // The warning must not appear for the overwhelming majority of logs whose body never ends
+        // with the truncation marker.
         var entry = Entry(5, "build");
         var bodies = new Dictionary<string, string> { [entry.FilePath] = "done\n" };
         var (command, _, writer) = Create(new FakeStore(bodies, entry));
