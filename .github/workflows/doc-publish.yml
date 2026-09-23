@@ -1,28 +1,33 @@
 name: Docs Publish
 
-# docfx reads docs/ (docs/superpowers holds design notes it never renders) and the four src/ projects it
-# generates the API reference from. A pull request builds the site with warnings as errors; only a push
-# to develop deploys it.
+# docfx reads docs/ (docs/superpowers holds design notes it never renders), the samples/examples pages that
+# docs/articles/examples/*.md pull in with [!INCLUDE], and the four src/ projects it generates the API
+# reference from, built with the repository's SDK and package settings. A pull request builds the site with
+# warnings as errors; only a push to develop deploys it.
 on:
   push:
     branches: [develop]
     paths:
       - 'docs/**'
       - '!docs/superpowers/**'
+      - 'samples/examples/**'
       - 'src/**'
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
       - 'global.json'
+      - 'NuGet.config'
       - '.config/dotnet-tools.json'
       - '.github/workflows/doc-publish.yml'
   pull_request:
     paths:
       - 'docs/**'
       - '!docs/superpowers/**'
+      - 'samples/examples/**'
       - 'src/**'
       - 'Directory.Build.props'
       - 'Directory.Packages.props'
       - 'global.json'
+      - 'NuGet.config'
       - '.config/dotnet-tools.json'
       - '.github/workflows/doc-publish.yml'
   workflow_dispatch:

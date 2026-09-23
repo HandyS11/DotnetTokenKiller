@@ -250,9 +250,10 @@ and track on Rocky Linux 8). `fallback-package.yml` tests `any` on Linux and on 
 integration suite and a smoke test from Git Bash, pwsh and cmd. `publish.yml` pushes the RID packages before
 the pointer. The RID list and its runners live only in `aot-rids.yml`, which `ci.yml` and `publish.yml` both
 call; add or change a RID there. The Windows shell smoke test is the local action
-`.github/actions/smoke-windows-shells`, shared by both package workflows. A local Release build of the CLI carries the AOT feature switches in its runtimeconfig
-(`PublishAot=true` in the csproj), so `cold-start` on `bin/Release` measures an AOT-like JIT build, not the
-shipped fallback; measure the installed `any` package for fallback figures.
+`.github/actions/smoke-windows-shells`, shared by both package workflows. A local Release build of the CLI
+carries the AOT feature switches in its runtimeconfig (`PublishAot=true` in the csproj), so `cold-start` on
+`bin/Release` measures an AOT-like JIT build, not the shipped fallback; measure the installed `any` package for
+fallback figures.
 
 linux-x64 and linux-arm64 link SQLite statically (`DtkLinkSqliteStatically` in the CLI csproj), because
 SQLitePCLRaw's `libe_sqlite3.so` needs GLIBC_2.34 (ericsink/SQLitePCL.raw#674). glibc 2.27 has no `fcntl64`,

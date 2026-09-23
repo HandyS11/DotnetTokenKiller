@@ -9,7 +9,8 @@ on:
   workflow_dispatch:       # Allow manual runs
 
 # One Stryker run at a time: a manual run waits for the scheduled one (or the other way round) instead of
-# running beside it, and never cancels it.
+# running beside it, and never cancels the run in progress. GitHub keeps one pending run per group, so a
+# third run queued meanwhile replaces the pending one, which then shows as cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
