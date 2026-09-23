@@ -176,6 +176,21 @@ dtk init copilot-cli
 This creates `.github/hooks/dtk-dotnet.json`, which registers the `preToolUse` hook, and a dtk section in
 `.github/copilot-instructions.md`. `dtk init copilot-cli --global` writes the hook to `~/.copilot/hooks/`.
 
+### Approval
+
+When the hook rewrites a command it also replies with a `permissionDecision`, and `allow` skips Copilot CLI's own
+confirmation. dtk replies `allow` only for a single, plain `dotnet build`, `dotnet test`, `dotnet restore`,
+`dotnet clean`, `dotnet format` or `dotnet list package` invocation: the command must start with `dotnet` and hold
+nothing but words, quoted text and blanks. Everything else it rewrites gets `ask`, so Copilot CLI prompts as usual:
+
+- `dotnet publish` and `dotnet pack`, which write artifacts and, with a publish profile, can deploy;
+- a command with an environment-variable prefix (`FOO=1 dotnet build`) or any other word before `dotnet`;
+- a chained, piped or backgrounded command (`;`, `&&`, `||`, `|`, `&`), a subshell, or a line break;
+- a redirection (`>`, `<`, here-documents), a command substitution (`$(…)` or backticks, even inside double
+  quotes), a `${…}` expansion, a `!` outside single quotes (history expansion), a comment, or an unterminated quote.
+
+A command dtk does not rewrite gets no reply, which leaves it to your own Copilot CLI policy.
+
 ### Manual Installation
 
 Create `.github/hooks/dtk-dotnet.json`. Copilot CLI denies the tool call when a hook exits non-zero, so

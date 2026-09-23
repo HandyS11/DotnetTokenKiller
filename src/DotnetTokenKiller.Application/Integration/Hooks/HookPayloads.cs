@@ -18,7 +18,7 @@ internal static class HookPayloads
     /// <summary>
     /// Gemini CLI's reply when nothing about the payload calls for a rewrite. Unlike Copilot CLI's
     /// <c>permissionDecision: "allow"</c> (a real bypass, so <see cref="ReplyToCopilot"/> gates it on
-    /// <see cref="DotnetCommandRewriter.IsSimpleCommand"/>), a <c>BeforeTool</c> hook's <c>"allow"</c> decision does
+    /// <see cref="DotnetCommandRewriter.IsAutoApprovable"/>), a <c>BeforeTool</c> hook's <c>"allow"</c> decision does
     /// not bypass Gemini CLI's own confirmation: the scheduler only ever special-cases a hook decision of
     /// <c>"ask"</c> (forced into <c>PolicyDecision.ASK_USER</c>) or <c>"deny"</c>/<c>"block"</c> (rejected before
     /// the policy check runs); anything else, including <c>"allow"</c>, is indistinguishable from no decision at
@@ -174,7 +174,7 @@ internal static class HookPayloads
         toolArgs[CommandProperty] = rewritten;
         return new JsonObject
         {
-            ["permissionDecision"] = DotnetCommandRewriter.IsSimpleCommand(command) ? "allow" : "ask",
+            ["permissionDecision"] = DotnetCommandRewriter.IsAutoApprovable(command) ? "allow" : "ask",
             ["modifiedArgs"] = toolArgs
         }.ToJsonString();
     }

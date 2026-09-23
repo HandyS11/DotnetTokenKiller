@@ -171,4 +171,33 @@ public sealed class DotnetCommandRewriterTests
     {
         DotnetCommandRewriter.IsSimpleCommand(command).Should().Be(expected);
     }
+
+    [Fact]
+    public void AutoApprovableSubcommands_AreExactlyTheOnesRewrittenBeforePublishAndPack()
+    {
+        // Pinned on purpose: a subcommand added to DotnetSubcommands gains a rewrite, never an auto-approval,
+        // unless someone decides to widen this list and updates this test.
+        DotnetCommandRewriter.AutoApprovableSubcommands.Should()
+            .Equal("build", "test", "restore", "clean", "format", "list package");
+    }
+
+    [Theory]
+    [InlineData("dotnet build", true)]
+    [InlineData("dotnet test --no-build", true)]
+    [InlineData("dotnet restore", true)]
+    [InlineData("dotnet clean", true)]
+    [InlineData("dotnet format --verify-no-changes", true)]
+    [InlineData("dotnet list package --outdated", true)]
+    [InlineData(" \tdotnet  list \t package", true)]
+    [InlineData("dotnet publish -c Release -p:PublishProfile=Production", false)]
+    [InlineData("dotnet publish", false)]
+    [InlineData("dotnet pack -o artifacts", false)]
+    [InlineData("dotnet run dotnet build", false)]
+    [InlineData("dotnet list reference", false)]
+    [InlineData("dotnet build && rm -rf x", false)]
+    [InlineData("x=1 dotnet build", false)]
+    public void IsAutoApprovable_RequiresASimpleCommandAndAnApprovableSubcommand(string command, bool expected)
+    {
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().Be(expected);
+    }
 }

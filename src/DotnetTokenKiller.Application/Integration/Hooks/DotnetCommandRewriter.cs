@@ -51,6 +51,22 @@ internal static class DotnetCommandRewriter
     private static readonly string[][] SubcommandTokens =
         [.. DotnetSubcommands.Sorted.OrderByDescending(name => name.Length).Select(name => name.Split(' '))];
 
+    /// <summary>
+    /// The subcommands <see cref="IsAutoApprovable"/> accepts: exactly the ones dtk rewrote before it learned
+    /// <c>publish</c> and <c>pack</c>. Deliberately spelled out rather than derived from
+    /// <see cref="DotnetSubcommands.Ordered"/>, so a subcommand added there gains a rewrite but never, silently,
+    /// an auto-approval; widening this list is a decision of its own.
+    /// </summary>
+    internal static readonly IReadOnlyList<string> AutoApprovableSubcommands =
+    [
+        DotnetSubcommands.Build, DotnetSubcommands.Test, DotnetSubcommands.Restore, DotnetSubcommands.Clean,
+        DotnetSubcommands.Format, DotnetSubcommands.ListPackage
+    ];
+
+    /// <summary><see cref="AutoApprovableSubcommands"/>' tokens, longest name first.</summary>
+    private static readonly string[][] AutoApprovableTokens =
+        [.. AutoApprovableSubcommands.OrderByDescending(name => name.Length).Select(name => name.Split(' '))];
+
     /// <summary>Prefixes every qualifying <c>dotnet &lt;subcommand&gt;</c> in <paramref name="command"/> with <c>dtk</c>.</summary>
     /// <param name="command">The shell command a harness is about to run.</param>
     /// <returns>The rewritten command, or <paramref name="command"/> itself when nothing qualified.</returns>
@@ -118,6 +134,33 @@ internal static class DotnetCommandRewriter
         }
 
         return scanner.IsTerminated();
+    }
+
+    /// <summary>
+    /// Whether Copilot CLI may run <paramref name="command"/>'s rewrite without asking: it is
+    /// <see cref="IsSimpleCommand">simple</see> and its subcommand is one of <see cref="AutoApprovableSubcommands"/>.
+    /// <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they write artifacts (and a publish
+    /// profile can deploy), so they are left to the user's own approval.
+    /// </summary>
+    /// <param name="command">The original, unrewritten command.</param>
+    internal static bool IsAutoApprovable(string command)
+    {
+        if (!IsSimpleCommand(command))
+        {
+            return false;
+        }
+
+        var position = command.AsSpan().IndexOf(Dotnet, StringComparison.Ordinal) + Dotnet.Length;
+        var subcommandStart = SkipSpaces(command, position);
+        foreach (var tokens in AutoApprovableTokens)
+        {
+            if (TryMatchTokens(command, subcommandStart, tokens, out var end) && !IsWordAt(command, end))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryMatchSubcommand(string command, int position, out int subcommandStart, out int end)

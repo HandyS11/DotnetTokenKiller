@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Hardened the shell-aware `dotnet` command rewriter against command substitution, heredocs, and quoting edge
   cases that could let the Copilot CLI hook treat a disguised arbitrary shell command as "simple" and auto-approve
   it.
+- The Copilot CLI hook auto-approves (`allow`) fewer commands. It still replies `allow` for a single, plain
+  `dotnet build`, `test`, `restore`, `clean`, `format` or `list package` invocation, but now replies `ask` for a
+  command with an environment-variable prefix (`FOO=1 dotnet build`), a `!` outside single quotes, a redirection, or
+  a command substitution (even inside double quotes), and for every `dotnet publish` and `dotnet pack` it rewrites.
 
 ### Added
 

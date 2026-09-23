@@ -161,6 +161,23 @@ public sealed class HookPayloadsTests
     }
 
     [Theory]
+    [InlineData("dotnet publish -c Release -p:PublishProfile=Production", "dtk dotnet publish -c Release -p:PublishProfile=Production")]
+    [InlineData("dotnet pack -o artifacts", "dtk dotnet pack -o artifacts")]
+    public void Copilot_PublishOrPack_IsRewrittenButAsks(string command, string expected)
+    {
+        var payload = new JsonObject
+        {
+            ["toolName"] = "bash",
+            ["toolArgs"] = new JsonObject { ["command"] = command }
+        }.ToJsonString();
+
+        var root = JsonNode.Parse(Reply(HookPayloadKind.CopilotCli, payload)!)!;
+
+        root["permissionDecision"]!.GetValue<string>().Should().Be("ask", "publish and pack are not auto-approvable");
+        root["modifiedArgs"]!["command"]!.GetValue<string>().Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData("""{"toolName":"powershell","toolArgs":{"command":"dotnet build"}}""")]
     [InlineData("""{"toolName":"bash","toolArgs":{"command":"ls"}}""")]
     [InlineData("""{"toolName":"bash","toolArgs":"not json"}""")]
