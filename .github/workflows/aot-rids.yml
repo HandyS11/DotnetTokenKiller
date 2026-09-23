@@ -1,0 +1,56 @@
+name: AOT RIDs
+
+# The one list of Native AOT tool packages, as a matrix for aot-package.yml. CI packs and tests every
+# entry on each push and pull request, and Publish packs and releases the same entries, so the two
+# cannot drift apart. Each entry holds aot-package.yml's inputs except the version:
+# - rid: the runtime identifier packed;
+# - pack-runner / test-runner: the runner that packs it, and one of the RID's own OS and architecture;
+# - test-image: the container the tests run in, empty for the runner itself. The musl test jobs build
+#   with the Alpine image's SDK, which must satisfy global.json;
+# - glibc: check the package's glibc floor and smoke-test it on Rocky Linux 8;
+# - run-integration-suite: also run the whole CLI integration suite against the installed binary.
+# Keep the keys in this order: Publish's job names list the matrix values in it.
+
+on:
+  workflow_call:
+    outputs:
+      matrix:
+        description: The strategy.matrix object, as JSON, for fromJSON().
+        value: ${{ jobs.matrix.outputs.matrix }}
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    name: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Emit the matrix
+        id: matrix
+        env:
+          MATRIX: |
+            {
+              "include": [
+                { "rid": "linux-x64", "pack-runner": "ubuntu-latest", "test-runner": "ubuntu-latest",
+                  "test-image": "", "glibc": true, "run-integration-suite": true },
+                { "rid": "linux-arm64", "pack-runner": "ubuntu-latest", "test-runner": "ubuntu-24.04-arm",
+                  "test-image": "", "glibc": true, "run-integration-suite": false },
+                { "rid": "linux-musl-x64", "pack-runner": "ubuntu-latest", "test-runner": "ubuntu-latest",
+                  "test-image": "mcr.microsoft.com/dotnet/sdk:10.0-alpine", "glibc": false, "run-integration-suite": false },
+                { "rid": "linux-musl-arm64", "pack-runner": "ubuntu-latest", "test-runner": "ubuntu-24.04-arm",
+                  "test-image": "mcr.microsoft.com/dotnet/sdk:10.0-alpine", "glibc": false, "run-integration-suite": false },
+                { "rid": "osx-arm64", "pack-runner": "macos-latest", "test-runner": "macos-latest",
+                  "test-image": "", "glibc": false, "run-integration-suite": false },
+                { "rid": "win-x64", "pack-runner": "windows-latest", "test-runner": "windows-latest",
+                  "test-image": "", "glibc": false, "run-integration-suite": true }
+              ]
+            }
+        # jq fails the job on malformed JSON and compacts it to the single line $GITHUB_OUTPUT needs.
+        run: |
+          matrix="$(printf '%s' "$MATRIX" | jq -c .)"
+          echo "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"

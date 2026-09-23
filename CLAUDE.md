@@ -248,7 +248,9 @@ installs and tests every package on a runner of its own architecture (`eng/aot/t
 `eng/aot/check-glibc-floor.sh` (no symbol above GLIBC_2.27) and `eng/aot/smoke-old-glibc.sh` (start, filter
 and track on Rocky Linux 8). `fallback-package.yml` tests `any` on Linux and on Windows, where it also runs the
 integration suite and a smoke test from Git Bash, pwsh and cmd. `publish.yml` pushes the RID packages before
-the pointer. A local Release build of the CLI carries the AOT feature switches in its runtimeconfig
+the pointer. The RID list and its runners live only in `aot-rids.yml`, which `ci.yml` and `publish.yml` both
+call; add or change a RID there. The Windows shell smoke test is the local action
+`.github/actions/smoke-windows-shells`, shared by both package workflows. A local Release build of the CLI carries the AOT feature switches in its runtimeconfig
 (`PublishAot=true` in the csproj), so `cold-start` on `bin/Release` measures an AOT-like JIT build, not the
 shipped fallback; measure the installed `any` package for fallback figures.
 
