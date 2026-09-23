@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/HandyS11/DotnetTokenKiller/security/advisories/new
+    about: >-
+      Please do not open a public issue for security vulnerabilities. Use GitHub's private
+      vulnerability reporting instead — see SECURITY.md.
