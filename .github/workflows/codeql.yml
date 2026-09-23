@@ -30,6 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # build-mode none compiles nothing, but still uses the SDK to restore NuGet references it can resolve.
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -41,7 +42,7 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: csharp
-          build-mode: autobuild
+          build-mode: none
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
