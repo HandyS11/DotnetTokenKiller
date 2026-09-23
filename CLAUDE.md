@@ -100,6 +100,13 @@ CI sets `DTK_NODE_REQUIRED=1`.
 `{"decision":"ask","overwrite":{"CommandLine":…}}` — never `allow`, which auto-approves. Hooks run through
 `sh -c`/`cmd /c` and a failing hook blocks the command, hence `|| exit 0`. Gate G results are in the PR that added it.
 
+`dtk init <provider> --uninstall` (respects `--dir`/`--global`) removes what that install writes, through
+`UninstallHelpers` (every integrator implements `IUninstallIntegrator`): dtk's hook entries (the install's own match),
+marked sections, and generated files only when their stamp or exact content proves them dtk's; edited files are kept.
+A shared `AGENTS.md`/`GEMINI.md`/copilot instructions/skill stays while another provider's dtk hook is registered in
+the same scope. It never edits rtk's config or Codex's `config.toml`. `UninstallIntegrationTests` round-trips every
+provider in both scopes against the whole temp tree.
+
 ## Git Hooks
 
 The pre-commit hook auto-formats staged `.cs` files and validates `.csproj`/`.props` files. Install it once with:

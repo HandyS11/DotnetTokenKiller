@@ -22,6 +22,48 @@ dtk init copilot-cli --global   # ~/.copilot/hooks
 
 `--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
 
+## Uninstalling
+
+`--uninstall` removes what `dtk init <provider>` installed, in the project (or `--dir`) or, with `--global`, in your
+home config. Run it before `dotnet tool uninstall -g DotnetTokenKiller`, so no harness is left calling a `dtk` that is
+gone:
+
+```sh
+dtk init claude --uninstall
+dtk init codex --global --uninstall
+```
+
+It removes only dtk's own parts, and reports each file as `removed`, `unchanged` or `kept`:
+
+- **Hook registrations** merged into a settings file (`settings.json`, `hooks.json`): only dtk's entries — the same
+  ones `dtk init` treats as its own, including a Python-era `dotnet-to-dtk.py` entry — are removed; a matcher group,
+  event or hook group left empty goes with them, and a file left as `{}` is deleted.
+- **Instruction sections** (`AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`,
+  `.aider.conf.yml`): only the section between dtk's markers is removed; the file is deleted when nothing else is left
+  in it. For Aider, the instructions file is also taken back out of your own `read:` key when `dtk init` merged it
+  there.
+- **Generated files** (`SKILL.md`, the OpenCode plugin, Copilot CLI's `dtk-dotnet.json`, the Cursor and Windsurf
+  rules, `.aider-dtk-instructions.md`): deleted only when dtk can prove the content is its own — a provenance stamp
+  that still verifies, or content identical to what this dtk writes. An edited file is `kept`, with a note.
+
+Directories the removal leaves empty are deleted too, up to the project or home directory. A second run finds nothing
+to remove. `--force` cannot be combined with `--uninstall`.
+
+Some things are deliberately left alone:
+
+- **Shared instructions still in use.** Codex CLI, OpenCode and Antigravity CLI share `AGENTS.md` and the
+  `.agents/skills` skill; Gemini CLI and Antigravity CLI share `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
+  share `.github/copilot-instructions.md`. While another of these still has its dtk hook registered in the same scope,
+  the shared file keeps dtk's section and is reported `unchanged`, with a note naming that provider. (GitHub Copilot
+  has no hook, so it never holds the file back for Copilot CLI.)
+- **Other tools' configs.** If `dtk init` excluded `dotnet` in rtk's `config.toml`, the exclusion stays — dtk cannot
+  tell whether it or you added it — and a note says how to remove it.
+- **Codex's `config.toml`.** dtk never writes it; the approval Codex recorded for dtk's hook stays there. Codex keys
+  approvals by position in `hooks.json`, so hooks that followed dtk's may need approving again under `/hooks`.
+
+A settings file dtk merged into is rewritten in the same format `dtk init` writes it in, so hand-formatting there is
+not preserved.
+
 ## Claude Code
 
 A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk`.

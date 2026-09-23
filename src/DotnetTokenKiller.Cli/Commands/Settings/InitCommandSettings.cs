@@ -26,4 +26,9 @@ internal sealed class InitCommandSettings : CommandSettings
     [CommandOption("-g|--global")]
     [Description("Install into the user's home config (claude, copilot-cli, gemini, codex, opencode, antigravity, aider) instead of a project")]
     public bool Global { get; init; }
+
+    /// <summary>Gets a value indicating whether to remove what the provider's install wrote instead of installing it.</summary>
+    [CommandOption("--uninstall")]
+    [Description("Remove what 'dtk init' installed for the provider instead (respects --dir and --global); edited files are kept")]
+    public bool Uninstall { get; init; }
 }

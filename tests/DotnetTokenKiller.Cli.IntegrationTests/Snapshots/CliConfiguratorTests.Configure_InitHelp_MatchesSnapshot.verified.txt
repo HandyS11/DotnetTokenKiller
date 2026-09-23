@@ -21,14 +21,18 @@ EXAMPLES:
     dtk init windsurf
     dtk init aider
     dtk init jetbrains
+    dtk init claude --uninstall
+    dtk init codex --global --uninstall
 
 ARGUMENTS:
     <provider>    AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex,     
                   opencode, antigravity, cursor, windsurf, aider, jetbrains)                        
 
 OPTIONS:
-    -h, --help      Prints help information                                                         
-    -d, --dir       Target project root directory (default: current directory)                      
-    -f, --force     Overwrite existing files instead of skipping them                               
-    -g, --global    Install into the user's home config (claude, copilot-cli, gemini, codex,        
-                    opencode, antigravity, aider) instead of a project                              
+    -h, --help         Prints help information                                                      
+    -d, --dir          Target project root directory (default: current directory)                   
+    -f, --force        Overwrite existing files instead of skipping them                            
+    -g, --global       Install into the user's home config (claude, copilot-cli, gemini, codex,     
+                       opencode, antigravity, aider) instead of a project                           
+        --uninstall    Remove what 'dtk init' installed for the provider instead (respects --dir and
+                       --global); edited files are kept                                             

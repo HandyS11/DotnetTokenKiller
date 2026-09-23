@@ -123,11 +123,16 @@ To update an existing installation:
 dotnet tool update -g DotnetTokenKiller
 ```
 
-To uninstall:
+To uninstall, first remove each AI agent integration you installed with `dtk init` — otherwise the agent's hook
+keeps calling a `dtk` that is no longer there — then the tool:
 
 ```sh
+dtk init claude --uninstall             # add --global for an integration installed with --global
 dotnet tool uninstall -g DotnetTokenKiller
 ```
+
+`--uninstall` removes only dtk's own entries, sections and generated files, and keeps any file you edited since dtk
+wrote it; see [AI Agent Setup](docs/articles/ai-agent-setup.md#uninstalling).
 
 ## Usage
 

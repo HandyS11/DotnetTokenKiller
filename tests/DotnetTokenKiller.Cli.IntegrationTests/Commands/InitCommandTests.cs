@@ -628,6 +628,84 @@ public class InitCommandTests
         }
     }
 
+    [Fact]
+    public async Task RunAsync_Uninstall_RemovesTheInstallThenFindsNothingToRemove()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-uninstall-{Guid.NewGuid():N}");
+
+        try
+        {
+            await CreateClaudeCommand(dir, new TestConsole())
+                .RunAsync(new InitCommandSettings { Provider = "claude", Directory = dir }, CancellationToken.None);
+            var uninstall = new InitCommandSettings { Provider = "claude", Directory = dir, Uninstall = true };
+
+            var firstConsole = new TestConsole();
+            (await CreateClaudeCommand(dir, firstConsole).RunAsync(uninstall, CancellationToken.None)).Should().Be(0);
+            var secondConsole = new TestConsole();
+            (await CreateClaudeCommand(dir, secondConsole).RunAsync(uninstall, CancellationToken.None)).Should().Be(0);
+
+            firstConsole.Output.Should().Contain("removed  .claude/settings.json")
+                .And.Contain("removed  .claude/skills/dotnet-token-killer/SKILL.md")
+                .And.Contain("Done.");
+            Directory.Exists(Path.Combine(dir, ".claude")).Should().BeFalse();
+            secondConsole.Output.Should().Contain("Nothing to remove").And.NotContain("removed");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_Uninstall_EditedSkill_IsReportedKept()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-uninstall-{Guid.NewGuid():N}");
+
+        try
+        {
+            await CreateClaudeCommand(dir, new TestConsole())
+                .RunAsync(new InitCommandSettings { Provider = "claude", Directory = dir }, CancellationToken.None);
+            await File.AppendAllTextAsync(Path.Combine(dir, ".claude", "skills", "dotnet-token-killer", "SKILL.md"), "mine\n");
+
+            var console = new TestConsole();
+            await CreateClaudeCommand(dir, console)
+                .RunAsync(new InitCommandSettings { Provider = "claude", Directory = dir, Uninstall = true }, CancellationToken.None);
+
+            console.Output.Should().Contain("kept     .claude/skills/dotnet-token-killer/SKILL.md")
+                .And.Contain("removed  .claude/settings.json")
+                .And.Contain("1 file(s) were kept");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_UninstallWithForce_FailsWithoutTouchingAnything()
+    {
+        var (command, console) = Create("claude", new IntegrationResult([], [], []));
+
+        var exitCode = await command.RunAsync(
+            new InitCommandSettings { Provider = "claude", Uninstall = true, Force = true }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("--force cannot be combined with --uninstall");
+    }
+
+    [Fact]
+    public async Task RunAsync_UninstallGlobalForARepositoryScopedProvider_FailsWithTheReason()
+    {
+        var console = new TestConsole();
+        var command = new InitCommand(new IntegrateUseCase([new CursorIntegrator()]), console);
+
+        var exitCode = await command.RunAsync(
+            new InitCommandSettings { Provider = "cursor", Uninstall = true, Global = true }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("repository-scoped");
+    }
+
     /// <summary>
     /// Builds a real (non-stub) Claude integration command rooted at an isolated home, so repeat
     /// runs against <paramref name="dir"/> exercise the actual freshness detection in

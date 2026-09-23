@@ -114,7 +114,9 @@ internal static class CliConfigurator
             .WithExample(InitCommand, "cursor")
             .WithExample(InitCommand, "windsurf")
             .WithExample(InitCommand, "aider")
-            .WithExample(InitCommand, "jetbrains");
+            .WithExample(InitCommand, "jetbrains")
+            .WithExample(InitCommand, "claude", "--uninstall")
+            .WithExample(InitCommand, "codex", GlobalOption, "--uninstall");
 
         config.AddBranch(ConfigBranch, cfg =>
         {

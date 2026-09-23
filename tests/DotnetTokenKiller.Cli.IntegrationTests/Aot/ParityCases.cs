@@ -11,6 +11,10 @@ internal static class ParityCases
     private const string RtkHookSettings =
         """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook claude"}]}]}}""";
 
+    /// <summary>Every provider <c>dtk init</c> accepts. Declared before the cases that use it, which read it at initialization.</summary>
+    private static readonly string[] InitProviders =
+        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "cursor", "windsurf", "aider", "jetbrains"];
+
     private static readonly Dictionary<string, ParityCase> Portable = new(StringComparer.Ordinal)
     {
         ["version"] = Steps(["--version"]),
@@ -67,9 +71,14 @@ internal static class ParityCases
             ["completion", "bash"], ["completion", "zsh"], ["completion", "fish"], ["completion", "powershell"]),
         ["init-project"] = new ParityCase(
         [
-            .. new[] { "claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "cursor", "windsurf", "aider", "jetbrains" }
-                .Select(provider => new ParityStep(["init", provider, "--dir", "{project}"])),
+            .. InitProviders.Select(provider => new ParityStep(["init", provider, "--dir", "{project}"])),
             new ParityStep(["integrate", "claude", "--dir", "{project}"]),
+        ], ArrangeRtk),
+        ["init-uninstall"] = new ParityCase(
+        [
+            .. InitProviders.Select(provider => new ParityStep(["init", provider, "--dir", "{project}"])),
+            .. InitProviders.Select(provider => new ParityStep(["init", provider, "--dir", "{project}", "--uninstall"])),
+            new ParityStep(["init", "claude", "--dir", "{project}", "--uninstall"]),
         ], ArrangeRtk),
         ["spectre-built-ins"] = Steps(["cli", "version"], ["cli", "explain"], ["cli", "opencli"], ["--help-dump-opencli"]),
         ["passthrough"] = Steps(["dotnet", "--version"]),
