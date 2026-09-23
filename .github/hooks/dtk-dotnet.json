@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "matcher": "bash",
+        "bash": "dtk hook copilot-cli; exit 0",
+        "powershell": "dtk hook copilot-cli; exit 0",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}
