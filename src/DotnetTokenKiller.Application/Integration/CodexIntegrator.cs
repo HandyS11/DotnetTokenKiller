@@ -209,7 +209,7 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
             context.Notes.Add(PositionNote);
         }
 
-        rtk.NoteRemainingExclusion(context);
+        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook, hookDirectory)));
 
         return context.ToResult();
     }
@@ -260,12 +260,16 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
         // `hook.RegistrationPath` is already the correct path for whichever scope this run is (project or
         // global); the extra global lookup only matters when scope is Project, so a project run also sees
         // an rtk hook left in the global hooks.json.
-        var rtkOutcome = await rtk.ReconcileFilesAsync(
-            [.. new[] { hook.RegistrationPath, DescribeHooks(hookDirectory, HookScope.Global)[0].RegistrationPath }
-                .Distinct(StringComparer.Ordinal)],
-            cancellationToken).ConfigureAwait(false);
+        var rtkOutcome = await rtk.ReconcileFilesAsync(RtkCandidates(hook, hookDirectory), cancellationToken).ConfigureAwait(false);
         rtkOutcome.ApplyTo(context);
 
         return context.ToResult();
     }
+
+    /// <summary>Where rtk registers itself for Codex: this scope's <c>hooks.json</c> and the global one.</summary>
+    /// <param name="hook">This run's installation.</param>
+    /// <param name="hookDirectory">The project root, or the home directory for a global run.</param>
+    private List<string> RtkCandidates(HookInstallation hook, string hookDirectory) =>
+        [.. new[] { hook.RegistrationPath, DescribeHooks(hookDirectory, HookScope.Global)[0].RegistrationPath }
+            .Distinct(StringComparer.Ordinal)];
 }

@@ -258,16 +258,33 @@ public sealed class UninstallIntegrationTests : IDisposable
         result.Notes.Should().Contain(CodexIntegrator.PositionNote);
     }
 
-    [Fact]
-    public async Task Uninstall_LeavesRtksDotnetExclusionInPlaceWithANote()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Uninstall_LeavesRtksDotnetExclusionInPlace_NotingItWhereRtksHookRuns(bool rtkHook)
     {
-        Write(Path.Combine("home", ".config", "rtk", "config.toml"), "[hooks]\nexclude_commands = [\"dotnet\"]\n");
+        const string rtkConfig = "[hooks]\nexclude_commands = [\"dotnet\"]\n";
+        Write(Path.Combine("home", ".config", "rtk", "config.toml"), rtkConfig);
+        if (rtkHook)
+        {
+            Write(
+                Path.Combine("project", ".claude", "settings.json"),
+                "{\"hooks\":{\"PreToolUse\":[{\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":\"rtk hook claude\"}]}]}}");
+        }
+
         await InstallAsync("claude");
 
         var result = await UninstallAsync("claude");
 
-        (await File.ReadAllTextAsync(RtkConfigPath)).Should().Be("[hooks]\nexclude_commands = [\"dotnet\"]\n");
-        result.Notes.Should().ContainSingle().Which.Should().Contain(RtkConfigPath);
+        (await File.ReadAllTextAsync(RtkConfigPath)).Should().Be(rtkConfig);
+        if (rtkHook)
+        {
+            result.Notes.Should().ContainSingle().Which.Should().Contain(RtkConfigPath);
+        }
+        else
+        {
+            result.Notes.Should().BeEmpty();
+        }
     }
 
     [Fact]

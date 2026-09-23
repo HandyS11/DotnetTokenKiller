@@ -108,7 +108,7 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
         await UninstallHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath!, HookFiles(hook), context, cancellationToken)
             .ConfigureAwait(false);
 
-        rtk.NoteRemainingExclusion(context);
+        rtk.NoteRemainingExclusion(context, rtk.IsRtkHookPresent(hookDirectory));
 
         return context.ToResult();
     }

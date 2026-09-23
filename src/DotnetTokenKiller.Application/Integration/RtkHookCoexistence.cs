@@ -159,14 +159,17 @@ internal sealed partial class RtkHookCoexistence
     }
 
     /// <summary>
-    /// After an uninstall removed something, notes that rtk's config still excludes <c>dotnet</c>, which the install
-    /// may have added. The exclusion is left in place: rtk's config is another tool's file, and dtk cannot tell whether
-    /// it added the entry or the user did.
+    /// After an uninstall removed something from a harness where rtk's hook runs — the case in which the install
+    /// excludes <c>dotnet</c> in rtk's config — notes that the exclusion remains. It is left in place: rtk's config is
+    /// another tool's file, and dtk cannot tell whether it added the entry or the user did.
     /// </summary>
     /// <param name="context">The uninstall context.</param>
-    internal void NoteRemainingExclusion(IntegrationContext context)
+    /// <param name="rtkHookDetected">
+    /// Whether rtk's hook is registered for the harness, detected as the install detects it.
+    /// </param>
+    internal void NoteRemainingExclusion(IntegrationContext context, bool rtkHookDetected)
     {
-        if (context.Removed.Count == 0 && context.Updated.Count == 0)
+        if (!rtkHookDetected || (context.Removed.Count == 0 && context.Updated.Count == 0))
         {
             return;
         }

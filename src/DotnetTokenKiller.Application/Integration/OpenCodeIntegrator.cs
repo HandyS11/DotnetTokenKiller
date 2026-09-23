@@ -68,7 +68,7 @@ internal sealed class OpenCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
         await UninstallHelpers.RemoveGeneratedFileAsync(DescribeHooks(hookDirectory, scope)[0].PluginArtifact!, context, cancellationToken)
             .ConfigureAwait(false);
 
-        rtk.NoteRemainingExclusion(context);
+        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hookDirectory)));
 
         return context.ToResult();
     }
