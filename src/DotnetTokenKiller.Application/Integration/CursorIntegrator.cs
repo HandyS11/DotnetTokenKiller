@@ -9,7 +9,7 @@ namespace DotnetTokenKiller.Application.Integration;
 ///   <item><description><c>.cursor/rules/dtk.mdc</c> (Cursor project rule)</description></item>
 /// </list>
 /// </remarks>
-public sealed class CursorIntegrator : IProviderIntegrator
+public sealed class CursorIntegrator : IProviderIntegrator, IUninstallIntegrator
 {
     private static readonly string CursorRule =
         $"""
@@ -43,10 +43,24 @@ public sealed class CursorIntegrator : IProviderIntegrator
     {
         var context = new IntegrationContext(force);
 
-        await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(directory, ".cursor", "rules", "dtk.mdc"),
-            CursorRule, context, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteFileAsync(RulePath(directory), CursorRule, context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
+
+    /// <inheritdoc/>
+    IReadOnlyList<string> IUninstallIntegrator.SharedArtifactPaths(string directory, HookScope scope) => [];
+
+    /// <inheritdoc/>
+    async Task<IntegrationResult> IUninstallIntegrator.UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var context = IntegrationContext.ForUninstall(directory, sharedInUse);
+
+        await UninstallHelpers.RemoveOwnedFileAsync(RulePath(directory), CursorRule, context, cancellationToken).ConfigureAwait(false);
+
+        return context.ToResult();
+    }
+
+    private static string RulePath(string directory) => Path.Combine(directory, ".cursor", "rules", "dtk.mdc");
 }

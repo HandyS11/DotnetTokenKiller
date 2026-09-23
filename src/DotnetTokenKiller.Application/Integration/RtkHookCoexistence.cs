@@ -158,6 +158,36 @@ internal sealed partial class RtkHookCoexistence
         }
     }
 
+    /// <summary>
+    /// After an uninstall removed something, notes that rtk's config still excludes <c>dotnet</c>, which the install
+    /// may have added. The exclusion is left in place: rtk's config is another tool's file, and dtk cannot tell whether
+    /// it added the entry or the user did.
+    /// </summary>
+    /// <param name="context">The uninstall context.</param>
+    internal void NoteRemainingExclusion(IntegrationContext context)
+    {
+        if (context.Removed.Count == 0 && context.Updated.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(_rtkConfigPath) && ConfigTextExcludesDotnet(File.ReadAllText(_rtkConfigPath)))
+            {
+                context.Notes.Add(
+                    $"rtk's config at {_rtkConfigPath} still excludes dotnet (an earlier 'dtk init' may have added it) "
+                    + "and was left as it is. Remove \"dotnet\" from [hooks].exclude_commands if rtk should handle "
+                    + "dotnet commands again.");
+            }
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Another tool's file dtk cannot read: nothing to say about it.
+        }
+    }
+
     private async Task WriteConfigAsync(string content, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_rtkConfigPath)!);
