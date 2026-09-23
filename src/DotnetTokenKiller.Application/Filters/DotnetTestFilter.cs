@@ -13,6 +13,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private const int MaxFailures = 15;
     private const int MessageMaxLen = 200;
 
+    /// <summary>Microsoft.Testing.Platform's exit code for a run in which zero tests ran.</summary>
+    private const int MtpZeroTestsExitCode = 8;
+
     /// <summary>Name of the regex capture group holding a test/summary duration.</summary>
     private const string DurationGroup = "duration";
 
@@ -20,7 +23,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
     /// <summary>Applies the filter to the test output.</summary>
     /// <param name="strippedOutput">The test output to filter, with ANSI escape sequences already stripped.</param>
-    /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
+    /// <param name="exitCode">
+    /// The process exit code; the sole source of truth for the success/failure verdict, except that
+    /// Microsoft.Testing.Platform's exit code 8 with its "Zero tests ran" verdict reads as a zero-tests warning.
+    /// </param>
     public string Apply(string strippedOutput, int exitCode)
     {
         if (string.IsNullOrEmpty(strippedOutput))
@@ -326,8 +332,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
         // headers alone (crashed host) — always renders its failures, so it can never silently
-        // collapse to empty. The exit code stays the sole verdict: on a zero exit we never emit a
-        // FAILURES report just because a stray line happened to match a failure-shaped pattern.
+        // collapse to empty. The exit code stays the sole verdict (the one exception, MTP's exit 8 with
+        // its "Zero tests ran" verdict, is below): on a zero exit we never emit a FAILURES report just
+        // because a stray line happened to match a failure-shaped pattern.
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
             return FormatFailures(state, elapsed);
@@ -349,10 +356,11 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // not load-bearing.
         var noTestEvidence = state is { TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0 }
                              && state.Failures.Count == 0;
-        // MTP exits non-zero (8) when zero tests ran, so its run-level "Zero tests ran" verdict stands
-        // in for the zero exit: that exit code means exactly this outcome, not a failure to hide.
-        if ((exitCode == 0 || state.MtpZeroTestsVerdict) && noTestEvidence
-                                                         && (state.ZeroTestsFound || state.ProjectCount > 0))
+        // MTP exits 8 when zero tests ran, so exit 8 together with its run-level "Zero tests ran"
+        // verdict stands in for the zero exit: that exit code means exactly this outcome, not a failure
+        // to hide. Any other non-zero exit is a real failure and falls through to the raw-tail fallback.
+        var zeroTestsExit = exitCode == 0 || (exitCode == MtpZeroTestsExitCode && state.MtpZeroTestsVerdict);
+        if (zeroTestsExit && noTestEvidence && (state.ZeroTestsFound || state.ProjectCount > 0))
         {
             return state.ZeroTestsFound
                 ? "⚠ dotnet test: 0 tests found (no assembly matched)\n"

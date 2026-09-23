@@ -1063,6 +1063,19 @@ public class DotnetTestFilterTests
         _sut.Apply(fixture, exitCode: 8).Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(-1)]
+    public void Apply_MtpZeroTestsFixture_OtherNonZeroExit_BlankForRawTailFallback(int exitCode)
+    {
+        // Only exit 8 means "zero tests ran"; any other failing exit is something else going wrong, so
+        // the "Zero tests ran" verdict must not turn it into a harmless-looking warning.
+        var fixture = LoadFixture("dotnet_test_mtp_zero.txt");
+
+        _sut.Apply(fixture, exitCode).Should().BeEmpty();
+    }
+
     [Fact]
     public void Apply_MtpMultiProjectFixture_CountsBothAssembliesFromTheSingleSummary()
     {
