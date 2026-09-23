@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using DotnetTokenKiller.Infrastructure.Execution;
+using DotnetTokenKiller.Infrastructure.Tests.Helpers;
 using FluentAssertions;
 using Xunit;
 
@@ -484,6 +486,88 @@ public sealed class ProcessCommandRunnerTests
             // window, whereas a properly killed process tree never reaches the marker-creating step.
             await Task.Delay(TimeSpan.FromSeconds(childSleepSeconds + 2));
             File.Exists(done).Should().BeFalse();
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [WindowsFact]
+    public async Task RunPassthroughAsync_Cancellation_OnWindows_KillsTheGrandchildTooAsync()
+    {
+        // KillProcess only ever targets the direct child (cmd.exe here); the taskkill /T backstop in
+        // TryKillTreeWithTaskkill exists specifically because Process.Kill(entireProcessTree: true) has
+        // proven unreliable at tearing down a shell subtree on the Windows CI runner, leaving a
+        // grandchild (e.g. powershell) alive under a dead cmd.exe. RunCapturedAsync_Cancellation_
+        // ActuallyTerminatesTheChildAsync above already covers the direct child on every platform; this
+        // test is the Windows-only regression for the backstop itself, so it must check the grandchild
+        // specifically rather than the immediate child cmd.exe spawns.
+        //
+        // The grandchild cannot be identified from outside before it starts, so it writes its own PID to
+        // a marker file as soon as it launches (the same "started" marker idiom used above), then sleeps
+        // long enough that only a real kill — not the process simply finishing on its own — could explain
+        // its absence afterwards.
+        const int childSleepSeconds = 60;
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-treekill-{Guid.NewGuid()}");
+        Directory.CreateDirectory(dir);
+        var markerPath = Path.Combine(dir, "grandchild-pid.txt");
+        try
+        {
+            var args = new[]
+            {
+                "/c", "powershell", "-NoProfile", "-Command",
+                $"Set-Content -Path '{markerPath}' -Value $PID; Start-Sleep -Seconds {childSleepSeconds}"
+            };
+            using var cts = new CancellationTokenSource();
+
+            var cancelWhenStarted = Task.Run(async () =>
+            {
+                await WaitForFileAsync(markerPath, TimeSpan.FromSeconds(30));
+                await cts.CancelAsync();
+            });
+
+            var act = async () => await _sut.RunPassthroughAsync("cmd", args, cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+            await cancelWhenStarted; // surfaces any failure (e.g. the grandchild never started)
+
+            var grandchildPid = int.Parse(
+                (await File.ReadAllTextAsync(markerPath)).Trim(), CultureInfo.InvariantCulture);
+
+            // The kill (registration callback plus the catch-block KillAndReapAsync, both of which run
+            // taskkill synchronously before RunPassthroughAsync's exception unwinds) has almost certainly
+            // already finished by the time the throw above completes, but poll with a bounded grace
+            // period rather than asserting instantly, in case the OS is briefly slow to retire the PID.
+            //
+            // Process.GetProcessById throws ArgumentException once no process holds that id, the only
+            // externally observable gone signal on Windows. A PID can in principle be reused by an
+            // unrelated process inside this window, which would then read as still alive here. That
+            // race is inherent to any PID-based liveness check and not something this test can rule
+            // out, so the poll is kept short to minimise the window rather than pretending to eliminate it.
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            var stillAlive = true;
+            while (DateTime.UtcNow < deadline)
+            {
+                try
+                {
+                    using var grandchild = Process.GetProcessById(grandchildPid);
+                    stillAlive = !grandchild.HasExited;
+                }
+                catch (ArgumentException)
+                {
+                    stillAlive = false;
+                }
+
+                if (!stillAlive)
+                {
+                    break;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100));
+            }
+
+            stillAlive.Should().BeFalse(
+                "the taskkill /T backstop must reach the grandchild powershell process, not just cmd.exe");
         }
         finally
         {
