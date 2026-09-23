@@ -3,6 +3,8 @@
     <NoWarn>$(NoWarn);CA1515;CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DotnetTokenKiller.DoesNotExist" />
+    <!-- Intentionally nonexistent package/version to trigger NU1101; not centrally managed since no real
+         release of it will ever exist. -->
+    <PackageReference Include="DotnetTokenKiller.DoesNotExist" VersionOverride="99.0.0" />
   </ItemGroup>
 </Project>
