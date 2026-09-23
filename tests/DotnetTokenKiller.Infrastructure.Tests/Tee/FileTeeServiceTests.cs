@@ -100,6 +100,19 @@ public sealed class FileTeeServiceTests : IDisposable
         RunSource.Run,
         new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
 
+    /// <summary>
+    /// Extracts a body's true last line, mirroring what <c>TeeLogRenderer.IsTruncated</c> actually
+    /// inspects (see the identical helper and its remarks in <c>FileTeeSessionTests</c>).
+    /// </summary>
+    /// <param name="body">The log body (header already stripped).</param>
+    /// <returns>The last line, with no leading or trailing line feed.</returns>
+    private static string LastLine(string body)
+    {
+        var trimmed = body.EndsWith('\n') ? body[..^1] : body;
+        var lastNewline = trimmed.LastIndexOf('\n');
+        return lastNewline < 0 ? trimmed : trimmed[(lastNewline + 1)..];
+    }
+
     [Fact]
     public async Task BeginAsync_WritesTheHeaderBeforeAnyOutputArrives()
     {
@@ -158,7 +171,9 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         // FileTeeSessionTests exercises the writer's own truncation logic directly; this proves it
         // through the public API a production caller actually uses, with a config-driven cap rather
-        // than a hand-built one.
+        // than a hand-built one. Checked via the real detector against the real last line, not a
+        // substring Contain check — the latter would pass even if the marker were glued onto the
+        // tail of the cut content instead of starting its own line.
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: 100));
 
         await using var session = await sut.BeginAsync("build", RunningHeader());
@@ -168,8 +183,9 @@ public sealed class FileTeeServiceTests : IDisposable
         }
 
         var text = await TeeLogFileReader.ReadAllTextAsync(Directory.GetFiles(_tempDir).Single());
-        Encoding.UTF8.GetByteCount(TeeLogHeader.StripHeader(text)).Should().BeLessThanOrEqualTo(100);
-        TeeLogHeader.StripHeader(text).Should().Contain("[dtk: output truncated at 100 bytes]");
+        var body = TeeLogHeader.StripHeader(text);
+        Encoding.UTF8.GetByteCount(body).Should().BeLessThanOrEqualTo(100);
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
     }
 
     [Fact]
@@ -177,15 +193,17 @@ public sealed class FileTeeServiceTests : IDisposable
     {
         // Regression guard, through the real BeginAsync/FinalizeAsync path rather than a hand-built
         // FileTeeSession. FileTeeService.BeginAsync clamps MinBodyBytes to
-        // Math.Min(500, MaxFileSizeBytes) -- for this 100-byte cap, a floor of exactly 100. A
-        // truncated body does not necessarily land on exactly 100 bytes, though: "é" is a 2-byte
-        // UTF-8 rune, and the cap's 63-byte content budget (100 minus the 37-byte marker for this
-        // three-digit cap) is odd, so the cut can only take whole runes -- 31 of them, 62 bytes, one
-        // short of the budget. Marker included, the body lands at 99 bytes, one under the 100-byte
-        // floor. Without bypassing the floor for a truncated body, this exact (and unremarkable —
-        // nothing here is a contrived edge case beyond the specific byte count) log would be
-        // silently discarded despite the marker the writer just wrote proving real output was lost.
-        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: 100));
+        // Math.Min(500, MaxFileSizeBytes) -- for this 101-byte cap, a floor of exactly 101. A
+        // truncated body does not necessarily land on exactly 101 bytes, though: "é" is a 2-byte
+        // UTF-8 rune, and the cap's 63-byte content budget (101 minus the 38-byte marker for this
+        // three-digit cap, leading line feed included) is odd, so the cut can only take whole runes
+        // -- 31 of them, 62 bytes, one short of the budget. Marker included (with its own leading
+        // line feed, since the cut content never ends with "\n" on its own), the body lands at 100
+        // bytes, one under the 101-byte floor. Without bypassing the floor for a truncated body, this
+        // exact (and unremarkable — nothing here is a contrived edge case beyond the specific byte
+        // count) log would be silently discarded despite the marker the writer just wrote proving
+        // real output was lost.
+        var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: 101));
 
         await using var session = await sut.BeginAsync("build", RunningHeader());
         await session.Writer.WriteLineAsync(new string('é', 40).AsMemory(), CancellationToken.None);

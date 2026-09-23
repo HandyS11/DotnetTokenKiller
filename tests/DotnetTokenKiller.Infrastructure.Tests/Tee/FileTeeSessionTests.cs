@@ -40,6 +40,26 @@ public sealed class FileTeeSessionTests : IDisposable
         RunSource.Run,
         new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
 
+    /// <summary>
+    /// Extracts a body's true last line, mirroring the two production steps between a raw file body
+    /// (what this file works with) and what <c>TeeLogRenderer.IsTruncated</c> actually inspects:
+    /// <c>LogViewUseCase.SplitLines</c> trims exactly one trailing "\n" from the raw body before
+    /// splitting, and <c>view.Body</c> is then rejoined with no trailing "\n" at all — so the last
+    /// line is the text after the last "\n" of the *trimmed* body, not the raw one (whose own
+    /// trailing "\n", from the marker's own write, would otherwise make it look empty). Used to run
+    /// the real detector (<see cref="TeeTruncationMarker.IsMarkerLine"/>) against exactly what
+    /// production would see, rather than a substring <c>Contain</c> check that would pass even if the
+    /// marker were glued onto the end of the previous line instead of starting its own.
+    /// </summary>
+    /// <param name="body">The log body (header already stripped).</param>
+    /// <returns>The last line, with no leading or trailing line feed.</returns>
+    private static string LastLine(string body)
+    {
+        var trimmed = body.EndsWith('\n') ? body[..^1] : body;
+        var lastNewline = trimmed.LastIndexOf('\n');
+        return lastNewline < 0 ? trimmed : trimmed[(lastNewline + 1)..];
+    }
+
     /// <summary>Opens a session over a real file, mirroring what FileTeeService.BeginAsync does.</summary>
     /// <param name="maxBodyBytes">The body's byte budget.</param>
     /// <param name="minBodyBytes">Bodies smaller than this are discarded when the run completes.</param>
@@ -215,8 +235,9 @@ public sealed class FileTeeSessionTests : IDisposable
     [Fact]
     public async Task Writer_StopsAppending_OnceTheByteCapIsReached()
     {
-        // 100 comfortably fits the truncation marker (37 bytes for this three-digit cap) alongside
-        // some real content, so the body still shows both once the cap is hit.
+        // 100 comfortably fits the truncation marker (38 bytes for this three-digit cap, leading
+        // line feed included) alongside some real content, so the body still shows both once the
+        // cap is hit.
         const int maxBodyBytes = 100;
         var (session, path) = CreateSut(maxBodyBytes: maxBodyBytes, minBodyBytes: 0);
 
@@ -228,7 +249,7 @@ public sealed class FileTeeSessionTests : IDisposable
         await session.FinalizeAsync(0);
         var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
         Encoding.UTF8.GetByteCount(body).Should().BeLessThanOrEqualTo(maxBodyBytes);
-        body.Should().Contain($"[dtk: output truncated at {maxBodyBytes} bytes]");
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
     }
 
     [Fact]
@@ -249,7 +270,7 @@ public sealed class FileTeeSessionTests : IDisposable
         var text = await TeeLogFileReader.ReadAllTextAsync(path);
         TeeLogHeader.TryParse(text, out var header).Should().BeTrue();
         header.Status.Should().Be(TeeLogStatus.Running);
-        TeeLogHeader.StripHeader(text).Should().Contain("[dtk: output truncated at 100 bytes]");
+        TeeTruncationMarker.IsMarkerLine(LastLine(TeeLogHeader.StripHeader(text))).Should().BeTrue();
     }
 
     [Fact]
@@ -257,15 +278,33 @@ public sealed class FileTeeSessionTests : IDisposable
     {
         // A line landing exactly on the content budget is not proof anything was lost -- it might
         // simply have been the last line the child ever produced. Appending the marker here would
-        // be a false positive. 41 is precomputed so the content budget (cap minus the 36-byte marker
-        // for this two-digit cap) comes out to exactly 5 bytes -- the length of "abcd\n".
-        var (session, path) = CreateSut(maxBodyBytes: 41, minBodyBytes: 0);
+        // be a false positive. 42 is precomputed so the content budget (cap minus the 37-byte marker
+        // for this two-digit cap, leading line feed included) comes out to exactly 5 bytes -- the
+        // length of "abcd\n".
+        var (session, path) = CreateSut(maxBodyBytes: 42, minBodyBytes: 0);
 
         await session.Writer.WriteLineAsync("abcd".AsMemory(), CancellationToken.None);
         await session.FinalizeAsync(0);
 
         var text = await TeeLogFileReader.ReadAllTextAsync(path);
         TeeLogHeader.StripHeader(text).Should().Be("abcd\n");
+    }
+
+    [Fact]
+    public async Task Writer_WritesTheMarkerCleanly_WhenALineLandsExactlyOnTheBudgetAndMoreFollows()
+    {
+        // Companion to the test above: this time more output does follow, so the marker must be
+        // written -- and, because the preceding line already ended with "\n" on its own, without an
+        // extra blank line before it. 42 again gives a 5-byte content budget, exactly "abcd\n".
+        var (session, path) = CreateSut(maxBodyBytes: 42, minBodyBytes: 0);
+
+        await session.Writer.WriteLineAsync("abcd".AsMemory(), CancellationToken.None);
+        await session.Writer.WriteLineAsync("more".AsMemory(), CancellationToken.None);
+        await session.FinalizeAsync(0);
+
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
+        body.Should().Be("abcd\n[dtk: output truncated at 42 bytes]\n");
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
     }
 
     [Fact]
@@ -282,6 +321,38 @@ public sealed class FileTeeSessionTests : IDisposable
         var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
         var markerOccurrences = body.Split("[dtk: output truncated", StringSplitOptions.None).Length - 1;
         markerOccurrences.Should().Be(1);
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Writer_ProducesADetectableMarkerLine_WhenARealMultiLineBodyIsCutMidLine()
+    {
+        // The regression this guards: a mid-line cut must leave the marker as its own clean line,
+        // not glued onto the tail of the cut content ("xxxx...x[dtk: output truncated ...]"), which
+        // TeeTruncationMarker.IsMarkerLine's anchored match would silently fail to detect -- dtk log
+        // would never warn for a real log that hit this path. Driven over a realistic multi-line
+        // body (distinct complete lines, then one long line cut mid-way through, then more output
+        // that must be dropped entirely) through the actual writer, not a hand-built string, with
+        // the real detector run against the real last line on disk afterward.
+        const int maxBodyBytes = 200;
+        var (session, path) = CreateSut(maxBodyBytes: maxBodyBytes, minBodyBytes: 0);
+
+        await session.Writer.WriteLineAsync("first line".AsMemory(), CancellationToken.None);
+        await session.Writer.WriteLineAsync("second line".AsMemory(), CancellationToken.None);
+        await session.Writer.WriteLineAsync("third line".AsMemory(), CancellationToken.None);
+        // Far longer than whatever room is left after the three short lines above (at most 200
+        // bytes minus the marker's reserved room), so this one is cut mid-line rather than dropped
+        // whole or fitting cleanly.
+        await session.Writer.WriteLineAsync(new string('x', 500).AsMemory(), CancellationToken.None);
+        await session.Writer.WriteLineAsync("this must never appear".AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
+        Encoding.UTF8.GetByteCount(body).Should().BeLessThanOrEqualTo(maxBodyBytes);
+        body.Should().Contain("first line").And.Contain("second line").And.Contain("third line");
+        body.Should().NotContain("this must never appear");
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
     }
 
     [Fact]
@@ -322,7 +393,7 @@ public sealed class FileTeeSessionTests : IDisposable
         hint.Should().NotBeNull();
         File.Exists(path).Should().BeTrue();
         var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
-        body.Should().Contain("[dtk: output truncated at 100 bytes]");
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
     }
 
     [Fact]
@@ -601,8 +672,11 @@ public sealed class FileTeeSessionTests : IDisposable
         var maxBodyBytes = contentBudget;
         for (var i = 0; i < 2; i++)
         {
+            // Leading "\n" included, matching SessionWriter.ComputeCap exactly: it is reserved
+            // unconditionally (skipped at the write site only when not needed), so it counts against
+            // the budget here regardless of whether this particular run ends up needing it.
             var markerLength = Encoding.UTF8.GetByteCount(
-                $"[dtk: output truncated at {maxBodyBytes.ToString(CultureInfo.InvariantCulture)} bytes]\n");
+                $"\n[dtk: output truncated at {maxBodyBytes.ToString(CultureInfo.InvariantCulture)} bytes]\n");
             maxBodyBytes = contentBudget + markerLength;
         }
 
@@ -629,17 +703,27 @@ public sealed class FileTeeSessionTests : IDisposable
         contentLines.Should().OnlyContain(line => line == lineA || line == lineB);
         contentLines.Should().HaveCount(linesAtCap);
         lines.Should().Contain(marker);
-        Encoding.UTF8.GetByteCount(body).Should().Be(maxBodyBytes);
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
+
+        // One byte short of maxBodyBytes, not equal to it: content always fills contentBudget with
+        // exactly linesAtCap whole lines here, so the marker is always appended by the
+        // "remaining <= 0" branch (never a mid-line cut) -- the preceding line already ends with
+        // "\n" on its own, so the reserved-but-unneeded leading line feed byte in the marker's own
+        // bytes is skipped, same as every other cap-exact-fit scenario.
+        Encoding.UTF8.GetByteCount(body).Should().Be(maxBodyBytes - 1);
     }
 
     [Fact]
     public async Task Writer_CutsMultiByteContentOnARuneBoundary_WhenTheByteCapIsReached()
     {
-        // "é" is 2 bytes in UTF-8; an odd content budget (100-byte cap minus the 37-byte marker for
-        // this three-digit cap, leaving 63) forces a cut that cannot land evenly between characters.
-        // Decoding a split rune back as UTF-8 (the default, replacement-fallback decoder
-        // File.ReadAllTextAsync uses) would surface it as U+FFFD.
-        const int maxBodyBytes = 100;
+        // "é" is 2 bytes in UTF-8; an odd content budget (101-byte cap minus the 38-byte marker for
+        // this three-digit cap, leading line feed included, leaving 63) forces a cut that cannot
+        // land evenly between characters. Decoding a split rune back as UTF-8 (the default,
+        // replacement-fallback decoder File.ReadAllTextAsync uses) would surface it as U+FFFD. This
+        // is also a genuine mid-line cut (the whole point of TeeTruncationMarker.IsMarkerLine being
+        // anchored on the real last line below, not a Contain check): the cut content never ends
+        // with "\n" of its own, so the marker needs its reserved leading line feed to start cleanly.
+        const int maxBodyBytes = 101;
         var (session, path) = CreateSut(maxBodyBytes: maxBodyBytes, minBodyBytes: 0);
 
         await session.Writer.WriteLineAsync(new string('é', 40).AsMemory(), CancellationToken.None);
@@ -648,7 +732,7 @@ public sealed class FileTeeSessionTests : IDisposable
         var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
         Encoding.UTF8.GetByteCount(body).Should().BeLessThanOrEqualTo(maxBodyBytes);
         body.Should().NotContain("�");
-        body.Should().Contain($"[dtk: output truncated at {maxBodyBytes.ToString(CultureInfo.InvariantCulture)} bytes]");
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
     }
 
     /// <summary>A <see cref="FileStream"/> whose async writes, flushes, and disposal can be made to fail on demand.</summary>

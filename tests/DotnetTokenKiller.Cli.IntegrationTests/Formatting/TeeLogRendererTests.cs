@@ -72,16 +72,31 @@ public sealed class TeeLogRendererTests
     }
 
     [Fact]
-    public async Task RenderViewAsync_OmitsTheTruncationWarning_WhenTheHeaderIsMissing()
+    public async Task RenderViewAsync_OmitsTheTruncationWarning_WhenTheHeaderIsMissingAndTheBodyIsNotTruncated()
     {
-        // A legacy log (no header) still detects truncation from the body alone — the marker's whole
-        // point is that it needs no header support at all, old or new.
+        // A legacy log (no header) must not falsely claim truncation just because there is no header
+        // to say otherwise — detection is body-based, so a plain body still correctly reports "not
+        // truncated" with no header at all. The positive counterpart lives in the test below.
         var entry = Entry() with { Header = null };
         var view = new LogView(entry, "body", 1, 1);
 
         var output = await RenderAsync(view);
 
         output.Should().NotContain("output was truncated");
+    }
+
+    [Fact]
+    public async Task RenderViewAsync_WarnsAboutTruncation_WhenTheHeaderIsMissing_ButTheMarkerIsPresent()
+    {
+        // The marker's whole point is that detection needs no header support at all, old or new: a
+        // legacy log (no header) whose body still ends with the marker line must warn exactly like
+        // one with an ordinary header does.
+        var entry = Entry() with { Header = null };
+        var view = new LogView(entry, "body\n[dtk: output truncated at 100 bytes]", 2, 2);
+
+        var output = await RenderAsync(view);
+
+        output.Should().Contain("output was truncated");
     }
 
     [Fact]

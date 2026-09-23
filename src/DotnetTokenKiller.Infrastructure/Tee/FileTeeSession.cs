@@ -177,12 +177,14 @@ public sealed class FileTeeSession(
 #pragma warning restore CA2213
 
         /// <summary>
-        /// The marker's bytes, the content budget left once room for it is set aside, and whether it
-        /// fits within the cap at all — computed once, together, from <c>maxBodyBytes</c>.
-        /// A single tuple field rather than three separate ones: C# forbids a field initializer from
-        /// reading another instance field (only <see langword="static"/> members and the primary
-        /// constructor's own parameters are in scope at that point), so three independent
-        /// initializers would each have had to re-render and re-measure the marker text.
+        /// The marker's bytes (with a leading line feed baked in — see
+        /// <see cref="RecordTruncationAsync"/>), the content budget left once room for it is set
+        /// aside, and whether it fits within the cap at all — computed once, together, from
+        /// <c>maxBodyBytes</c>. A single tuple field rather than three separate ones: C# forbids a
+        /// field initializer from reading another instance field (only <see langword="static"/>
+        /// members and the primary constructor's own parameters are in scope at that point), so
+        /// three independent initializers would each have had to re-render and re-measure the marker
+        /// text.
         /// </summary>
         private readonly (byte[] MarkerBytes, long ContentBudget, bool MarkerFits) _cap = ComputeCap(maxBodyBytes);
 
@@ -192,6 +194,14 @@ public sealed class FileTeeSession(
         /// it on another.
         /// </summary>
         private volatile bool _broken;
+
+        /// <summary>
+        /// Whether the byte most recently written to the stream was a line feed — i.e. whether the
+        /// marker can start its own line without help. True vacuously when nothing has been written
+        /// yet. Only a mid-line cut (see <see cref="WriteLineAsync"/>) ever leaves this false: a
+        /// whole line always ends with the "\n" <c>WriteLineAsync</c> appends before measuring it.
+        /// </summary>
+        private bool _bodyEndsWithNewline = true;
 
         /// <summary>
         /// Whether the byte cap has been hit. Also gates the marker write (or, on a cap too small
@@ -273,11 +283,17 @@ public sealed class FileTeeSession(
                 {
                     // This line itself has to be cut short: whatever text follows the cut is lost
                     // right now, so the marker belongs immediately after it rather than waiting for
-                    // a next call that may never come.
+                    // a next call that may never come. TruncateToUtf8Bytes cuts on a rune boundary
+                    // strictly before the budget, and the needed byte count here always exceeds
+                    // remaining by at least the trailing "\n" alone, so the cut can include every
+                    // content rune but never that final "\n" — checked directly below rather than
+                    // assumed, since the marker gluing onto this line instead of starting its own is
+                    // exactly the bug this tracking exists to prevent.
                     var truncatedLine = Utf8Text.TruncateToUtf8Bytes(stripped, remaining);
                     var truncatedBytes = Encoding.UTF8.GetBytes(truncatedLine);
                     await stream.WriteAsync(truncatedBytes, cancellationToken).ConfigureAwait(false);
                     BodyBytesWritten += truncatedBytes.Length;
+                    _bodyEndsWithNewline = truncatedLine.EndsWith('\n');
                     await RecordTruncationAsync(cancellationToken).ConfigureAwait(false);
                     return;
                 }
@@ -285,6 +301,7 @@ public sealed class FileTeeSession(
                 var bytes = Encoding.UTF8.GetBytes(stripped);
                 await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
                 BodyBytesWritten += bytes.Length;
+                _bodyEndsWithNewline = true; // stripped always ends with the "\n" appended above.
 
                 // The line landed exactly on the content budget with nothing cut. Whether that was
                 // truly the last line or more was about to follow is unknowable here — recording
@@ -314,9 +331,18 @@ public sealed class FileTeeSession(
         {
             if (_cap.MarkerFits)
             {
-                // Guaranteed to fit: _cap.ContentBudget was sized to leave exactly this much room.
-                await stream.WriteAsync(_cap.MarkerBytes, cancellationToken).ConfigureAwait(false);
-                BodyBytesWritten += _cap.MarkerBytes.Length;
+                // _cap.MarkerBytes has a leading "\n" baked in for the mid-line-cut case, where the
+                // byte just written is not itself a "\n" and the marker would otherwise glue onto the
+                // end of that content instead of starting its own line — silently breaking
+                // TeeTruncationMarker.IsMarkerLine's anchored match against the last line. Skipped
+                // when the preceding write already ended with "\n" on its own (a whole line, or
+                // nothing written yet), so the body never gains a spurious blank line either.
+                // Guaranteed to fit either way: _cap.ContentBudget was sized to leave exactly this
+                // much room, leading "\n" included.
+                var offset = _bodyEndsWithNewline ? 1 : 0;
+                var markerBytes = _cap.MarkerBytes.AsMemory(offset);
+                await stream.WriteAsync(markerBytes, cancellationToken).ConfigureAwait(false);
+                BodyBytesWritten += markerBytes.Length;
             }
 
             // Set only after the write above (if any) actually completed, not before it: Task 9
@@ -341,14 +367,17 @@ public sealed class FileTeeSession(
         /// </summary>
         /// <param name="maxBodyBytes">The body's byte budget.</param>
         /// <returns>
-        /// The marker's UTF-8 bytes (including its trailing line feed); the byte budget left for
-        /// real content once room for the marker is set aside — the full cap, unreduced, when the
-        /// marker cannot fit at all, since reserving room for a marker that will never be written
+        /// The marker's UTF-8 bytes, with a leading line feed baked in unconditionally (skipped at
+        /// the write site — see <see cref="RecordTruncationAsync"/> — when it turns out not to be
+        /// needed, which just leaves the body a byte under the cap rather than risking it a byte
+        /// over) plus a trailing one; the byte budget left for real content once room for the whole
+        /// of that is set aside — the full cap, unreduced, when the marker cannot fit at all even
+        /// with the leading line feed, since reserving room for a marker that will never be written
         /// would only discard content for nothing; and whether the marker fits within the cap.
         /// </returns>
         private static (byte[] MarkerBytes, long ContentBudget, bool MarkerFits) ComputeCap(long maxBodyBytes)
         {
-            var markerBytes = Encoding.UTF8.GetBytes(TeeTruncationMarker.Render(maxBodyBytes) + "\n");
+            var markerBytes = Encoding.UTF8.GetBytes("\n" + TeeTruncationMarker.Render(maxBodyBytes) + "\n");
             var markerFits = markerBytes.Length <= maxBodyBytes;
             var contentBudget = markerFits ? Math.Max(0, maxBodyBytes - markerBytes.Length) : maxBodyBytes;
             return (markerBytes, contentBudget, markerFits);
