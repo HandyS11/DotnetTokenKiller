@@ -121,8 +121,39 @@ public sealed class CancellationTests : IDisposable
             SendSignal("INT", dtk.Id);
             await WaitForExitAsync(dtk);
 
+            // Only the elapsed time is asserted. A second signal kills dtk by default action, with no
+            // cleanup: the child may outlive it (Dispose kills it) and the log stays "incomplete", which
+            // is the documented outcome of pressing Ctrl-C twice.
+
             stopwatch.Elapsed.Should().BeLessThan(RunCancellation.InterruptGracePeriod,
                 "a second Ctrl+C must not wait out the grace period");
+        }
+    }
+
+    [UnixFact]
+    public async Task Interrupt_ChildAttachedToTheTerminal_IsLeftToExitOnItsOwn()
+    {
+        // `dotnet run` keeps its stdio attached and owns Ctrl+C: dtk absorbs the signal but starts no
+        // grace period, however long the child takes, and returns the child's exit code.
+        const string script = """
+            trap 'kill $SLEEPER 2>/dev/null; exit 3' INT
+            sleep 60 >/dev/null 2>&1 &
+            SLEEPER=$!
+            wait
+            """;
+        var (dtk, _) = await StartAsync(script, "run");
+        using (dtk)
+        {
+            SendSignal("INT", dtk.Id);
+            await Task.Delay(RunCancellation.InterruptGracePeriod + TimeSpan.FromSeconds(1));
+
+            dtk.HasExited.Should().BeFalse("dtk waits for an attached child instead of killing it");
+            IsAlive(_childPids[0]).Should().BeTrue();
+
+            SendSignal("INT", _childPids[0]);
+            await WaitForExitAsync(dtk);
+
+            dtk.ExitCode.Should().Be(3);
         }
     }
 

@@ -153,8 +153,17 @@ public sealed class ProcessCommandRunner : ICommandRunner
             }
 
             await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
+
+            // Both streams are drained. A child that has also exited finished on its own, so its
+            // result stands even if the token was cancelled since: throwing now would discard the
+            // complete output and real exit code of a run that nothing interrupted.
+            if (!process.HasExited)
+            {
+                await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
+                // Still running when the wait began, so a cancellation now means the kill ended it.
+                cancellationToken.ThrowIfCancellationRequested();
+            }
 
             // Tasks are already complete after WhenAll; await here is instant and satisfies analyzers
             return new CommandResult(await stdOutTask.ConfigureAwait(false), await stdErrTask.ConfigureAwait(false),

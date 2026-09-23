@@ -58,6 +58,32 @@ public sealed class RunCancellationTests
     }
 
     [Fact]
+    public void OnSignal_InterruptLeftToChild_IsAbsorbedWithoutEverCancelling()
+    {
+        // A child attached to the terminal received the same Ctrl+C and owns its own shutdown.
+        using var cancellation = new RunCancellation(TimeSpan.Zero);
+        cancellation.LeaveInterruptToChild();
+
+        var absorbed = cancellation.OnSignal(PosixSignal.SIGINT);
+
+        absorbed.Should().BeTrue();
+        cancellation.Token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(200)).Should()
+            .BeFalse("no grace period starts, even a zero one");
+        cancellation.OnSignal(PosixSignal.SIGINT).Should().BeFalse("a second Ctrl+C still ends dtk");
+    }
+
+    [Fact]
+    public void OnSignal_TerminateWithInterruptLeftToChild_StillCancelsAtOnce()
+    {
+        using var cancellation = new RunCancellation(Timeout.InfiniteTimeSpan);
+        cancellation.LeaveInterruptToChild();
+
+        cancellation.OnSignal(PosixSignal.SIGTERM).Should().BeTrue();
+
+        cancellation.Token.WaitHandle.WaitOne(WaitLimit).Should().BeTrue();
+    }
+
+    [Fact]
     public void OnSignal_AfterDispose_IsNotAbsorbed()
     {
         var cancellation = new RunCancellation(Timeout.InfiniteTimeSpan);

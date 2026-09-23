@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.UseCases;
+using DotnetTokenKiller.Cli.Infrastructure;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Infrastructure.Configuration;
@@ -24,14 +25,18 @@ internal static class PassthroughEntryPoint
     /// <summary>Runs the command and records the run.</summary>
     /// <param name="command">The executable to run.</param>
     /// <param name="dotnetArgs">The arguments to pass to it, starting at the subcommand.</param>
-    /// <param name="cancellationToken">Cancelled by Ctrl+C or SIGTERM; the child's tree is then killed.</param>
+    /// <param name="cancellation">
+    /// Turns Ctrl+C and SIGTERM into cancellation, after which the child's tree is killed; or
+    /// <see langword="null"/> when no signal is handled.
+    /// </param>
     /// <returns>The child process exit code, or <see cref="ExitCodes.Cancelled"/> when the run was cancelled.</returns>
     internal static async Task<int> RunAsync(
-        string command, IReadOnlyList<string> dotnetArgs, CancellationToken cancellationToken = default)
+        string command, IReadOnlyList<string> dotnetArgs, RunCancellation? cancellation = null)
     {
+        var cancellationToken = cancellation?.Token ?? CancellationToken.None;
         try
         {
-            return await RunCoreAsync(command, dotnetArgs, cancellationToken).ConfigureAwait(false);
+            return await RunCoreAsync(command, dotnetArgs, cancellation, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -41,11 +46,21 @@ internal static class PassthroughEntryPoint
     }
 
     private static async Task<int> RunCoreAsync(
-        string command, IReadOnlyList<string> dotnetArgs, CancellationToken cancellationToken)
+        string command,
+        IReadOnlyList<string> dotnetArgs,
+        RunCancellation? cancellation,
+        CancellationToken cancellationToken)
     {
         var configProvider = new JsonConfigProvider();
         var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
         var runner = new ProcessCommandRunner();
+
+        if (PassthroughRunUseCase.KeepsStdioAttached(config, dotnetArgs))
+        {
+            // The child owns the terminal and receives Ctrl+C itself (dotnet run, dotnet watch), and
+            // may rightly take longer than the grace period to shut down, or keep running: wait for it.
+            cancellation?.LeaveInterruptToChild();
+        }
 
         if (!config.Tracking.Enabled && config.Tee.Mode == TeeMode.Never)
         {

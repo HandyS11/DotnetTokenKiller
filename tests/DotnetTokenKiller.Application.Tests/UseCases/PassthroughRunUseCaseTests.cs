@@ -339,6 +339,68 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_CancelledAfterTheChildExited_KeepsTheLogAndTheRecord()
+    {
+        // Ctrl+C's grace period can elapse after the child already stopped on its own; the finished
+        // run must still be logged and recorded.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 3));
+
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs, cts.Token);
+
+        exitCode.Should().Be(3);
+        await session.Received(1).FinalizeAsync(3, Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(),
+            Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+    }
+
+    [Fact]
+    public async Task RunAsync_InteractiveCancelledAfterTheChildExited_KeepsTheRecord()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        _runner.RunPassthroughAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(3);
+
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", RunArgs, cts.Token);
+
+        exitCode.Should().Be(3);
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(),
+            Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+    }
+
+    [Fact]
+    public void KeepsStdioAttached_InteractiveSubcommand_IsTrue()
+    {
+        PassthroughRunUseCase.KeepsStdioAttached(DtkConfig.Default, RunArgs).Should().BeTrue();
+    }
+
+    [Fact]
+    public void KeepsStdioAttached_MeasurableSubcommand_IsFalse()
+    {
+        PassthroughRunUseCase.KeepsStdioAttached(DtkConfig.Default, MsBuildArgs).Should().BeFalse();
+    }
+
+    [Fact]
+    public void KeepsStdioAttached_TrackingAndTeeOff_IsTrueForAnySubcommand()
+    {
+        var config = DtkConfig.Default with
+        {
+            Tracking = DtkConfig.Default.Tracking with { Enabled = false },
+            Tee = new TeeConfig(TeeMode.Never)
+        };
+
+        PassthroughRunUseCase.KeepsStdioAttached(config, MsBuildArgs).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task RunAsync_TeeFinalizeThrows_DoesNotSurfaceExceptionAndKeepsTheExitCode()
     {
         // Mirrors FilteredOutputPipeline's guard: a broken tee stream's FinalizeAsync must never

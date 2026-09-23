@@ -48,7 +48,7 @@ var cancellationToken = runCancellation?.Token ?? CancellationToken.None;
 // coverage report can rank which subcommand is worth filtering next.
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
-    return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..], cancellationToken).ConfigureAwait(false);
+    return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..], runCancellation).ConfigureAwait(false);
 }
 
 // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are

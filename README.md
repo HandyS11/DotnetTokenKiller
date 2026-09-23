@@ -187,8 +187,8 @@ every run. Logs written by dtk 0.6.0 or earlier have no project metadata and app
 
 A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice —
 still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying
-the output ends where dtk was killed. A single Ctrl-C or SIGTERM stops `dotnet` and lets dtk finish
-the log (see [Interrupting a run](https://handys11.github.io/DotnetTokenKiller/articles/usage.html#interrupting-a-run)).
+the output ends where dtk was killed. A single Ctrl-C (or SIGTERM on Linux and macOS) lets dtk stop
+`dotnet` and finish the log (see [Interrupting a run](https://handys11.github.io/DotnetTokenKiller/articles/usage.html#interrupting-a-run)).
 
 A log that hit `tee.maxFileSizeBytes` stops growing but stays readable: the body ends with a
 `[dtk: output truncated at <N> bytes]` marker, and `dtk log` shows a note that the output was

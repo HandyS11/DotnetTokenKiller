@@ -250,7 +250,7 @@ dtk log --all            # include other projects
 
 Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are saved, and output under 500 bytes is never saved. Use `dtk config set tee.mode Always` to keep every run. Logs written by dtk 0.6.0 or earlier carry no project metadata and appear only under `--all`.
 
-A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice — still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying the output ends where dtk was killed. A single Ctrl-C or SIGTERM lets dtk finish the log; see [Interrupting a run](#interrupting-a-run).
+A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice — still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying the output ends where dtk was killed. A single Ctrl-C (or SIGTERM on Linux and macOS) lets dtk finish the log; see [Interrupting a run](#interrupting-a-run).
 
 A log that hit `tee.maxFileSizeBytes` stops growing but stays readable: the body ends with a `[dtk: output truncated at <N> bytes]` marker, and `dtk log` shows a note that the output was truncated.
 
@@ -376,10 +376,11 @@ dtk dotnet msbuild    # runs: dotnet msbuild
 
 ## Interrupting a run
 
-Ctrl-C (SIGINT) and SIGTERM stop a `dtk dotnet …` run without leaving `dotnet` running behind dtk:
+Ctrl-C (SIGINT) and, on Linux and macOS, SIGTERM stop a `dtk dotnet …` run without leaving `dotnet` running behind dtk:
 
 - **Ctrl-C** at a terminal reaches `dotnet` as well as dtk. dtk gives `dotnet` up to 5 seconds to stop on its own; when it does, dtk shows the filtered output, saves the log and records the run as usual, and exits with `dotnet`'s own exit code. If `dotnet` is still running after 5 seconds, or the signal reached dtk alone, dtk stops it and every process it started, and exits with code `130`.
-- **SIGTERM** stops `dotnet` and every process it started at once; dtk exits with code `130`.
+- **Ctrl-C with `dotnet run`, `dotnet watch`** and other interactive commands, which stay attached to the terminal (as does every passthrough command when tracking is off and `tee.mode` is `Never`): the command handles Ctrl-C itself and may take as long as it needs to shut down, so dtk waits for it without a time limit and exits with its exit code.
+- **SIGTERM** (Linux and macOS only) stops `dotnet` and every process it started at once; dtk exits with code `130`. On Windows, a console close, logoff or shutdown ends dtk the default way.
 - A **second** Ctrl-C or SIGTERM ends dtk immediately.
 
 When dtk stops `dotnet` itself, it prints no filtered output and does not record the run in `dtk gain`, but it finishes the log, which shows exit code `130` and is kept like any failed run's. Other dtk commands (`gain`, `log`, `config`, …) keep the default behavior: Ctrl-C ends them at once.

@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace DotnetTokenKiller.Cli.Infrastructure;
 
 /// <summary>
-/// Turns Ctrl+C (SIGINT) and SIGTERM into cancellation of the dotnet command dtk is wrapping, so dtk
-/// outlives the signal long enough to stop the child, finalize its log and report an exit code.
+/// Turns Ctrl+C (SIGINT) and, on Unix, SIGTERM into cancellation of the dotnet command dtk is wrapping,
+/// so dtk outlives the signal long enough to stop the child, finalize its log and report an exit code.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -15,6 +15,16 @@ namespace DotnetTokenKiller.Cli.Infrastructure;
 /// drains the rest of its output and records the run with the child's own exit code. The grace period
 /// is the backstop for a signal sent to dtk alone, or a child that ignores it: when it elapses, the
 /// token cancels and <c>ProcessCommandRunner</c> kills the child's process tree.
+/// </para>
+/// <para>
+/// A child attached to the terminal (<c>dotnet run</c>, <c>dotnet watch</c>) owns Ctrl+C: it receives it
+/// itself and may take as long as it likes to shut down, or keep running. After
+/// <see cref="LeaveInterruptToChild"/>, the first Ctrl+C is absorbed without starting the grace period,
+/// so dtk keeps waiting for the child; a second one still ends dtk.
+/// </para>
+/// <para>
+/// SIGTERM is handled on Unix only. Windows raises it for a console shutdown or logoff, which
+/// <see cref="PosixSignalContext.Cancel"/> cannot stop, so a handler there could not keep dtk alive.
 /// </para>
 /// <para>
 /// <see cref="PosixSignalRegistration"/> rather than <see cref="Console.CancelKeyPress"/> for SIGINT
@@ -31,6 +41,7 @@ internal sealed class RunCancellation : IDisposable
     private readonly TimeSpan _interruptGrace;
     private readonly List<PosixSignalRegistration> _registrations = [];
     private int _signalCount;
+    private volatile bool _interruptLeftToChild;
 
     /// <summary>Creates a cancellation source that no signal reaches until <see cref="Register"/> wires one.</summary>
     /// <param name="interruptGrace">How long after the first Ctrl+C the token cancels.</param>
@@ -42,15 +53,25 @@ internal sealed class RunCancellation : IDisposable
     /// <summary>Cancelled once a signal asks the wrapped command to stop.</summary>
     internal CancellationToken Token => _cancellation.Token;
 
-    /// <summary>Creates a cancellation source wired to SIGINT and SIGTERM for the life of the run.</summary>
+    /// <summary>Creates a cancellation source wired to SIGINT, and to SIGTERM on Unix, for the life of the run.</summary>
     /// <returns>The source; disposing it restores the default signal handling.</returns>
     internal static RunCancellation Register()
     {
         var cancellation = new RunCancellation(InterruptGracePeriod);
         cancellation.TryAdd(PosixSignal.SIGINT);
-        cancellation.TryAdd(PosixSignal.SIGTERM);
+        if (!OperatingSystem.IsWindows())
+        {
+            cancellation.TryAdd(PosixSignal.SIGTERM);
+        }
+
         return cancellation;
     }
+
+    /// <summary>
+    /// Makes the first Ctrl+C wait for the child instead of starting the grace period. Call it before
+    /// starting a child that inherits the terminal.
+    /// </summary>
+    internal void LeaveInterruptToChild() => _interruptLeftToChild = true;
 
     /// <summary>Records a signal and schedules or triggers cancellation for the first one.</summary>
     /// <param name="signal">The signal received.</param>
@@ -69,7 +90,10 @@ internal sealed class RunCancellation : IDisposable
         {
             if (signal == PosixSignal.SIGINT)
             {
-                _cancellation.CancelAfter(_interruptGrace);
+                if (!_interruptLeftToChild)
+                {
+                    _cancellation.CancelAfter(_interruptGrace);
+                }
             }
             else
             {
