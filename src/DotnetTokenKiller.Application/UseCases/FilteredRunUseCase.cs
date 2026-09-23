@@ -80,9 +80,20 @@ public sealed class FilteredRunUseCase(
 #pragma warning restore CA2007
         var stdOutSink = countingSink ?? session.Writer;
 
-        var result = await commandRunner
-            .RunStreamedAsync(command, args, stdOutSink, session.Writer, cancellationToken)
-            .ConfigureAwait(false);
+        CommandResult result;
+        try
+        {
+            result = await commandRunner
+                .RunStreamedAsync(command, args, stdOutSink, session.Writer, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The runner has killed the child's tree. dtk is still alive, so close the log as a
+            // cancelled run rather than leave it looking like one dtk was killed in the middle of.
+            await CancelledRun.FinalizeTeeAsync(session).ConfigureAwait(false);
+            throw;
+        }
 
         // RunStreamedAsync awaits both pumps before returning, so both have finished writing by now:
         // appending after Finish would throw, but nothing more will be appended.

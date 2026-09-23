@@ -317,6 +317,28 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_Cancelled_FinalizesTheSessionAsCancelledAndRethrows()
+    {
+        // The runner has already killed the child's tree when it throws; the log should record the
+        // run as cancelled rather than stay "running" as if dtk itself had been killed.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await session.Received(1).FinalizeAsync(ExitCodes.Cancelled, CancellationToken.None);
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RunAsync_TeeFinalizeThrows_DoesNotSurfaceExceptionAndKeepsTheExitCode()
     {
         // Mirrors FilteredOutputPipeline's guard: a broken tee stream's FinalizeAsync must never

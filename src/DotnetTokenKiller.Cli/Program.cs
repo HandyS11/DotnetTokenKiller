@@ -16,7 +16,15 @@ if (args is [HookCommands.Verb, ..])
     return HookEntryPoint.Run(args[1..]);
 }
 
-Console.OutputEncoding = Encoding.UTF8;
+try
+{
+    Console.OutputEncoding = Encoding.UTF8;
+}
+catch (IOException)
+{
+    // No console to configure: a Windows process started without one (a harness's child, a service)
+    // has no handle to set it on. Output keeps the default encoding rather than dtk failing to start.
+}
 
 // Honour the NO_COLOR convention (https://no-color.org): when the env var is present
 // (regardless of value), disable ANSI colors and emoji for all output.
@@ -28,11 +36,19 @@ const string dotnetCmd = "dotnet";
 // case-sensitive routing resolves it; unknown/passthrough invocations are left untouched.
 args = ArgumentPreprocessor.Normalize(args);
 
+// Only a run that wraps a dotnet child takes over Ctrl+C and SIGTERM: the first one stops the child and
+// lets dtk finalize its log and report an exit code, rather than dying with the child still running.
+// Every other command keeps the default, dying at once.
+using var runCancellation = string.Equals(args.FirstOrDefault(), dotnetCmd, StringComparison.OrdinalIgnoreCase)
+    ? RunCancellation.Register()
+    : null;
+var cancellationToken = runCancellation?.Token ?? CancellationToken.None;
+
 // Passthrough: run any unsupported dotnet subcommand directly, recording what it cost so the
 // coverage report can rank which subcommand is worth filtering next.
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
-    return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..]).ConfigureAwait(false);
+    return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..], cancellationToken).ConfigureAwait(false);
 }
 
 // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
@@ -62,7 +78,9 @@ try
 
     app.Configure(config => CliConfigurator.Configure(config, CliConfigurator.DefaultVersion));
 
-    return await app.RunAsync(args).ConfigureAwait(false);
+    // A cancelled command's OperationCanceledException becomes Spectre's CancellationExitCode, whose
+    // default is ExitCodes.Cancelled (130).
+    return await app.RunAsync(args, cancellationToken).ConfigureAwait(false);
 }
 catch (Exception ex)
 {

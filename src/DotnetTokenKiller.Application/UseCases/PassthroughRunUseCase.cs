@@ -94,9 +94,20 @@ public sealed class PassthroughRunUseCase(
         await using var errSink = new FanOutTextWriter(stdErr, session.Writer);
 #pragma warning restore CA2007
 
-        var result = await commandRunner
-            .RunStreamedAsync(command, dotnetArgs, outSink, errSink, cancellationToken)
-            .ConfigureAwait(false);
+        CommandResult result;
+        try
+        {
+            result = await commandRunner
+                .RunStreamedAsync(command, dotnetArgs, outSink, errSink, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The runner has killed the child's tree; close the log as a cancelled run.
+            await CancelledRun.FinalizeTeeAsync(session).ConfigureAwait(false);
+            throw;
+        }
+
         stopwatch.Stop();
 
         // The hint is discarded rather than printed: passthrough emits no dtk meta-output today,

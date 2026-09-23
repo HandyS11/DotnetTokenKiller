@@ -143,6 +143,46 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_Cancelled_FinalizesTheSessionAsCancelledAndRethrows()
+    {
+        // The runner has already killed the child's tree when it throws. dtk is still alive, so the
+        // log should say the run was cancelled rather than look like dtk itself was killed mid-run.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = CreateSession();
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await session.Received(1).FinalizeAsync(ExitCodes.Cancelled, CancellationToken.None);
+        _filter.DidNotReceive().Apply(Arg.Any<string>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task RunAsync_Cancelled_StillRethrows_WhenFinalizingTheSessionFails()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = CreateSession();
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("disk full"));
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task RunAsync_DoesNotThrow_WhenFinalizingTheSessionFails()
     {
         var session = Substitute.For<ITeeSession>();
