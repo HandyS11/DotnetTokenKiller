@@ -23,7 +23,8 @@ Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`,
 
 [Getting Started](https://handys11.github.io/DotnetTokenKiller/articles/getting-started.html) ·
 [Documentation](https://handys11.github.io/DotnetTokenKiller/) ·
-[Samples](./samples/README.md)
+[Samples](./samples/README.md) ·
+[Changelog](./CHANGELOG.md)
 
 </div>
 
