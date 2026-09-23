@@ -20,8 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Filters for `dotnet publish` and `dotnet pack`, summarizing diagnostics and output locations like `dotnet build`.
 - Truncated tee logs are now marked with a `[dtk: output truncated at <N> bytes]` line, and `dtk log` warns when it
   prints a truncated log.
-- `dotnet` child processes are stopped cleanly on Ctrl+C/SIGTERM: SIGTERM cancels at once, Ctrl+C gives the child 5
-  seconds to exit on its own so its output is still drained, logged, and recorded.
+- A captured `dotnet` run (its stdio piped through dtk's filters) now stops cleanly on Ctrl+C: dtk gives the
+  child 5 seconds to exit on its own, still draining, logging, and recording its output, before killing the
+  process tree and exiting `130`. An attached run (`dotnet run`, `dotnet watch`, or any passthrough run whose
+  stdio stays attached to the terminal) is left to handle Ctrl+C itself; a second Ctrl+C ends dtk either way.
+  SIGTERM (Linux/macOS only) stops the tree at once.
 
 ### Changed
 
@@ -79,6 +82,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `dotnet list package` output filtering.
 - `dtk gain --coverage` to show tracking coverage, and a new rtk-style dashboard for `dtk gain`.
 - Tee logs now stream as the command runs, so a killed run keeps whatever output was written before it was killed.
+- Integration artifacts (hooks, skills) dtk previously generated now refresh themselves automatically when a
+  newer dtk adds something they're missing, and `dtk doctor` now checks that an installed hook is registered,
+  current, and actually fires.
 
 ### Fixed
 
