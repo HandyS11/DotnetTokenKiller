@@ -25,11 +25,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Filters for `dotnet publish` and `dotnet pack`, summarizing diagnostics and output locations like `dotnet build`.
 - Truncated tee logs are now marked with a `[dtk: output truncated at <N> bytes]` line, and `dtk log` warns when it
   prints a truncated log.
-- A captured `dotnet` run (its stdio piped through dtk's filters) now stops cleanly on Ctrl+C: dtk gives the
-  child 5 seconds to exit on its own, still draining, logging, and recording its output, before killing the
-  process tree and exiting `130`. An attached run (`dotnet run`, `dotnet watch`, or any passthrough run whose
-  stdio stays attached to the terminal) is left to handle Ctrl+C itself; a second Ctrl+C ends dtk either way.
-  SIGTERM (Linux/macOS only) stops the tree at once.
+- A captured `dotnet` run (its stdio piped through dtk's filters) now stops cleanly on Ctrl+C. The child usually
+  exits on its own within a 5-second grace period; dtk then shows the filtered output, saves the log, records the
+  run, and exits with the child's own exit code. Only if the child is still running after 5 seconds (or the signal
+  reached dtk alone) does dtk kill the process tree and exit `130`. An attached run (`dotnet run`, `dotnet watch`,
+  or any passthrough run whose stdio stays attached to the terminal) is left to handle Ctrl+C itself; a second
+  Ctrl+C ends dtk either way. SIGTERM (Linux/macOS only) stops the tree at once.
+- The `dtk hook` rewrite now also covers `dotnet publish` and `dotnet pack`. A `dotnet publish --interactive` or
+  `dotnet pack --interactive` run passes through unfiltered with the terminal attached, so a credential provider's
+  prompt stays visible.
 
 ### Changed
 
@@ -41,6 +45,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Build diagnostic deduplication no longer merges identical-looking diagnostics that come from different projects.
 - `dotnet ef database drop`'s interactive confirmation prompt is passed through instead of being captured (and
   starved) by the passthrough filter.
+- dtk no longer crashes at startup on Windows when it runs without a console (for example as a harness's child
+  process or a service): it now keeps the default output encoding when it cannot switch to UTF-8.
 
 ## [0.8.0] - 2026-09-14
 
