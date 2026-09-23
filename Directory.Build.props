@@ -10,8 +10,10 @@
       Placeholder for local builds only. The Publish workflow (.github/workflows/publish.yml) passes
       the pushed release tag's version (`v1.2.3` -> `-p:Version=1.2.3`) to every build and pack,
       and CI's AOT and fallback package jobs pass `0.0.0-ci`, so a published package's version always comes from the tag.
+      The `-dev` suffix keeps this default from ever being mistaken for a real release if a local
+      build or pack is published by accident.
     -->
-    <Version>0.5.0</Version>
+    <Version>0.0.0-dev</Version>
     <IsPackable>false</IsPackable>
 
     <!-- Code Analysis & Quality -->
