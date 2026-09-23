@@ -10,6 +10,11 @@ on:
   # See ci.yml: a run dropped during an Actions outage is never replayed on its own.
   workflow_dispatch:
 
+# See ci.yml: only a pull request's superseded run is cancelled, so every push to develop is analyzed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build and analyze

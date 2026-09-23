@@ -16,9 +16,16 @@ on:
   # See ci.yml: a run dropped during an Actions outage is never replayed on its own.
   workflow_dispatch:
 
+# See ci.yml: only a pull request's superseded run is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    # A normal run takes about 5 minutes.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7

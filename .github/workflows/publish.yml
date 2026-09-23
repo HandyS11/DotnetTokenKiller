@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+# A release never cancels: a second run for the same tag waits for the first.
+concurrency: publish-${{ github.ref }}
+
 jobs:
   version:
     runs-on: ubuntu-latest

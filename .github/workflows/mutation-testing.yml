@@ -8,6 +8,12 @@ on:
     - cron: '0 3 * * 1'  # Every Monday at 03:00 UTC
   workflow_dispatch:       # Allow manual runs
 
+# One Stryker run at a time: a manual run waits for the scheduled one (or the other way round) instead of
+# running beside it, and never cancels it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   stryker:
     runs-on: ubuntu-latest
