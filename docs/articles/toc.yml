@@ -10,3 +10,5 @@
   href: token-analytics.md
 - name: Architecture
   href: architecture.md
+- name: Performance
+  href: performance.md
