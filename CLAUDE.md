@@ -268,7 +268,9 @@ log was truncated.
 - **CLI framework**: Spectre.Console + Spectre.Console.Cli
 - **Testing**: xunit + FluentAssertions + Spectre.Console.Testing
 - **Package management**: Central via `Directory.Packages.props` — all version numbers go there, `.csproj` files omit
-  versions
+  versions. The one exception is `samples/SampleApp.BadPackage`, whose deliberately nonexistent
+  `DotnetTokenKiller.DoesNotExist` reference (it triggers NU1101 for the restore tests) carries a `VersionOverride`
+  so that no fake pin sits in `Directory.Packages.props`
 
 ## Code Style
 
