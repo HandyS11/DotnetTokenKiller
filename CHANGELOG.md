@@ -20,7 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - `dtk init <provider> --uninstall` removes a previously installed provider integration and reports each file as
-  removed, unchanged, or kept.
+  removed, unchanged, or kept. It also recognizes, and removes, the unedited Cursor, Windsurf and Aider files an
+  earlier dtk release wrote; a kept file's note says how to remove it anyway.
 - Filters for `dotnet publish` and `dotnet pack`, summarizing diagnostics and output locations like `dotnet build`.
 - Truncated tee logs are now marked with a `[dtk: output truncated at <N> bytes]` line, and `dtk log` warns when it
   prints a truncated log.

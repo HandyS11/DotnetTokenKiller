@@ -44,7 +44,8 @@ It removes only dtk's own parts, and reports each file as `removed`, `unchanged`
   there.
 - **Generated files** (`SKILL.md`, the OpenCode plugin, Copilot CLI's `dtk-dotnet.json`, the Cursor and Windsurf
   rules, `.aider-dtk-instructions.md`): deleted only when dtk can prove the content is its own — a provenance stamp
-  that still verifies, or content identical to what this dtk writes. An edited file is `kept`, with a note.
+  that still verifies, or content identical to what this dtk or an earlier release wrote. An edited file is `kept`,
+  with a note; to remove it anyway, run `dtk init <provider> --force` to restore dtk's version, then `--uninstall`.
 
 Directories the removal leaves empty are deleted too, up to the project or home directory. A second run finds nothing
 to remove. `--force` cannot be combined with `--uninstall`.

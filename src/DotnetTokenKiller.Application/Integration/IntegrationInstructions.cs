@@ -78,6 +78,47 @@ internal static class IntegrationInstructions
         {UsageBody}
         """;
 
+    /// <summary>
+    /// SHA-256 hashes of every Cursor rule (<c>.cursor/rules/dtk.mdc</c>) a released dtk wrote, so that
+    /// <c>--uninstall</c> recognizes an unedited rule from an older dtk as its own and deletes it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each hash is the lowercase hex SHA-256 of the file's UTF-8 bytes with <c>\n</c> line endings, as
+    /// <see cref="UninstallHelpers.RemoveOwnedFileAsync"/> computes it. They were taken from the files each released
+    /// package from NuGet writes (<c>dtk integrate cursor</c>, <c>dtk init cursor</c>); the body changed in 0.4.0 and
+    /// 0.7.0, and 0.1.0 and 0.2.0 had no Cursor integration.
+    /// </para>
+    /// <para>
+    /// <b>Any change to the text a Cursor rule renders</b> — <see cref="Intro"/>, <see cref="UsageBody"/>,
+    /// <see cref="DotnetSubcommands.Ordered"/> or <c>CursorIntegrator</c>'s own frontmatter — <b>must append the
+    /// previous body's hash here</b> once that body has shipped in a release; otherwise an uninstall keeps every rule
+    /// the released version wrote. <c>ReleasedOwnedFileHashesTests</c> pins the current body's hash to force the
+    /// question.
+    /// </para>
+    /// </remarks>
+    internal static readonly IReadOnlyList<string> ReleasedCursorRuleHashes =
+    [
+        "9cd79f606fd5fa0b959b6d9a39382f8184269b9fada9e79622123d28e660d964", // 0.3.0–0.3.1
+        "3002e61a693f4ab92e7938cb34ea27cb3b9d40387e1e66658ad4b670ea6313b0", // 0.4.0–0.6.0
+        "735f10527ecc916333caa23a70a156ecb577b85587fc403d38ad0a18b91ecb69" // 0.7.0–0.8.0
+    ];
+
+    /// <summary>
+    /// SHA-256 hashes of every Windsurf rule (<c>.windsurf/rules/dtk.md</c>) and Aider instructions file
+    /// (<c>.aider-dtk-instructions.md</c>) a released dtk wrote; the two have always had the same body.
+    /// </summary>
+    /// <remarks>
+    /// Computed and maintained exactly as <see cref="ReleasedCursorRuleHashes"/> is: <b>any change to the text
+    /// either renders must append the previous body's hash here</b> once that body has shipped in a release.
+    /// </remarks>
+    internal static readonly IReadOnlyList<string> ReleasedMarkdownRuleHashes =
+    [
+        "22afee5d48f8412be23909f8b2a5b625a64a8d21b12797b557136281352e230a", // 0.3.0–0.3.1
+        "ca57ccc020e44aea0ef2d65ef268c65622ae9d00402124e75bd5e44ef515a28b", // 0.4.0–0.6.0
+        "f4324d4ef087a70168f045c27cbba4885da3d9e06c8ea9d9f723210cd7e757b9" // 0.7.0–0.8.0
+    ];
+
     /// <summary>Joins names into an Oxford-comma prose list, e.g. <c>build, test, and format</c>.</summary>
     /// <param name="names">The names to join, in the order they should read.</param>
     /// <returns>The joined list, or <see cref="string.Empty"/> when <paramref name="names"/> is empty.</returns>

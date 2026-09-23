@@ -112,7 +112,13 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
             : (Path.Combine(directory, InstructionsFileName), Path.Combine(directory, ".aider.conf.yml"), InstructionsFileName, directory);
         var context = IntegrationContext.ForUninstall(root, sharedInUse);
 
-        await UninstallHelpers.RemoveOwnedFileAsync(instructionsPath, InstructionsMarkdown, context, cancellationToken)
+        await UninstallHelpers.RemoveOwnedFileAsync(
+                instructionsPath,
+                InstructionsMarkdown,
+                IntegrationInstructions.ReleasedMarkdownRuleHashes,
+                scope == HookScope.Global ? "dtk init aider --global" : "dtk init aider",
+                context,
+                cancellationToken)
             .ConfigureAwait(false);
 
         await UninstallHelpers.RemoveSectionAsync(

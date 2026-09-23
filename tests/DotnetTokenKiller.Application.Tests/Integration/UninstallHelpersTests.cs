@@ -328,7 +328,7 @@ public sealed class UninstallHelpersTests : IDisposable
         await IntegratorHelpers.WriteFileAsync(path, "rule\n", new IntegrationContext(false), default);
         var context = Uninstall();
 
-        await UninstallHelpers.RemoveOwnedFileAsync(path, "rule\n", context, default);
+        await UninstallHelpers.RemoveOwnedFileAsync(path, "rule\n", [], "dtk init cursor", context, default);
 
         context.Removed.Should().Equal(path);
         Directory.Exists(Path.Combine(_tempDir, ".cursor")).Should().BeFalse();
@@ -341,7 +341,7 @@ public sealed class UninstallHelpersTests : IDisposable
         await File.WriteAllTextAsync(path, "rule\nmine\n");
         var context = Uninstall();
 
-        await UninstallHelpers.RemoveOwnedFileAsync(path, "rule\n", context, default);
+        await UninstallHelpers.RemoveOwnedFileAsync(path, "rule\n", [], "dtk init cursor", context, default);
 
         context.Skipped.Should().Equal(path);
         File.Exists(path).Should().BeTrue();

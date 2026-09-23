@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration.Hooks;
 
@@ -190,16 +192,31 @@ internal static class UninstallHelpers
     }
 
     /// <summary>
-    /// Deletes a file the install writes whole without a stamp, when its content is exactly what this dtk writes
-    /// (line endings aside).
+    /// Deletes a file the install writes whole without a stamp, when its content is exactly what this dtk writes or
+    /// what a released dtk wrote (line endings aside).
     /// </summary>
     /// <param name="path">The file the install writes.</param>
     /// <param name="content">The content the install writes.</param>
+    /// <param name="releasedHashes">
+    /// The SHA-256 hashes of the bodies released dtk versions wrote there, e.g.
+    /// <see cref="IntegrationInstructions.ReleasedCursorRuleHashes"/>.
+    /// </param>
+    /// <param name="installCommand">
+    /// The <c>dtk init</c> command that writes the file, e.g. <c>dtk init aider --global</c>, for the note on a kept
+    /// file.
+    /// </param>
     /// <param name="context">The uninstall context.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     internal static async Task RemoveOwnedFileAsync(
-        string path, string content, IntegrationContext context, CancellationToken cancellationToken)
+        string path,
+        string content,
+        IReadOnlyList<string> releasedHashes,
+        string installCommand,
+        IntegrationContext context,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(releasedHashes);
+
         if (!File.Exists(path))
         {
             return;
@@ -210,15 +227,28 @@ internal static class UninstallHelpers
         {
             Keep(path, "it could not be read", context);
         }
-        else if (string.Equals(existing, content.ReplaceLineEndings("\n"), StringComparison.Ordinal))
+        else if (string.Equals(existing, content.ReplaceLineEndings("\n"), StringComparison.Ordinal)
+                 || releasedHashes.Contains(HashOwnedFile(existing), StringComparer.Ordinal))
         {
             DeleteFile(path, context);
         }
         else
         {
-            Keep(path, "it differs from what this dtk writes (edited, or written by another dtk version)", context);
+            context.Skipped.Add(path);
+            context.Notes.Add(
+                $"{path} was kept: it differs from what this dtk and every earlier release wrote, so it was edited " +
+                "or comes from a dtk version this one does not know. To remove it anyway, run " +
+                $"`{installCommand} --force` to restore dtk's version, then `{installCommand} --uninstall`.");
         }
     }
+
+    /// <summary>
+    /// The lowercase hex SHA-256 of a whole-file body's UTF-8 bytes, as recorded in
+    /// <see cref="IntegrationInstructions.ReleasedCursorRuleHashes"/> and its siblings.
+    /// </summary>
+    /// <param name="body">The file's content, already read with <c>\n</c> line endings.</param>
+    internal static string HashOwnedFile(string body) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(body)));
 
     /// <summary>
     /// Deletes the Python hook script an older dtk installed, once no registration file runs it and dtk can prove it

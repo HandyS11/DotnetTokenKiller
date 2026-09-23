@@ -47,7 +47,9 @@ public sealed class WindsurfIntegrator : IProviderIntegrator, IUninstallIntegrat
     {
         var context = IntegrationContext.ForUninstall(directory, sharedInUse);
 
-        await UninstallHelpers.RemoveOwnedFileAsync(RulePath(directory), WindsurfRule, context, cancellationToken).ConfigureAwait(false);
+        await UninstallHelpers.RemoveOwnedFileAsync(
+            RulePath(directory), WindsurfRule, IntegrationInstructions.ReleasedMarkdownRuleHashes, "dtk init windsurf", context,
+            cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }

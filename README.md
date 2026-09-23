@@ -132,8 +132,8 @@ dtk init claude --uninstall             # add --global for an integration instal
 dotnet tool uninstall -g DotnetTokenKiller
 ```
 
-`--uninstall` removes only dtk's own entries, sections and generated files, and keeps any file you edited since dtk
-wrote it; see [AI Agent Setup](docs/articles/ai-agent-setup.md#uninstalling).
+`--uninstall` removes only dtk's own entries, sections and generated files — including those an older dtk wrote — and
+keeps any file you edited since dtk wrote it; see [AI Agent Setup](docs/articles/ai-agent-setup.md#uninstalling).
 
 ## Usage
 

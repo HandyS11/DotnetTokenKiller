@@ -57,7 +57,9 @@ public sealed class CursorIntegrator : IProviderIntegrator, IUninstallIntegrator
     {
         var context = IntegrationContext.ForUninstall(directory, sharedInUse);
 
-        await UninstallHelpers.RemoveOwnedFileAsync(RulePath(directory), CursorRule, context, cancellationToken).ConfigureAwait(false);
+        await UninstallHelpers.RemoveOwnedFileAsync(
+            RulePath(directory), CursorRule, IntegrationInstructions.ReleasedCursorRuleHashes, "dtk init cursor", context,
+            cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
