@@ -123,7 +123,7 @@ internal static class IntegratorHelpers
     /// </summary>
     /// <param name="path">Path to the existing file to read.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    private static async Task<string?> TryReadExistingAsync(string path, CancellationToken cancellationToken)
+    internal static async Task<string?> TryReadExistingAsync(string path, CancellationToken cancellationToken)
     {
         try
         {
@@ -422,10 +422,7 @@ internal static class IntegratorHelpers
         }
 
         var existing = await TryReadExistingAsync(scriptPath, cancellationToken).ConfigureAwait(false);
-        var writtenByDtk = existing is not null
-                           && (ArtifactStamping.IsAuthentic(existing)
-                               || (!ArtifactStamping.HasStamp(existing)
-                                   && existing.Contains(HookLegacySignature, StringComparison.Ordinal)));
+        var writtenByDtk = existing is not null && IsDtkLegacyHookScript(existing);
 
         if (!writtenByDtk && !context.Force)
         {
@@ -465,6 +462,15 @@ internal static class IntegratorHelpers
             // that gained a file since it was listed, is left as it is.
         }
     }
+
+    /// <summary>
+    /// Whether a Python hook script's content proves dtk wrote it: its provenance stamp verifies, or it is unstamped and
+    /// carries <see cref="HookLegacySignature"/>.
+    /// </summary>
+    /// <param name="content">The script's content.</param>
+    internal static bool IsDtkLegacyHookScript(string content) =>
+        ArtifactStamping.IsAuthentic(content)
+        || (!ArtifactStamping.HasStamp(content) && content.Contains(HookLegacySignature, StringComparison.Ordinal));
 
     /// <summary>
     /// Deletes the Python hook script dtk installed before <c>dtk hook</c> only when nothing dtk can see can still
@@ -660,6 +666,18 @@ internal static class IntegratorHelpers
         hooks[hookEventKey] = hookArray;
         root[containerKey] = hooks;
 
+        await WriteSettingsJsonAsync(path, root, cancellationToken).ConfigureAwait(false);
+
+        (exists ? context.Updated : context.Created).Add(path);
+        return replacedLegacy;
+    }
+
+    /// <summary>Writes a merged settings file in the one format every settings merge uses.</summary>
+    /// <param name="path">Path to the settings file.</param>
+    /// <param name="root">The settings to write.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task WriteSettingsJsonAsync(string path, JsonObject root, CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(
             path,
@@ -668,9 +686,6 @@ internal static class IntegratorHelpers
             // .editorconfig's insert_final_newline.
             root.ToJsonString(SettingsJsonOptions).ReplaceLineEndings("\n") + "\n",
             cancellationToken).ConfigureAwait(false);
-
-        (exists ? context.Updated : context.Created).Add(path);
-        return replacedLegacy;
     }
 
     /// <summary>
@@ -682,7 +697,7 @@ internal static class IntegratorHelpers
     /// <param name="exists">Whether the file already exists on disk.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <exception cref="InvalidOperationException">Thrown when the file contains invalid JSON or the root is not a JSON object.</exception>
-    private static async Task<JsonObject> ReadRootObjectAsync(
+    internal static async Task<JsonObject> ReadRootObjectAsync(
         string path,
         bool exists,
         CancellationToken cancellationToken)
@@ -724,7 +739,7 @@ internal static class IntegratorHelpers
     /// </summary>
     /// <param name="hookArray">The hook event array (e.g. <c>hooks.PreToolUse</c>) to search.</param>
     /// <param name="hookCommand">The current command dtk registers.</param>
-    private static List<JsonObject> FindEquivalentEntries(JsonArray hookArray, string hookCommand)
+    internal static List<JsonObject> FindEquivalentEntries(JsonArray hookArray, string hookCommand)
     {
         var matches = new List<JsonObject>();
 
@@ -782,7 +797,7 @@ internal static class IntegratorHelpers
     /// </summary>
     /// <param name="hookArray">The hook event array (e.g. <c>hooks.PreToolUse</c>) to prune.</param>
     /// <param name="entriesToRemove">The specific inner hook objects to remove.</param>
-    private static void RemoveEntries(JsonArray hookArray, IReadOnlyCollection<JsonObject> entriesToRemove)
+    internal static void RemoveEntries(JsonArray hookArray, IReadOnlyCollection<JsonObject> entriesToRemove)
     {
         var toRemove = new HashSet<JsonObject>(entriesToRemove);
 
