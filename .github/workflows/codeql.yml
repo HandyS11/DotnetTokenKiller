@@ -30,14 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # build-mode none compiles nothing, but still uses the SDK to restore NuGet references it can resolve.
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: Directory.Packages.props
-
+      # No setup-dotnet: build-mode none installs global.json's SDK itself and restores into its own
+      # packages folder, so ~/.nuget/packages never exists and setup-dotnet's cache save fails the job.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
