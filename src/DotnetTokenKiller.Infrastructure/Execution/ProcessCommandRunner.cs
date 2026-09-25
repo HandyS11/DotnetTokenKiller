@@ -162,6 +162,8 @@ public sealed class ProcessCommandRunner : ICommandRunner
                 await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
                 // Still running when the wait began, so a cancellation now means the kill ended it.
+                // The wait alone does not guarantee a throw: the registration's kill raises Exited,
+                // which can complete the wait before the token's own callback cancels it.
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
