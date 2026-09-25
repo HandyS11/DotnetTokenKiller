@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Infrastructure.Execution;
 using DotnetTokenKiller.Infrastructure.Tests.Helpers;
 using FluentAssertions;
@@ -491,6 +492,74 @@ public sealed class ProcessCommandRunnerTests
         {
             Directory.Delete(dir, recursive: true);
         }
+    }
+
+    private static Task<CommandResult> RunWithTokenIgnoringReadersAsync(
+        string command,
+        string[] args,
+        Func<StreamReader, CancellationToken, Task<string>> readStdOut,
+        CancellationToken cancellationToken)
+    {
+        // Invokes the private RunRedirectedAsync with readers that ignore the token. On Windows a
+        // child's redirected pipes are synchronous handles, so every read behaves this way: it ends
+        // only at the EOF the kill causes. These readers reproduce that on every platform.
+        var runMethod = typeof(ProcessCommandRunner)
+            .GetMethod("RunRedirectedAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Func<StreamReader, CancellationToken, Task<string>> readStdErr =
+            static (reader, _) => reader.ReadToEndAsync(CancellationToken.None);
+
+        return (Task<CommandResult>)runMethod.Invoke(
+            null, [command, args, readStdOut, readStdErr, cancellationToken, null])!;
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_Cancellation_ThrowsWhenTheKillIsWhatEndsTheDrainAsync()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-kill-{Guid.NewGuid()}");
+        Directory.CreateDirectory(dir);
+        var started = Path.Combine(dir, "started");
+        try
+        {
+            var (cmd, args) = StartedThenDelayedMarkerCommand(started, Path.Combine(dir, "done"), 30);
+            using var cts = new CancellationTokenSource();
+            var cancelWhenStarted = Task.Run(async () =>
+            {
+                await WaitForFileAsync(started, TimeSpan.FromSeconds(30));
+                await cts.CancelAsync();
+            });
+
+            // The drained streams and the exited child are both the kill's doing, not the child's.
+            var act = async () => await RunWithTokenIgnoringReadersAsync(
+                cmd, args, static (reader, _) => reader.ReadToEndAsync(CancellationToken.None), cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+            await cancelWhenStarted;
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_TokenCancelledAfterTheChildExitedOnItsOwn_ReturnsItsResultAsync()
+    {
+        var (cmd, args) = EchoCommand("finished");
+        using var cts = new CancellationTokenSource();
+
+        // Cancel only once stdout is drained and the child has had time to exit on its own.
+        async Task<string> ReadThenCancelAsync(StreamReader reader, CancellationToken _)
+        {
+            var text = await reader.ReadToEndAsync(CancellationToken.None);
+            await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None);
+            await cts.CancelAsync();
+            return text;
+        }
+
+        var result = await RunWithTokenIgnoringReadersAsync(cmd, args, ReadThenCancelAsync, cts.Token);
+
+        result.StdOut.Should().Contain("finished");
+        result.ExitCode.Should().Be(0);
     }
 
     [WindowsFact]

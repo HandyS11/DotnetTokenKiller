@@ -98,8 +98,10 @@ public sealed class ProcessCommandRunner : ICommandRunner
 
         using var process = StartProcess(psi, command);
 
+        var cancellationKill = new CancellationKill(process);
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
-        var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
+        var registration = cancellationToken.Register(
+            static state => ((CancellationKill)state!).Run(), cancellationKill);
 #pragma warning restore CA2016
         try
         {
@@ -154,17 +156,20 @@ public sealed class ProcessCommandRunner : ICommandRunner
 
             await Task.WhenAll(stdOutTask, stdErrTask).ConfigureAwait(false);
 
-            // Both streams are drained. A child that has also exited finished on its own, so its
-            // result stands even if the token was cancelled since: throwing now would discard the
-            // complete output and real exit code of a run that nothing interrupted.
             if (!process.HasExited)
             {
                 await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            }
 
-                // Still running when the wait began, so a cancellation now means the kill ended it.
-                // The wait alone does not guarantee a throw: the registration's kill raises Exited,
-                // which can complete the wait before the token's own callback cancels it.
-                cancellationToken.ThrowIfCancellationRequested();
+            // Neither a normal drain nor a normal wait proves the child finished on its own. On
+            // Windows the reads ignore the token and end at the EOF the kill causes, and the kill's
+            // Exited event can complete the wait before the token's own callback cancels it. Only
+            // the callback knows whether the token found the child still running: if it did, the
+            // kill ended this run. If not, the child had already exited, and its complete output and
+            // real exit code stand even though the token was cancelled since.
+            if (cancellationKill.FoundChildRunning)
+            {
+                throw new OperationCanceledException(cancellationToken);
             }
 
             // Tasks are already complete after WhenAll; await here is instant and satisfies analyzers
@@ -261,12 +266,22 @@ public sealed class ProcessCommandRunner : ICommandRunner
 
         using var process = StartProcess(psi, command);
 
+        var cancellationKill = new CancellationKill(process);
 #pragma warning disable CA2016 // CancellationToken is handled via registration below
-        var registration = cancellationToken.Register(static state => KillProcess((Process)state!), process);
+        var registration = cancellationToken.Register(
+            static state => ((CancellationKill)state!).Run(), cancellationKill);
 #pragma warning restore CA2016
         try
         {
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
+            // The kill's Exited event can complete the wait before the token's own callback cancels
+            // it; the kill's exit code is then not the child's result.
+            if (cancellationKill.FoundChildRunning)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+
             return process.ExitCode;
         }
         catch (OperationCanceledException)
@@ -313,6 +328,32 @@ public sealed class ProcessCommandRunner : ICommandRunner
         catch (OperationCanceledException)
         {
             // Grace elapsed (or the original token is still firing); nothing more to do here.
+        }
+    }
+
+    /// <summary>
+    /// A run's cancellation callback: kills the child's tree, first recording whether the child was
+    /// still running when the token fired.
+    /// </summary>
+    /// <param name="process">The child whose tree is killed.</param>
+    private sealed class CancellationKill(Process process)
+    {
+        private bool _foundChildRunning;
+
+        /// <summary>Whether the token fired while the child was still running.</summary>
+        public bool FoundChildRunning => Volatile.Read(ref _foundChildRunning);
+
+        /// <summary>Records whether the child is still running, then kills its tree.</summary>
+        public void Run()
+        {
+            // Recorded before the kill, never after: the kill closes the child's pipes and raises
+            // Exited, so the run can resume from a finished drain or wait before KillProcess returns.
+            if (!process.HasExited)
+            {
+                Volatile.Write(ref _foundChildRunning, true);
+            }
+
+            KillProcess(process);
         }
     }
 
