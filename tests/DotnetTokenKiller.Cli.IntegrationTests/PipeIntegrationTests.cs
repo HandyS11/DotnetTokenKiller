@@ -59,7 +59,7 @@ public class PipeIntegrationTests
     public async Task Pipe_UnknownSubcommand_FailsWithKnownListAsync()
     {
         var (output, exitCode, _) =
-            await IntegrationTestHelper.RunDtkWithStdinAsync("anything", "pipe", "publish");
+            await IntegrationTestHelper.RunDtkWithStdinAsync("anything", "pipe", "run");
 
         exitCode.Should().Be(1);
         output.Should().Contain("build").And.Contain("list package");
@@ -73,7 +73,7 @@ public class PipeIntegrationTests
         // as the small one sometimes did on Windows.
         var payload = new string('x', 1024 * 1024);
 
-        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(payload, "pipe", "publish");
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(payload, "pipe", "run");
 
         exitCode.Should().Be(1);
         output.Should().Contain("build").And.Contain("list package");

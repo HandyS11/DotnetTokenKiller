@@ -1,0 +1,3 @@
+  Determining projects to restore...
+  Restored /repo/samples/SampleApp.Broken/SampleApp.Broken.csproj (in 198 ms).
+/repo/samples/SampleApp.Broken/BrokenClass.cs(5,33): error CS0029: Cannot implicitly convert type 'string' to 'int' [/repo/samples/SampleApp.Broken/SampleApp.Broken.csproj]

@@ -22,9 +22,52 @@ dtk init copilot-cli --global   # ~/.copilot/hooks
 
 `--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
 
+## Uninstalling
+
+`--uninstall` removes what `dtk init <provider>` installed, in the project (or `--dir`) or, with `--global`, in your
+home config. Run it before `dotnet tool uninstall -g DotnetTokenKiller`, so no harness is left calling a `dtk` that is
+gone:
+
+```sh
+dtk init claude --uninstall
+dtk init codex --global --uninstall
+```
+
+It removes only dtk's own parts, and reports each file as `removed`, `unchanged` or `kept`:
+
+- **Hook registrations** merged into a settings file (`settings.json`, `hooks.json`): only dtk's entries — the same
+  ones `dtk init` treats as its own, including a Python-era `dotnet-to-dtk.py` entry — are removed; a matcher group,
+  event or hook group left empty goes with them, and a file left as `{}` is deleted.
+- **Instruction sections** (`AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`, `.junie/guidelines.md`,
+  `.aider.conf.yml`): only the section between dtk's markers is removed; the file is deleted when nothing else is left
+  in it. For Aider, the instructions file is also taken back out of your own `read:` key when `dtk init` merged it
+  there.
+- **Generated files** (`SKILL.md`, the OpenCode plugin, Copilot CLI's `dtk-dotnet.json`, the Cursor and Windsurf
+  rules, `.aider-dtk-instructions.md`): deleted only when dtk can prove the content is its own — a provenance stamp
+  that still verifies, or content identical to what this dtk or an earlier release wrote. An edited file is `kept`,
+  with a note; to remove it anyway, run `dtk init <provider> --force` to restore dtk's version, then `--uninstall`.
+
+Directories the removal leaves empty are deleted too, up to the project or home directory. A second run finds nothing
+to remove. `--force` cannot be combined with `--uninstall`.
+
+Some things are deliberately left alone:
+
+- **Shared instructions still in use.** Codex CLI, OpenCode and Antigravity CLI share `AGENTS.md` and the
+  `.agents/skills` skill; Gemini CLI and Antigravity CLI share `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
+  share `.github/copilot-instructions.md`. While another of these still has its dtk hook registered in the same scope,
+  the shared file keeps dtk's section and is reported `unchanged`, with a note naming that provider. (GitHub Copilot
+  has no hook, so it never holds the file back for Copilot CLI.)
+- **Other tools' configs.** If `dtk init` excluded `dotnet` in rtk's `config.toml`, the exclusion stays — dtk cannot
+  tell whether it or you added it — and a note says how to remove it.
+- **Codex's `config.toml`.** dtk never writes it; the approval Codex recorded for dtk's hook stays there. Codex keys
+  approvals by position in `hooks.json`, so hooks that followed dtk's may need approving again under `/hooks`.
+
+A settings file dtk merged into is rewritten in the same format `dtk init` writes it in, so hand-formatting there is
+not preserved.
+
 ## Claude Code
 
-A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`.
+A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk`.
 
 ### Installation
 
@@ -58,7 +101,7 @@ dtk init claude --dir /path/to/project
 
 ### How It Works
 
-With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, or `dotnet list package`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
+With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, `dotnet list package`, `dotnet publish`, or `dotnet pack`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
 
 ### Manual Installation
 
@@ -107,7 +150,7 @@ markers so a future `dtk init copilot --force` can safely replace just this sect
 <!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
 `dtk` filters output to actionable signal only, reducing noise by 50-97%.
 
 ```sh
@@ -117,6 +160,8 @@ dtk dotnet restore
 dtk dotnet clean
 dtk dotnet format
 dtk dotnet list package --outdated
+dtk dotnet publish -c Release
+dtk dotnet pack
 ```
 <!-- /dtk -->
 ````
@@ -131,6 +176,21 @@ dtk init copilot-cli
 
 This creates `.github/hooks/dtk-dotnet.json`, which registers the `preToolUse` hook, and a dtk section in
 `.github/copilot-instructions.md`. `dtk init copilot-cli --global` writes the hook to `~/.copilot/hooks/`.
+
+### Approval
+
+When the hook rewrites a command it also replies with a `permissionDecision`, and `allow` skips Copilot CLI's own
+confirmation. dtk replies `allow` only for a single, plain `dotnet build`, `dotnet test`, `dotnet restore`,
+`dotnet clean`, `dotnet format` or `dotnet list package` invocation: the command must start with `dotnet` and hold
+nothing but words, quoted text and blanks. Everything else it rewrites gets `ask`, so Copilot CLI prompts as usual:
+
+- `dotnet publish` and `dotnet pack`, which write artifacts and, with a publish profile, can deploy;
+- a command with an environment-variable prefix (`FOO=1 dotnet build`) or any other word before `dotnet`;
+- a chained, piped or backgrounded command (`;`, `&&`, `||`, `|`, `&`), a subshell, or a line break;
+- a redirection (`>`, `<`, here-documents), a command substitution (`$(…)` or backticks, even inside double
+  quotes), a `${…}` expansion, a `!` outside single quotes (history expansion), a comment, or an unterminated quote.
+
+A command dtk does not rewrite gets no reply, which leaves it to your own Copilot CLI policy.
 
 ### Manual Installation
 
@@ -156,7 +216,7 @@ Create `.github/hooks/dtk-dotnet.json`. Copilot CLI denies the tool call when a 
 
 ## Gemini CLI
 
-A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`.
+A pre-built hook automatically rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk`.
 
 ### Installation
 
@@ -191,7 +251,11 @@ dtk init gemini --dir /path/to/project
 
 ### How It Works
 
-With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, or `dotnet list package`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
+With the hook in place, any time Gemini CLI runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, `dotnet list package`, `dotnet publish`, or `dotnet pack`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
+
+dtk always replies `{"decision":"allow", ...}`, but that does not bypass your own confirmation: Gemini CLI's
+`BeforeTool` hook contract only treats `"ask"` and `"deny"`/`"block"` specially, so `"allow"` is inert there and
+the policy engine (your trust rules and approval mode) still decides whether the rewritten command runs.
 
 ### Manual Installation
 
@@ -224,14 +288,14 @@ touching the rest of the file:
 <!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
 `dtk` filters output to actionable signal only, reducing noise by 50-97%.
 <!-- /dtk -->
 ```
 
 ## Codex CLI
 
-A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`. It needs
+A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk`. It needs
 Codex CLI 0.131 or later, the first release whose hooks can change a command, and was verified against Codex CLI 0.154.
 
 ### Installation
@@ -302,7 +366,7 @@ Then approve it in Codex under `/hooks`.
 ## OpenCode
 
 OpenCode runs plugins rather than hook commands, so dtk installs a small plugin that rewrites
-`dotnet build|test|restore|clean|format|list package` commands to use `dtk`. It needs OpenCode 1.x, not the v2 beta,
+`dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk`. It needs OpenCode 1.x, not the v2 beta,
 and was verified against OpenCode 1.18.31.
 
 ### Installation
@@ -336,7 +400,7 @@ command.
 
 ## Antigravity CLI
 
-A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk` in Google's
+A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk` in Google's
 Antigravity CLI (`agy`). Checked against Antigravity CLI 1.2.3 on Linux x64 (hook firing and the empty reply also on
 1.2.2).
 
@@ -422,7 +486,7 @@ Use `--force` to overwrite an existing file. Use `--dir` to target a specific pr
 
 ### How It Works
 
-Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format|list package` over raw `dotnet` commands. No hook is needed — it's a plain text instruction file.
+Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format|list package|publish|pack` over raw `dotnet` commands. No hook is needed — it's a plain text instruction file.
 
 ### Manual Installation
 
@@ -433,7 +497,7 @@ Create `.cursor/rules/dtk.mdc`:
 alwaysApply: false
 ---
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ````
 
@@ -451,14 +515,14 @@ Use `--force` to overwrite. Use `--dir` to target a specific project directory.
 
 ### How It Works
 
-Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format|list package` to reduce token usage. No hook is needed.
+Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format|list package|publish|pack` to reduce token usage. No hook is needed.
 
 ### Manual Installation
 
 Create `.windsurf/rules/dtk.md`:
 
 ```markdown
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ```
 
@@ -509,7 +573,7 @@ If your `.aider.conf.yml` already has a top-level `read:` key, add
 And create `.aider-dtk-instructions.md`:
 
 ```markdown
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ```
 
@@ -539,7 +603,7 @@ Add to your `.junie/guidelines.md`:
 <!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 
 ```sh
@@ -549,6 +613,8 @@ dtk dotnet restore
 dtk dotnet clean
 dtk dotnet format
 dtk dotnet list package --outdated
+dtk dotnet publish -c Release
+dtk dotnet pack
 ```
 <!-- /dtk -->
 ````
@@ -558,7 +624,7 @@ dtk dotnet list package --outdated
 For any AI agent that runs terminal commands, the general approach is:
 
 1. Install DTK globally: `dotnet tool install -g DotnetTokenKiller`
-2. Configure the agent to prefix `dotnet build|test|restore|clean|format|list package` with `dtk`
+2. Configure the agent to prefix `dotnet build|test|restore|clean|format|list package|publish|pack` with `dtk`
 3. The agent receives compact, filtered output — reducing token usage by 50–98%
 
 ## Upgrading dtk

@@ -20,7 +20,8 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Declared <see langword="internal"/> because its primary constructor takes the internal
 /// <see cref="HomePaths"/>; reached polymorphically via <see cref="IProviderIntegrator"/> through DI.
 /// </remarks>
-internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
+internal sealed class CopilotCliIntegrator(HomePaths home)
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
 {
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
@@ -76,7 +77,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
         var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
-            Path.Combine(directory, ".github", "copilot-instructions.md"),
+            InstructionsPath(directory),
             SectionMarker, SectionEndMarker, CopilotSection,
             context, cancellationToken).ConfigureAwait(false);
 
@@ -97,6 +98,96 @@ internal sealed class CopilotCliIntegrator(HomePaths home) : IProviderIntegrator
             + "Run 'dtk init copilot-cli' inside a project to also write .github/copilot-instructions.md.");
 
         return context.ToResult();
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) =>
+        scope == HookScope.Global ? [] : [InstructionsPath(directory)];
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <c>dtk-dotnet.json</c> is a file dtk owns: it is deleted when it holds nothing but dtk's hooks, and kept
+    /// otherwise. The global install writes no instructions, so a global uninstall removes none.
+    /// </remarks>
+    public async Task<IntegrationResult> UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
+        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
+
+        if (scope == HookScope.Project)
+        {
+            await UninstallHelpers.RemoveSectionAsync(
+                InstructionsPath(directory), SectionMarker, SectionEndMarker, context, cancellationToken).ConfigureAwait(false);
+        }
+
+        var hook = DescribeHooks(hookDirectory, scope)[0];
+        await RemoveHookFileAsync(hook.RegistrationPath, context, cancellationToken).ConfigureAwait(false);
+
+        var hooksDirectory = Path.GetDirectoryName(hook.RegistrationPath)!;
+        var hookFiles = Directory.Exists(hooksDirectory)
+            ? Directory.GetFiles(hooksDirectory, "*.json").Order(StringComparer.Ordinal).ToList()
+            : [];
+        await UninstallHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath!, hookFiles, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        return context.ToResult();
+    }
+
+    private static string InstructionsPath(string directory) => Path.Combine(directory, ".github", "copilot-instructions.md");
+
+    /// <summary>Deletes <c>dtk-dotnet.json</c> when it holds nothing but dtk's hooks.</summary>
+    /// <param name="path">The registration file.</param>
+    /// <param name="context">The uninstall context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task RemoveHookFileAsync(string path, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        if (await HoldsOnlyDtkHooksAsync(path, cancellationToken).ConfigureAwait(false))
+        {
+            UninstallHelpers.DeleteFile(path, context);
+            return;
+        }
+
+        var content = await IntegratorHelpers.TryReadExistingAsync(path, cancellationToken).ConfigureAwait(false);
+        if (content is not { } text
+            || text.Contains(HookCommands.Invocation(ProviderName), StringComparison.Ordinal)
+            || text.Contains(IntegratorHelpers.LegacyHookScriptName, StringComparison.Ordinal))
+        {
+            UninstallHelpers.Keep(path, "it holds more than dtk's hooks, so dtk cannot remove it without losing yours", context);
+            return;
+        }
+
+        context.Unchanged.Add(path);
+    }
+
+    /// <summary>
+    /// Whether a registration file holds nothing but what dtk writes there: a <c>version</c>, and <c>preToolUse</c>
+    /// entries that all run dtk's hook (<see cref="IsDtkRegistrationAsync"/>) and no other hook event.
+    /// </summary>
+    /// <param name="path">The registration file.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<bool> HoldsOnlyDtkHooksAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!await IsDtkRegistrationAsync(path, cancellationToken).ConfigureAwait(false))
+        {
+            return false;
+        }
+
+        try
+        {
+            return JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false)) is JsonObject root
+                   && root.All(property => property.Key is "version" or "hooks")
+                   && root["hooks"] is JsonObject { Count: 1 };
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
     }
 
     private async Task WriteHookArtifactsAsync(

@@ -18,13 +18,20 @@ namespace DotnetTokenKiller.Application.Integration;
 /// through the public <see cref="IProviderIntegrator"/> via DI, and tests reach it directly via
 /// <c>InternalsVisibleTo</c>.
 /// </remarks>
-internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator
+internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator, IUninstallIntegrator
 {
     private const string SectionMarker = "# dtk";
     private const string SectionEndMarker = "# /dtk";
     private const string ReadKeyPrefix = "read:";
     private const string BlockItemPrefix = "- ";
     private const string InstructionsFileName = ".aider-dtk-instructions.md";
+
+    /// <summary>
+    /// The line of <see cref="AiderConfSectionWithoutReadKey"/> recording that the instructions file was merged into
+    /// the user's own <c>read:</c> key, which tells an uninstall to take it out of that key again.
+    /// </summary>
+    private const string MergedReadKeyLine =
+        "# (merged into the existing top-level \"read:\" key above instead of declaring a new one)";
 
     /// <summary>Builds the dtk-managed conf section declaring a top-level <c>read:</c> key pointing at <paramref name="readTarget"/>.</summary>
     /// <param name="readTarget">
@@ -52,7 +59,7 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
         $"""
         # dtk
         # DotnetTokenKiller: use dtk instead of dotnet for {IntegrationInstructions.SubcommandSlashAlternation}.
-        # (merged into the existing top-level "read:" key above instead of declaring a new one)
+        {MergedReadKeyLine}
         # /dtk
         """;
 
@@ -87,6 +94,94 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
             home.AiderInstructionsPath,
             force,
             cancellationToken);
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) => [];
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Removes the instructions file when it is exactly what dtk writes, and dtk's section from the conf file. When the
+    /// install merged the instructions file into the user's own <c>read:</c> key, it is taken out of that key too; a
+    /// flow-style key is rewritten in the <c>read: [a, b]</c> form the merge writes.
+    /// </remarks>
+    public async Task<IntegrationResult> UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var (instructionsPath, confPath, readTarget, root) = scope == HookScope.Global
+            ? (home.AiderInstructionsPath, home.AiderConfPath, home.AiderInstructionsPath, home.Home)
+            : (Path.Combine(directory, InstructionsFileName), Path.Combine(directory, ".aider.conf.yml"), InstructionsFileName, directory);
+        var context = IntegrationContext.ForUninstall(root, sharedInUse);
+
+        await UninstallHelpers.RemoveOwnedFileAsync(
+                instructionsPath,
+                InstructionsMarkdown,
+                IntegrationInstructions.ReleasedMarkdownRuleHashes,
+                scope == HookScope.Global ? "dtk init aider --global" : "dtk init aider",
+                context,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await UninstallHelpers.RemoveSectionAsync(
+            confPath, SectionMarker, SectionEndMarker, context, cancellationToken,
+            content => content.Contains(MergedReadKeyLine, StringComparison.Ordinal)
+                ? RemoveFromExternalReadKey(content, readTarget)
+                : content).ConfigureAwait(false);
+
+        return context.ToResult();
+    }
+
+    /// <summary>Takes <paramref name="readTarget"/> out of the top-level <c>read:</c> key outside dtk's section.</summary>
+    /// <param name="content">The conf file's content.</param>
+    /// <param name="readTarget">The instructions file the install merged into the key.</param>
+    /// <returns>The content without that entry; unchanged when the key does not list it.</returns>
+    private static string RemoveFromExternalReadKey(string content, string readTarget)
+    {
+        var lines = content.Split('\n');
+        var readLineIndex = FindExternalReadKeyIndex(lines);
+        if (readLineIndex < 0)
+        {
+            return content;
+        }
+
+        var (value, comment) = SplitTrailingComment(lines[readLineIndex][ReadKeyPrefix.Length..].Trim());
+        List<string> updated = [.. lines];
+
+        if (value.Length == 0)
+        {
+            // Block style: drop the "- readTarget" item line.
+            for (var i = readLineIndex + 1; i < lines.Length; i++)
+            {
+                var trimmedStart = lines[i].TrimStart();
+                if (trimmedStart.Length == lines[i].Length || !trimmedStart.StartsWith(BlockItemPrefix, StringComparison.Ordinal))
+                {
+                    break;
+                }
+
+                if (IsReadTarget(trimmedStart[BlockItemPrefix.Length..], readTarget))
+                {
+                    updated.RemoveAt(i);
+                    return string.Join('\n', updated);
+                }
+            }
+
+            return content;
+        }
+
+        var listed = value.StartsWith('[') && value.EndsWith(']') ? value[1..^1] : value;
+        List<string> items = [.. listed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+        if (items.RemoveAll(item => IsReadTarget(item, readTarget)) == 0)
+        {
+            return content;
+        }
+
+        var commentSuffix = comment.Length == 0 ? string.Empty : "  " + comment;
+        var lineEnding = lines[readLineIndex].EndsWith('\r') ? "\r" : string.Empty;
+        updated[readLineIndex] = $"{ReadKeyPrefix} [{string.Join(", ", items)}]{commentSuffix}{lineEnding}";
+        return string.Join('\n', updated);
+    }
+
+    private static bool IsReadTarget(string item, string readTarget) =>
+        item.Trim().Trim('"', '\'').Equals(readTarget, StringComparison.Ordinal);
 
     private static async Task<IntegrationResult> IntegrateCoreAsync(
         string instructionsPath,

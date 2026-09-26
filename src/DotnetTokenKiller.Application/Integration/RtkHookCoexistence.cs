@@ -158,6 +158,39 @@ internal sealed partial class RtkHookCoexistence
         }
     }
 
+    /// <summary>
+    /// After an uninstall removed something from a harness where rtk's hook runs — the case in which the install
+    /// excludes <c>dotnet</c> in rtk's config — notes that the exclusion remains. It is left in place: rtk's config is
+    /// another tool's file, and dtk cannot tell whether it added the entry or the user did.
+    /// </summary>
+    /// <param name="context">The uninstall context.</param>
+    /// <param name="rtkHookDetected">
+    /// Whether rtk's hook is registered for the harness, detected as the install detects it.
+    /// </param>
+    internal void NoteRemainingExclusion(IntegrationContext context, bool rtkHookDetected)
+    {
+        if (!rtkHookDetected || (context.Removed.Count == 0 && context.Updated.Count == 0))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(_rtkConfigPath) && ConfigTextExcludesDotnet(File.ReadAllText(_rtkConfigPath)))
+            {
+                context.Notes.Add(
+                    $"rtk's config at {_rtkConfigPath} still excludes dotnet (an earlier 'dtk init' may have added it) "
+                    + "and was left as it is. Remove \"dotnet\" from [hooks].exclude_commands if rtk should handle "
+                    + "dotnet commands again.");
+            }
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Another tool's file dtk cannot read: nothing to say about it.
+        }
+    }
+
     private async Task WriteConfigAsync(string content, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_rtkConfigPath)!);

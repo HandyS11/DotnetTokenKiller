@@ -82,6 +82,14 @@ internal static class CliConfigurator
                     .WithExample(DotnetCommand, "list", "package")
                     .WithExample(DotnetCommand, "list", "package", "--outdated");
             });
+            dotnet.AddCommand<DotnetPublishCommand>(DotnetSubcommands.Publish)
+                .WithDescription("Run dotnet publish with filtered output")
+                .WithExample(DotnetCommand, DotnetSubcommands.Publish)
+                .WithExample(DotnetCommand, DotnetSubcommands.Publish, "src/MyApp.csproj", "-c", "Release");
+            dotnet.AddCommand<DotnetPackCommand>(DotnetSubcommands.Pack)
+                .WithDescription("Run dotnet pack with filtered output")
+                .WithExample(DotnetCommand, DotnetSubcommands.Pack)
+                .WithExample(DotnetCommand, DotnetSubcommands.Pack, "-o", "artifacts");
         });
 
         config.AddCommand<Commands.PipeCommand>(PipeCommand)
@@ -106,7 +114,9 @@ internal static class CliConfigurator
             .WithExample(InitCommand, "cursor")
             .WithExample(InitCommand, "windsurf")
             .WithExample(InitCommand, "aider")
-            .WithExample(InitCommand, "jetbrains");
+            .WithExample(InitCommand, "jetbrains")
+            .WithExample(InitCommand, "claude", "--uninstall")
+            .WithExample(InitCommand, "codex", GlobalOption, "--uninstall");
 
         config.AddBranch(ConfigBranch, cfg =>
         {

@@ -22,7 +22,8 @@ namespace DotnetTokenKiller.Application.Integration;
 /// through the public <see cref="IProviderIntegrator"/> via DI, and tests reach it directly via
 /// <c>InternalsVisibleTo</c>.
 /// </remarks>
-internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
+internal sealed class GeminiCliIntegrator(HomePaths home)
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
 {
     /// <inheritdoc/>
     public string ProviderName => "gemini";
@@ -47,7 +48,7 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
-            Path.Combine(directory, "GEMINI.md"),
+            ContextFilePath(directory, HookScope.Project),
             directory,
             HookScope.Project,
             force,
@@ -56,11 +57,40 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
-            Path.Combine(home.GeminiDir, "GEMINI.md"),
+            ContextFilePath(home.Home, HookScope.Global),
             home.Home,
             HookScope.Global,
             force,
             cancellationToken);
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) => [ContextFilePath(directory, scope)];
+
+    /// <inheritdoc/>
+    public async Task<IntegrationResult> UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
+        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
+
+        await UninstallHelpers.RemoveSectionAsync(
+            ContextFilePath(hookDirectory, scope),
+            SharedInstructionArtifacts.SectionMarker, SharedInstructionArtifacts.SectionEndMarker,
+            context, cancellationToken).ConfigureAwait(false);
+
+        var hook = DescribeHooks(hookDirectory, scope)[0];
+        await UninstallHelpers.RemoveHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
+        await UninstallHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath!, [hook.RegistrationPath], context, cancellationToken)
+            .ConfigureAwait(false);
+
+        return context.ToResult();
+    }
+
+    private string ContextFilePath(string directory, HookScope scope) =>
+        Path.Combine(scope == HookScope.Global ? home.GeminiDir : directory, "GEMINI.md");
+
+    private static HookRegistrationSpec Registration(HookInstallation hook) =>
+        new(hook.RegistrationPath, "BeforeTool", "run_shell_command", hook.Command);
 
     private async Task<IntegrationResult> IntegrateCoreAsync(
         string contextFilePath,
@@ -78,9 +108,8 @@ internal sealed class GeminiCliIntegrator(HomePaths home) : IProviderIntegrator,
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
 
-        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
-            new HookRegistrationSpec(hook.RegistrationPath, "BeforeTool", "run_shell_command", hook.Command),
-            context, cancellationToken).ConfigureAwait(false);
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(Registration(hook), context, cancellationToken)
+            .ConfigureAwait(false);
 
         await IntegratorHelpers.RetireLegacyHookScriptAsync(
             hook.LegacyScriptPath!, replacedLegacy, [hook.RegistrationPath], context, cancellationToken).ConfigureAwait(false);

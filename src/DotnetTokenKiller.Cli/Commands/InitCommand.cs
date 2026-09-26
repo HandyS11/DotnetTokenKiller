@@ -6,7 +6,10 @@ using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands;
 
-/// <summary>Installs dtk integration artifacts for the given AI assistant provider (<c>dtk init</c>, alias <c>dtk integrate</c>).</summary>
+/// <summary>
+/// Installs dtk integration artifacts for the given AI assistant provider (<c>dtk init</c>, alias <c>dtk integrate</c>),
+/// or removes them with <c>--uninstall</c>.
+/// </summary>
 /// <param name="integrateUseCase">The integration use case.</param>
 /// <param name="console">The Spectre.Console output sink.</param>
 internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsole console)
@@ -44,18 +47,31 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
             return 1;
         }
 
+        if (settings.Uninstall && settings.Force)
+        {
+            console.MarkupLine(
+                "[red]Error:[/] --force cannot be combined with --uninstall: an uninstall never deletes a file "
+                + "edited since dtk wrote it.");
+            return 1;
+        }
+
         var directory = settings.Global ? Environment.CurrentDirectory : (settings.Directory ?? Environment.CurrentDirectory);
 
         IntegrationResult result;
         try
         {
-            result = settings.Global
-                ? await integrateUseCase
+            result = settings switch
+            {
+                { Uninstall: true } => await integrateUseCase
+                    .UninstallAsync(canonicalProvider, directory, settings.Global, cancellationToken)
+                    .ConfigureAwait(false),
+                { Global: true } => await integrateUseCase
                     .RunGlobalAsync(canonicalProvider, settings.Force, cancellationToken)
-                    .ConfigureAwait(false)
-                : await integrateUseCase
+                    .ConfigureAwait(false),
+                _ => await integrateUseCase
                     .RunAsync(canonicalProvider, directory, settings.Force, cancellationToken)
-                    .ConfigureAwait(false);
+                    .ConfigureAwait(false)
+            };
         }
         catch (InvalidOperationException ex)
         {
@@ -64,6 +80,12 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
             // to Spectre's default handler (which would exit 255).
             console.MarkupLine($"[red]Error:[/] {Markup.Escape(ex.Message)}");
             return 1;
+        }
+
+        if (settings.Uninstall)
+        {
+            PrintUninstall(result, directory, canonicalProvider, settings.Global, console);
+            return 0;
         }
 
         foreach (var file in result.CreatedFiles)
@@ -107,6 +129,61 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
         PrintSummary(result, settings.Force, canonicalProvider, console);
 
         return 0;
+    }
+
+    /// <summary>
+    /// Prints what an uninstall did, in the install's line format: <c>removed</c> for a deleted file and for a file dtk's
+    /// part was taken out of, <c>unchanged</c> for an existing file holding nothing of dtk's (or a shared file another
+    /// integration still uses), and <c>kept</c> for a file dtk cannot prove is its own, each explained by a note.
+    /// </summary>
+    /// <param name="result">The uninstall result.</param>
+    /// <param name="directory">The directory paths are shown relative to.</param>
+    /// <param name="provider">The canonical provider name.</param>
+    /// <param name="global">Whether the home config install was removed.</param>
+    /// <param name="console">The Spectre.Console output sink.</param>
+    private static void PrintUninstall(
+        IntegrationResult result, string directory, string provider, bool global, IAnsiConsole console)
+    {
+        foreach (var file in result.RemovedFiles)
+        {
+            console.MarkupLine($"[red]removed[/]  {Markup.Escape(RelativePath(directory, file))}");
+        }
+
+        foreach (var file in result.UpdatedFiles)
+        {
+            console.MarkupLine($"[red]removed[/]  {Markup.Escape(RelativePath(directory, file))} [grey](dtk's part; the rest is kept)[/]");
+        }
+
+        foreach (var file in result.UnchangedFiles)
+        {
+            console.MarkupLine($"[grey]unchanged[/] {Markup.Escape(RelativePath(directory, file))}");
+        }
+
+        foreach (var file in result.SkippedFiles)
+        {
+            console.MarkupLine($"[yellow]kept[/]     {Markup.Escape(RelativePath(directory, file))}");
+        }
+
+        foreach (var note in result.Notes)
+        {
+            console.MarkupLine($"[cyan]note[/]     {Markup.Escape(note)}");
+        }
+
+        if (result.RemovedFiles.Count > 0 || result.UpdatedFiles.Count > 0)
+        {
+            console.MarkupLine($"[green]Done.[/] dtk's [bold]{provider}[/] integration was removed.");
+        }
+        else if (result.SkippedFiles.Count == 0)
+        {
+            var where = global ? "in your home config" : "in this project";
+            console.MarkupLine($"[grey]Nothing to remove: dtk's {provider} integration is not installed {where}.[/]");
+        }
+
+        if (result.SkippedFiles.Count > 0)
+        {
+            console.MarkupLine(
+                $"[yellow]{result.SkippedFiles.Count} file(s) were kept[/] because dtk cannot prove they hold only what it wrote.");
+        }
     }
 
     /// <summary>

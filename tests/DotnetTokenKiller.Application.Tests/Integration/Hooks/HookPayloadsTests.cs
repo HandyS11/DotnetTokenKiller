@@ -102,6 +102,21 @@ public sealed class HookPayloadsTests
         root["hookSpecificOutput"]!["tool_input"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test");
     }
 
+    [Fact]
+    public void Gemini_CompoundCommand_StillAllows_BecauseGeminiPolicyGovernsConfirmation()
+    {
+        // Unlike Copilot CLI's "allow" (a real bypass gated by IsSimpleCommand, see
+        // Copilot_CompoundCommand_AsksInsteadOfAllowing below), Gemini CLI's BeforeTool hook contract never
+        // lets a hook's "allow" decision skip the user's own confirmation: only "ask"/"deny"/"block" have any
+        // effect there, so replying "allow" for a compound command is as inert as replying with nothing.
+        var reply = Reply(HookPayloadKind.GeminiCli,
+            """{"tool_name":"run_shell_command","tool_input":{"command":"dotnet build && rm -rf x"}}""");
+
+        var root = JsonNode.Parse(reply!)!;
+        root["decision"]!.GetValue<string>().Should().Be("allow");
+        root["hookSpecificOutput"]!["tool_input"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build && rm -rf x");
+    }
+
     [Theory]
     [InlineData("""{"tool_input":{"command":"ls"}}""")]
     [InlineData("""{"tool_input":{}}""")]
@@ -143,6 +158,23 @@ public sealed class HookPayloadsTests
 
         root["permissionDecision"]!.GetValue<string>().Should().Be("ask");
         root["modifiedArgs"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build && rm -rf x");
+    }
+
+    [Theory]
+    [InlineData("dotnet publish -c Release -p:PublishProfile=Production", "dtk dotnet publish -c Release -p:PublishProfile=Production")]
+    [InlineData("dotnet pack -o artifacts", "dtk dotnet pack -o artifacts")]
+    public void Copilot_PublishOrPack_IsRewrittenButAsks(string command, string expected)
+    {
+        var payload = new JsonObject
+        {
+            ["toolName"] = "bash",
+            ["toolArgs"] = new JsonObject { ["command"] = command }
+        }.ToJsonString();
+
+        var root = JsonNode.Parse(Reply(HookPayloadKind.CopilotCli, payload)!)!;
+
+        root["permissionDecision"]!.GetValue<string>().Should().Be("ask", "publish and pack are not auto-approvable");
+        root["modifiedArgs"]!["command"]!.GetValue<string>().Should().Be(expected);
     }
 
     [Theory]

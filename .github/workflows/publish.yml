@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+# A release never cancels: a second run for the same tag waits for the first.
+concurrency: publish-${{ github.ref }}
+
 jobs:
   version:
     runs-on: ubuntu-latest
@@ -49,49 +52,15 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal
 
+  aot-rids:
+    uses: ./.github/workflows/aot-rids.yml
+
   pack-rid:
-    needs: version
+    needs: [ version, aot-rids ]
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - rid: linux-x64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-latest
-            test-image: ''
-            glibc: true
-            run-integration-suite: true
-          - rid: linux-arm64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-24.04-arm
-            test-image: ''
-            glibc: true
-            run-integration-suite: false
-          # The musl test jobs build with the Alpine image's SDK, which must satisfy global.json.
-          - rid: linux-musl-x64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-latest
-            test-image: mcr.microsoft.com/dotnet/sdk:10.0-alpine
-            glibc: false
-            run-integration-suite: false
-          - rid: linux-musl-arm64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-24.04-arm
-            test-image: mcr.microsoft.com/dotnet/sdk:10.0-alpine
-            glibc: false
-            run-integration-suite: false
-          - rid: osx-arm64
-            pack-runner: macos-latest
-            test-runner: macos-latest
-            test-image: ''
-            glibc: false
-            run-integration-suite: false
-          - rid: win-x64
-            pack-runner: windows-latest
-            test-runner: windows-latest
-            test-image: ''
-            glibc: false
-            run-integration-suite: true
+      # The RIDs and their runners live in aot-rids.yml, shared with CI.
+      matrix: ${{ fromJSON(needs.aot-rids.outputs.matrix) }}
     uses: ./.github/workflows/aot-package.yml
     with:
       rid: ${{ matrix.rid }}

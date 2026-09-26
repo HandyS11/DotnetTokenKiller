@@ -21,3 +21,5 @@ COMMANDS:
     clean      Run dotnet clean with filtered output        
     format     Run dotnet format with filtered output       
     list       Run dotnet list commands with filtered output
+    publish    Run dotnet publish with filtered output      
+    pack       Run dotnet pack with filtered output         

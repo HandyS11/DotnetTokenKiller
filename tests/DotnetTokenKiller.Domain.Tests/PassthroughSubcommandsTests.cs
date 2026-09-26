@@ -84,8 +84,8 @@ public class PassthroughSubcommandsTests
     }
 
     [Theory]
-    [InlineData((object)new[] { "publish" })]
-    [InlineData((object)new[] { "pack" })]
+    [InlineData((object)new[] { "tool", "install", "dotnet-ef" })]
+    [InlineData((object)new[] { "sln", "list" })]
     [InlineData((object)new[] { "list", "package" })]
     [InlineData((object)new[] { "ef", "migrations" })]
     [InlineData((object)new[] { "msbuild" })]
@@ -108,10 +108,12 @@ public class PassthroughSubcommandsTests
     }
 
     [Theory]
+    [InlineData((object)new[] { "tool", "install", "dotnet-ef", "--interactive" })]
+    [InlineData((object)new[] { "msbuild", "--interactive" })]
+    [InlineData((object)new[] { "msbuild", "-p:Configuration=Release", "--interactive" })]
+    [InlineData((object)new[] { "msbuild", "--INTERACTIVE" })]
     [InlineData((object)new[] { "publish", "--interactive" })]
     [InlineData((object)new[] { "pack", "--interactive" })]
-    [InlineData((object)new[] { "publish", "-c", "Release", "--interactive" })]
-    [InlineData((object)new[] { "publish", "--INTERACTIVE" })]
     public void IsMeasurable_IsFalse_WhenInteractiveFlagIsPresent(string[] args)
     {
         // RunStreamedAsync closes the child's stdin. A command that may prompt for private-feed
@@ -121,12 +123,45 @@ public class PassthroughSubcommandsTests
     }
 
     [Theory]
-    [InlineData((object)new[] { "publish" })]
-    [InlineData((object)new[] { "pack" })]
+    [InlineData((object)new[] { "tool", "install", "dotnet-ef" })]
+    [InlineData((object)new[] { "msbuild" })]
     public void IsMeasurable_IsTrue_WhenInteractiveFlagIsAbsent(string[] args)
     {
         // Guards against a fix for --interactive accidentally disabling measurement generally.
         PassthroughSubcommands.IsMeasurable(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "publish" })]
+    [InlineData((object)new[] { "pack", "-o", "artifacts" })]
+    public void IsMeasurable_IsFalse_ForFilteredSubcommands(string[] args)
+    {
+        // dtk filters these now; only their --interactive runs still reach the passthrough path,
+        // and those are never measured.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "publish", "--interactive" })]
+    [InlineData((object)new[] { "pack", "--interactive" })]
+    [InlineData((object)new[] { "publish", "-c", "Release", "--interactive" })]
+    [InlineData((object)new[] { "PUBLISH", "--INTERACTIVE" })]
+    public void IsInteractiveFilteredRun_IsTrue_ForPublishOrPackWithTheInteractiveFlag(string[] args)
+    {
+        // A filtered run captures the output and closes stdin, so a credential prompt would never
+        // reach the user; these keep the inherited-stdio passthrough they had before dtk filtered them.
+        PassthroughSubcommands.IsInteractiveFilteredRun(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "publish" })]
+    [InlineData((object)new[] { "pack", "-o", "artifacts" })]
+    [InlineData((object)new[] { "build", "--interactive" })]
+    [InlineData((object)new[] { "msbuild", "--interactive" })]
+    [InlineData((object)new string[0])]
+    public void IsInteractiveFilteredRun_IsFalse_Otherwise(string[] args)
+    {
+        PassthroughSubcommands.IsInteractiveFilteredRun(args).Should().BeFalse();
     }
 
     [Theory]
@@ -138,6 +173,43 @@ public class PassthroughSubcommandsTests
 
         // The command still records under its real name; only measurability changes.
         PassthroughSubcommands.CommandName(args).Should().Be(args[0]);
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "--connection", "Server=db" })]
+    [InlineData((object)new[] { "EF", "DATABASE", "DROP" })]
+    public void IsMeasurable_IsFalse_ForEfDatabaseDropWithoutForce(string[] args)
+    {
+        // dotnet ef database drop reads a confirmation from stdin (Console.ReadLine in
+        // DatabaseDropCommand.cs) unless -f/--force is given. Capturing it with stdin closed would
+        // make that read see EOF immediately instead of letting the user answer.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop", "--force" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "-f" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "--connection", "Server=db", "-f" })]
+    [InlineData((object)new[] { "ef", "DATABASE", "DROP", "--FORCE" })]
+    public void IsMeasurable_IsTrue_ForEfDatabaseDropWithForce(string[] args)
+    {
+        // --force (or -f) skips the confirmation read, so capturing the run is safe again.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "migrations", "remove" })]
+    [InlineData((object)new[] { "ef", "migrations", "remove", "--force" })]
+    [InlineData((object)new[] { "ef", "database", "update" })]
+    [InlineData((object)new[] { "ef", "database" })]
+    [InlineData((object)new[] { "ef", "dbcontext", "drop" })]
+    public void IsMeasurable_IsUnaffectedByThePromptingEfCheck_ForOtherEfInvocations(string[] args)
+    {
+        // dotnet ef migrations remove does not prompt: MigrationsScaffolder.RemoveMigration throws
+        // instead of reading input when --force is absent and the migration was already applied.
+        // Only the documented "database drop" pair is gated.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeTrue();
     }
 
     [Fact]

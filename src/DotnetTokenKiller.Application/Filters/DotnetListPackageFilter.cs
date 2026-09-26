@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Domain.Filters;
-using DotnetTokenKiller.Domain.Text;
 
 namespace DotnetTokenKiller.Application.Filters;
 
@@ -22,22 +21,23 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
 {
     private const int MaxGroups = 30;
 
-    /// <summary>Applies the filter to raw <c>dotnet list package</c> output.</summary>
-    /// <param name="rawOutput">The raw output to filter.</param>
+    /// <summary>Applies the filter to <c>dotnet list package</c> output.</summary>
+    /// <param name="strippedOutput">
+    /// The <c>dotnet list package</c> output to filter, with ANSI escape sequences already stripped.
+    /// </param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
-    public string Apply(string rawOutput, int exitCode)
+    public string Apply(string strippedOutput, int exitCode)
     {
-        if (string.IsNullOrWhiteSpace(rawOutput))
+        if (string.IsNullOrWhiteSpace(strippedOutput))
         {
             return string.Empty;
         }
 
-        var stripped = AnsiStrip.Strip(rawOutput);
-        var state = Parse(stripped.Split(["\r\n", "\n"], StringSplitOptions.None));
+        var state = Parse(strippedOutput.Split(["\r\n", "\n"], StringSplitOptions.None));
 
         if (state.Variant == Variant.Unknown || state.DroppedRows > 0)
         {
-            return Unrecognized(stripped, exitCode);
+            return Unrecognized(strippedOutput, exitCode);
         }
 
         return state.Variant switch
@@ -52,7 +52,7 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
             Variant.Vulnerable => FormatAudit(
                 state, exitCode, "--vulnerable", ("vulnerable package", "vulnerable packages"),
                 entry => $"{Version(entry)} — {entry.Severity} {entry.Advisory}".TrimEnd()),
-            _ => Unrecognized(stripped, exitCode)
+            _ => Unrecognized(strippedOutput, exitCode)
         };
     }
 

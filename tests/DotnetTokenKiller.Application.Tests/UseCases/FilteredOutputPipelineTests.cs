@@ -43,6 +43,19 @@ public class FilteredOutputPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_StripsAnsiBeforePassingToTheFilter()
+    {
+        // The pipeline is the sole owner of ANSI stripping: every IOutputFilter.Apply implementation
+        // assumes its input has already been stripped and does not strip again. This pins that
+        // contract at the seam between the two, independent of any single filter's own behavior.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        await _sut.ProcessAsync(Request(raw: "\x1b[32mBuild succeeded.\x1b[0m\n"), NullTeeSession.Instance);
+
+        _filter.Received(1).Apply(Arg.Is<string>(s => !s.Contains('\x1b')), Arg.Any<int>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_RecordsSuppliedSource()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");

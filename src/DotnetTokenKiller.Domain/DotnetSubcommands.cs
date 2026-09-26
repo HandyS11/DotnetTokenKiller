@@ -40,10 +40,10 @@ namespace DotnetTokenKiller.Domain;
 ///   hand-editing — but that test's pinned literals do.
 ///   </description></item>
 ///   <item><description>
-///   Check <c>PipeCommand</c>'s "No filter for: …" error line. It renders <see cref="Ordered"/> joined
-///   with ", " on one line; a seventh entry can push that line past Spectre's 80-column
-///   non-interactive wrap width and break the line-count assertion in
-///   <c>PipeIntegrationTests.Pipe_UnknownSubcommand_FailsWithKnownListAsync</c>.
+///   Check <c>PipeCommand</c>'s "Available: …" error line. It renders <see cref="Ordered"/> joined
+///   with ", " on one line, 75 characters with eight entries; a longer list can push that line past
+///   Spectre's 80-column non-interactive wrap width and fold it mid-name, which
+///   <c>PipeIntegrationTests.Pipe_UnknownSubcommand_FailsWithKnownListAsync</c> checks for.
 ///   </description></item>
 /// </list>
 /// </remarks>
@@ -73,11 +73,18 @@ public static class DotnetSubcommands
     /// </remarks>
     public const string ListPackage = "list package";
 
+    /// <summary>The <c>dotnet publish</c> subcommand.</summary>
+    public const string Publish = "publish";
+
+    /// <summary>The <c>dotnet pack</c> subcommand.</summary>
+    public const string Pack = "pack";
+
     /// <summary>
     /// Canonical display order, used for CLI routing, help, and completion. Changing this order
     /// changes the order commands are listed in <c>dtk dotnet --help</c>.
     /// </summary>
-    public static readonly IReadOnlyList<string> Ordered = [Build, Test, Restore, Clean, Format, ListPackage];
+    public static readonly IReadOnlyList<string> Ordered =
+        [Build, Test, Restore, Clean, Format, ListPackage, Publish, Pack];
 
     /// <summary>
     /// The canonical names as a case-insensitive set, for asserting membership and binding other

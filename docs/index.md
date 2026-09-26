@@ -3,7 +3,7 @@ _layout: landing
 _disableToc: true
 _disableAffix: true
 _disableBreadcrumb: true
-_description: A .NET CLI proxy that filters dotnet build, test, restore, clean, format, and list package output down to what your AI agent actually needs.
+_description: A .NET CLI proxy that filters dotnet build, test, restore, clean, format, list package, publish, and pack output down to what your AI agent actually needs.
 ---
 
 <section class="dtk-hero">

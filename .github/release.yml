@@ -1,0 +1,22 @@
+# Categorizes GitHub's auto-generated release notes by pull request label.
+# https://docs.github.com/repositories/releasing-projects-on-github/automatically-generated-release-notes
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+    - title: Fixes
+      labels:
+        - bug
+    - title: Dependencies
+      labels:
+        - dependencies
+        - github_actions
+    - title: Other Changes
+      labels:
+        - "*"

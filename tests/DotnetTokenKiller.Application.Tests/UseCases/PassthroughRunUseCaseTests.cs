@@ -11,7 +11,7 @@ namespace DotnetTokenKiller.Application.Tests.UseCases;
 
 public sealed class PassthroughRunUseCaseTests : IDisposable
 {
-    private static readonly string[] PublishArgs = ["publish", "-c", "Release"];
+    private static readonly string[] MsBuildArgs = ["msbuild", "-p:Configuration=Release"];
     private static readonly string[] RunArgs = ["run"];
     private readonly StringWriter _stdErr = new();
     private readonly StringWriter _stdOut = new();
@@ -42,15 +42,15 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     {
         _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
                 Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(new CommandResult("a good deal of publish output", "", 0));
+            .Returns(new CommandResult("a good deal of msbuild output", "", 0));
 
-        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         exitCode.Should().Be(0);
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
                 r.Outcome == RunOutcome.PassthroughMeasured &&
-                r.Command == "publish" &&
+                r.Command == "msbuild" &&
                 r.InputTokens > 0),
             Arg.Any<CancellationToken>());
     }
@@ -63,7 +63,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("some output", "", 0));
 
-        await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
@@ -103,7 +103,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         _runner.RunPassthroughAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(0);
 
-        await _sut.RunAsync(config, "dotnet", PublishArgs);
+        await _sut.RunAsync(config, "dotnet", MsBuildArgs);
 
         await _runner.DidNotReceive().RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>());
@@ -117,7 +117,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "error text", 42));
 
-        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         exitCode.Should().Be(42);
     }
@@ -136,14 +136,14 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
     [Fact]
     public async Task RunAsync_TrackingThrows_DoesNotSurfaceExceptionAndKeepsTheExitCode()
     {
-        // A broken tracking database must never change what a dotnet publish returns.
+        // A broken tracking database must never change what a dotnet msbuild returns.
         _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
                 Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("output", "", 3));
         _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db error"));
 
-        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         exitCode.Should().Be(3);
     }
@@ -177,7 +177,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db error"));
 
-        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         exitCode.Should().Be(3);
     }
@@ -189,7 +189,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "a warning printed to standard error", 0));
 
-        await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.InputTokens > 0),
@@ -207,7 +207,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("out", "", 0));
 
-        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["msbuild"]);
 
         await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
     }
@@ -230,7 +230,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("out", "", 0));
 
-        await _sut.RunAsync(config, "dotnet", ["publish"]);
+        await _sut.RunAsync(config, "dotnet", ["msbuild"]);
 
         await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
         await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
@@ -247,7 +247,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         _runner.RunPassthroughAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<CancellationToken>()).Returns(0);
 
-        await _sut.RunAsync(config, "dotnet", ["publish"]);
+        await _sut.RunAsync(config, "dotnet", ["msbuild"]);
 
         await _runner.Received(1).RunPassthroughAsync(Arg.Any<string>(),
             Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
@@ -287,7 +287,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("out", "", 0));
 
-        await _sut.RunAsync(config, "dotnet", ["publish"]);
+        await _sut.RunAsync(config, "dotnet", ["msbuild"]);
 
         await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
         await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
@@ -310,10 +310,94 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("out", "", 0));
 
-        var exitCode = await sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+        var exitCode = await sut.RunAsync(DtkConfig.Default, "dotnet", ["msbuild"]);
 
         exitCode.Should().Be(0);
         await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_Cancelled_FinalizesTheSessionAsCancelledAndRethrows()
+    {
+        // The runner has already killed the child's tree when it throws; the log should record the
+        // run as cancelled rather than stay "running" as if dtk itself had been killed.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await session.Received(1).FinalizeAsync(ExitCodes.Cancelled, CancellationToken.None);
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledAfterTheChildExited_KeepsTheLogAndTheRecord()
+    {
+        // Ctrl+C's grace period can elapse after the child already stopped on its own; the finished
+        // run must still be logged and recorded.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(TextWriter.Null);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 3));
+
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs, cts.Token);
+
+        exitCode.Should().Be(3);
+        await session.Received(1).FinalizeAsync(3, Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(),
+            Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+    }
+
+    [Fact]
+    public async Task RunAsync_InteractiveCancelledAfterTheChildExited_KeepsTheRecord()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        _runner.RunPassthroughAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(3);
+
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", RunArgs, cts.Token);
+
+        exitCode.Should().Be(3);
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(),
+            Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+    }
+
+    [Fact]
+    public void KeepsStdioAttached_InteractiveSubcommand_IsTrue()
+    {
+        PassthroughRunUseCase.KeepsStdioAttached(DtkConfig.Default, RunArgs).Should().BeTrue();
+    }
+
+    [Fact]
+    public void KeepsStdioAttached_MeasurableSubcommand_IsFalse()
+    {
+        PassthroughRunUseCase.KeepsStdioAttached(DtkConfig.Default, MsBuildArgs).Should().BeFalse();
+    }
+
+    [Fact]
+    public void KeepsStdioAttached_TrackingAndTeeOff_IsTrueForAnySubcommand()
+    {
+        var config = DtkConfig.Default with
+        {
+            Tracking = DtkConfig.Default.Tracking with { Enabled = false },
+            Tee = new TeeConfig(TeeMode.Never)
+        };
+
+        PassthroughRunUseCase.KeepsStdioAttached(config, MsBuildArgs).Should().BeTrue();
     }
 
     [Fact]
@@ -333,7 +417,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("out", "", 5));
 
-        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         exitCode.Should().Be(5);
     }
@@ -360,7 +444,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 return new CommandResult("stdout line", "", 0);
             });
 
-        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["msbuild"]);
 
         _stdOut.ToString().Should().Contain("stdout line");
         sessionWriter.ToString().Should().Contain("stdout line");
@@ -379,10 +463,10 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 var pending = warmUpStarted.Task;
                 var first = await Task.WhenAny(pending, Task.Delay(TimeSpan.FromSeconds(5)));
                 startedWhileChildRan = first == pending;
-                return new CommandResult("publish output", "", 0);
+                return new CommandResult("msbuild output", "", 0);
             });
 
-        await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         startedWhileChildRan.Should().BeTrue();
         await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
@@ -415,9 +499,9 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         var config = DtkConfig.Default with { Tracking = new TrackingConfig(Enabled: false) };
         _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
                 Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(new CommandResult("publish output", "", 0));
+            .Returns(new CommandResult("msbuild output", "", 0));
 
-        await _sut.RunAsync(config, "dotnet", PublishArgs);
+        await _sut.RunAsync(config, "dotnet", MsBuildArgs);
 
         await _tracker.DidNotReceive().WarmUpAsync(Arg.Any<CancellationToken>());
     }
@@ -428,9 +512,9 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         _tracker.WarmUpAsync(Arg.Any<CancellationToken>()).ThrowsAsync(new InvalidOperationException("db locked"));
         _runner.RunStreamedAsync("dotnet", Arg.Any<IReadOnlyList<string>>(), Arg.Any<TextWriter>(),
                 Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(new CommandResult("publish output", "", 4));
+            .Returns(new CommandResult("msbuild output", "", 4));
 
-        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", PublishArgs);
+        var exitCode = await _sut.RunAsync(DtkConfig.Default, "dotnet", MsBuildArgs);
 
         exitCode.Should().Be(4);
         await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
@@ -468,7 +552,7 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
                 return new CommandResult("", "stderr line", 0);
             });
 
-        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["publish"]);
+        await _sut.RunAsync(DtkConfig.Default, "dotnet", ["msbuild"]);
 
         _stdErr.ToString().Should().Contain("stderr line");
         sessionWriter.ToString().Should().Contain("stderr line");

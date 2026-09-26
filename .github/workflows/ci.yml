@@ -12,9 +12,17 @@ on:
   # trigger a run skipped that way stays missing until the next push.
   workflow_dispatch:
 
+# A new push to a pull request cancels its superseded run. Every other run gets a group of its own, so
+# nothing cancels or supersedes a push to develop: a shared group would drop a queued run for a newer one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    # A normal run takes 5 to 8 minutes.
+    timeout-minutes: 30
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest ]
@@ -22,11 +30,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
-
-      - name: Display OS Information
-        run: |
-          echo "Running on: ${{ matrix.os }}"
-          echo "Runner OS: ${{ runner.os }}"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -47,59 +50,19 @@ jobs:
       - name: Test
         env:
           DTK_NODE_REQUIRED: '1'
-        run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+        run: dotnet test --no-build --configuration Release --verbosity normal
 
-      - name: Upload coverage reports
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-reports
-          path: ./coverage/**/coverage.cobertura.xml
-          retention-days: 14
+  aot-rids:
+    name: AOT RIDs
+    uses: ./.github/workflows/aot-rids.yml
 
   aot:
     name: AOT (${{ matrix.rid }})
+    needs: aot-rids
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - rid: linux-x64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-latest
-            test-image: ''
-            glibc: true
-            run-integration-suite: true
-          - rid: linux-arm64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-24.04-arm
-            test-image: ''
-            glibc: true
-            run-integration-suite: false
-          # The musl test jobs build with the Alpine image's SDK, which must satisfy global.json.
-          - rid: linux-musl-x64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-latest
-            test-image: mcr.microsoft.com/dotnet/sdk:10.0-alpine
-            glibc: false
-            run-integration-suite: false
-          - rid: linux-musl-arm64
-            pack-runner: ubuntu-latest
-            test-runner: ubuntu-24.04-arm
-            test-image: mcr.microsoft.com/dotnet/sdk:10.0-alpine
-            glibc: false
-            run-integration-suite: false
-          - rid: osx-arm64
-            pack-runner: macos-latest
-            test-runner: macos-latest
-            test-image: ''
-            glibc: false
-            run-integration-suite: false
-          - rid: win-x64
-            pack-runner: windows-latest
-            test-runner: windows-latest
-            test-image: ''
-            glibc: false
-            run-integration-suite: true
+      # The RIDs and their runners live in aot-rids.yml, shared with Publish.
+      matrix: ${{ fromJSON(needs.aot-rids.outputs.matrix) }}
     uses: ./.github/workflows/aot-package.yml
     with:
       rid: ${{ matrix.rid }}

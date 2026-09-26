@@ -143,6 +143,69 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_Cancelled_FinalizesTheSessionAsCancelledAndRethrows()
+    {
+        // The runner has already killed the child's tree when it throws. dtk is still alive, so the
+        // log should say the run was cancelled rather than look like dtk itself was killed mid-run.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = CreateSession();
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await session.Received(1).FinalizeAsync(ExitCodes.Cancelled, CancellationToken.None);
+        _filter.DidNotReceive().Apply(Arg.Any<string>(), Arg.Any<int>());
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledAfterTheChildExited_KeepsTheRunsOutcome()
+    {
+        // Ctrl+C's grace period can elapse after the child already stopped on its own. The runner then
+        // returns the real result, and nothing after it may observe the now-cancelled token.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = CreateSession();
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("output", "", 3));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
+
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+
+        exitCode.Should().Be(3);
+        await session.Received(1).FinalizeAsync(3, Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(),
+            Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
+    }
+
+    [Fact]
+    public async Task RunAsync_Cancelled_StillRethrows_WhenFinalizingTheSessionFails()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var session = CreateSession();
+        session.FinalizeAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("disk full"));
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task RunAsync_DoesNotThrow_WhenFinalizingTheSessionFails()
     {
         var session = Substitute.For<ITeeSession>();

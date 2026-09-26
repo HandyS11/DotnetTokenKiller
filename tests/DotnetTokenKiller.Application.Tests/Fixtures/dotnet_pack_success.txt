@@ -1,0 +1,6 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  SampleApp.Lib -> /repo/samples/SampleApp.Lib/bin/Release/net10.0/SampleApp.Lib.dll
+  SampleApp.MultiProject -> /repo/samples/SampleApp.MultiProject/bin/Release/net10.0/SampleApp.MultiProject.dll
+  The package SampleApp.MultiProject.0.5.0 is missing a readme. Go to https://aka.ms/nuget/authoring-best-practices/readme to learn why package readmes are important.
+  Successfully created package '/repo/samples/SampleApp.MultiProject/bin/Release/SampleApp.MultiProject.0.5.0.nupkg'.

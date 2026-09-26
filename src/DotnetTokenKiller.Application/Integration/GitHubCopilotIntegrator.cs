@@ -6,7 +6,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <remarks>
 /// Appends (or creates) a dtk section in <c>.github/copilot-instructions.md</c>.
 /// </remarks>
-public sealed class GitHubCopilotIntegrator : IProviderIntegrator
+public sealed class GitHubCopilotIntegrator : IProviderIntegrator, IUninstallIntegrator
 {
     private const string SectionMarker = "<!-- dtk -->";
     private const string SectionEndMarker = "<!-- /dtk -->";
@@ -32,10 +32,27 @@ public sealed class GitHubCopilotIntegrator : IProviderIntegrator
         var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
-            Path.Combine(directory, ".github", "copilot-instructions.md"),
+            InstructionsPath(directory),
             SectionMarker, SectionEndMarker, CopilotSection,
             context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
+
+    /// <inheritdoc/>
+    IReadOnlyList<string> IUninstallIntegrator.SharedArtifactPaths(string directory, HookScope scope) => [InstructionsPath(directory)];
+
+    /// <inheritdoc/>
+    async Task<IntegrationResult> IUninstallIntegrator.UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var context = IntegrationContext.ForUninstall(directory, sharedInUse);
+
+        await UninstallHelpers.RemoveSectionAsync(
+            InstructionsPath(directory), SectionMarker, SectionEndMarker, context, cancellationToken).ConfigureAwait(false);
+
+        return context.ToResult();
+    }
+
+    private static string InstructionsPath(string directory) => Path.Combine(directory, ".github", "copilot-instructions.md");
 }

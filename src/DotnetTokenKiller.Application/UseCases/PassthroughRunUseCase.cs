@@ -25,6 +25,23 @@ public sealed class PassthroughRunUseCase(
     TextWriter stdOut,
     TextWriter stdErr)
 {
+    /// <summary>
+    /// Whether <see cref="RunAsync"/> runs the command with its stdio attached to the terminal rather
+    /// than captured: when there is nothing to measure or log, or when the subcommand is interactive.
+    /// </summary>
+    /// <param name="config">The loaded configuration.</param>
+    /// <param name="dotnetArgs">The arguments to pass to dotnet, starting at the subcommand.</param>
+    /// <returns><see langword="true"/> when the child inherits dtk's stdio.</returns>
+    public static bool KeepsStdioAttached(DtkConfig config, IReadOnlyList<string> dotnetArgs)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentNullException.ThrowIfNull(dotnetArgs);
+
+        // Tee and tracking are configured independently, so either one is reason enough to capture.
+        return (!config.Tracking.Enabled && config.Tee.Mode == TeeMode.Never) ||
+               !PassthroughSubcommands.IsMeasurable(dotnetArgs);
+    }
+
     /// <summary>Runs the command and records the run.</summary>
     /// <param name="config">
     /// The already-loaded configuration. Passed in rather than resolved so the caller reads the
@@ -43,9 +60,7 @@ public sealed class PassthroughRunUseCase(
         ArgumentNullException.ThrowIfNull(config);
         ArgumentNullException.ThrowIfNull(dotnetArgs);
 
-        // Tee and tracking are configured independently, so either one is reason enough to capture.
-        var teeEnabled = config.Tee.Mode != TeeMode.Never;
-        if (!config.Tracking.Enabled && !teeEnabled)
+        if (!config.Tracking.Enabled && config.Tee.Mode == TeeMode.Never)
         {
             // Nothing to measure and nothing to log, so leave the child's stdio attached to the
             // terminal exactly as it is today — colour included.
@@ -56,7 +71,7 @@ public sealed class PassthroughRunUseCase(
         var commandName = PassthroughSubcommands.CommandName(dotnetArgs);
         var stopwatch = Stopwatch.StartNew();
 
-        if (!PassthroughSubcommands.IsMeasurable(dotnetArgs))
+        if (KeepsStdioAttached(config, dotnetArgs))
         {
             // Interactive runs record zero tokens and never estimate, so only the tracker needs
             // setting up while the child runs.
@@ -67,8 +82,10 @@ public sealed class PassthroughRunUseCase(
                 .ConfigureAwait(false);
             stopwatch.Stop();
             await interactiveWarmUp.WhenReadyAsync().ConfigureAwait(false);
+            // None from here on: the child has exited, and a cancellation landing now must not
+            // drop the record of a run that finished on its own.
             await TrackAsync(commandName, null, config.Tracking, stopwatch.Elapsed, passthroughExit,
-                    RunOutcome.PassthroughUnmeasured, cancellationToken)
+                    RunOutcome.PassthroughUnmeasured, CancellationToken.None)
                 .ConfigureAwait(false);
             return passthroughExit;
         }
@@ -94,14 +111,27 @@ public sealed class PassthroughRunUseCase(
         await using var errSink = new FanOutTextWriter(stdErr, session.Writer);
 #pragma warning restore CA2007
 
-        var result = await commandRunner
-            .RunStreamedAsync(command, dotnetArgs, outSink, errSink, cancellationToken)
-            .ConfigureAwait(false);
+        CommandResult result;
+        try
+        {
+            result = await commandRunner
+                .RunStreamedAsync(command, dotnetArgs, outSink, errSink, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The runner has killed the child's tree; close the log as a cancelled run. None: the
+            // run's own token is already cancelled, and this is the cleanup it exists to allow.
+            await FinalizeTeeAsync(session, ExitCodes.Cancelled, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+
         stopwatch.Stop();
 
         // The hint is discarded rather than printed: passthrough emits no dtk meta-output today,
-        // and the log is reachable through `dtk log`.
-        await FinalizeTeeAsync(session, result.ExitCode, cancellationToken).ConfigureAwait(false);
+        // and the log is reachable through `dtk log`. None from here on: the child has exited, and a
+        // cancellation landing now (Ctrl+C's grace period elapsing) must not drop the log or the record.
+        await FinalizeTeeAsync(session, result.ExitCode, CancellationToken.None).ConfigureAwait(false);
 
         // The child's exit code above is already captured before any of this runs, so a throw from
         // here on — including from stripping/tokenizing a very large captured output — cannot alter
@@ -110,7 +140,7 @@ public sealed class PassthroughRunUseCase(
         // Never throws; a failed setup resurfaces inside TrackAsync's catch.
         await warmUp.WhenReadyAsync().ConfigureAwait(false);
         await TrackAsync(commandName, result.StdOut + result.StdErr, config.Tracking,
-                stopwatch.Elapsed, result.ExitCode, RunOutcome.PassthroughMeasured, cancellationToken)
+                stopwatch.Elapsed, result.ExitCode, RunOutcome.PassthroughMeasured, CancellationToken.None)
             .ConfigureAwait(false);
 
         return result.ExitCode;

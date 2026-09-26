@@ -10,7 +10,7 @@ public sealed class FixtureCorpusTests
     {
         // Bound to a count, not a subset: a glob that silently stopped matching would otherwise
         // leave the corpus quietly smaller than the fixtures directory it mirrors.
-        FixtureCorpus.Names.Should().HaveCount(16);
+        FixtureCorpus.Names.Should().HaveCount(26);
         FixtureCorpus.Names.Should().Contain("dotnet_build_errors.txt");
         FixtureCorpus.Names.Should().Contain("dotnet_list_package_raw.txt");
     }

@@ -22,7 +22,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
 internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IHookApprovalInspector
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IHookApprovalInspector, IUninstallIntegrator
 {
     /// <summary>Printed when this run wrote the hook, which Codex will not run until the user approves it.</summary>
     internal const string ApprovalNote =
@@ -164,8 +164,8 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
-            Path.Combine(directory, "AGENTS.md"),
-            Path.Combine(directory, ".agents", "skills"),
+            InstructionsPath(directory, HookScope.Project),
+            SkillsDirectory(directory, HookScope.Project),
             directory,
             HookScope.Project,
             force,
@@ -174,12 +174,59 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
-            Path.Combine(home.CodexDir, "AGENTS.md"),
-            home.AgentsSkillsDir,
+            InstructionsPath(home.Home, HookScope.Global),
+            SkillsDirectory(home.Home, HookScope.Global),
             home.Home,
             HookScope.Global,
             force,
             cancellationToken);
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) =>
+        [InstructionsPath(directory, scope), SharedInstructionArtifacts.SkillPath(SkillsDirectory(directory, scope))];
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Removes dtk's handler from <c>hooks.json</c> and nothing from <c>config.toml</c>: dtk never writes that file,
+    /// and the approval Codex recorded there is Codex's own. Codex keys an approval by the handler's position, so
+    /// handlers that followed dtk's may need approving again.
+    /// </remarks>
+    public async Task<IntegrationResult> UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
+        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
+
+        await SharedInstructionArtifacts.RemoveAgentsFilesAsync(
+            InstructionsPath(hookDirectory, scope), SkillsDirectory(hookDirectory, scope), context, cancellationToken)
+            .ConfigureAwait(false);
+
+        var hook = DescribeHooks(hookDirectory, scope)[0];
+        await UninstallHelpers.RemoveHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
+
+        if (context.Updated.Contains(hook.RegistrationPath))
+        {
+            context.Notes.Add(PositionNote);
+        }
+
+        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook, hookDirectory)));
+
+        return context.ToResult();
+    }
+
+    /// <summary>Printed when an uninstall removed dtk's handler from a <c>hooks.json</c> that still holds others.</summary>
+    internal const string PositionNote =
+        "Codex keys hook approvals by position in hooks.json: if other hooks followed dtk's, Codex may ask you to "
+        + "approve them again under /hooks.";
+
+    private string InstructionsPath(string directory, HookScope scope) =>
+        Path.Combine(scope == HookScope.Global ? home.CodexDir : directory, "AGENTS.md");
+
+    private string SkillsDirectory(string directory, HookScope scope) =>
+        scope == HookScope.Global ? home.AgentsSkillsDir : Path.Combine(directory, ".agents", "skills");
+
+    private static HookRegistrationSpec Registration(HookInstallation hook) =>
+        new(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command, HookTimeoutSeconds);
 
     private async Task<IntegrationResult> IntegrateCoreAsync(
         string instructionsPath,
@@ -195,9 +242,7 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
             .ConfigureAwait(false);
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
-        await IntegratorHelpers.WriteHookRegistrationAsync(
-            new HookRegistrationSpec(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command, HookTimeoutSeconds),
-            context, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
 
         if (context.Created.Contains(hook.RegistrationPath) || context.Updated.Contains(hook.RegistrationPath))
         {
@@ -215,12 +260,16 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
         // `hook.RegistrationPath` is already the correct path for whichever scope this run is (project or
         // global); the extra global lookup only matters when scope is Project, so a project run also sees
         // an rtk hook left in the global hooks.json.
-        var rtkOutcome = await rtk.ReconcileFilesAsync(
-            [.. new[] { hook.RegistrationPath, DescribeHooks(hookDirectory, HookScope.Global)[0].RegistrationPath }
-                .Distinct(StringComparer.Ordinal)],
-            cancellationToken).ConfigureAwait(false);
+        var rtkOutcome = await rtk.ReconcileFilesAsync(RtkCandidates(hook, hookDirectory), cancellationToken).ConfigureAwait(false);
         rtkOutcome.ApplyTo(context);
 
         return context.ToResult();
     }
+
+    /// <summary>Where rtk registers itself for Codex: this scope's <c>hooks.json</c> and the global one.</summary>
+    /// <param name="hook">This run's installation.</param>
+    /// <param name="hookDirectory">The project root, or the home directory for a global run.</param>
+    private List<string> RtkCandidates(HookInstallation hook, string hookDirectory) =>
+        [.. new[] { hook.RegistrationPath, DescribeHooks(hookDirectory, HookScope.Global)[0].RegistrationPath }
+            .Distinct(StringComparer.Ordinal)];
 }

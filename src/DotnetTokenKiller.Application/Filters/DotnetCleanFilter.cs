@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Filters;
-using DotnetTokenKiller.Domain.Text;
 
 namespace DotnetTokenKiller.Application.Filters;
 
@@ -15,12 +14,12 @@ public sealed partial class DotnetCleanFilter(string? rootPath = null) : IOutput
 
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
-    /// <summary>Applies the filter to the raw clean output.</summary>
-    /// <param name="rawOutput">The raw clean output to filter.</param>
+    /// <summary>Applies the filter to the clean output.</summary>
+    /// <param name="strippedOutput">The clean output to filter, with ANSI escape sequences already stripped.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
-    public string Apply(string rawOutput, int exitCode)
+    public string Apply(string strippedOutput, int exitCode)
     {
-        if (string.IsNullOrEmpty(rawOutput))
+        if (string.IsNullOrEmpty(strippedOutput))
         {
             return string.Empty;
         }
@@ -30,8 +29,7 @@ public sealed partial class DotnetCleanFilter(string? rootPath = null) : IOutput
             return "✓ dotnet clean\n";
         }
 
-        var stripped = AnsiStrip.Strip(rawOutput);
-        var lines = stripped.Split('\n');
+        var lines = strippedOutput.Split('\n');
 
         var sb = new StringBuilder();
         var count = 0;

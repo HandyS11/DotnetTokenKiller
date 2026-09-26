@@ -1,25 +1,49 @@
 name: Docs Publish
 
+# docfx reads docs/ (docs/superpowers holds design notes it never renders), the samples/examples pages that
+# docs/articles/examples/*.md pull in with [!INCLUDE], and the four src/ projects it generates the API
+# reference from, built with the repository's SDK and package settings. A pull request builds the site with
+# warnings as errors; only a push to develop deploys it.
 on:
   push:
     branches: [develop]
     paths:
       - 'docs/**'
-      - '**/*.md'
+      - '!docs/superpowers/**'
+      - 'samples/examples/**'
+      - 'src/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+      - '.config/dotnet-tools.json'
+      - '.github/workflows/doc-publish.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '!docs/superpowers/**'
+      - 'samples/examples/**'
+      - 'src/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'NuGet.config'
+      - '.config/dotnet-tools.json'
+      - '.github/workflows/doc-publish.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
+# See ci.yml: only a pull request's superseded run is cancelled.
 concurrency:
-  group: "pages"
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -31,21 +55,35 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Restore local tools
-        run: dotnet tool restore
+      # Only docfx, at the manifest's version: `dotnet tool restore` would also fetch ReSharper, Stryker
+      # and dtk. --allow-roll-forward stands in for the manifest's rollForward.
+      - name: Install docfx
+        run: |
+          version="$(jq -r '.tools.docfx.version' .config/dotnet-tools.json)"
+          dotnet tool install docfx --version "$version" --tool-path "$RUNNER_TEMP/docfx" --allow-roll-forward
+          echo "$RUNNER_TEMP/docfx" >> "$GITHUB_PATH"
 
       - name: Build Documentation
-        run: dotnet docfx docs/docfx.json --warningsAsErrors
+        run: docfx docs/docfx.json --warningsAsErrors
 
       - name: Upload artifact
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
           path: 'docs/_site'
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/develop'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    # One deployment at a time; an in-progress deployment is never cancelled part-way.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
     steps:

@@ -80,9 +80,22 @@ public sealed class FilteredRunUseCase(
 #pragma warning restore CA2007
         var stdOutSink = countingSink ?? session.Writer;
 
-        var result = await commandRunner
-            .RunStreamedAsync(command, args, stdOutSink, session.Writer, cancellationToken)
-            .ConfigureAwait(false);
+        CommandResult result;
+        try
+        {
+            result = await commandRunner
+                .RunStreamedAsync(command, args, stdOutSink, session.Writer, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The runner has killed the child's tree. dtk is still alive, so close the log as a
+            // cancelled run rather than leave it looking like one dtk was killed in the middle of.
+            // None: the run's own token is already cancelled, and this is the cleanup it exists to allow.
+            await FilteredOutputPipeline.FinalizeTeeAsync(session, ExitCodes.Cancelled, CancellationToken.None)
+                .ConfigureAwait(false);
+            throw;
+        }
 
         // RunStreamedAsync awaits both pumps before returning, so both have finished writing by now:
         // appending after Finish would throw, but nothing more will be appended.
@@ -101,7 +114,9 @@ public sealed class FilteredRunUseCase(
             InputTokenCounter = counter
         };
 
-        return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
+        // None: the child has exited, and a cancellation landing now (Ctrl+C's grace period elapsing)
+        // must not drop the filtered output, the log or the record of a run that finished on its own.
+        return await pipeline.ProcessAsync(request, session, prepared, CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>Resolves the name a run is recorded and tee'd under.</summary>

@@ -118,8 +118,27 @@ internal static class SharedInstructionArtifacts
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             instructionsPath, SectionMarker, SectionEndMarker, Section, context, cancellationToken).ConfigureAwait(false);
 
-        await IntegratorHelpers.WriteGeneratedFileAsync(
-            new GeneratedArtifact(SkillPath(skillsDirectory), SkillMarkdown, StampStyle.HtmlComment, SkillLegacySignature),
-            context, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteGeneratedFileAsync(SkillArtifact(skillsDirectory), context, cancellationToken)
+            .ConfigureAwait(false);
     }
+
+    /// <summary>Removes what <see cref="WriteAgentsFilesAsync"/> writes: dtk's section and the skill.</summary>
+    /// <param name="instructionsPath">The <c>AGENTS.md</c> (or <c>GEMINI.md</c>) holding the section.</param>
+    /// <param name="skillsDirectory">The skills root the skill folder is under.</param>
+    /// <param name="context">The uninstall context.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal static async Task RemoveAgentsFilesAsync(
+        string instructionsPath, string skillsDirectory, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        await UninstallHelpers.RemoveSectionAsync(instructionsPath, SectionMarker, SectionEndMarker, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        await UninstallHelpers.RemoveGeneratedFileAsync(SkillArtifact(skillsDirectory), context, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>The stamped skill as a generated artifact under a harness's skills directory.</summary>
+    /// <param name="skillsDirectory">A skills root such as <c>.agents/skills</c>.</param>
+    internal static GeneratedArtifact SkillArtifact(string skillsDirectory) =>
+        new(SkillPath(skillsDirectory), SkillMarkdown, StampStyle.HtmlComment, SkillLegacySignature);
 }

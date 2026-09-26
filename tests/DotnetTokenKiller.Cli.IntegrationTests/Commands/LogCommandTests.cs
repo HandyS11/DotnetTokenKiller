@@ -433,4 +433,39 @@ public sealed class LogCommandTests
         output.Should().Contain("exit unknown");
         output.Should().NotContain("run did not finish");
     }
+
+    [Fact]
+    public async Task Run_WarnsAboutTruncatedOutput_ForATruncatedLog()
+    {
+        // Detection is body-based, not a header field (a header field would make a new log
+        // unreadable by an older dtk sharing the same tee directory — see TeeTruncationMarker's
+        // remarks): the marker is the true last line the writer ever appends, so a plain Entry()
+        // with an ordinary header is enough here.
+        var entry = Entry(5, "build");
+        var bodies = new Dictionary<string, string>
+        {
+            [entry.FilePath] = "compiling...\n[dtk: output truncated at 1048576 bytes]\n"
+        };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        writer.ToString().Should().Contain("output was truncated");
+    }
+
+    [Fact]
+    public async Task Run_OmitsTheTruncatedWarning_ForALogThatNeverHitTheCap()
+    {
+        // The warning must not appear for the overwhelming majority of logs whose body never ends
+        // with the truncation marker.
+        var entry = Entry(5, "build");
+        var bodies = new Dictionary<string, string> { [entry.FilePath] = "done\n" };
+        var (command, _, writer) = Create(new FakeStore(bodies, entry));
+
+        var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        writer.ToString().Should().NotContain("output was truncated");
+    }
 }

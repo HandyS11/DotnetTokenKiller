@@ -12,6 +12,11 @@ namespace DotnetTokenKiller.Infrastructure.Tracking;
 /// journal into the database before it queries, so what it returns includes every run that has
 /// finished. Retention runs when the database is initialized and at fold time. An in-memory data
 /// source has no directory to journal into, so there <see cref="RecordAsync"/> inserts directly.
+/// This type owns the connection and the semaphore that serializes every access to it; schema
+/// migration, journal folding and filtered queries are delegated to
+/// <see cref="SqliteSchemaMigrator"/>, <see cref="SqliteFoldCoordinator"/> and
+/// <see cref="SqliteQueryReader"/>, each of which receives a connection accessor (and the journal
+/// or semaphore, where needed) rather than opening a connection of its own.
 /// </remarks>
 /// <param name="connectionString">The SQLite connection string.</param>
 /// <param name="defaultRetentionDays">Number of days to retain records before automatic cleanup.</param>
@@ -43,6 +48,23 @@ public sealed class SqliteTracker(
     private SqliteConnection? _connection;
     private bool _disposed;
     private bool _initialized;
+
+    /// <summary>
+    /// Lazily built on first use rather than in a field initializer: a primary constructor's field
+    /// initializers cannot reference other instance members (CS0236), and this wrapper needs
+    /// <see cref="GetConnection"/> bound to this instance. Stateless (it only holds a delegate), so a
+    /// benign race building two on first concurrent use is harmless. Touches no SQLite connection;
+    /// that still happens only inside <see cref="EnsureInitializedAsync"/>.
+    /// </summary>
+    private SqliteSchemaMigrator SchemaMigrator => field ??= new SqliteSchemaMigrator(GetConnection);
+
+    /// <summary>Lazily built on first use; see <see cref="SchemaMigrator"/> for why.</summary>
+    private SqliteFoldCoordinator FoldCoordinator => field ??= new SqliteFoldCoordinator(
+        _journal, _semaphore, GetConnection, EnsureInitializedAsync, InsertAsync, CleanupCoreAsync, defaultRetentionDays);
+
+    /// <summary>Lazily built on first use; see <see cref="SchemaMigrator"/> for why.</summary>
+    private SqliteQueryReader QueryReader => field ??=
+        new SqliteQueryReader(_semaphore, GetConnection, EnsureInitializedAsync, FoldBeforeReadAsync);
 
     /// <summary>Asynchronously releases managed resources.</summary>
     /// <remarks>
@@ -161,7 +183,7 @@ public sealed class SqliteTracker(
         // waits for it: an aborted fold is refolded next time (see PendingRecordJournal.FoldAsync).
         if (journal.Count() >= foldThreshold)
         {
-            _backgroundFold = Task.Run(() => FoldInBackgroundAsync(cancellationToken), CancellationToken.None);
+            _backgroundFold = Task.Run(() => FoldCoordinator.FoldInBackgroundAsync(cancellationToken), CancellationToken.None);
         }
     }
 
@@ -189,7 +211,8 @@ public sealed class SqliteTracker(
                    ORDER BY command, success DESC
                    """;
 
-        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadSummaryAsync, null, cancellationToken);
+        return QueryReader.ExecuteWithFilterAsync(
+            days, projectPath, commandFilter, sql, SqliteQueryReader.ReadSummaryAsync, null, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -210,8 +233,8 @@ public sealed class SqliteTracker(
                            LIMIT @limit
                            """;
 
-        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadHistoryAsync, HistoryLimit,
-            cancellationToken);
+        return QueryReader.ExecuteWithFilterAsync(
+            days, projectPath, commandFilter, sql, SqliteQueryReader.ReadHistoryAsync, HistoryLimit, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -234,8 +257,8 @@ public sealed class SqliteTracker(
                            ORDER BY total_input DESC, run_count DESC
                            """;
 
-        return ExecuteWithFilterAsync(days, projectPath, commandFilter, sql, ReadCoverageAsync, null,
-            cancellationToken);
+        return QueryReader.ExecuteWithFilterAsync(
+            days, projectPath, commandFilter, sql, SqliteQueryReader.ReadCoverageAsync, null, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -245,7 +268,7 @@ public sealed class SqliteTracker(
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            await FoldLockedAsync(wait: true, cancellationToken).ConfigureAwait(false);
+            await FoldCoordinator.FoldLockedAsync(wait: true, cancellationToken).ConfigureAwait(false);
             await CleanupCoreAsync(retentionDays, null, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -334,90 +357,13 @@ public sealed class SqliteTracker(
         return new PendingRecordJournal(Path.Combine(directory, Path.GetFileName(fullPath) + ".pending"));
     }
 
-    private async Task FoldInBackgroundAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await FoldAsync(wait: false, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            // Intentional: best effort; the next read folds what this one did not
-        }
-    }
-
     /// <summary>The fold <see cref="WarmUpAsync"/> started, or a completed task. Never throws.</summary>
     private Task BackgroundFoldAsync() => _backgroundFold ?? Task.CompletedTask;
 
-    private async Task FoldAsync(bool wait, CancellationToken cancellationToken)
-    {
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            await FoldLockedAsync(wait, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    /// <summary>Folds the journal. The caller holds the semaphore and has initialized the connection.</summary>
-    /// <param name="wait">Wait for another process's fold (readers), or skip when one is running (background).</param>
+    /// <summary>The fold every reader runs before its query, waiting for a concurrent fold to finish.</summary>
     /// <param name="cancellationToken">Cancellation token.</param>
-    private async Task FoldLockedAsync(bool wait, CancellationToken cancellationToken)
-    {
-        if (_journal is not { } journal)
-        {
-            return;
-        }
-
-        await journal.FoldAsync(IsFoldCommittedAsync, CommitFoldAsync, wait, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<bool> IsFoldCommittedAsync(string foldId, CancellationToken cancellationToken)
-    {
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var cmd = CreateCommand();
-#pragma warning restore CA2007
-        cmd.CommandText = "SELECT COUNT(*) FROM folds WHERE id = @id";
-        cmd.Parameters.AddWithValue("@id", foldId);
-        return (long)(await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))! > 0;
-    }
-
-    /// <summary>Inserts the folded records, every fold id, and applies retention, in one transaction.</summary>
-    /// <param name="foldIds">The new claim's id and every recovered claim's id.</param>
-    /// <param name="records">The claimed records, in run order.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <exception cref="InvalidOperationException">Called before initialization succeeded.</exception>
-    private async Task CommitFoldAsync(
-        IReadOnlyList<string> foldIds, IReadOnlyList<CommandRecord> records, CancellationToken cancellationToken)
-    {
-        var connection = _connection ?? throw new InvalidOperationException("The tracker was used before it was initialized.");
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var transaction =
-            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-#pragma warning restore CA2007
-        foreach (var record in records)
-        {
-            await InsertAsync(record, transaction, cancellationToken).ConfigureAwait(false);
-        }
-
-        foreach (var foldId in foldIds)
-        {
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = CreateCommand();
-#pragma warning restore CA2007
-            cmd.Transaction = transaction;
-            cmd.CommandText = "INSERT OR IGNORE INTO folds (id) VALUES (@id)";
-            cmd.Parameters.AddWithValue("@id", foldId);
-            await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        await CleanupCoreAsync(defaultRetentionDays, transaction, cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
+    private Task FoldBeforeReadAsync(CancellationToken cancellationToken) =>
+        FoldCoordinator.FoldLockedAsync(wait: true, cancellationToken);
 
     private async Task InsertAsync(CommandRecord record, SqliteTransaction? transaction, CancellationToken cancellationToken)
     {
@@ -462,7 +408,7 @@ public sealed class SqliteTracker(
             // used (tracking disabled) should not pay.
             _connection = new SqliteConnection(connectionString);
             await _connection.OpenAsync(ct).ConfigureAwait(false);
-            await InitializeSchemaAsync(ct).ConfigureAwait(false);
+            await SchemaMigrator.InitializeSchemaAsync(ct).ConfigureAwait(false);
 
             // A one-shot CLI runs as a single process with a single tracker instance, so purge
             // expired rows once here at startup. A single delete per process is cheap and replaces
@@ -489,282 +435,14 @@ public sealed class SqliteTracker(
         }
     }
 
+    /// <summary>The connection <see cref="EnsureInitializedAsync"/> opened.</summary>
+    /// <exception cref="InvalidOperationException">Called before initialization succeeded.</exception>
+    private SqliteConnection GetConnection() =>
+        _connection ?? throw new InvalidOperationException("The tracker was used before it was initialized.");
+
     /// <summary>Creates a command on the connection <see cref="EnsureInitializedAsync"/> opened.</summary>
     /// <exception cref="InvalidOperationException">Called before initialization succeeded.</exception>
-    private SqliteCommand CreateCommand() =>
-        (_connection ?? throw new InvalidOperationException("The tracker was used before it was initialized."))
-        .CreateCommand();
-
-    private async Task InitializeSchemaAsync(CancellationToken ct)
-    {
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var createCmd = CreateCommand();
-#pragma warning restore CA2007
-        createCmd.CommandText = """
-                                CREATE TABLE IF NOT EXISTS commands (
-                                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    timestamp TEXT NOT NULL,
-                                    command TEXT NOT NULL,
-                                    project_path TEXT NOT NULL,
-                                    input_tokens INTEGER NOT NULL,
-                                    output_tokens INTEGER NOT NULL,
-                                    saved_tokens INTEGER NOT NULL,
-                                    savings_percentage REAL NOT NULL,
-                                    execution_time_ms REAL NOT NULL,
-                                    success INTEGER NOT NULL DEFAULT 1,
-                                    outcome TEXT NOT NULL DEFAULT 'Filtered',
-                                    source TEXT NOT NULL DEFAULT 'Run'
-                                );
-                                CREATE INDEX IF NOT EXISTS idx_commands_timestamp ON commands(timestamp);
-                                CREATE INDEX IF NOT EXISTS idx_commands_project_path ON commands(project_path);
-                                CREATE TABLE IF NOT EXISTS folds (
-                                    id TEXT PRIMARY KEY
-                                );
-                                """;
-        await createCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-
-        // Migrations for databases created before these columns existed. Fresh databases already
-        // have them (see CREATE TABLE above) so these only run on legacy files.
-        await EnsureColumnAsync("success", "INTEGER NOT NULL DEFAULT 1", ct).ConfigureAwait(false);
-        await EnsureColumnAsync("outcome", "TEXT NOT NULL DEFAULT 'Filtered'", ct).ConfigureAwait(false);
-        await EnsureColumnAsync("source", "TEXT NOT NULL DEFAULT 'Run'", ct).ConfigureAwait(false);
-    }
-
-    /// <summary>Adds a column to the commands table if it is not already present.</summary>
-    /// <param name="columnName">The column to ensure exists.</param>
-    /// <param name="columnDefinition">The SQL type and constraints for the column.</param>
-    /// <param name="ct">Cancellation token.</param>
-    private async Task EnsureColumnAsync(string columnName, string columnDefinition, CancellationToken ct)
-    {
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var checkCmd = CreateCommand();
-#pragma warning restore CA2007
-        checkCmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('commands') WHERE name = @name";
-        checkCmd.Parameters.AddWithValue("@name", columnName);
-        var columnExists = (long)(await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false))! > 0;
-        if (columnExists)
-        {
-            return;
-        }
-
-        try
-        {
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var alterCmd = CreateCommand();
-#pragma warning restore CA2007
-#pragma warning disable CA2100, S2077 // columnName and columnDefinition are caller-supplied constant literals
-            alterCmd.CommandText = $"ALTER TABLE commands ADD COLUMN {columnName} {columnDefinition}";
-#pragma warning restore CA2100, S2077
-            await alterCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-        }
-        catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
-        {
-            // A concurrent initializer added the column between our pragma check and this ALTER.
-            // The column now exists, which is all we required — the losing racer is fine.
-        }
-    }
-
-    private async Task<T> ExecuteWithFilterAsync<T>(
-        int days,
-        string? projectPath,
-        string? commandFilter,
-        string sql,
-        Func<SqliteCommand, CancellationToken, Task<T>> readResultsAsync,
-        int? limit,
-        CancellationToken cancellationToken)
-    {
-        await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            await FoldLockedAsync(wait: true, cancellationToken).ConfigureAwait(false);
-            var since = DateTimeOffset.UtcNow.AddDays(-days).ToString("O", CultureInfo.InvariantCulture);
-
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-            await using var cmd = CreateCommand();
-#pragma warning restore CA2007
-#pragma warning disable CA2100 // sql is a caller-supplied constant literal; no user input reaches this parameter
-            cmd.CommandText = sql;
-#pragma warning restore CA2100
-            cmd.Parameters.AddWithValue("@since", since);
-            cmd.Parameters.AddWithValue("@path", (object?)projectPath ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@cmd", (object?)commandFilter ?? DBNull.Value);
-            if (limit.HasValue)
-            {
-                cmd.Parameters.AddWithValue("@limit", limit.Value);
-            }
-
-            return await readResultsAsync(cmd, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _semaphore.Release();
-        }
-    }
-
-    private static async Task<GainSummary> ReadSummaryAsync(SqliteCommand cmd, CancellationToken ct)
-    {
-        var totalCommands = 0;
-        long totalInput = 0;
-        long totalOutput = 0;
-        long totalSaved = 0;
-        var totalMs = 0.0;
-
-        // Accumulate per-command, per-status rows before building CommandGainDetail
-        var grouped =
-            new Dictionary<string, List<(bool Success, int RunCount, long SumInput, long SumOutput, long SumSaved, double
-                AvgPct, double SumMs)>>(StringComparer.Ordinal);
-
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-#pragma warning restore CA2007
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
-        {
-            var cmdName = reader.GetString(0);
-            var success = reader.GetInt32(1) != 0;
-            var runCount = reader.GetInt32(2);
-            var sumInput = reader.GetInt64(3);
-            var sumOutput = reader.GetInt64(4);
-            var sumSaved = reader.GetInt64(5);
-            var avgPct = reader.GetDouble(6);
-            var sumMs = reader.GetDouble(7);
-
-            totalCommands += runCount;
-            totalInput += sumInput;
-            totalOutput += sumOutput;
-            totalSaved += sumSaved;
-            totalMs += sumMs;
-
-            if (!grouped.TryGetValue(cmdName, out var rows))
-            {
-                rows = [];
-                grouped[cmdName] = rows;
-            }
-
-            rows.Add((success, runCount, sumInput, sumOutput, sumSaved, avgPct, sumMs));
-        }
-
-        var commandDetails = new Dictionary<string, CommandGainDetail>(StringComparer.Ordinal);
-        foreach (var (cmdName, rows) in grouped)
-        {
-            CommandGainDetail? successDetail = null;
-            CommandGainDetail? failureDetail = null;
-            var totalRunsCmd = 0;
-            long totalInputCmd = 0;
-            long totalOutputCmd = 0;
-            long totalSavedCmd = 0;
-            var weightedPctSum = 0.0;
-            var totalMsCmd = 0.0;
-
-            foreach (var (success, runCount, sumInput, sumOutput, sumSaved, avgPct, sumMs) in rows)
-            {
-                var statusDetail = new CommandGainDetail(runCount, sumInput, sumOutput, sumSaved, avgPct,
-                    TotalExecutionTime: TimeSpan.FromMilliseconds(sumMs));
-                if (success)
-                {
-                    successDetail = statusDetail;
-                }
-                else
-                {
-                    failureDetail = statusDetail;
-                }
-
-                totalRunsCmd += runCount;
-                totalInputCmd += sumInput;
-                totalOutputCmd += sumOutput;
-                totalSavedCmd += sumSaved;
-                weightedPctSum += runCount * avgPct;
-                totalMsCmd += sumMs;
-            }
-
-            // Run-count-weighted average of the per-status SQL AVG(savings_percentage) values,
-            // keeping the same per-run-average semantics as SuccessDetail/FailureDetail.
-            var avgPctCmd = totalRunsCmd > 0 ? weightedPctSum / totalRunsCmd : 0.0;
-            commandDetails[cmdName] = new CommandGainDetail(totalRunsCmd, totalInputCmd, totalOutputCmd, totalSavedCmd,
-                avgPctCmd, successDetail, failureDetail, TimeSpan.FromMilliseconds(totalMsCmd));
-        }
-
-        var averagePct = totalInput > 0 ? (double)totalSaved / totalInput * 100.0 : 0.0;
-        return new GainSummary(totalCommands, totalInput, totalOutput, totalSaved, averagePct, commandDetails,
-            TimeSpan.FromMilliseconds(totalMs));
-    }
-
-    private static async Task<IReadOnlyList<CommandRecord>> ReadHistoryAsync(SqliteCommand cmd, CancellationToken ct)
-    {
-        var results = new List<CommandRecord>();
-
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-#pragma warning restore CA2007
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
-        {
-            // An outcome written by a newer dtk that this build does not know is treated as
-            // Filtered rather than crashing the report. Case-insensitive so a value differing
-            // only in case (e.g. a manual database edit) still parses instead of falling back.
-            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(9), ignoreCase: true, out var parsed)
-                ? parsed
-                : RunOutcome.Filtered;
-
-            // A source written by a newer dtk that this build does not know reads as Run, matching
-            // how an unknown outcome degrades to Filtered rather than crashing the report.
-            var source = Enum.TryParse<RunSource>(reader.GetString(10), ignoreCase: true, out var parsedSource)
-                ? parsedSource
-                : RunSource.Run;
-
-            results.Add(new CommandRecord(
-                DateTimeOffset.ParseExact(reader.GetString(0), "O", CultureInfo.InvariantCulture,
-                    DateTimeStyles.RoundtripKind),
-                reader.GetString(1),
-                reader.GetString(2),
-                new TokenStatistics(reader.GetInt32(3), reader.GetInt32(4), reader.GetInt32(5), reader.GetDouble(6)),
-                TimeSpan.FromMilliseconds(reader.GetDouble(7)))
-            {
-                Success = reader.GetInt32(8) != 0,
-                Outcome = outcome,
-                Source = source
-            });
-        }
-
-        return results;
-    }
-
-    private static async Task<CoverageSummary> ReadCoverageAsync(SqliteCommand cmd, CancellationToken ct)
-    {
-        var entries = new List<CoverageDetail>();
-        var totalRuns = 0;
-        long totalUnfiltered = 0;
-
-#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-#pragma warning restore CA2007
-        while (await reader.ReadAsync(ct).ConfigureAwait(false))
-        {
-            var outcome = Enum.TryParse<RunOutcome>(reader.GetString(1), ignoreCase: true, out var parsed)
-                ? parsed
-                : RunOutcome.Filtered;
-            var source = Enum.TryParse<RunSource>(reader.GetString(2), ignoreCase: true, out var parsedSource)
-                ? parsedSource
-                : RunSource.Run;
-            var runCount = reader.GetInt32(3);
-            var inputTokens = reader.GetInt64(4);
-
-            entries.Add(new CoverageDetail(
-                reader.GetString(0),
-                outcome,
-                source,
-                runCount,
-                inputTokens,
-                TimeSpan.FromMilliseconds(reader.GetDouble(5))));
-
-            totalRuns += runCount;
-            if (RunOutcomes.IsPassthrough(outcome))
-            {
-                totalUnfiltered += inputTokens;
-            }
-        }
-
-        return new CoverageSummary(entries, totalRuns, totalUnfiltered);
-    }
+    private SqliteCommand CreateCommand() => GetConnection().CreateCommand();
 
     private async Task CleanupCoreAsync(int days, SqliteTransaction? transaction, CancellationToken cancellationToken)
     {

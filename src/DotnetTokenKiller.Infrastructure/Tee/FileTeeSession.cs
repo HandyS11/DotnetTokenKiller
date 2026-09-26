@@ -59,7 +59,16 @@ public sealed class FileTeeSession(
         {
             await stream.FlushAsync(ct).ConfigureAwait(false);
 
-            if ((policy.KeepOnlyOnFailure && exitCode == 0) || _writer.BodyBytesWritten < policy.MinBodyBytes)
+            // A truncated body bypasses the MinBodyBytes floor: hitting the byte cap already proves
+            // the run produced at least that many bytes of output (in practice, likely far more —
+            // the child kept producing output after the point the cap was reached), which is exactly
+            // the kind of run the floor exists to keep, not the one-line "Restored." it exists to
+            // drop. Without this, a cap configured below the floor (itself clamped to the cap in
+            // FileTeeService.BeginAsync so a *plain* small-but-real log can still pass it) discarded
+            // every truncated log outright — the marker line the writer just spent a whole cap's
+            // worth of effort reserving room for would never survive to be read.
+            if ((policy.KeepOnlyOnFailure && exitCode == 0) ||
+                (_writer.BodyBytesWritten < policy.MinBodyBytes && !_writer.Truncated))
             {
                 await DisposeAsync().ConfigureAwait(false);
                 File.Delete(filePath);
@@ -168,11 +177,39 @@ public sealed class FileTeeSession(
 #pragma warning restore CA2213
 
         /// <summary>
+        /// The marker's bytes (with a leading line feed baked in — see
+        /// <see cref="RecordTruncationAsync"/>), the content budget left once room for it is set
+        /// aside, and whether it fits within the cap at all — computed once, together, from
+        /// <c>maxBodyBytes</c>. A single tuple field rather than three separate ones: C# forbids a
+        /// field initializer from reading another instance field (only <see langword="static"/>
+        /// members and the primary constructor's own parameters are in scope at that point), so
+        /// three independent initializers would each have had to re-render and re-measure the marker
+        /// text.
+        /// </summary>
+        private readonly (byte[] MarkerBytes, long ContentBudget, bool MarkerFits) _cap = ComputeCap(maxBodyBytes);
+
+        /// <summary>
         /// Written from both pump threads and from <c>FinalizeAsync</c>; volatile so a check on one
         /// thread cannot be reordered ahead of a <see cref="MarkBroken"/> call that happened-before
         /// it on another.
         /// </summary>
         private volatile bool _broken;
+
+        /// <summary>
+        /// Whether the byte most recently written to the stream was a line feed — i.e. whether the
+        /// marker can start its own line without help. True vacuously when nothing has been written
+        /// yet. Only a mid-line cut (see <see cref="WriteLineAsync"/>) ever leaves this false: a
+        /// whole line always ends with the "\n" <c>WriteLineAsync</c> appends before measuring it.
+        /// </summary>
+        private bool _bodyEndsWithNewline = true;
+
+        /// <summary>
+        /// Whether the byte cap has been hit. Also gates the marker write (or, on a cap too small
+        /// even for the marker, nothing) so it happens exactly once no matter how many further lines
+        /// the pump offers. Deliberately set only after that write succeeds; see
+        /// <see cref="RecordTruncationAsync"/>.
+        /// </summary>
+        public bool Truncated { get; private set; }
 
         public long BodyBytesWritten { get; private set; }
 
@@ -226,17 +263,57 @@ public sealed class FileTeeSession(
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var remaining = maxBodyBytes - BodyBytesWritten;
-                if (remaining <= 0)
+                if (Truncated)
                 {
+                    // The cap was already dealt with — nothing more can ever be appended.
                     return;
                 }
 
-                var line = Utf8Text.TruncateToUtf8Bytes(
-                    AnsiStrip.Strip(buffer.ToString()) + "\n", remaining);
-                var bytes = Encoding.UTF8.GetBytes(line);
+                var remaining = _cap.ContentBudget - BodyBytesWritten;
+                if (remaining <= 0)
+                {
+                    // The previous line used up the last of the content budget and there is more to
+                    // write — this call is proof some output is genuinely being dropped now.
+                    await RecordTruncationAsync(cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                var stripped = AnsiStrip.Strip(buffer.ToString()) + "\n";
+                if (Encoding.UTF8.GetByteCount(stripped) > remaining)
+                {
+                    // This line itself has to be cut short: whatever text follows the cut is lost
+                    // right now, so the marker belongs immediately after it rather than waiting for
+                    // a next call that may never come. TruncateToUtf8Bytes cuts on a rune boundary
+                    // strictly before the budget, and the needed byte count here always exceeds
+                    // remaining by at least the trailing "\n" alone, so the cut can include every
+                    // content rune but never that final "\n" — checked directly below rather than
+                    // assumed, since the marker gluing onto this line instead of starting its own is
+                    // exactly the bug this tracking exists to prevent.
+                    var truncatedLine = Utf8Text.TruncateToUtf8Bytes(stripped, remaining);
+                    var truncatedBytes = Encoding.UTF8.GetBytes(truncatedLine);
+                    await stream.WriteAsync(truncatedBytes, cancellationToken).ConfigureAwait(false);
+                    BodyBytesWritten += truncatedBytes.Length;
+
+                    // A cut that kept nothing (the first rune alone exceeds remaining) wrote no
+                    // byte, so the body still ends however the previous write left it.
+                    if (truncatedBytes.Length > 0)
+                    {
+                        _bodyEndsWithNewline = truncatedLine.EndsWith('\n');
+                    }
+                    await RecordTruncationAsync(cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                var bytes = Encoding.UTF8.GetBytes(stripped);
                 await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
                 BodyBytesWritten += bytes.Length;
+                _bodyEndsWithNewline = true; // stripped always ends with the "\n" appended above.
+
+                // The line landed exactly on the content budget with nothing cut. Whether that was
+                // truly the last line or more was about to follow is unknowable here — recording
+                // truncation now would risk a false positive on output that just happened to fit
+                // exactly, so it waits for the "remaining <= 0" branch above to decide, on the next
+                // call, whether there really was more.
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -248,6 +325,68 @@ public sealed class FileTeeSession(
             {
                 _gate.Release();
             }
+        }
+
+        /// <summary>
+        /// Records that the byte cap has been hit: appends the truncation marker, when it fits at
+        /// all. Called only once per session, from within the gate <see cref="WriteLineAsync"/>
+        /// already holds.
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        private async Task RecordTruncationAsync(CancellationToken cancellationToken)
+        {
+            if (_cap.MarkerFits)
+            {
+                // _cap.MarkerBytes has a leading "\n" baked in for the mid-line-cut case, where the
+                // byte just written is not itself a "\n" and the marker would otherwise glue onto the
+                // end of that content instead of starting its own line — silently breaking
+                // TeeTruncationMarker.IsMarkerLine's anchored match against the last line. Skipped
+                // when the preceding write already ended with "\n" on its own (a whole line, or
+                // nothing written yet), so the body never gains a spurious blank line either.
+                // Guaranteed to fit either way: _cap.ContentBudget was sized to leave exactly this
+                // much room, leading "\n" included.
+                var offset = _bodyEndsWithNewline ? 1 : 0;
+                var markerBytes = _cap.MarkerBytes.AsMemory(offset);
+                await stream.WriteAsync(markerBytes, cancellationToken).ConfigureAwait(false);
+                BodyBytesWritten += markerBytes.Length;
+            }
+
+            // Set only after the write above (if any) actually completed, not before it: Task 9
+            // wires Ctrl+C cancellation through this same writer, and a cancellation that throws out
+            // of WriteAsync would otherwise leave Truncated permanently true with the
+            // marker never actually on the stream — every future call short-circuits on it above, so
+            // the marker would be lost for good rather than retried. A cancellation during the flush
+            // immediately below is accepted as a narrower risk: the marker bytes are already handed
+            // to the stream by that point, just not yet guaranteed durable on disk.
+            Truncated = true;
+
+            // Durable immediately, not deferred to FinalizeAsync: a run killed right after this
+            // point (SIGKILL, a tool-call timeout) must still leave a log whose body says it was
+            // truncated, the same durability guarantee AbandonedSession already relies on for the
+            // running/complete status.
+            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Computes the marker bytes and, from their length, the content budget and whether the
+        /// marker fits within the cap at all.
+        /// </summary>
+        /// <param name="maxBodyBytes">The body's byte budget.</param>
+        /// <returns>
+        /// The marker's UTF-8 bytes, with a leading line feed baked in unconditionally (skipped at
+        /// the write site — see <see cref="RecordTruncationAsync"/> — when it turns out not to be
+        /// needed, which just leaves the body a byte under the cap rather than risking it a byte
+        /// over) plus a trailing one; the byte budget left for real content once room for the whole
+        /// of that is set aside — the full cap, unreduced, when the marker cannot fit at all even
+        /// with the leading line feed, since reserving room for a marker that will never be written
+        /// would only discard content for nothing; and whether the marker fits within the cap.
+        /// </returns>
+        private static (byte[] MarkerBytes, long ContentBudget, bool MarkerFits) ComputeCap(long maxBodyBytes)
+        {
+            var markerBytes = Encoding.UTF8.GetBytes("\n" + TeeTruncationMarker.Render(maxBodyBytes) + "\n");
+            var markerFits = markerBytes.Length <= maxBodyBytes;
+            var contentBudget = markerFits ? Math.Max(0, maxBodyBytes - markerBytes.Length) : maxBodyBytes;
+            return (markerBytes, contentBudget, markerFits);
         }
 
         public override async Task FlushAsync(CancellationToken cancellationToken)

@@ -1,5 +1,5 @@
-using System.Reflection;
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -90,10 +90,15 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_AnsiCodesInInput_StrippedFromOutput()
+    public void Apply_AlreadyStrippedAnsiInput_ParsesCorrectly()
     {
-        const string ansiInput = "\x1b[32mBuild succeeded.\x1b[0m\n";
-        var result = _sut.Apply(ansiInput, exitCode: 0);
+        // The filter no longer strips ANSI itself: FilteredOutputPipeline strips once, before any
+        // filter runs, so this pins that the parser handles text that has already been through
+        // AnsiStrip.Strip cleanly, with no stray escape artifacts confusing the "nothing parsed" path.
+        var stripped = AnsiStrip.Strip("\x1b[32mBuild succeeded.\x1b[0m\n");
+
+        var result = _sut.Apply(stripped, exitCode: 0);
+
         result.Should().NotContain("\x1b[");
         result.Should().Be("\u2713 dotnet build\n");
     }
@@ -197,11 +202,7 @@ public class DotnetBuildFilterTests
     [Fact]
     public void Apply_FormatElapsed_WhenTimeSpanPatternDoesNotMatch_ReturnsEmpty()
     {
-        // Covers FormatElapsed early return (lines 181-182) via reflection
-        var method = typeof(DotnetBuildFilter)
-            .GetMethod("FormatElapsed", BindingFlags.NonPublic | BindingFlags.Static)!;
-
-        var result = (string)method.Invoke(null, ["Time Elapsed invalid-no-digits"])!;
+        var result = MsBuildDiagnosticReport.FormatElapsed("Time Elapsed invalid-no-digits");
 
         result.Should().BeEmpty();
     }
@@ -867,6 +868,46 @@ public class DotnetBuildFilterTests
         const string input = """
                              /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net8.0]
                              /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net10.0]
+                                 0 Warning(s)
+                                 2 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("dotnet build: 2 errors (1 shown), 0 warnings");
+        result.Should().Contain("Bad.cs (1 error)");
+    }
+
+    [Fact]
+    public void Apply_SameDiagnosticFromTwoProjects_ReportsBothSeparately()
+    {
+        // Two distinct projects can report the identical file/line/code/message — a linked
+        // GlobalUsings.cs shared via <Compile Include> between projects, for instance. Deduping on
+        // file/line/code/message alone (no project) would merge them into a single entry and hide
+        // one project's failure entirely.
+        const string input = """
+                             /p/GlobalUsings.cs(1,1): error CS0246: The type or namespace name 'Foo' could not be found [/p/A.csproj]
+                             /p/GlobalUsings.cs(1,1): error CS0246: The type or namespace name 'Foo' could not be found [/p/B.csproj]
+                                 0 Warning(s)
+                                 2 Error(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("dotnet build: 2 errors, 0 warnings");
+        result.Should().NotContain("shown");
+        result.Should().Contain("GlobalUsings.cs (2 errors)");
+    }
+
+    [Fact]
+    public void Apply_SameDiagnosticFromOneProjectAcrossTfmsWithOtherProperties_StillCollapses()
+    {
+        // The "::" suffix can carry more than just TargetFramework (e.g. a Configuration alongside
+        // it, or a different property entirely). Only the project path before the first "::" is
+        // keyed on, so any such repeat for the same project still collapses to one entry.
+        const string input = """
+                             /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net8.0;Configuration=Debug]
+                             /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net10.0;Configuration=Debug]
                                  0 Warning(s)
                                  2 Error(s)
                              """;

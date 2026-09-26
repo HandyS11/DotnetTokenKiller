@@ -127,6 +127,52 @@ the argument list. Passthrough is safe (the output is correct, just unfiltered) 
 recorded under `list` and `package` respectively in `dtk gain --coverage`. The generated agent hooks
 do not rewrite them either.
 
+### `dtk dotnet publish`
+
+Run `dotnet publish` with filtered output:
+
+```sh
+dtk dotnet publish
+dtk dotnet publish src/MyApp/MyApp.csproj -c Release
+dtk dotnet publish -r linux-x64 --self-contained
+```
+
+Diagnostics are summarised exactly as for `dtk dotnet build`. On success the summary line is followed by each
+project's publish directory, with a workspace-relative path:
+
+```text
+✓ dotnet publish (2 projects)
+  MyApp -> src/MyApp/bin/Release/net10.0/publish/
+```
+
+On failure the output is the build's error layout, and no publish directory is listed.
+
+### `dtk dotnet pack`
+
+Run `dotnet pack` with filtered output:
+
+```sh
+dtk dotnet pack
+dtk dotnet pack -o artifacts
+dtk dotnet pack -c Release -p:Version=1.2.3
+```
+
+Diagnostics, including NuGet's `NU5xxx` pack warnings, are summarised exactly as for `dtk dotnet build`. On
+success the summary line is followed by every package created (`.nupkg` and `.snupkg`), with a
+workspace-relative path:
+
+```text
+✓ dotnet pack (1 project)
+  artifacts/MyLib.1.2.3.nupkg
+  artifacts/MyLib.1.2.3.snupkg
+```
+
+On failure the output is the build's error layout, and no package is listed.
+
+`dtk dotnet publish --interactive` and `dtk dotnet pack --interactive` are not filtered: they run with the
+terminal attached, as they did before dtk filtered these commands, so a credential provider can prompt for a
+private feed. They are recorded as unmeasured passthrough runs.
+
 ### `dtk pipe`
 
 Filter output on stdin from a command dtk did not run — CI logs, or any invocation the hook
@@ -204,9 +250,11 @@ dtk log --all            # include other projects
 
 Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are saved, and output under 500 bytes is never saved. Use `dtk config set tee.mode Always` to keep every run. Logs written by dtk 0.6.0 or earlier carry no project metadata and appear only under `--all`.
 
-A run that dtk did not finish — because you pressed Ctrl-C, or an agent's tool call timed out — still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying the output ends where dtk was killed.
+A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice — still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying the output ends where dtk was killed. A single Ctrl-C (or SIGTERM on Linux and macOS) lets dtk finish the log; see [Interrupting a run](#interrupting-a-run).
 
-Passthrough subcommands dtk measures but does not filter — `publish`, `ef migrations`, and similar — are tee'd like any other run. Interactive passthrough (`run`, `watch`) stays attached to the terminal and is not tee'd, so `dtk log` will never find it.
+A log that hit `tee.maxFileSizeBytes` stops growing but stays readable: the body ends with a `[dtk: output truncated at <N> bytes]` marker, and `dtk log` shows a note that the output was truncated.
+
+Passthrough subcommands dtk measures but does not filter — `msbuild`, `ef migrations`, and similar — are tee'd like any other run. Interactive passthrough (`run`, `watch`) stays attached to the terminal and is not tee'd, so `dtk log` will never find it.
 
 ### `dtk reset`
 
@@ -318,13 +366,24 @@ In quiet mode, verbosity flags (`-v`/`--verbose`, `--vv`) and `--show-log` are i
 
 ## Passthrough Behavior
 
-Any `dotnet` subcommand not in the supported list (build, test, restore, clean, format, list package) is passed through to `dotnet` unchanged:
+Any `dotnet` subcommand not in the supported list (build, test, restore, clean, format, list package, publish, pack) is passed through to `dotnet` unchanged:
 
 ```sh
-dtk dotnet publish    # runs: dotnet publish
-dtk dotnet pack       # runs: dotnet pack
 dtk dotnet run        # runs: dotnet run
+dtk dotnet watch      # runs: dotnet watch
+dtk dotnet msbuild    # runs: dotnet msbuild
 ```
+
+## Interrupting a run
+
+Ctrl-C (SIGINT) and, on Linux and macOS, SIGTERM stop a `dtk dotnet …` run without leaving `dotnet` running behind dtk:
+
+- **Ctrl-C** at a terminal reaches `dotnet` as well as dtk. dtk gives `dotnet` up to 5 seconds to stop on its own; when it does, dtk shows the filtered output, saves the log and records the run as usual, and exits with `dotnet`'s own exit code. If `dotnet` is still running after 5 seconds, or the signal reached dtk alone, dtk stops it and every process it started, and exits with code `130`.
+- **Ctrl-C with `dotnet run`, `dotnet watch`** and other interactive commands, which stay attached to the terminal (as does every passthrough command when tracking is off and `tee.mode` is `Never`): the command handles Ctrl-C itself and may take as long as it needs to shut down, so dtk waits for it without a time limit and exits with its exit code.
+- **SIGTERM** (Linux and macOS only) stops `dotnet` and every process it started at once; dtk exits with code `130`. On Windows, a console close, logoff or shutdown ends dtk the default way.
+- A **second** Ctrl-C or SIGTERM ends dtk immediately.
+
+When dtk stops `dotnet` itself, it prints no filtered output and does not record the run in `dtk gain`, but it finishes the log, which shows exit code `130` and is kept like any failed run's. Other dtk commands (`gain`, `log`, `config`, …) keep the default behavior: Ctrl-C ends them at once.
 
 ## Log Files
 

@@ -124,6 +124,72 @@
       "savingsPercent": 50
     },
     {
+      "id": "pack/failure",
+      "fixture": "dotnet_pack_failure.txt",
+      "filterKey": "pack",
+      "exitCode": 1,
+      "rawBytes": 253,
+      "rawTokens": 68,
+      "filteredTokens": 58,
+      "savedTokens": 10,
+      "savingsPercent": 14.7
+    },
+    {
+      "id": "pack/success",
+      "fixture": "dotnet_pack_success.txt",
+      "filterKey": "pack",
+      "exitCode": 0,
+      "rawBytes": 562,
+      "rawTokens": 147,
+      "filteredTokens": 34,
+      "savedTokens": 113,
+      "savingsPercent": 76.9
+    },
+    {
+      "id": "pack/warnings",
+      "fixture": "dotnet_pack_warnings.txt",
+      "filterKey": "pack",
+      "exitCode": 0,
+      "rawBytes": 7530,
+      "rawTokens": 2113,
+      "filteredTokens": 1196,
+      "savedTokens": 917,
+      "savingsPercent": 43.4
+    },
+    {
+      "id": "publish/failure",
+      "fixture": "dotnet_publish_failure.txt",
+      "filterKey": "publish",
+      "exitCode": 1,
+      "rawBytes": 289,
+      "rawTokens": 83,
+      "filteredTokens": 58,
+      "savedTokens": 25,
+      "savingsPercent": 30.1
+    },
+    {
+      "id": "publish/success",
+      "fixture": "dotnet_publish_success.txt",
+      "filterKey": "publish",
+      "exitCode": 0,
+      "rawBytes": 492,
+      "rawTokens": 135,
+      "filteredTokens": 31,
+      "savedTokens": 104,
+      "savingsPercent": 77
+    },
+    {
+      "id": "publish/warnings",
+      "fixture": "dotnet_publish_warnings.txt",
+      "filterKey": "publish",
+      "exitCode": 0,
+      "rawBytes": 7343,
+      "rawTokens": 2063,
+      "filteredTokens": 1193,
+      "savedTokens": 870,
+      "savingsPercent": 42.2
+    },
+    {
       "id": "restore/raw",
       "fixture": "dotnet_restore_raw.txt",
       "filterKey": "restore",
@@ -155,6 +221,50 @@
       "filteredTokens": 181,
       "savedTokens": 627,
       "savingsPercent": 77.6
+    },
+    {
+      "id": "test/mtp-all-pass",
+      "fixture": "dotnet_test_mtp_all_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 1243,
+      "rawTokens": 347,
+      "filteredTokens": 23,
+      "savedTokens": 324,
+      "savingsPercent": 93.4
+    },
+    {
+      "id": "test/mtp-failures",
+      "fixture": "dotnet_test_mtp_failures.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2444,
+      "rawTokens": 598,
+      "filteredTokens": 84,
+      "savedTokens": 514,
+      "savingsPercent": 86
+    },
+    {
+      "id": "test/mtp-multiproject",
+      "fixture": "dotnet_test_mtp_multiproject.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2520,
+      "rawTokens": 669,
+      "filteredTokens": 88,
+      "savedTokens": 581,
+      "savingsPercent": 86.8
+    },
+    {
+      "id": "test/mtp-zero",
+      "fixture": "dotnet_test_mtp_zero.txt",
+      "filterKey": "test",
+      "exitCode": 8,
+      "rawBytes": 502,
+      "rawTokens": 172,
+      "filteredTokens": 16,
+      "savedTokens": 156,
+      "savingsPercent": 90.7
     },
     {
       "id": "test/multiproject-partial",

@@ -16,25 +16,27 @@ on:
   # See ci.yml: a run dropped during an Actions outage is never replayed on its own.
   workflow_dispatch:
 
+# See ci.yml: only a pull request's superseded run is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    # A normal run takes about 5 minutes.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: Directory.Packages.props
-
+      # No setup-dotnet: build-mode none installs global.json's SDK itself and restores into its own
+      # packages folder, so ~/.nuget/packages never exists and setup-dotnet's cache save fails the job.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: csharp
-          build-mode: autobuild
+          build-mode: none
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

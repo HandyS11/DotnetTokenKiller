@@ -10,6 +10,11 @@ on:
   # See ci.yml: a run dropped during an Actions outage is never replayed on its own.
   workflow_dispatch:
 
+# See ci.yml: only a pull request's superseded run is cancelled, so every push to develop is analyzed.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build and analyze
@@ -32,20 +37,27 @@ jobs:
         with:
           global-json-file: global.json
 
+      # A cache entry never changes once saved, so both keys roll over monthly: the analyzers in
+      # ~/.sonar/cache and the scanner itself would otherwise stay at whatever the first run fetched.
+      - name: Compute the cache month
+        id: cache-month
+        run: echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+
       - name: Cache SonarQube packages
         uses: actions/cache@v6
         with:
-          path: ./.sonar/scanner
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar-cache-${{ steps.cache-month.outputs.month }}
+          restore-keys: ${{ runner.os }}-sonar-cache-
 
+      # A restore-keys match is not a hit, so the install step below updates last month's scanner.
       - name: Cache SonarQube scanner
         id: cache-sonar-scanner
         uses: actions/cache@v6
         with:
           path: ./.sonar/scanner
-          key: ${{ runner.os }}-sonar-scanner
-          restore-keys: ${{ runner.os }}-sonar-scanner
+          key: ${{ runner.os }}-sonar-scanner-${{ steps.cache-month.outputs.month }}
+          restore-keys: ${{ runner.os }}-sonar-scanner-
 
       - name: Install SonarQube scanner
         if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
@@ -54,11 +66,15 @@ jobs:
           dotnet tool update dotnet-sonarscanner --tool-path ./.sonar/scanner
 
       - name: Build and analyze
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
         run: |
-          ./.sonar/scanner/dotnet-sonarscanner begin /k:"${{ secrets.SONAR_PROJECT_KEY }}" /d:sonar.token="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" /d:sonar.exclusions="_bmad/**/*,samples/**/*,.claude/**/*,benchmarks/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,_bmad/**/*,samples/**/*,benchmarks/**/*,docs/**/*,src/DotnetTokenKiller.Cli/Program.cs,src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs"
+          ./.sonar/scanner/dotnet-sonarscanner begin /k:"$SONAR_PROJECT_KEY" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.exclusions="samples/**/*,.claude/**/*,benchmarks/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,samples/**/*,benchmarks/**/*,docs/**/*,src/DotnetTokenKiller.Cli/Program.cs,src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs"
           dotnet build DotnetTokenKiller.slnx
           dotnet test DotnetTokenKiller.slnx --no-build --collect:"XPlat Code Coverage" --logger trx -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
-          ./.sonar/scanner/dotnet-sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+          ./.sonar/scanner/dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7

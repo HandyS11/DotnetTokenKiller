@@ -1,0 +1,14 @@
+Running tests from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) Zero tests ran (160ms)
+Exit code: 8
+  Standard output: MSTest v4.0.2 (UTC 11/11/2025) [linux-x64 - .NET 10.0.12]
+
+Test run summary: Zero tests ran
+  error: 1
+
+  total: 0
+  failed: 0
+  succeeded: 0
+  skipped: 0
+  duration: 324ms
+Test run completed with non-success exit code: 8 (see: https://aka.ms/testingplatform/exitcodes)

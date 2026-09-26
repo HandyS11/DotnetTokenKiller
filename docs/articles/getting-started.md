@@ -79,6 +79,8 @@ dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 | `dtk dotnet clean`   | Clean with filtered output |
 | `dtk dotnet format`  | Format with filtered output |
 | `dtk dotnet list package` | List package references with filtered output |
+| `dtk dotnet publish` | Publish with filtered output |
+| `dtk dotnet pack`    | Pack with filtered output |
 | `dtk pipe <subcommand>` | Filter output dtk did not produce (CI logs, missed invocations) |
 | `dtk log`            | Retrieve a previous run's full output without re-running it |
 | `dtk gain`           | Show token savings analytics |
@@ -89,7 +91,7 @@ dotnet test: 1 failed, 3 passed (1 project, 0.07s)
 | `dtk completion`     | Print a shell completion script |
 | `dtk init`           | Install AI agent integration artifacts (alias: `dtk integrate`) |
 
-Any other `dotnet` subcommand (e.g., `dtk dotnet publish`) is passed through to `dotnet` unchanged.
+Any other `dotnet` subcommand (e.g., `dtk dotnet run`) is passed through to `dotnet` unchanged.
 
 ## Troubleshooting
 

@@ -15,7 +15,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
 internal sealed class OpenCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
 {
     /// <inheritdoc/>
     public string ProviderName => "opencode";
@@ -41,14 +41,43 @@ internal sealed class OpenCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
-            Path.Combine(directory, "AGENTS.md"), Path.Combine(directory, ".agents", "skills"), directory, HookScope.Project,
-            force, cancellationToken);
+            InstructionsPath(directory, HookScope.Project), SkillsDirectory(directory, HookScope.Project), directory,
+            HookScope.Project, force, cancellationToken);
 
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(
-            Path.Combine(home.OpenCodeConfigDir, "AGENTS.md"), home.AgentsSkillsDir, home.Home, HookScope.Global,
-            force, cancellationToken);
+            InstructionsPath(home.Home, HookScope.Global), SkillsDirectory(home.Home, HookScope.Global), home.Home,
+            HookScope.Global, force, cancellationToken);
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) =>
+        [InstructionsPath(directory, scope), SharedInstructionArtifacts.SkillPath(SkillsDirectory(directory, scope))];
+
+    /// <inheritdoc/>
+    public async Task<IntegrationResult> UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
+        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
+
+        await SharedInstructionArtifacts.RemoveAgentsFilesAsync(
+            InstructionsPath(hookDirectory, scope), SkillsDirectory(hookDirectory, scope), context, cancellationToken)
+            .ConfigureAwait(false);
+
+        await UninstallHelpers.RemoveGeneratedFileAsync(DescribeHooks(hookDirectory, scope)[0].PluginArtifact!, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hookDirectory)));
+
+        return context.ToResult();
+    }
+
+    private string InstructionsPath(string directory, HookScope scope) =>
+        Path.Combine(scope == HookScope.Global ? home.OpenCodeConfigDir : directory, "AGENTS.md");
+
+    private string SkillsDirectory(string directory, HookScope scope) =>
+        scope == HookScope.Global ? home.AgentsSkillsDir : Path.Combine(directory, ".agents", "skills");
 
     /// <summary>The folder names rtk's OpenCode plugin might use, singular or plural.</summary>
     private static readonly string[] RtkPluginFolderNames = ["plugin", "plugins"];

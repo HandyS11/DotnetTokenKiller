@@ -10,10 +10,32 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      nuget-all:
+      # Groups are matched in order; first match wins, so the catch-all "runtime" group must stay last.
+      samples:
+        patterns: ["MSTest.*", "NUnit*", "Reqnroll*"]
+      test-frameworks:
+        patterns:
+          - "xunit*"
+          - "FluentAssertions"
+          - "NSubstitute"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.collector"
+          - "Verify.Xunit"
+          - "Spectre.Console.Testing"
+          - "BenchmarkDotNet"
+      analyzers:
+        patterns:
+          - "Microsoft.CodeAnalysis.NetAnalyzers"
+          - "Microsoft.VisualStudio.Threading.Analyzers"
+          - "Roslynator.*"
+          - "SonarAnalyzer.CSharp"
+      runtime:
         patterns: ["*"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]

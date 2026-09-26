@@ -8,7 +8,7 @@ DTK tracks token counts for every run, comparing the raw `dotnet` output against
 dtk gain                       # last 30 days (default)
 dtk gain --days 7              # last 7 days
 dtk gain --project             # current project only
-dtk gain --command build       # filter to a specific command (build, test, restore, clean, format, "list package")
+dtk gain --command build       # filter to a specific command (build, test, restore, clean, format, "list package", publish, pack)
 dtk gain --json                # machine-readable JSON output
 dtk gain --export csv          # export raw records as CSV
 ```
@@ -61,7 +61,7 @@ spacer row between commands so each group reads as one block:
 
 | Column | Description |
 |--------|-------------|
-| **Command** | The `dotnet` subcommand (build, test, restore, clean, format, list package), suffixed `(ok)` or `(fail)` |
+| **Command** | The `dotnet` subcommand (build, test, restore, clean, format, list package, publish, pack), suffixed `(ok)` or `(fail)` |
 | **Runs** | Number of times the command was executed |
 | **Without Tool** | Total tokens in the raw `dotnet` output |
 | **Used by Tool** | Total tokens in the filtered DTK output |
@@ -81,7 +81,7 @@ dtk gain --command build --export csv > build-savings.csv
 dtk gain --command "list package"   # quote it: the slug contains a space
 ```
 
-The filter is exact-match on the command slug recorded at run time (`build`, `test`, `restore`, `clean`, `format`, `list package`).
+The filter is exact-match on the command slug recorded at run time (`build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, `pack`).
 
 ## JSON Output
 
@@ -106,7 +106,7 @@ dtk gain --export csv --project
 | Column | Description |
 |--------|-------------|
 | `timestamp` | ISO 8601 timestamp of the run |
-| `command` | The `dotnet` subcommand (build, test, restore, clean, format, list package) |
+| `command` | The `dotnet` subcommand (build, test, restore, clean, format, list package, publish, pack) |
 | `project_path` | Working directory when the command ran |
 | `input_tokens` | Estimated tokens in the raw output |
 | `output_tokens` | Estimated tokens in the filtered output |

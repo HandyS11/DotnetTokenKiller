@@ -29,7 +29,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <c>InternalsVisibleTo</c>.
 /// </remarks>
 internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
 {
     /// <summary>The per-user settings file Claude Code reads beside <c>settings.json</c>, which dtk never edits.</summary>
     private const string LocalSettingsFileName = "settings.local.json";
@@ -71,31 +71,59 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     {
         var context = new IntegrationContext(force);
 
-        await IntegratorHelpers.WriteGeneratedFileAsync(
-            new GeneratedArtifact(
-                SharedInstructionArtifacts.SkillPath(Path.Combine(baseDirectory, "skills")),
-                SharedInstructionArtifacts.SkillMarkdown,
-                StampStyle.HtmlComment,
-                SharedInstructionArtifacts.SkillLegacySignature),
-            context, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteGeneratedFileAsync(SkillArtifact(baseDirectory), context, cancellationToken)
+            .ConfigureAwait(false);
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
 
-        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(
-            new HookRegistrationSpec(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command),
-            context, cancellationToken).ConfigureAwait(false);
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(Registration(hook), context, cancellationToken)
+            .ConfigureAwait(false);
 
-        // dtk merges settings.json only; Claude Code also runs the hooks in settings.local.json beside it.
         await IntegratorHelpers.RetireLegacyHookScriptAsync(
-            hook.LegacyScriptPath!,
-            replacedLegacy,
-            [hook.RegistrationPath, Path.Combine(Path.GetDirectoryName(hook.RegistrationPath)!, LocalSettingsFileName)],
-            context,
-            cancellationToken).ConfigureAwait(false);
+            hook.LegacyScriptPath!, replacedLegacy, HookFiles(hook), context, cancellationToken).ConfigureAwait(false);
 
         var rtkOutcome = await rtk.ReconcileAsync(hookDirectory, cancellationToken).ConfigureAwait(false);
         rtkOutcome.ApplyTo(context);
 
         return context.ToResult();
     }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) => [];
+
+    /// <inheritdoc/>
+    public async Task<IntegrationResult> UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var (baseDirectory, hookDirectory) = scope == HookScope.Global
+            ? (home.ClaudeDir, home.Home)
+            : (Path.Combine(directory, ".claude"), directory);
+        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
+
+        await UninstallHelpers.RemoveGeneratedFileAsync(SkillArtifact(baseDirectory), context, cancellationToken)
+            .ConfigureAwait(false);
+
+        var hook = DescribeHooks(hookDirectory, scope)[0];
+        await UninstallHelpers.RemoveHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
+        await UninstallHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath!, HookFiles(hook), context, cancellationToken)
+            .ConfigureAwait(false);
+
+        rtk.NoteRemainingExclusion(context, rtk.IsRtkHookPresent(hookDirectory));
+
+        return context.ToResult();
+    }
+
+    private static GeneratedArtifact SkillArtifact(string baseDirectory) =>
+        SharedInstructionArtifacts.SkillArtifact(Path.Combine(baseDirectory, "skills"));
+
+    private static HookRegistrationSpec Registration(HookInstallation hook) =>
+        new(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command);
+
+    /// <summary>
+    /// The files Claude Code runs hooks from beside the registration: dtk merges <c>settings.json</c> only, but Claude
+    /// Code also runs the hooks in <c>settings.local.json</c>.
+    /// </summary>
+    /// <param name="hook">The installation.</param>
+    private static string[] HookFiles(HookInstallation hook) =>
+        [hook.RegistrationPath, Path.Combine(Path.GetDirectoryName(hook.RegistrationPath)!, LocalSettingsFileName)];
 }

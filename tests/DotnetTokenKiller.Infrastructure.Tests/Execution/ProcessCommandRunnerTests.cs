@@ -1,8 +1,11 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Infrastructure.Execution;
+using DotnetTokenKiller.Infrastructure.Tests.Helpers;
 using FluentAssertions;
 using Xunit;
 
@@ -487,6 +490,173 @@ public sealed class ProcessCommandRunnerTests
         }
         finally
         {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    private static Task<CommandResult> RunWithTokenIgnoringReadersAsync(
+        string command,
+        string[] args,
+        Func<StreamReader, CancellationToken, Task<string>> readStdOut,
+        CancellationToken cancellationToken)
+    {
+        // Invokes the private RunRedirectedAsync with readers that ignore the token. On Windows a
+        // child's redirected pipes are synchronous handles, so every read behaves this way: it ends
+        // only at the EOF the kill causes. These readers reproduce that on every platform.
+        var runMethod = typeof(ProcessCommandRunner)
+            .GetMethod("RunRedirectedAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Func<StreamReader, CancellationToken, Task<string>> readStdErr =
+            static (reader, _) => reader.ReadToEndAsync(CancellationToken.None);
+
+        return (Task<CommandResult>)runMethod.Invoke(
+            null, [command, args, readStdOut, readStdErr, cancellationToken, null])!;
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_Cancellation_ThrowsWhenTheKillIsWhatEndsTheDrainAsync()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-kill-{Guid.NewGuid()}");
+        Directory.CreateDirectory(dir);
+        var started = Path.Combine(dir, "started");
+        try
+        {
+            var (cmd, args) = StartedThenDelayedMarkerCommand(started, Path.Combine(dir, "done"), 30);
+            using var cts = new CancellationTokenSource();
+            var cancelWhenStarted = Task.Run(async () =>
+            {
+                await WaitForFileAsync(started, TimeSpan.FromSeconds(30));
+                await cts.CancelAsync();
+            });
+
+            // The drained streams and the exited child are both the kill's doing, not the child's.
+            var act = async () => await RunWithTokenIgnoringReadersAsync(
+                cmd, args, static (reader, _) => reader.ReadToEndAsync(CancellationToken.None), cts.Token);
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+            await cancelWhenStarted;
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunCapturedAsync_TokenCancelledAfterTheChildExitedOnItsOwn_ReturnsItsResultAsync()
+    {
+        var (cmd, args) = EchoCommand("finished");
+        using var cts = new CancellationTokenSource();
+
+        // Cancel only once stdout is drained and the child has had time to exit on its own.
+        async Task<string> ReadThenCancelAsync(StreamReader reader, CancellationToken _)
+        {
+            var text = await reader.ReadToEndAsync(CancellationToken.None);
+            await Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None);
+            await cts.CancelAsync();
+            return text;
+        }
+
+        var result = await RunWithTokenIgnoringReadersAsync(cmd, args, ReadThenCancelAsync, cts.Token);
+
+        result.StdOut.Should().Contain("finished");
+        result.ExitCode.Should().Be(0);
+    }
+
+    [WindowsFact]
+    public async Task RunPassthroughAsync_Cancellation_OnWindows_KillsTheGrandchildTooAsync()
+    {
+        // Verifies the outcome the taskkill /T backstop in TryKillTreeWithTaskkill guards: after a cancel,
+        // the whole tree is gone, grandchild included. Process.Kill(entireProcessTree: true) has proven
+        // unreliable at tearing down a shell subtree on the Windows CI runner, leaving a grandchild (e.g.
+        // powershell) alive under a dead cmd.exe, so this checks the grandchild rather than the cmd.exe
+        // RunCapturedAsync_Cancellation_ActuallyTerminatesTheChildAsync above already covers. It does not
+        // isolate the backstop: a passing run cannot tell which of the two kills reached the grandchild.
+        //
+        // The grandchild cannot be identified from outside before it starts, so it writes its own PID to
+        // a temporary file and renames that into place as soon as it launches — the rename makes the marker
+        // appear only once it holds the whole PID — then sleeps long enough that only a real kill, not the
+        // process simply finishing on its own, could explain its absence afterwards.
+        const int childSleepSeconds = 60;
+        var dir = Path.Combine(Path.GetTempPath(), $"dtk-treekill-{Guid.NewGuid()}");
+        Directory.CreateDirectory(dir);
+        var markerPath = Path.Combine(dir, "grandchild-pid.txt");
+        var partialPath = Path.Combine(dir, "grandchild-pid.tmp");
+        int? grandchildPid = null;
+        var stillAlive = true;
+        try
+        {
+            var args = new[]
+            {
+                "/c", "powershell", "-NoProfile", "-Command",
+                $"Set-Content -Path '{partialPath}' -Value $PID; Move-Item -Path '{partialPath}' -Destination '{markerPath}'; " +
+                $"Start-Sleep -Seconds {childSleepSeconds}"
+            };
+            using var cts = new CancellationTokenSource();
+
+            var cancelWhenStarted = Task.Run(async () =>
+            {
+                await WaitForFileAsync(markerPath, TimeSpan.FromSeconds(30));
+                await cts.CancelAsync();
+            });
+
+            var act = async () => await _sut.RunPassthroughAsync("cmd", args, cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+            await cancelWhenStarted; // surfaces any failure (e.g. the grandchild never started)
+
+            grandchildPid = int.Parse(
+                (await File.ReadAllTextAsync(markerPath)).Trim(), CultureInfo.InvariantCulture);
+
+            // The kill (registration callback plus the catch-block KillAndReapAsync, both of which run
+            // taskkill synchronously before RunPassthroughAsync's exception unwinds) has almost certainly
+            // already finished by the time the throw above completes, but poll with a bounded grace
+            // period rather than asserting instantly, in case the OS is briefly slow to retire the PID.
+            //
+            // Process.GetProcessById throws ArgumentException once no process holds that id, the only
+            // externally observable gone signal on Windows. A PID can in principle be reused by an
+            // unrelated process inside this window, which would then read as still alive here. That
+            // race is inherent to any PID-based liveness check and not something this test can rule
+            // out, so the poll is kept short to minimise the window rather than pretending to eliminate it.
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (DateTime.UtcNow < deadline)
+            {
+                try
+                {
+                    using var grandchild = Process.GetProcessById(grandchildPid.Value);
+                    stillAlive = !grandchild.HasExited;
+                }
+                catch (ArgumentException)
+                {
+                    stillAlive = false;
+                }
+
+                if (!stillAlive)
+                {
+                    break;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100));
+            }
+
+            stillAlive.Should().BeFalse(
+                "cancelling must leave no process of the tree behind, the grandchild powershell included");
+        }
+        finally
+        {
+            // Best effort, and only while the grandchild still looked alive: a failed run must not leave a
+            // 60-second powershell behind, but a PID already seen gone may have been reused since.
+            if (grandchildPid is { } pid && stillAlive)
+            {
+                try
+                {
+                    using var grandchild = Process.GetProcessById(pid);
+                    grandchild.Kill();
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    // Already gone.
+                }
+            }
+
             Directory.Delete(dir, recursive: true);
         }
     }

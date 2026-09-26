@@ -9,7 +9,7 @@ namespace DotnetTokenKiller.Application.Integration;
 ///   <item><description><c>.windsurf/rules/dtk.md</c> (Windsurf project rule)</description></item>
 /// </list>
 /// </remarks>
-public sealed class WindsurfIntegrator : IProviderIntegrator
+public sealed class WindsurfIntegrator : IProviderIntegrator, IUninstallIntegrator
 {
     private static readonly string WindsurfRule =
         $"""
@@ -33,10 +33,26 @@ public sealed class WindsurfIntegrator : IProviderIntegrator
     {
         var context = new IntegrationContext(force);
 
-        await IntegratorHelpers.WriteFileAsync(
-            Path.Combine(directory, ".windsurf", "rules", "dtk.md"),
-            WindsurfRule, context, cancellationToken).ConfigureAwait(false);
+        await IntegratorHelpers.WriteFileAsync(RulePath(directory), WindsurfRule, context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
+
+    /// <inheritdoc/>
+    IReadOnlyList<string> IUninstallIntegrator.SharedArtifactPaths(string directory, HookScope scope) => [];
+
+    /// <inheritdoc/>
+    async Task<IntegrationResult> IUninstallIntegrator.UninstallAsync(
+        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    {
+        var context = IntegrationContext.ForUninstall(directory, sharedInUse);
+
+        await UninstallHelpers.RemoveOwnedFileAsync(
+            RulePath(directory), WindsurfRule, IntegrationInstructions.ReleasedMarkdownRuleHashes, "dtk init windsurf", context,
+            cancellationToken).ConfigureAwait(false);
+
+        return context.ToResult();
+    }
+
+    private static string RulePath(string directory) => Path.Combine(directory, ".windsurf", "rules", "dtk.md");
 }

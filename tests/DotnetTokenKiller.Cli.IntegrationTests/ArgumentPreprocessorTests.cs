@@ -12,8 +12,7 @@ public sealed class ArgumentPreprocessorTests
 
     [Theory]
     [InlineData("dotnet", "run")]
-    [InlineData("dotnet", "publish")]
-    [InlineData("dotnet", "pack")]
+    [InlineData("dotnet", "watch")]
     [InlineData("DOTNET", "RUN")]
     public void IsPassthrough_ReturnsTrue_ForUnknownSubcommand(string exe, string sub)
     {
@@ -26,10 +25,29 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet", "restore")]
     [InlineData("dotnet", "clean")]
     [InlineData("dotnet", "format")]
+    [InlineData("dotnet", "publish")]
+    [InlineData("dotnet", "pack")]
     [InlineData("DOTNET", "BUILD")]
     public void IsPassthrough_ReturnsFalse_ForKnownSubcommand(string exe, string sub)
     {
         ArgumentPreprocessor.IsPassthrough([exe, sub]).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("dotnet", "publish", "--interactive")]
+    [InlineData("dotnet", "pack", "-o", "out", "--interactive")]
+    [InlineData("DOTNET", "PUBLISH", "--interactive")]
+    public void IsPassthrough_ReturnsTrue_ForAnInteractivePublishOrPack(params string[] args)
+    {
+        // Filtering captures the output and closes stdin, so a credential provider's prompt would
+        // never reach the user; these runs keep the terminal, as they did before dtk filtered them.
+        ArgumentPreprocessor.IsPassthrough(ArgumentPreprocessor.Normalize(args)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void IsPassthrough_ReturnsFalse_ForAnInteractiveBuild()
+    {
+        ArgumentPreprocessor.IsPassthrough(["dotnet", "build", "--interactive"]).Should().BeFalse();
     }
 
     [Fact]
@@ -158,7 +176,7 @@ public sealed class ArgumentPreprocessorTests
     {
         var args = new[]
         {
-            "dotnet", "publish", "MyProject.csproj"
+            "dotnet", "run", "--project", "MyProject.csproj"
         };
 
         var result = ArgumentPreprocessor.InsertSeparator(args);

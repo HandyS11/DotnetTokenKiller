@@ -8,9 +8,9 @@ DotnetTokenKiller is a .NET CLI proxy that reduces LLM token usage through dotne
 
 ## Commands
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, and list package to reduce token usage. The
-repository registers no hook of its own; `dtk init claude --global` (dtk 0.8.0 or later) installs one that rewrites
-these commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack to reduce
+token usage. The repository registers no hook of its own; `dtk init claude --global` (dtk 0.8.0 or later) installs
+one that rewrites these commands.
 
 ```bash
 # Build
@@ -79,9 +79,17 @@ jb inspectcode DotnetTokenKiller.slnx --output=artifacts/inspectcode.xml --forma
 jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Syntax Style"
 ```
 
+`dotnet publish` and `dotnet pack` share `MsBuildDiagnosticReport` — the same error/warning summary `dotnet build`
+uses — via `DotnetPublishFilter`/`DotnetPackFilter`, which each add their own success line (`project -> publish dir`,
+`Successfully created package '…'`). Either run with `--interactive` (used to prompt for private-feed credentials) is
+passed through unfiltered with the terminal attached, never captured, via `PassthroughSubcommands.IsInteractiveFilteredRun`.
+
 `dtk init copilot-cli` (alias `dtk integrate`) installs a GitHub Copilot CLI `preToolUse` hook (`.github/hooks/`)
 that runs `dtk hook copilot-cli`, rewriting `dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`).
-Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is `dtk hook <provider>`.
+Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is `dtk hook <provider>`. Its reply's
+`permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any
+command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
+rather than guess a command is safe.
 
 `dtk init codex` writes a shared `AGENTS.md` section, the `.agents/skills/dotnet-token-killer` skill and a
 `PreToolUse` hook in `.codex/hooks.json` (`--global`: `$CODEX_HOME` or `~/.codex`, and `~/.agents/skills`). Codex runs
@@ -99,6 +107,26 @@ CI sets `DTK_NODE_REQUIRED=1`.
 (`--global`: `~/.gemini/config/hooks.json`, with the section in `~/.gemini/GEMINI.md`). `dtk hook antigravity` replies
 `{"decision":"ask","overwrite":{"CommandLine":…}}` — never `allow`, which auto-approves. Hooks run through
 `sh -c`/`cmd /c` and a failing hook blocks the command, hence `|| exit 0`. Gate G results are in the PR that added it.
+
+`dtk init <provider> --uninstall` (respects `--dir`/`--global`) removes what that install writes, through
+`UninstallHelpers` (every integrator implements `IUninstallIntegrator`): dtk's hook entries (the install's own match),
+marked sections, and generated files only when their stamp or exact content proves them dtk's; edited files are kept.
+A shared `AGENTS.md`/`GEMINI.md`/copilot instructions/skill stays while another provider's dtk hook is registered in
+the same scope. It never edits rtk's config or Codex's `config.toml`. `UninstallIntegrationTests` round-trips every
+provider in both scopes against the whole temp tree.
+
+Ctrl+C (SIGINT) and, on Unix only, SIGTERM cancel the wrapped dotnet command (`RunCancellation`, in
+`src/DotnetTokenKiller.Cli/Infrastructure/`): SIGTERM cancels at once; Ctrl+C cancels only after a 5 s grace period,
+because the terminal usually delivers it to the child too, which then exits on its own; a second signal of either
+kind takes the default action and kills dtk immediately. A captured run's cancellation kill-and-reap is bounded by
+its own 5 s grace (`ProcessCommandRunner.ReapGracePeriod`). An attached passthrough (`dotnet run`, `dotnet watch` —
+anything `PassthroughRunUseCase.KeepsStdioAttached`) leaves the first Ctrl+C to the child instead of starting the
+grace period (`RunCancellation.LeaveInterruptToChild`), since the child owns the terminal and may legitimately take
+longer to shut down, or never exit.
+
+`DotnetTestFilterTests`' `dotnet_test_mtp_*` fixtures are real `dotnet test` output, not hand-written: a .NET 10 SDK
+run of an MSTest 4.0.2 project under Microsoft.Testing.Platform (`"test": {"runner": "Microsoft.Testing.Platform"}`
+in `global.json`), with the machine path replaced by `/test/project/root`.
 
 ## Git Hooks
 
@@ -119,8 +147,9 @@ Performance here has two dimensions, gated differently:
   against `benchmarks/DotnetTokenKiller.Benchmarks.Corpus/Baselines/savings-baseline.json` and runs
   as part of `dotnet test`. **Changing a filter's output changes its savings and fails this test.**
   That is intended: regenerate with `update-baseline` and let the diff show how the numbers moved.
-- **Timings** are never gated. Shared CI runners vary too much for a threshold to mean anything, so
-  the suite runs on demand via the `Benchmarks` workflow and uploads its results as artifacts.
+- **Timings are never gated.** Shared CI runners vary too much for a threshold to mean anything, so
+  the suite runs on demand via the `Benchmarks` workflow and uploads its results as artifacts. See
+  [Performance](docs/articles/performance.md) for every dated figure referenced in this section.
 
 Two costs cannot be measured in process and have their own verbs instead of BenchmarkDotNet jobs:
 
@@ -141,78 +170,17 @@ Two costs cannot be measured in process and have their own verbs instead of Benc
   `DOTNET_*`/`COMPlus_*` variables, the binary's `runtimeconfig.json` properties, and a
   `State: <root> (<filesystem>)` line, since all three move the figures: state defaults to the temp
   root (tmpfs on the measuring machine) or, with `--state-dir <dir>`, a caller-chosen directory on a
-  real disk. Needs a POSIX shell. Measured 2026-09-13, before → after starting tracking setup in the
-  background and turning `TieredPGO` off: pipe 295.9 → 230.2 ms; wrapped overhead 286.6 → 228.2 ms
-  (instant child) and 288.4 → 185.5 ms (1000 ms child, wall-clock 1188.0 ms). Measured 2026-09-14,
-  tmpfs → ext4, both against the same local AOT publish (host toolchain, SQLite linked in): pipe
-  63.9 → 75.5 ms; wrapped overhead 61.9 → 74.9 ms (instant child), 28.8 → 179.1 ms (1000 ms child),
-  and 185.7 → 307.1 ms (1000 ms child, 1 MB log). The medians show every scenario costing more on
-  disk than on tmpfs, with the 1000 ms-child scenario rising far more (150.3 ms) than pipe or the
-  instant child (11.6 ms and 13.0 ms) — more than the ext4 fsync cost alone accounts for — and the
-  disk run's variance was much wider throughout (e.g. 1000 ms-child p95 571.4 ms, max 981.8 ms,
-  against tmpfs's 25.6–31.8 ms full range). Journal, measured 2026-09-14, baseline → a tracked run
-  writing a journal file instead of SQLite, both local AOT publishes: on tmpfs, pipe 63.9 → 65.6 ms;
-  wrapped overhead 61.9 → 63.3 ms (instant child), 28.8 → 26.5 ms (1000 ms child), and
-  185.7 → 186.9 ms (1000 ms child, 1 MB log); on ext4, pipe 75.5 → 63.4 ms; wrapped overhead
-  74.9 → 63.7 ms (instant child), 179.1 → 26.5 ms (1000 ms child), and 307.1 → 188.6 ms (1000 ms
-  child, 1 MB log). With no SQLite write left in the run, the ext4 medians sit within 2 ms of tmpfs
-  and the ext4 spread closed (1000 ms-child p95 30.8 ms, max 31.8 ms). Streaming count, measured
-  2026-09-14, journal → counting stdout in chunks while the child runs, both local AOT publishes: on
-  tmpfs, pipe 65.6 → 63.9 ms; wrapped overhead 63.3 → 62.5 ms (instant child), 26.5 → 25.5 ms (1000 ms
-  child), and 186.9 → 158.9 ms (1000 ms child, 1 MB log); on ext4, pipe 63.4 → 64.9 ms; wrapped
-  overhead 63.7 → 62.7 ms (instant child), 26.5 → 25.8 ms (1000 ms child), and 188.6 → 160.6 ms
-  (1000 ms child, 1 MB log). The three unchanged scenarios moved by at most 1.7 ms either way, well
-  under the 3 ms ceiling; the 1 MB scenario's overhead dropped 28.0 ms on both filesystems, 2.0 ms
-  short of the 30 ms target the spec set for it.
+  real disk. Needs a POSIX shell. See [Performance § Cold start](docs/articles/performance.md#cold-start)
+  for measured figures.
 - `tokenizer-load` times the one-time tiktoken vocabulary load, **one fresh process per sample**.
   `Microsoft.ML.Tokenizers` caches the parsed vocabulary in internal static state, so an
   in-process benchmark measures a cache hit — microseconds for something that costs about 113 ms.
   Do not "simplify" this back into a `[Benchmark]`; there is no in-process form of it that is not
-  a lie. Measured 2026-09-12: `cl100k_base` median 112.7 ms, `o200k_base` median 173.6 ms, against
-  a 287.9 ms pipe cold-start median (before the tracking-path changes) on the same machine.
+  a lie. See [Performance § Tokenizer load](docs/articles/performance.md#tokenizer-load) for measured
+  figures.
 
-Native AOT, measured 2026-09-13, JIT (the `any` fallback package installed from a local feed) → AOT
-(linux-x64 tool package installed from a local feed; the shim is a symlink to the binary): pipe
-238.9 → 65.0 ms; wrapped overhead 225.5 → 63.6 ms (instant child) and 186.8 → 29.4 ms (1000 ms child);
-`dtk --version` 112.9 → 12.5 ms; tracking off 207.2 → 14.4 ms. Under AOT, tracking (tokenizer load,
-counting, SQLite) is 50.6 ms of the pipe figure.
-
-Static SQLite, measured 2026-09-13, three linux-x64 AOT tools installed from a local feed: host-built with a
-dynamic `libe_sqlite3.so` (the package before the cross-sysroot work) → cross-built against the glibc 2.27
-sysroot, still dynamic (`-p:DtkLinkSqliteStatically=false`) → cross-built with SQLite linked in (what ships):
-pipe 65.0 → 65.7 → 65.2 ms; wrapped overhead 62.7 → 62.8 → 63.9 ms (instant child) and 29.3 → 29.5 → 29.2 ms
-(1000 ms child); `dtk --version` 12.5 → 12.7 → 12.5 ms; tracking off 14.3 → 14.6 → 14.6 ms.
-
-Windows x64 packaged shim, measured 2026-09-14, windows-latest, indicative (a shared CI runner): the win-x64 package
-is 12,609,768 bytes (12.6 MB) and its native `dtk.exe` shim 16,414,720 bytes; parity tests (43) and the whole
-CLI integration suite (392) pass against the installed `dtk.exe`; tracking reaches Windows' own `winsqlite3.dll`
-(Windows 10 1903 or later). 21 runs each in Git Bash, medians minus a ~34 ms Git Bash process-start baseline
-measured the same way (raw medians in parentheses): `dtk --version` 5.0 ms for the native shim vs 131.0 ms for
-`any` (40 vs 166 ms raw); `dtk pipe build` 57.0 ms vs 277.0 ms (90 vs 310 ms raw).
-
-`dtk hook`, measured 2026-09-14, 55 runs each, local AOT publish (linux-x64) against the Python hook it replaced, medians
-including a 1.0 ms `/bin/true` fork-and-exec baseline: `dtk hook claude` 9.5 ms (no rewrite) and 9.8 ms
-(rewrite); `python3 .claude/hooks/dotnet-to-dtk.py` (this repository's former hook, since deleted) 15.9 ms and
-15.9 ms; `dtk --version` 12.9 ms. A harness runs the
-hook on every shell tool call, so this is a per-call cost; on the `any` fallback it is the JIT start-up instead.
-The hook runs 2.9–3.4 ms *faster* than `--version`, because it returns before the service container and
-Spectre are built, which `--version` still constructs — meeting the spec's 3 ms ceiling on hook overhead, a
-gap a repeat run confirmed as stable (9.5/10.0 ms hook vs 12.9 ms `--version`).
-
-OpenCode plugin, measured 2026-09-15, OpenCode 1.18.31 (`opencode-ai` from npm) running `opencode run` against a
-local fake OpenAI-compatible model that requests one `bash` call, local AOT publish (linux-x64) of dtk first on
-`PATH`, 21 runs per configuration in interleaved rounds, plugin absent → installed. `--print-logs` has no per-tool
-timing, so the figure is the median interval from the fake model receiving the tool-offering request to OpenCode
-logging the `bash` permission check, which runs after the plugin's hook: `echo hi` 165 → 165 ms and
-`dotnet --version` 167 → 181 ms. The whole run's wall clock (about 2.1 s) moved 2086.9 → 2093.4 ms and
-2167.4 → 2180.3 ms, but its per-round installed-minus-absent differences spread from −66 to +81 ms, so it resolves
-neither figure; only these in-run figures were taken inside OpenCode. The OpenCode CLI runs plugins under the Bun
-it embeds (a probe plugin's `tool.execute.before` saw `Bun.version` 1.3.14), while the figures that isolate the
-hook come from Node 26, outside OpenCode: the plugin's `tool.execute.before` imported and timed by a driver script,
-55 samples, `dotnet --version` 10.7 ms (one `dtk hook opencode` start, no rewrite) and `dotnet build` 11.0 ms
-(rewritten to `dtk dotnet build`), against 1.2 ms for spawning `/bin/true` the same way. The plugin starts no
-process for a command without `dotnet`: inside OpenCode, a logging `dtk` wrapper on `PATH` saw no start for
-`echo hi` and one for `dotnet --version`; under the Node driver, the hook returned in under 0.01 ms for `echo hi`.
+See [Performance](docs/articles/performance.md) for the Native AOT, Static SQLite, Windows x64 packaged shim,
+`dtk hook`, and OpenCode plugin cold-start figures.
 
 Both fail loudly — non-zero exit, the child's own output — rather than reporting a fast number they
 did not measure. A BenchmarkDotNet run that matches no benchmark also exits non-zero, so a typo in
@@ -241,9 +209,12 @@ installs and tests every package on a runner of its own architecture (`eng/aot/t
 `eng/aot/check-glibc-floor.sh` (no symbol above GLIBC_2.27) and `eng/aot/smoke-old-glibc.sh` (start, filter
 and track on Rocky Linux 8). `fallback-package.yml` tests `any` on Linux and on Windows, where it also runs the
 integration suite and a smoke test from Git Bash, pwsh and cmd. `publish.yml` pushes the RID packages before
-the pointer. A local Release build of the CLI carries the AOT feature switches in its runtimeconfig
-(`PublishAot=true` in the csproj), so `cold-start` on `bin/Release` measures an AOT-like JIT build, not the
-shipped fallback; measure the installed `any` package for fallback figures.
+the pointer. The RID list and its runners live only in `aot-rids.yml`, which `ci.yml` and `publish.yml` both
+call; add or change a RID there. The Windows shell smoke test is the local action
+`.github/actions/smoke-windows-shells`, shared by both package workflows. A local Release build of the CLI
+carries the AOT feature switches in its runtimeconfig (`PublishAot=true` in the csproj), so `cold-start` on
+`bin/Release` measures an AOT-like JIT build, not the shipped fallback; measure the installed `any` package for
+fallback figures.
 
 linux-x64 and linux-arm64 link SQLite statically (`DtkLinkSqliteStatically` in the CLI csproj), because
 SQLitePCLRaw's `libe_sqlite3.so` needs GLIBC_2.34 (ericsink/SQLitePCL.raw#674). glibc 2.27 has no `fcntl64`,
@@ -281,13 +252,25 @@ A tracked run writes one JSON file to `<database file>.pending/` beside the trac
 nor duplicated. A warm-up folds in the background when 64 or more files wait. `SqliteLoaderTests` uses `gain`
 as its positive control for that reason. `:memory:` data sources insert directly.
 
+## Tee Logging
+
+A truncated tee log's sole signal is its body's last line, `[dtk: output truncated at <N> bytes]`
+(`TeeTruncationMarker.IsMarkerLine`), matched by exact shape regardless of the cap value. There is no header field
+for it: `TeeLogHeader.TryReadFields` rejects any key it does not recognise, so adding one would make a truncated log
+unreadable by an older dtk sharing the same tee directory, while a body line has no such compatibility hazard — an
+older dtk simply displays it like any other line. Rendering (`TeeTruncationMarker.Render`) and detection are shared
+between the writer (`FileTeeSession`) and reader (`TeeLogRenderer`) so the two can never disagree about whether a
+log was truncated.
+
 ## Architecture & Stack
 
 - **Target framework**: net10.0
 - **CLI framework**: Spectre.Console + Spectre.Console.Cli
 - **Testing**: xunit + FluentAssertions + Spectre.Console.Testing
 - **Package management**: Central via `Directory.Packages.props` — all version numbers go there, `.csproj` files omit
-  versions
+  versions. The one exception is `samples/SampleApp.BadPackage`, whose deliberately nonexistent
+  `DotnetTokenKiller.DoesNotExist` reference (it triggers NU1101 for the restore tests) carries a `VersionOverride`
+  so that no fake pin sits in `Directory.Packages.props`
 
 ## Code Style
 

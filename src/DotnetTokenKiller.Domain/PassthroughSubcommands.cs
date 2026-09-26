@@ -21,7 +21,40 @@ public static class PassthroughSubcommands
     public static readonly IReadOnlySet<string> Measurable =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "publish", "pack", "list", "tool", "workload", "sln", "msbuild", "ef"
+            "list", "tool", "workload", "sln", "msbuild", "ef"
+        };
+
+    /// <summary>
+    /// Filtered subcommands that are passed through all the same when run with <c>--interactive</c>,
+    /// which they use to prompt for private-feed credentials.
+    /// </summary>
+    private static readonly HashSet<string> PassedThroughWhenInteractive =
+        new(StringComparer.OrdinalIgnoreCase) { DotnetSubcommands.Publish, DotnetSubcommands.Pack };
+
+    /// <summary>
+    /// <c>dotnet ef</c> invocations, keyed by their (subcommand, verb) token pair, that block on an
+    /// interactive confirmation read from standard input unless one of the listed flags is present.
+    /// </summary>
+    /// <remarks>
+    /// Sourced from the EF Core tools source (dotnet/efcore, <c>main</c> branch, checked 2026-09-23):
+    /// a full-repository search for <c>Console.ReadLine</c> finds exactly one interactive read in the
+    /// whole tool, in <c>src/ef/Commands/DatabaseDropCommand.cs</c>
+    /// (https://github.com/dotnet/efcore/blob/main/src/ef/Commands/DatabaseDropCommand.cs) — it is
+    /// skipped when <c>-f|--force</c> is given (also when <c>--dry-run</c> is given, but that flag
+    /// does not drop the database, so it is not listed here as a substitute for <c>--force</c>). The
+    /// EF Core CLI reference documents the same contract: "<c>--force</c> (<c>-f</c>) - Don't confirm
+    /// the deletion." (https://learn.microsoft.com/en-us/ef/core/cli/dotnet#dotnet-ef-database-drop).
+    /// <c>dotnet ef migrations remove</c> does <em>not</em> prompt, despite also taking a
+    /// <c>--force</c> flag: <c>MigrationsScaffolder.RemoveMigration</c>
+    /// (src/EFCore.Design/Migrations/Design/MigrationsScaffolder.cs) throws an <c>OperationException</c>
+    /// instead of reading input when the last migration was already applied to the database and
+    /// <c>--force</c> is absent — the CLI reference describes its <c>--force</c> as "revert the latest
+    /// migration", not a confirmation. It is deliberately not listed here.
+    /// </remarks>
+    private static readonly Dictionary<(string Subcommand, string Verb), IReadOnlySet<string>> PromptingEfInvocations =
+        new()
+        {
+            [("database", "drop")] = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "--force", "-f" }
         };
 
     /// <summary>
@@ -124,10 +157,13 @@ public static class PassthroughSubcommands
     /// <remarks>
     /// <c>RunStreamedAsync</c> (the path a measurable command takes) closes the child's stdin so a
     /// child reading stdin sees EOF rather than hanging. That is wrong for <c>--interactive</c>,
-    /// which <c>dotnet publish</c>/<c>pack</c> use to prompt for private-feed credentials, so those
-    /// invocations are excluded here even though their subcommand is otherwise on the allowlist —
-    /// they fall back to the inherited-stdio passthrough path and record as
-    /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> instead.
+    /// which dotnet commands use to prompt for private-feed credentials, so those invocations are
+    /// excluded here even though their subcommand is otherwise on the allowlist — they fall back to
+    /// the inherited-stdio passthrough path and record as
+    /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> instead. The same is true of the
+    /// <c>dotnet ef</c> invocations in <see cref="PromptingEfInvocations"/>: closing stdin would make
+    /// their confirmation read see EOF immediately, so they are excluded unless the flag that
+    /// suppresses the prompt is present.
     /// </remarks>
     public static bool IsMeasurable(IReadOnlyList<string> dotnetArgs)
     {
@@ -138,8 +174,60 @@ public static class PassthroughSubcommands
             return false;
         }
 
-        return !dotnetArgs.Any(arg => string.Equals(arg, "--interactive", StringComparison.OrdinalIgnoreCase));
+        return !HasInteractiveFlag(dotnetArgs) && !IsPromptingEfInvocation(dotnetArgs);
     }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when this invocation matches one of the
+    /// <see cref="PromptingEfInvocations"/> entries and none of that entry's non-interactive flags
+    /// are present.
+    /// </summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>
+    private static bool IsPromptingEfInvocation(IReadOnlyList<string> dotnetArgs)
+    {
+        if (dotnetArgs.Count < 3 || !string.Equals(dotnetArgs[0], "ef", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        foreach (var (key, nonInteractiveFlags) in PromptingEfInvocations)
+        {
+            if (string.Equals(dotnetArgs[1], key.Subcommand, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(dotnetArgs[2], key.Verb, StringComparison.OrdinalIgnoreCase))
+            {
+                return !dotnetArgs.Any(arg => nonInteractiveFlags.Contains(arg));
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when this invocation of a filtered subcommand must be passed
+    /// through rather than filtered: <c>dotnet publish</c> or <c>dotnet pack</c> run with
+    /// <c>--interactive</c>.
+    /// </summary>
+    /// <param name="dotnetArgs">
+    /// The arguments passed to <c>dotnet</c>, starting at the subcommand.
+    /// </param>
+    /// <remarks>
+    /// A filtered run captures the child's output until it exits and closes its stdin, so a
+    /// credential provider's prompt (or the device code it prints) would never reach the user. These
+    /// two were passed through, with the terminal attached, before dtk filtered them, and their
+    /// <c>--interactive</c> runs keep doing so; they record as
+    /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> via <see cref="IsMeasurable"/>.
+    /// </remarks>
+    public static bool IsInteractiveFilteredRun(IReadOnlyList<string> dotnetArgs)
+    {
+        ArgumentNullException.ThrowIfNull(dotnetArgs);
+
+        return dotnetArgs.Count > 0
+               && PassedThroughWhenInteractive.Contains(dotnetArgs[0])
+               && HasInteractiveFlag(dotnetArgs);
+    }
+
+    private static bool HasInteractiveFlag(IReadOnlyList<string> dotnetArgs) =>
+        dotnetArgs.Any(arg => string.Equals(arg, "--interactive", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Returns the allowlist's own spelling of <paramref name="value"/>, so a name recorded from

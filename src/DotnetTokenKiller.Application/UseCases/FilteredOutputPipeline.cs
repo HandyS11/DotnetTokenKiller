@@ -211,7 +211,12 @@ public sealed class FilteredOutputPipeline(
         return sb.ToString();
     }
 
-    private static async Task<string?> FinalizeTeeAsync(
+    /// <summary>Finalizes a tee session, swallowing any failure so a broken log cannot fail the run.</summary>
+    /// <param name="session">The session to finalize.</param>
+    /// <param name="exitCode">The exit code to record in the log.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The log hint, or <see langword="null"/> when no log was kept or finalizing failed.</returns>
+    internal static async Task<string?> FinalizeTeeAsync(
         ITeeSession session,
         int exitCode,
         CancellationToken cancellationToken)

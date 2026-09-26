@@ -86,6 +86,13 @@ internal static class TeeLogRenderer
                 .ConfigureAwait(false);
         }
 
+        if (IsTruncated(view))
+        {
+            await output.WriteLineAsync(
+                    "output was truncated — it reached the configured byte cap".AsMemory(), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var summary = view.ShownLines >= view.TotalLines
             ? $"showing all {view.TotalLines.ToString(CultureInfo.InvariantCulture)} lines"
             : $"showing last {view.ShownLines.ToString(CultureInfo.InvariantCulture)} of "
@@ -103,4 +110,26 @@ internal static class TeeLogRenderer
         bytes < 1024
             ? $"{bytes.ToString(CultureInfo.InvariantCulture)} B"
             : $"{(bytes / 1024.0).ToString("F1", CultureInfo.InvariantCulture)} KB";
+
+    /// <summary>
+    /// Detects truncation from the body itself rather than a header field: <see cref="TeeLogHeader"/>
+    /// rejects any header carrying a key it does not recognise, so a field here would make every log
+    /// a newer dtk writes unreadable by an older one sharing the same tee directory. The marker
+    /// FileTeeSession appends is always that truncated body's true last line — <c>view.Body</c>'s
+    /// windowing (<c>lines[^shown..]</c> in LogViewUseCase) always keeps the file's actual last line,
+    /// for any window size — so no extra read beyond what the view already loaded is needed here.
+    /// </summary>
+    /// <param name="view">The view being rendered.</param>
+    /// <returns><see langword="true"/> when the body's last line is the truncation marker.</returns>
+    private static bool IsTruncated(LogView view)
+    {
+        if (view.Body.Length == 0)
+        {
+            return false;
+        }
+
+        var lastNewline = view.Body.LastIndexOf('\n');
+        var lastLine = lastNewline < 0 ? view.Body : view.Body[(lastNewline + 1)..];
+        return TeeTruncationMarker.IsMarkerLine(lastLine);
+    }
 }
