@@ -190,4 +190,31 @@ public sealed class HomePathsTests
         new HomePaths("/home/u").WindsurfGlobalRulesPath
             .Should().Be(Path.Combine("/home/u", ".codeium", "windsurf", "memories", "global_rules.md"));
     }
+
+    [Fact]
+    public void FactoryDir_IsDotFactoryUnderHome_OrUnderAnAbsoluteOverride()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "dtk-home-test");
+        var over = Path.Combine(Path.GetTempPath(), "factory-home");
+
+        new HomePaths(home).FactoryDir.Should().Be(Path.Combine(home, ".factory"));
+        new HomePaths(home, name => name == "FACTORY_HOME_OVERRIDE" ? over : null).FactoryDir
+            .Should().Be(Path.Combine(over, ".factory"), "Droid replaces the home directory and still appends .factory");
+        new HomePaths(home, name => name == "FACTORY_HOME_OVERRIDE" ? "relative" : null).FactoryDir
+            .Should().Be(Path.Combine(home, ".factory"));
+    }
+
+    [Fact]
+    public void CrushConfigDir_PrefersCrushGlobalConfig_ThenXdgConfigHome_ThenDotConfig()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "dtk-home-test");
+        var global = Path.Combine(Path.GetTempPath(), "crush-global");
+        var xdg = Path.Combine(Path.GetTempPath(), "xdg");
+
+        new HomePaths(home).CrushConfigDir.Should().Be(Path.Combine(home, ".config", "crush"));
+        new HomePaths(home, name => name == "XDG_CONFIG_HOME" ? xdg : null).CrushConfigDir
+            .Should().Be(Path.Combine(xdg, "crush"));
+        new HomePaths(home, name => name switch { "CRUSH_GLOBAL_CONFIG" => global, "XDG_CONFIG_HOME" => xdg, _ => null })
+            .CrushConfigDir.Should().Be(global, "CRUSH_GLOBAL_CONFIG is the directory itself");
+    }
 }
