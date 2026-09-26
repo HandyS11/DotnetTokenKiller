@@ -744,4 +744,44 @@ public sealed class HookHealthCheckerTests : IDisposable
         public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
             [.. installations.Where(installation => installation.Scope == scope)];
     }
+
+    /// <summary>
+    /// A hook integrator describing a single project-scoped registration read as a script (Crush's <c>crushrc</c>)
+    /// rather than JSON. A local stub so this test does not depend on the real Crush integrator.
+    /// </summary>
+    /// <param name="path">The script file's path.</param>
+    private sealed class ScriptHookIntegrator(string path) : IHookIntegrator
+    {
+        public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
+            scope == HookScope.Project
+                ? [new HookInstallation("crush", scope, path, "dtk hook crush", null, HookPayloadKind.Crush) { IsScriptRegistration = true }]
+                : [];
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptRegistrationRunningTheHook_IsRegisteredAndProbed()
+    {
+        var path = Path.Combine(_tempDir, ".crushrc");
+        await File.WriteAllTextAsync(path, "option debug true\nhook add PreToolUse --name dtk --matcher '^bash$' --command 'dtk hook crush'\n");
+
+        var checks = await _sut.RunAsync([new ScriptHookIntegrator(path)], _tempDir, default);
+
+        checks.Should().Contain(c => c.Name == "crush hook (project)" && c.Passed && c.Message == "registered");
+        checks.Should().Contain(c => c.Name == "crush hook probe (project)");
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptRegistrationWithoutTheHook_IsNotRegistered()
+    {
+        // ScriptHookIntegrator's installation has no LegacyScriptPath, so an Absent registration is treated the
+        // same way a JSON registration's would be: RunAsync skips it and falls back to the informational check.
+        var path = Path.Combine(_tempDir, ".crushrc");
+        await File.WriteAllTextAsync(path, "option debug true\n");
+
+        var checks = await _sut.RunAsync([new ScriptHookIntegrator(path)], _tempDir, default);
+
+        checks.Should().ContainSingle();
+        checks[0].Passed.Should().BeTrue("dtk works without hooks, so their absence is not a failure");
+        checks[0].Message.Should().Contain("dtk init");
+    }
 }
