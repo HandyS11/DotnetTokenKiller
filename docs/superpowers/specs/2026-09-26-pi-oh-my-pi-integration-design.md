@@ -155,8 +155,8 @@ usage string, `HookCommands`, completion scripts and `InitCommandSettings` list 
 ### Generalizing the OpenCode-only checks
 
 `UninstallHelpers.IsRegistered` and `HookHealthChecker.ClassifyPlugin` compare a plugin file against
-`OpenCodePlugin.InvocationSignature`. The signature moves onto the plugin's `HookInstallation` (or its
-`GeneratedArtifact`), and both checks read it from there. No behaviour changes for OpenCode.
+`OpenCodePlugin.InvocationSignature`. The signature becomes a property of `HookInstallation`, set
+alongside `PluginArtifact`, and both checks read it from there. No behaviour changes for OpenCode.
 
 ### pi's project trust
 
