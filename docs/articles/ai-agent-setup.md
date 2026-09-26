@@ -630,7 +630,8 @@ Use `--force` to overwrite an existing rule file. Use `--dir` to target a specif
 
 Before Devin Local or Devin CLI runs a shell command, it sends it to `dtk hook devin`, which replies with Claude's
 `hookSpecificOutput.updatedInput` and no decision, so Devin's own approval still applies to the rewritten command.
-The legacy Cascade agent cannot rewrite commands and only gets the rule.
+The legacy Cascade agent cannot rewrite commands; whether it reads `.devin/rules` is not yet verified (see
+[Harness verification](harness-verification.md)).
 
 Devin Desktop runs no hooks while a workspace is in Restricted Mode: trust the workspace for the project hook to
 run.

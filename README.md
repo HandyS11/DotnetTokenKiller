@@ -225,10 +225,12 @@ dtk init pi          --global   # ~/.pi/agent, ~/.agents/skills
 dtk init oh-my-pi    --global   # ~/.omp/agent, ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
+dtk init cursor      --global   # ~/.cursor/hooks.json (hook only)
+dtk init devin       --global   # ~/.config/devin/config.json, global_rules.md
 ```
 
 Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
-for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, and **copilot-cli** (the providers with a home config).
+for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, and **devin** (the providers with a home config).
 
 ### Per-project install
 

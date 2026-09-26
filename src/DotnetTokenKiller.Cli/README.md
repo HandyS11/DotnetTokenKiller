@@ -85,7 +85,7 @@ once and every project your agent touches picks it up automatically:
 dtk init claude --global   # ~/.claude
 ```
 
-`--global` is supported for `claude`, `gemini`, `codex`, `opencode`, `antigravity`, `pi`, `oh-my-pi`, `aider`, and `copilot-cli`. The other providers
+`--global` is supported for `claude`, `gemini`, `codex`, `opencode`, `antigravity`, `pi`, `oh-my-pi`, `aider`, `copilot-cli`, `cursor`, and `devin`. The other providers
 (`copilot`, `jetbrains`) are repository-scoped — run `dtk init <provider>`
 inside the project. `windsurf` is an alias of `devin`.
 
