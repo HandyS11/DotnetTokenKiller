@@ -49,11 +49,11 @@ public class HookIntegrationTests
         // write outlive the process on every OS, as a fast native exit already did with "{}" on Windows.
         var payload = new string(' ', 1024 * 1024) + "{}";
 
-        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(payload, "hook", "cursor");
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(payload, "hook", "aider");
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin>");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
