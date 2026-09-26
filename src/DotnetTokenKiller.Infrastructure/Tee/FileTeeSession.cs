@@ -293,7 +293,13 @@ public sealed class FileTeeSession(
                     var truncatedBytes = Encoding.UTF8.GetBytes(truncatedLine);
                     await stream.WriteAsync(truncatedBytes, cancellationToken).ConfigureAwait(false);
                     BodyBytesWritten += truncatedBytes.Length;
-                    _bodyEndsWithNewline = truncatedLine.EndsWith('\n');
+
+                    // A cut that kept nothing (the first rune alone exceeds remaining) wrote no
+                    // byte, so the body still ends however the previous write left it.
+                    if (truncatedBytes.Length > 0)
+                    {
+                        _bodyEndsWithNewline = truncatedLine.EndsWith('\n');
+                    }
                     await RecordTruncationAsync(cancellationToken).ConfigureAwait(false);
                     return;
                 }

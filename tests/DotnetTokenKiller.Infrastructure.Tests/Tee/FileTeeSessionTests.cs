@@ -308,6 +308,23 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task Writer_WritesTheMarkerCleanly_WhenTheCutLineKeepsNothing()
+    {
+        // 42 gives a 5-byte content budget: "abc\n" leaves 1 byte, too small for the 2-byte "é", so
+        // the cut writes nothing and the body still ends with "abc\n"'s own line feed -- the marker
+        // must not add a blank line before itself.
+        var (session, path) = CreateSut(maxBodyBytes: 42, minBodyBytes: 0);
+
+        await session.Writer.WriteLineAsync("abc".AsMemory(), CancellationToken.None);
+        await session.Writer.WriteLineAsync("é".AsMemory(), CancellationToken.None);
+        await session.FinalizeAsync(0);
+
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
+        body.Should().Be("abc\n[dtk: output truncated at 42 bytes]\n");
+        TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Writer_WritesTheMarkerOnlyOnce_WhenManyMoreLinesOverflowTheCap()
     {
         var (session, path) = CreateSut(maxBodyBytes: 100, minBodyBytes: 0);
