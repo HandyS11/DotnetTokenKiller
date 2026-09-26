@@ -44,7 +44,8 @@ public sealed class CursorIntegratorTests : IDisposable
         var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
 
         result.CreatedFiles.Should().Equal(RulePath, ProjectHooksPath);
-        result.Notes.Should().Equal(CursorIntegrator.AutoApprovalNote, CursorIntegrator.TrustNote, CursorIntegrator.KnownGapsNote);
+        result.Notes.Should().Equal(
+            CursorIntegrator.AutoApprovalNote, CursorIntegrator.TrustNote, CursorIntegrator.OlderDtkNote, CursorIntegrator.KnownGapsNote);
         var entry = JsonNode.Parse(await File.ReadAllTextAsync(ProjectHooksPath))!["hooks"]!["preToolUse"]![0]!;
         entry["command"]!.GetValue<string>().Should().Be("dtk hook cursor");
         (await File.ReadAllTextAsync(RulePath)).Should().Contain("alwaysApply: false");

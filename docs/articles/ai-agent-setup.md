@@ -551,6 +551,11 @@ global hook has no such requirement.
 Known gaps: Cursor sends the hook no payload in remote Linux workspaces, and may drop rewrites for subagents'
 shell calls; those commands run as written, guided only by the rule.
 
+Once `.cursor/hooks.json` is committed, every machine that opens the project needs a dtk release newer than 0.8.0
+(the first with `dtk hook cursor`) on `PATH`: an older dtk prints nothing but a usage line on stderr, and Cursor
+blocks the tool call — every tool call, not just a missed rewrite — when a `preToolUse` hook's output isn't valid
+JSON. Update dtk on every machine before committing the file.
+
 If rtk's own Cursor hook is found — `rtk hook cursor` in `hooks.json`, or its legacy
 `~/.cursor/hooks/rtk-rewrite.sh` script — `dtk init cursor` excludes `dotnet` from rtk so the two proxies don't
 both rewrite it.

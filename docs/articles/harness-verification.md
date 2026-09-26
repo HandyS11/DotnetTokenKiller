@@ -11,9 +11,11 @@ unconfirmed. If you can run one, please report the result in an issue.
 3. Whether `permission: "allow"` skips Cursor's approval prompt for the rewritten command (if it does not, dtk could
    also rewrite chained commands and `publish`/`pack`).
 4. With dtk's Claude Code hook also in `~/.claude/settings.json`: the command is rewritten once, not `dtk dtk`.
+5. With a dtk that prints nothing (0.8.0 or earlier) on PATH, does Cursor block the command or let it run?
 
 ## Devin (Devin Local and Devin CLI)
 
 1. The matcher `exec` selects the shell tool: `dotnet build` becomes `dtk dotnet build` in `devin` and in Devin Desktop.
 2. Which shell runs the hook command on Windows.
 3. Whether a workspace in Restricted Mode runs the project hook.
+4. Whether the legacy Cascade agent reads .devin/rules (dtk removes its own .windsurf/rules/dtk.md).

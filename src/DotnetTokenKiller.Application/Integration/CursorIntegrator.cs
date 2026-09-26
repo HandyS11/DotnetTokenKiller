@@ -34,6 +34,16 @@ internal sealed class CursorIntegrator(RtkHookCoexistence rtk, HomePaths home)
         "Cursor sends hooks no payload in remote Linux workspaces and may drop rewrites for subagents' shell calls; "
         + "those commands run as written, guided only by the rule.";
 
+    /// <summary>
+    /// Printed when this run wrote a project hook: an older dtk on a teammate's machine has no <c>dtk hook cursor</c>
+    /// and prints nothing but a usage line on stderr, which Cursor treats as a blocked tool call for every command,
+    /// not just a missed rewrite, once <c>.cursor/hooks.json</c> is committed.
+    /// </summary>
+    internal const string OlderDtkNote =
+        "This hook needs a dtk release newer than 0.8.0 (the first with `dtk hook cursor`) on every machine that "
+        + "opens this project: an older dtk prints nothing, and Cursor blocks the tool call when a hook's output "
+        + "isn't valid JSON. Update dtk on every machine before committing .cursor/hooks.json.";
+
     /// <summary>Printed by a global install, which has no rule file to write.</summary>
     internal const string GlobalRuleNote =
         "Cursor keeps user rules in its settings, not in a file, so the global install adds only the hook. "
@@ -135,6 +145,7 @@ internal sealed class CursorIntegrator(RtkHookCoexistence rtk, HomePaths home)
             if (scope == HookScope.Project)
             {
                 context.Notes.Add(TrustNote);
+                context.Notes.Add(OlderDtkNote);
             }
 
             context.Notes.Add(KnownGapsNote);
