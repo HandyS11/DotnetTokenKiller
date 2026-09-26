@@ -35,7 +35,13 @@ internal enum HookPayloadKind
     Pi = 6,
 
     /// <summary>dtk's own oh-my-pi extension payload, the same as <see cref="OpenCode"/>'s.</summary>
-    OhMyPi = 7
+    OhMyPi = 7,
+
+    /// <summary>Cursor's <c>preToolUse</c> payload, for its <c>Shell</c> tool.</summary>
+    Cursor = 8,
+
+    /// <summary>Devin Local's and Devin CLI's <c>PreToolUse</c> payload: Claude Code's shape, for the <c>exec</c> tool.</summary>
+    Devin = 9
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>

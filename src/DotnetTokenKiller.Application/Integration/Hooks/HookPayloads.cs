@@ -41,6 +41,22 @@ internal static class HookPayloads
     /// </summary>
     private const string? AntigravityNeutralReply = null;
 
+    /// <summary>
+    /// Cursor's reply when there is nothing to rewrite. Never empty: Cursor blocks the tool call when a permission
+    /// hook's output does not match its schema (cursor.com/docs/hooks.md), and <c>{}</c> is what rtk's Cursor hook
+    /// prints for the same case.
+    /// </summary>
+    internal const string CursorNeutralReply = "{}";
+
+    /// <summary>Cursor's shell tool.</summary>
+    private const string CursorShellTool = "Shell";
+
+    /// <summary>Devin's shell tool.</summary>
+    private const string DevinShellTool = "exec";
+
+    /// <summary>The payload property naming the tool in Claude-shaped payloads (Claude Code, Codex CLI, Cursor, Devin).</summary>
+    private const string ToolNameProperty = "tool_name";
+
     /// <summary>The payload property holding Claude Code's, Gemini CLI's and Codex CLI's tool input.</summary>
     private const string ToolInputProperty = "tool_input";
 
@@ -49,7 +65,7 @@ internal static class HookPayloads
 
     /// <summary>
     /// Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>,
-    /// <c>antigravity</c>, <c>pi</c>, <c>oh-my-pi</c>) to its payload shape.
+    /// <c>antigravity</c>, <c>pi</c>, <c>oh-my-pi</c>, <c>cursor</c>, <c>devin</c>) to its payload shape.
     /// </summary>
     /// <param name="provider">The name passed to <c>dtk hook</c>.</param>
     /// <param name="kind">The payload shape, when the name is known.</param>
@@ -65,6 +81,8 @@ internal static class HookPayloads
             "antigravity" => (true, HookPayloadKind.AntigravityCli),
             "pi" => (true, HookPayloadKind.Pi),
             "oh-my-pi" => (true, HookPayloadKind.OhMyPi),
+            "cursor" => (true, HookPayloadKind.Cursor),
+            "devin" => (true, HookPayloadKind.Devin),
             _ => (false, default)
         };
         return known;
@@ -88,14 +106,16 @@ internal static class HookPayloads
         }
         catch (JsonException)
         {
-            return null;
+            return kind == HookPayloadKind.Cursor ? CursorNeutralReply : null;
         }
 
         try
         {
             return kind switch
             {
-                HookPayloadKind.ClaudeCode => ReplyToClaude(root),
+                HookPayloadKind.ClaudeCode => ReplyWithUpdatedInput(root, expectedTool: null),
+                HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool),
+                HookPayloadKind.Cursor => ReplyToCursor(root),
                 HookPayloadKind.GeminiCli => ReplyToGemini(root),
                 HookPayloadKind.CopilotCli => ReplyToCopilot(root),
                 HookPayloadKind.CodexCli => ReplyToCodex(root),
@@ -110,13 +130,28 @@ internal static class HookPayloads
             // JsonObject builds its property dictionary lazily — and only throws the first time something
             // above indexes into that object. Treat it the same as any other unexpected shape: the no-rewrite
             // result for this provider, never an unhandled exception.
-            return kind == HookPayloadKind.GeminiCli ? GeminiAllowReply : null;
+            return kind switch
+            {
+                HookPayloadKind.GeminiCli => GeminiAllowReply,
+                HookPayloadKind.Cursor => CursorNeutralReply,
+                _ => null
+            };
         }
     }
 
-    private static string? ReplyToClaude(JsonNode? root)
+    /// <summary>
+    /// Claude Code's reply, which Devin Local and Devin CLI share: the whole tool input with the command replaced, and
+    /// no permission decision, so the harness still applies its own approval to the rewritten command.
+    /// </summary>
+    /// <param name="root">The parsed payload.</param>
+    /// <param name="expectedTool">
+    /// The harness's shell tool, or <see langword="null"/> to skip the check (Claude Code's matcher already selects
+    /// <c>Bash</c>). A payload without <c>tool_name</c> — doctor's probe — always passes.
+    /// </param>
+    private static string? ReplyWithUpdatedInput(JsonNode? root, string? expectedTool)
     {
         if (root is not JsonObject payload
+            || (expectedTool is not null && NamesAnotherTool(payload, ToolNameProperty, expectedTool))
             || payload[ToolInputProperty] is not JsonObject toolInput
             || !TryRewrite(toolInput, out _, out var rewritten))
         {
@@ -133,6 +168,29 @@ internal static class HookPayloads
                 ["updatedInput"] = updatedInput
             }
         }.ToJsonString();
+    }
+
+    /// <summary>
+    /// Replies to Cursor's <c>preToolUse</c>. Cursor enforces only <c>allow</c> and <c>deny</c> there, and a rewrite
+    /// must carry <c>allow</c>, which may also skip Cursor's own approval; so, like Copilot CLI's reply, dtk rewrites
+    /// only commands <see cref="DotnetCommandRewriter.IsAutoApprovable"/> accepts and leaves every other command to
+    /// the agent, answering <see cref="CursorNeutralReply"/>.
+    /// </summary>
+    /// <param name="root">The parsed payload.</param>
+    private static string ReplyToCursor(JsonNode? root)
+    {
+        if (root is not JsonObject payload
+            || NamesAnotherTool(payload, ToolNameProperty, CursorShellTool)
+            || payload[ToolInputProperty] is not JsonObject toolInput
+            || !TryRewrite(toolInput, out var command, out var rewritten)
+            || !DotnetCommandRewriter.IsAutoApprovable(command))
+        {
+            return CursorNeutralReply;
+        }
+
+        var updatedInput = (JsonObject)toolInput.DeepClone();
+        updatedInput[CommandProperty] = rewritten;
+        return new JsonObject { ["permission"] = "allow", ["updated_input"] = updatedInput }.ToJsonString();
     }
 
     private static string ReplyToGemini(JsonNode? root)
@@ -184,7 +242,7 @@ internal static class HookPayloads
     private static string? ReplyToCodex(JsonNode? root)
     {
         if (root is not JsonObject payload
-            || NamesAnotherTool(payload, "tool_name", "Bash")
+            || NamesAnotherTool(payload, ToolNameProperty, "Bash")
             || payload[ToolInputProperty] is not JsonObject toolInput
             || !TryRewrite(toolInput, out _, out var rewritten))
         {
