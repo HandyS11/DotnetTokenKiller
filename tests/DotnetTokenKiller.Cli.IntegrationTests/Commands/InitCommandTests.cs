@@ -699,10 +699,10 @@ public class InitCommandTests
     public async Task RunAsync_UninstallGlobalForARepositoryScopedProvider_FailsWithTheReason()
     {
         var console = new TestConsole();
-        var command = new InitCommand(new IntegrateUseCase([new CursorIntegrator()]), console);
+        var command = new InitCommand(new IntegrateUseCase([new JetBrainsAiIntegrator()]), console);
 
         var exitCode = await command.RunAsync(
-            new InitCommandSettings { Provider = "cursor", Uninstall = true, Global = true }, CancellationToken.None);
+            new InitCommandSettings { Provider = "jetbrains", Uninstall = true, Global = true }, CancellationToken.None);
 
         exitCode.Should().Be(1);
         console.Output.Should().Contain("repository-scoped");

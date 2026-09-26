@@ -63,6 +63,9 @@ internal sealed class HomePaths
     /// <summary>Gets Codex CLI's home directory: <c>$CODEX_HOME</c> when it is an absolute path, else <c>~/.codex</c>.</summary>
     internal string CodexDir => RootedOrDefault("CODEX_HOME", Path.Combine(Home, ".codex"));
 
+    /// <summary>Gets Cursor's user directory (<c>~/.cursor</c>), which holds its user-level <c>hooks.json</c>.</summary>
+    internal string CursorDir => Path.Combine(Home, ".cursor");
+
     /// <summary>
     /// Gets the user-level skills directory Codex CLI, OpenCode, pi and oh-my-pi all read (<c>~/.agents/skills</c>).
     /// </summary>

@@ -166,4 +166,10 @@ public sealed class HomePathsTests
         var home = Path.Combine(Path.GetTempPath(), "home");
         new HomePaths(home).OhMyPiAgentDir.Should().Be(Path.Combine(home, ".omp", "agent"));
     }
+
+    [Fact]
+    public void CursorDir_IsDotCursorUnderHome()
+    {
+        new HomePaths("/home/u").CursorDir.Should().Be(Path.Combine("/home/u", ".cursor"));
+    }
 }
