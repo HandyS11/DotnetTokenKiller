@@ -42,6 +42,16 @@ public sealed class OpenCodeIntegratorTests : IDisposable
     }
 
     [Fact]
+    public void PluginBody_IsByteForByteTheReleasedPlugin()
+    {
+        // Pins the plugin every OpenCode user has installed: a byte change would mark every install stale.
+        var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(OpenCodePlugin.Body)));
+
+        hash.Should().Be("7b0cbc214a049aff85dd0de73c4a1296f9723080d9f2ce1768e4d91dfd8cf521");
+    }
+
+    [Fact]
     public void PluginBody_KeepsTheContractOpenCodeAndWindowsNeed()
     {
         const string body = OpenCodePlugin.Body;
