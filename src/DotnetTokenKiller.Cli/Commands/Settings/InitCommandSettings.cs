@@ -24,7 +24,7 @@ internal sealed class InitCommandSettings : CommandSettings
 
     /// <summary>Gets a value indicating whether to install into the user's home config instead of the project.</summary>
     [CommandOption("-g|--global")]
-    [Description("Install into the user's home config (claude, copilot-cli, gemini, codex, opencode, antigravity, pi, oh-my-pi, aider) instead of a project")]
+    [Description("Install into the user's home config (claude, copilot-cli, gemini, codex, opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), droid, crush, aider) instead of a project")]
     public bool Global { get; init; }
 
     /// <summary>Gets a value indicating whether to remove what the provider's install wrote instead of installing it.</summary>
