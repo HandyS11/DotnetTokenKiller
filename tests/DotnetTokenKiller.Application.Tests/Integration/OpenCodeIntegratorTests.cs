@@ -54,7 +54,7 @@ public sealed class OpenCodeIntegratorTests : IDisposable
     [Fact]
     public void PluginBody_KeepsTheContractOpenCodeAndWindowsNeed()
     {
-        const string body = OpenCodePlugin.Body;
+        var body = OpenCodePlugin.Body;
 
         body.Split('\n').Where(line => line.StartsWith("import ", StringComparison.Ordinal)).Should().Equal(
             "import { spawn } from \"node:child_process\";",
