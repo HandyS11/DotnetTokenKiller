@@ -171,8 +171,8 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="providerName"/> is unknown.</exception>
     private IProviderIntegrator ResolveOrThrow(string providerName)
     {
-        // InvalidOperationException (not ArgumentException): InitCommand validates
-        // settings.Provider against AvailableProviders before calling RunAsync, so this path
+        // InvalidOperationException (not ArgumentException): InitCommand already resolves
+        // settings.Provider via TryResolveProvider before calling RunAsync, so this path
         // is a defense-in-depth guard for other callers of this public use case rather than
         // the CLI's primary error path.
         if (!TryResolveProvider(providerName, out var canonical, out _))

@@ -202,6 +202,17 @@ public class IntegrateUseCaseTests
         devin.LastDirectory.Should().Be("/tmp/x");
     }
 
+    [Fact]
+    public async Task UninstallAsync_Alias_RunsTheCanonicalIntegrator()
+    {
+        var devin = new StubUninstallIntegrator("devin");
+
+        await new IntegrateUseCase([devin]).UninstallAsync("Windsurf", "/tmp/x", false, default);
+
+        devin.LastDirectory.Should().Be("/tmp/x");
+        devin.LastScope.Should().Be(HookScope.Project);
+    }
+
     private sealed class StubIntegrator(string providerName) : IProviderIntegrator
     {
         public string? LastDirectory { get; private set; }
@@ -216,6 +227,32 @@ public class IntegrateUseCaseTests
         {
             LastDirectory = directory;
             LastForce = force;
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class StubUninstallIntegrator(string providerName) : IProviderIntegrator, IUninstallIntegrator
+    {
+        public string? LastDirectory { get; private set; }
+        public HookScope? LastScope { get; private set; }
+        public IntegrationResult Result { get; init; } = new([], [], []);
+        public string ProviderName => providerName;
+
+        public Task<IntegrationResult> IntegrateAsync(
+            string directory,
+            bool force,
+            CancellationToken cancellationToken) => Task.FromResult(Result);
+
+        public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) => [];
+
+        public Task<IntegrationResult> UninstallAsync(
+            string directory,
+            HookScope scope,
+            IReadOnlyDictionary<string, string> sharedInUse,
+            CancellationToken cancellationToken)
+        {
+            LastDirectory = directory;
+            LastScope = scope;
             return Task.FromResult(Result);
         }
     }

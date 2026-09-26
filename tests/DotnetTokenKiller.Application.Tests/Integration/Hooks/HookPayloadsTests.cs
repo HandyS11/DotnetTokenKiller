@@ -317,6 +317,8 @@ public sealed class HookPayloadsTests
         Reply(kind, """{"command":"ls -la"}""").Should().BeNull();
     }
 
+    // Payload and reply shapes: cursor.com/docs/hooks.md (preToolUse), checked 2026-09-26.
+
     [Fact]
     public void Cursor_SimpleCommand_AllowsTheWholeToolInputWithTheCommandReplaced()
     {
@@ -369,6 +371,8 @@ public sealed class HookPayloadsTests
         JsonNode.Parse(HookPayloads.Reply(HookPayloadKind.Cursor, bytes)!)!["permission"]!.GetValue<string>()
             .Should().Be("allow");
     }
+
+    // Payload and reply shapes: docs.devin.ai/cli/extensibility/hooks/overview (PreToolUse), checked 2026-09-26.
 
     [Fact]
     public void Devin_ExecTool_ReturnsClaudesReplyWithoutADecision()
