@@ -54,6 +54,12 @@ internal static class HookPayloads
     /// <summary>Devin's shell tool.</summary>
     private const string DevinShellTool = "exec";
 
+    /// <summary>Factory Droid's shell tool.</summary>
+    private const string DroidShellTool = "Execute";
+
+    /// <summary>Crush's shell tool.</summary>
+    private const string CrushShellTool = "bash";
+
     /// <summary>The payload property naming the tool in Claude-shaped payloads (Claude Code, Codex CLI, Cursor, Devin).</summary>
     private const string ToolNameProperty = "tool_name";
 
@@ -65,7 +71,7 @@ internal static class HookPayloads
 
     /// <summary>
     /// Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>,
-    /// <c>antigravity</c>, <c>pi</c>, <c>oh-my-pi</c>, <c>cursor</c>, <c>devin</c>) to its payload shape.
+    /// <c>antigravity</c>, <c>pi</c>, <c>oh-my-pi</c>, <c>cursor</c>, <c>devin</c>, <c>droid</c>, <c>crush</c>) to its payload shape.
     /// </summary>
     /// <param name="provider">The name passed to <c>dtk hook</c>.</param>
     /// <param name="kind">The payload shape, when the name is known.</param>
@@ -83,6 +89,8 @@ internal static class HookPayloads
             "oh-my-pi" => (true, HookPayloadKind.OhMyPi),
             "cursor" => (true, HookPayloadKind.Cursor),
             "devin" => (true, HookPayloadKind.Devin),
+            "droid" => (true, HookPayloadKind.FactoryDroid),
+            "crush" => (true, HookPayloadKind.Crush),
             _ => (false, default)
         };
         return known;
@@ -115,12 +123,14 @@ internal static class HookPayloads
             {
                 HookPayloadKind.ClaudeCode => ReplyWithUpdatedInput(root, expectedTool: null),
                 HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool),
+                HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool),
                 HookPayloadKind.Cursor => ReplyToCursor(root),
                 HookPayloadKind.GeminiCli => ReplyToGemini(root),
                 HookPayloadKind.CopilotCli => ReplyToCopilot(root),
                 HookPayloadKind.CodexCli => ReplyToCodex(root),
                 HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi => ReplyToOpenCode(root),
                 HookPayloadKind.AntigravityCli => ReplyToAntigravity(root),
+                HookPayloadKind.Crush => ReplyToCrush(root),
                 _ => null
             };
         }
@@ -191,6 +201,29 @@ internal static class HookPayloads
         var updatedInput = (JsonObject)toolInput.DeepClone();
         updatedInput[CommandProperty] = rewritten;
         return new JsonObject { ["permission"] = "allow", ["updated_input"] = updatedInput }.ToJsonString();
+    }
+
+    /// <summary>
+    /// Replies to Crush's <c>PreToolUse</c> in Crush's own envelope. <c>updated_input</c> is a shallow-merge patch, so
+    /// only the command is sent; there is never a <c>decision</c>, because Crush's <c>allow</c> bypasses its permission
+    /// prompt entirely and dtk leaves that decision to the user.
+    /// </summary>
+    /// <param name="root">The parsed payload.</param>
+    private static string? ReplyToCrush(JsonNode? root)
+    {
+        if (root is not JsonObject payload
+            || NamesAnotherTool(payload, ToolNameProperty, CrushShellTool)
+            || payload[ToolInputProperty] is not JsonObject toolInput
+            || !TryRewrite(toolInput, out _, out var rewritten))
+        {
+            return null;
+        }
+
+        return new JsonObject
+        {
+            ["version"] = 1,
+            ["updated_input"] = new JsonObject { [CommandProperty] = rewritten }
+        }.ToJsonString();
     }
 
     private static string ReplyToGemini(JsonNode? root)

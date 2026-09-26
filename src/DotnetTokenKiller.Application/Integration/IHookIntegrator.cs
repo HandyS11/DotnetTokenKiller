@@ -41,7 +41,13 @@ internal enum HookPayloadKind
     Cursor = 8,
 
     /// <summary>Devin Local's and Devin CLI's <c>PreToolUse</c> payload: Claude Code's shape, for the <c>exec</c> tool.</summary>
-    Devin = 9
+    Devin = 9,
+
+    /// <summary>Factory Droid's <c>PreToolUse</c> payload: Claude Code's shape, for the <c>Execute</c> tool.</summary>
+    FactoryDroid = 10,
+
+    /// <summary>Crush's <c>PreToolUse</c> payload, for its <c>bash</c> tool.</summary>
+    Crush = 11
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>

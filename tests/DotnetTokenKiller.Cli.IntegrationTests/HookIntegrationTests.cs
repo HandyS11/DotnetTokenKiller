@@ -53,7 +53,7 @@ public class HookIntegrationTests
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin|droid|crush>");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
