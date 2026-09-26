@@ -1,8 +1,5 @@
 using System.Diagnostics;
-using System.Text.Json.Nodes;
-using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.Integration;
-using DotnetTokenKiller.Cli.IntegrationTests.Aot;
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
 using Xunit;
@@ -16,9 +13,11 @@ namespace DotnetTokenKiller.Cli.IntegrationTests;
 public sealed class OpenCodePluginTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"dtk-ocplugin-{Guid.NewGuid()}");
+    private readonly NodeDriver _node;
 
     public OpenCodePluginTests()
     {
+        _node = new NodeDriver(_dir);
         // The layout OpenCode produces: the plugin under .opencode/plugins/, beside the package.json OpenCode writes with
         // no "type", so Node loads the plugin as ESM by syntax detection (warning on stderr), as users get it.
         var plugins = Directory.CreateDirectory(Path.Combine(_dir, ".opencode", "plugins")).FullName;
@@ -50,7 +49,7 @@ public sealed class OpenCodePluginTests : IDisposable
     [NodeFact]
     public async Task Bash_DotnetCommand_IsRewrittenInPlaceByTheRealDtkAsync()
     {
-        var result = await RunAsync("bash", "dotnet build # répertoire", RealDtkDirectory);
+        var result = await _node.RunAsync("bash", "dotnet build # répertoire", RealDtkDirectory);
 
         result["command"]!.GetValue<string>().Should().Be("dtk dotnet build # répertoire");
         result["sameObject"]!.GetValue<bool>().Should().BeTrue("OpenCode passes the same args object on to the tool");
@@ -62,7 +61,7 @@ public sealed class OpenCodePluginTests : IDisposable
     {
         var empty = Directory.CreateDirectory(Path.Combine(_dir, "empty")).FullName;
 
-        var result = await RunAsync("bash", "dotnet build", empty);
+        var result = await _node.RunAsync("bash", "dotnet build", empty);
 
         result["command"]!.GetValue<string>().Should().Be("dotnet build");
     }
@@ -76,7 +75,7 @@ public sealed class OpenCodePluginTests : IDisposable
         // on PATH alone. The working directory here holds a runnable dtk that would rewrite the command.
         var empty = Directory.CreateDirectory(Path.Combine(_dir, "empty")).FullName;
 
-        var result = await RunAsync("bash", "dotnet build", string.Join(Path.PathSeparator, empty, string.Empty), RealDtkDirectory);
+        var result = await _node.RunAsync("bash", "dotnet build", string.Join(Path.PathSeparator, empty, string.Empty), RealDtkDirectory);
 
         result["command"]!.GetValue<string>().Should().Be("dotnet build");
     }
@@ -84,72 +83,30 @@ public sealed class OpenCodePluginTests : IDisposable
     [NodeUnixFact]
     public async Task OtherToolOrNoDotnet_NeverStartsDtkAsync()
     {
-        var bin = FakeDtk("touch \"$(dirname \"$0\")/started\"; cat >/dev/null");
+        var bin = _node.FakeDtk("touch \"$(dirname \"$0\")/started\"; cat >/dev/null");
 
-        (await RunAsync("read", "dotnet build", bin))["command"]!.GetValue<string>().Should().Be("dotnet build");
-        (await RunAsync("bash", "ls -la", bin))["command"]!.GetValue<string>().Should().Be("ls -la");
+        (await _node.RunAsync("read", "dotnet build", bin))["command"]!.GetValue<string>().Should().Be("dotnet build");
+        (await _node.RunAsync("bash", "ls -la", bin))["command"]!.GetValue<string>().Should().Be("ls -la");
         File.Exists(Path.Combine(bin, "started")).Should().BeFalse();
     }
 
     [NodeUnixFact]
     public async Task MalformedReply_LeavesTheCommandAsync()
     {
-        var bin = FakeDtk("cat >/dev/null; echo 'not json'");
+        var bin = _node.FakeDtk("cat >/dev/null; echo 'not json'");
 
-        (await RunAsync("bash", "dotnet test", bin))["command"]!.GetValue<string>().Should().Be("dotnet test");
+        (await _node.RunAsync("bash", "dotnet test", bin))["command"]!.GetValue<string>().Should().Be("dotnet test");
     }
 
     [NodeUnixFact]
     public async Task HangingDtk_TimesOutAndLeavesTheCommandAsync()
     {
-        var bin = FakeDtk("exec sleep 60");
+        var bin = _node.FakeDtk("exec sleep 60");
         var stopwatch = Stopwatch.StartNew();
 
-        var result = await RunAsync("bash", "dotnet test", bin);
+        var result = await _node.RunAsync("bash", "dotnet test", bin);
 
         result["command"]!.GetValue<string>().Should().Be("dotnet test");
         stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30), "the plugin gives dtk 5 seconds");
-    }
-
-    private string FakeDtk(string script)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            throw new PlatformNotSupportedException("The fake dtk is a POSIX shell script.");
-        }
-
-        var bin = Directory.CreateDirectory(Path.Combine(_dir, $"bin-{Guid.NewGuid():N}")).FullName;
-        var path = Path.Combine(bin, "dtk");
-        File.WriteAllText(path, "#!/bin/sh\n" + script + "\n");
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        return bin;
-    }
-
-    private Task<JsonNode> RunAsync(string tool, string command, string pathDirectory) =>
-        RunAsync(tool, command, pathDirectory, _dir);
-
-    private async Task<JsonNode> RunAsync(string tool, string command, string pathDirectory, string workingDirectory)
-    {
-        var node = ExecutableSearch.FindOnProcessPath("node")
-                   ?? throw new InvalidOperationException("node is not on PATH");
-        var psi = new ProcessStartInfo(node)
-        {
-            WorkingDirectory = workingDirectory,
-            // Only the dtk under test is reachable, plus the POSIX tools a fake dtk script uses. Node's own
-            // directory is deliberately left out: an installed dtk sharing it would defeat
-            // DtkMissingFromPath. The apphost finds the .NET runtime through DOTNET_ROOT or the install
-            // location, never PATH, and the child inherits this process's environment apart from PATH.
-            Environment = { ["PATH"] = string.Join(Path.PathSeparator, pathDirectory, "/bin", "/usr/bin") }
-        };
-        psi.ArgumentList.Add(Path.Combine(_dir, "driver.mjs"));
-        psi.ArgumentList.Add(tool);
-        psi.ArgumentList.Add(command);
-
-        // ParityProcess drains stdout and stderr concurrently before awaiting either, avoiding the deadlock
-        // a naive sequential read risks if the child fills the unread pipe before closing the other.
-        var result = await ParityProcess.RunAsync(psi, stdin: null);
-
-        result.ExitCode.Should().Be(0, "the plugin must never throw; stderr: {0}", result.Stderr);
-        return JsonNode.Parse(result.Stdout)!;
     }
 }

@@ -55,6 +55,8 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private OpenCodeIntegrator OpenCode => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
 
+    private PiIntegrator Pi => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
     private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
 
     private string CodexGlobalHooksPath => Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
@@ -443,6 +445,38 @@ public sealed class HookHealthCheckerTests : IDisposable
         var checks = await _sut.RunAsync([OpenCode], _tempDir, default);
 
         checks.Should().ContainSingle().Which.Name.Should().Be("hook integration");
+    }
+
+    private static readonly string[] PiHookArguments = ["hook", "pi"];
+
+    [Fact]
+    public async Task RunAsync_CurrentPiExtension_ProbesWithTheCommandPayloadAndNotesTrust()
+    {
+        await Pi.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([Pi], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal("pi hook (project)", "pi hook probe (project)", "pi project trust (project)");
+        checks.Should().OnlyContain(c => c.Passed && !c.IsWarning);
+        checks[2].Message.Should().Be(PiIntegrator.TrustNote);
+        await _runner.Received(1).RunCapturedWithInputAsync(
+            _dtkOnPath!,
+            Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(PiHookArguments)),
+            Arg.Is<string>(payload => payload.StartsWith("{\"command\":", StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_StalePiExtension_WarnsWithTheRemedy()
+    {
+        var path = Pi.DescribeHooks(_tempDir, HookScope.Project)[0].RegistrationPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var older = PiExtension.Body("pi", "pi").Replace("5000", "4000", StringComparison.Ordinal);
+        await File.WriteAllTextAsync(path, ArtifactStamping.Apply(older, StampStyle.SlashComment));
+
+        var checks = await _sut.RunAsync([Pi], _tempDir, default);
+
+        checks[0].Message.Should().Contain("stale").And.Contain("dtk init pi");
     }
 
     [Fact]

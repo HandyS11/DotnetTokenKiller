@@ -29,7 +29,13 @@ internal enum HookPayloadKind
     OpenCode = 4,
 
     /// <summary>Google Antigravity CLI's <c>PreToolUse</c> payload.</summary>
-    AntigravityCli = 5
+    AntigravityCli = 5,
+
+    /// <summary>dtk's own pi extension payload, the same as <see cref="OpenCode"/>'s.</summary>
+    Pi = 6,
+
+    /// <summary>dtk's own oh-my-pi extension payload, the same as <see cref="OpenCode"/>'s.</summary>
+    OhMyPi = 7
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>

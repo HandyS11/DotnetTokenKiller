@@ -147,7 +147,22 @@ public sealed class CompletionCommandTests
 
         await command.RunAsync(new CompletionCommandSettings { Shell = shell }, CancellationToken.None);
 
-        writer.ToString().Should().Contain("codex").And.Contain("opencode").And.Contain("antigravity");
+        writer.ToString().Should().Contain("codex").And.Contain("opencode").And.Contain("antigravity").And.Contain("oh-my-pi");
+    }
+
+    [Theory]
+    [InlineData("bash", " pi ")]
+    [InlineData("zsh", "'pi:")]
+    [InlineData("fish", "-a pi ")]
+    [InlineData("powershell", "'pi'")]
+    public async Task ExecuteAsync_EveryShell_CompletesThePiProvider(string shell, string piEntry)
+    {
+        // "pi" alone is a substring of copilot, pipe and oh-my-pi, so each shell's own entry syntax is asserted.
+        var (command, _, writer) = Create();
+
+        await command.RunAsync(new CompletionCommandSettings { Shell = shell }, CancellationToken.None);
+
+        writer.ToString().Should().Contain(piEntry);
     }
 
     [Fact]

@@ -53,7 +53,7 @@ public class HookIntegrationTests
 
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi>");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -102,6 +102,28 @@ public class HookIntegrationTests
         exitCode.Should().Be(0);
         stdout.Should().BeEmpty();
         stderr.Should().BeEmpty();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_Pi_RewritesAsync()
+    {
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"command":"dotnet format --verify-no-changes"}""", "hook", "pi");
+
+        exitCode.Should().Be(0);
+        stderr.Should().BeEmpty();
+        JsonNode.Parse(stdout)!["command"]!.GetValue<string>().Should().Be("dtk dotnet format --verify-no-changes");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_OhMyPi_RewritesAsync()
+    {
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"command":"dotnet format --verify-no-changes"}""", "hook", "oh-my-pi");
+
+        exitCode.Should().Be(0);
+        stderr.Should().BeEmpty();
+        JsonNode.Parse(stdout)!["command"]!.GetValue<string>().Should().Be("dtk dotnet format --verify-no-changes");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

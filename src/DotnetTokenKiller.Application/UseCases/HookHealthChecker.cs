@@ -254,7 +254,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 $"stale — {path} was written by a different dtk version. Run '{RemedyCommand(installation)}'");
         }
 
-        return normalized.Contains(OpenCodePlugin.InvocationSignature, StringComparison.Ordinal)
+        return normalized.Contains(PluginRuntime.InvocationSignature(installation.ProviderName), StringComparison.Ordinal)
             ? new Registration(RegistrationKind.Modified, string.Empty)
             : new Registration(RegistrationKind.Absent, $"not registered — {path} does not run '{installation.Command}'");
     }
@@ -363,7 +363,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 ["toolName"] = "bash",
                 ["toolArgs"] = new JsonObject { ["command"] = command }
             },
-            HookPayloadKind.OpenCode => new JsonObject { ["command"] = command },
+            HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi => new JsonObject { ["command"] = command },
             HookPayloadKind.AntigravityCli => new JsonObject
             {
                 ["toolCall"] = new JsonObject
