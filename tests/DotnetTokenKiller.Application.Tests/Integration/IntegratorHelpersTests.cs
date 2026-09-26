@@ -1730,6 +1730,38 @@ public sealed class IntegratorHelpersTests : IDisposable
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*'dtk' property of unexpected type*");
     }
 
+    [Fact]
+    public async Task WriteHookRegistrationAsync_NullContainer_WritesTheEventArrayAtTheRoot()
+    {
+        var path = Path.Combine(_tempDir, ".devin", "hooks.v1.json");
+        var context = new IntegrationContext(force: false);
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "exec", "dtk hook devin", 10, ContainerKey: null), context, default);
+
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+        root.Select(pair => pair.Key).Should().Equal("PreToolUse");
+        root["PreToolUse"]![0]!["matcher"]!.GetValue<string>().Should().Be("exec");
+        root["PreToolUse"]![0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("dtk hook devin");
+        context.Created.Should().Equal(path);
+    }
+
+    [Fact]
+    public async Task WriteHookRegistrationAsync_NullContainer_KeepsOtherRootEvents()
+    {
+        var path = Path.Combine(_tempDir, "hooks.v1.json");
+        Directory.CreateDirectory(_tempDir);
+        await File.WriteAllTextAsync(path,
+            """{"PostToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"lint"}]}]}""");
+
+        await IntegratorHelpers.WriteHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "exec", "dtk hook devin", 10, ContainerKey: null),
+            new IntegrationContext(force: false), default);
+
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+        root.Select(pair => pair.Key).Should().Equal("PostToolUse", "PreToolUse");
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

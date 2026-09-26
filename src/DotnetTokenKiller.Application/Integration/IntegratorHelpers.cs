@@ -11,11 +11,12 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <param name="Command">The command dtk registers, and the value used to detect an existing registration.</param>
 /// <param name="TimeoutSeconds">A <c>timeout</c> written on the handler, or <see langword="null"/> to write none.</param>
 /// <param name="ContainerKey">
-/// The top-level property holding the event arrays: "hooks" for Claude Code, Gemini CLI and Codex CLI; a hook
-/// group name for Antigravity CLI.
+/// The top-level property holding the event arrays (<c>"hooks"</c> for Claude Code, Gemini CLI and Codex CLI, or a hook
+/// group name for Antigravity CLI), or <see langword="null"/> when the event arrays sit at the file's root, as in
+/// Devin's <c>.devin/hooks.v1.json</c>.
 /// </param>
 internal sealed record HookRegistrationSpec(
-    string SettingsPath, string EventKey, string Matcher, string Command, int? TimeoutSeconds = null, string ContainerKey = "hooks");
+    string SettingsPath, string EventKey, string Matcher, string Command, int? TimeoutSeconds = null, string? ContainerKey = "hooks");
 
 internal static class IntegratorHelpers
 {
@@ -553,7 +554,8 @@ internal static class IntegratorHelpers
 
     /// <summary>
     /// Merges a hook entry into a JSON settings file under
-    /// <c><paramref name="containerKey"/>[<paramref name="hookEventKey"/>]</c>.
+    /// <c><paramref name="containerKey"/>[<paramref name="hookEventKey"/>]</c>, or at the root's <c><paramref name="hookEventKey"/></c>
+    /// when <paramref name="containerKey"/> is <see langword="null"/>.
     /// Existing content is preserved; registration is detected by matching
     /// <paramref name="hookCommand"/> against each entry's <c>"command"</c> field. An entry is dtk's
     /// own when its command equals <paramref name="hookCommand"/> after removing every <c>"</c>
@@ -589,8 +591,8 @@ internal static class IntegratorHelpers
     /// </summary>
     /// <param name="path">Path to the settings.json file.</param>
     /// <param name="containerKey">
-    /// The top-level property holding the event arrays: "hooks" for Claude Code, Gemini CLI and Codex CLI; a
-    /// hook group name for Antigravity CLI.
+    /// The top-level property holding the event arrays (<c>"hooks"</c> for Claude Code, Gemini CLI and Codex CLI, or a
+    /// hook group name for Antigravity CLI), or <see langword="null"/> when the event arrays sit at the file's root.
     /// </param>
     /// <param name="hookEventKey">Key of the hook event array within the container object (e.g. "PreToolUse").</param>
     /// <param name="hookEntry">The JSON object to append to the hook event array.</param>
@@ -604,7 +606,7 @@ internal static class IntegratorHelpers
     /// <exception cref="InvalidOperationException">The settings file contains invalid JSON or an unexpected root type.</exception>
     internal static async Task<bool> MergeJsonSettingsAsync(
         string path,
-        string containerKey,
+        string? containerKey,
         string hookEventKey,
         JsonObject hookEntry,
         string hookCommand,
@@ -614,22 +616,31 @@ internal static class IntegratorHelpers
         var exists = File.Exists(path);
         var root = await ReadRootObjectAsync(path, exists, cancellationToken).ConfigureAwait(false);
 
-        root.TryGetPropertyValue(containerKey, out var hooksNode);
-        var hooks = hooksNode switch
+        JsonObject hooks;
+        if (containerKey is null)
         {
-            null => [],
-            JsonObject hooksObj => hooksObj,
-            _ => throw new InvalidOperationException(
-                $"The settings file '{path}' has a '{containerKey}' property of unexpected type '{hooksNode.GetType().Name}'; expected a JSON object.")
-        };
+            hooks = root;
+        }
+        else
+        {
+            root.TryGetPropertyValue(containerKey, out var hooksNode);
+            hooks = hooksNode switch
+            {
+                null => [],
+                JsonObject hooksObj => hooksObj,
+                _ => throw new InvalidOperationException(
+                    $"The settings file '{path}' has a '{containerKey}' property of unexpected type '{hooksNode.GetType().Name}'; expected a JSON object.")
+            };
+        }
 
+        var eventPath = containerKey is null ? hookEventKey : $"{containerKey}.{hookEventKey}";
         hooks.TryGetPropertyValue(hookEventKey, out var eventNode);
         var hookArray = eventNode switch
         {
             null => [],
             JsonArray arr => arr,
             _ => throw new InvalidOperationException(
-                $"The settings file '{path}' has a '{containerKey}.{hookEventKey}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
+                $"The settings file '{path}' has a '{eventPath}' property of unexpected type '{eventNode.GetType().Name}'; expected a JSON array.")
         };
 
         var matches = FindEquivalentEntries(hookArray, hookCommand);
@@ -664,7 +675,10 @@ internal static class IntegratorHelpers
         }
 
         hooks[hookEventKey] = hookArray;
-        root[containerKey] = hooks;
+        if (containerKey is not null)
+        {
+            root[containerKey] = hooks;
+        }
 
         await WriteSettingsJsonAsync(path, root, cancellationToken).ConfigureAwait(false);
 
