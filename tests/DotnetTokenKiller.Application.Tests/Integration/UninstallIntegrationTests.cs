@@ -191,6 +191,32 @@ public sealed class UninstallIntegrationTests : IDisposable
         Tree().Should().BeEquivalentTo(before);
     }
 
+    [Theory]
+    [InlineData("pi", "oh-my-pi", ".omp")]
+    [InlineData("oh-my-pi", "pi", ".pi")]
+    public async Task Uninstall_OneOfPiAndOhMyPi_KeepsTheSharedFilesAndTheOthersExtension(
+        string removed, string kept, string keptFolder)
+    {
+        await InstallAsync("pi");
+        await InstallAsync("oh-my-pi");
+        var agents = Path.Combine(ProjectDir, "AGENTS.md");
+        var skill = SharedInstructionArtifacts.SkillPath(Path.Combine(ProjectDir, ".agents", "skills"));
+        var keptExtension = Path.Combine(ProjectDir, keptFolder, "extensions", "dtk.js");
+
+        var result = await UninstallAsync(removed);
+
+        result.UnchangedFiles.Should().Equal(agents, skill);
+        result.RemovedFiles.Should().ContainSingle().Which.Should().EndWith(Path.Combine("extensions", "dtk.js"));
+        File.Exists(keptExtension).Should().BeTrue();
+        var keptIntegrator = Integrators().OfType<IHookIntegrator>().Single(i => ((IProviderIntegrator)i).ProviderName == kept);
+        keptIntegrator.DescribeHooks(ProjectDir, HookScope.Project).Should().ContainSingle()
+            .Which.Should().Match<HookInstallation>(installation => UninstallHelpers.IsRegistered(installation));
+        var checks = await new HookHealthChecker(Substitute.For<ICommandRunner>(), () => null)
+            .RunAsync([.. Integrators().OfType<IHookIntegrator>()], ProjectDir, default);
+        checks.Should().Contain(check => check.Name == $"{kept} hook (project)" && check.Passed);
+        checks.Should().NotContain(check => check.Name.StartsWith($"{removed} ", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task Uninstall_Copilot_KeepsTheInstructionsWhileTheCopilotCliHookIsInstalled()
     {

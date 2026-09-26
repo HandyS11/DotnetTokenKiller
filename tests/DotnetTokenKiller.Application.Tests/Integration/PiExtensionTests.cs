@@ -30,5 +30,6 @@ public sealed class PiExtensionTests
 
         artifact.Style.Should().Be(StampStyle.SlashComment);
         artifact.Body.Should().Be(PiExtension.Body("pi", "pi"));
+        artifact.LegacySignature.Should().Be(ArtifactStamping.StampPrefix, "no dtk ever wrote an unstamped extension");
     }
 }

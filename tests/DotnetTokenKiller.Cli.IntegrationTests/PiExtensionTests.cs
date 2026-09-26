@@ -26,7 +26,9 @@ public sealed class PiExtensionTests : IDisposable
             const [toolName, command] = process.argv.slice(2);
             let handler;
             factory({ on: (name, fn) => { if (name === "tool_call") handler = fn; } });
-            const input = command === "<none>" ? { timeout: 7, cwd: "w" } : { command, timeout: 7, cwd: "w" };
+            const input = command === "<none>" ? { timeout: 7, cwd: "w" }
+              : command === "<number>" ? { command: 42, timeout: 7, cwd: "w" }
+              : { command, timeout: 7, cwd: "w" };
             const result = await handler({ type: "tool_call", toolName, toolCallId: "c", input });
             process.stdout.write(JSON.stringify({ command: input.command ?? null, result: result ?? null }));
             """);
@@ -73,6 +75,11 @@ public sealed class PiExtensionTests : IDisposable
 
         result["command"].Should().BeNull();
         result["result"].Should().BeNull();
+
+        var number = await _node.RunAsync("bash", "<number>", RealDtkDirectory);
+
+        number["command"]!.GetValue<int>().Should().Be(42);
+        number["result"].Should().BeNull();
     }
 
     [NodeFact]
