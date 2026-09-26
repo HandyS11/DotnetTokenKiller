@@ -172,4 +172,22 @@ public sealed class HomePathsTests
     {
         new HomePaths("/home/u").CursorDir.Should().Be(Path.Combine("/home/u", ".cursor"));
     }
+
+    [Fact]
+    public void DevinConfigDir_UsesAppDataOnWindowsAndDotConfigElsewhere()
+    {
+        var appData = Path.Combine(Path.GetTempPath(), "appdata");
+        var paths = new HomePaths("/home/u", name => name == "APPDATA" ? appData : null);
+
+        paths.DevinConfigDir.Should().Be(OperatingSystem.IsWindows()
+            ? Path.Combine(appData, "devin")
+            : Path.Combine("/home/u", ".config", "devin"));
+    }
+
+    [Fact]
+    public void WindsurfGlobalRulesPath_IsUnderCodeium()
+    {
+        new HomePaths("/home/u").WindsurfGlobalRulesPath
+            .Should().Be(Path.Combine("/home/u", ".codeium", "windsurf", "memories", "global_rules.md"));
+    }
 }
