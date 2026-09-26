@@ -107,7 +107,8 @@ internal sealed class CrushIntegrator(HomePaths home)
 
     /// <summary>
     /// The <c>crushrc</c> dtk registers in: globally <c>crushrc</c> in Crush's config directory; in a project,
-    /// <c>.crushrc</c>, unless the project already has a <c>crushrc</c> and no <c>.crushrc</c>.
+    /// whichever of <c>.crushrc</c> or <c>crushrc</c> already holds dtk's section (checked in that order), else
+    /// <c>crushrc</c> when it exists and <c>.crushrc</c> does not, else <c>.crushrc</c>.
     /// </summary>
     /// <param name="directory">The project root; ignored when <paramref name="scope"/> is <see cref="HookScope.Global"/>.</param>
     /// <param name="scope">Which scope to resolve the path for.</param>
@@ -120,7 +121,42 @@ internal sealed class CrushIntegrator(HomePaths home)
 
         var dotRc = Path.Combine(directory, ".crushrc");
         var plainRc = Path.Combine(directory, "crushrc");
+
+        if (HasDtkSection(dotRc))
+        {
+            return dotRc;
+        }
+
+        if (HasDtkSection(plainRc))
+        {
+            return plainRc;
+        }
+
         return !File.Exists(dotRc) && File.Exists(plainRc) ? plainRc : dotRc;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="path"/> exists, is readable, and already contains dtk's section: with both
+    /// <c>.crushrc</c> and <c>crushrc</c> present, the file dtk actually wrote into earlier takes precedence over
+    /// the existence-only fallback, so a re-install and doctor's <see cref="DescribeHooks"/> keep pointing at it
+    /// instead of orphaning it in favor of the other file.
+    /// </summary>
+    /// <param name="path">The <c>crushrc</c> candidate to check.</param>
+    private static bool HasDtkSection(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            return File.ReadAllText(path).Contains(CrushrcFile.BeginMarker, StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static async Task WriteHookAsync(string rcPath, IntegrationContext context, CancellationToken cancellationToken)

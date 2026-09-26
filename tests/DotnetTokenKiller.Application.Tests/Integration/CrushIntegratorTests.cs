@@ -120,4 +120,32 @@ public sealed class CrushIntegratorTests : IDisposable
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{DotRc}*");
     }
+
+    [Fact]
+    public async Task BothFilesExist_SectionInPlainCrushrc_DescribeHooksAndReinstallUseThatFile()
+    {
+        Write(DotRc, "option foo true\n");
+        Write(PlainRc, CrushrcFile.Section("dtk hook crush"));
+
+        CreateSut().DescribeHooks(ProjectDir, HookScope.Project).Should().ContainSingle()
+            .Which.RegistrationPath.Should().Be(PlainRc);
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UnchangedFiles.Should().Contain(PlainRc);
+        (await File.ReadAllTextAsync(DotRc)).Should().NotContain(CrushrcFile.BeginMarker);
+    }
+
+    [Fact]
+    public async Task BothFilesExist_NoSectionAnywhere_WritesIntoDotCrushrc()
+    {
+        Write(DotRc, "option foo true\n");
+        Write(PlainRc, "option bar true\n");
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UpdatedFiles.Should().Contain(DotRc);
+        (await File.ReadAllTextAsync(DotRc)).Should().Contain(CrushrcFile.BeginMarker);
+        (await File.ReadAllTextAsync(PlainRc)).Should().Be("option bar true\n");
+    }
 }
