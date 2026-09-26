@@ -41,7 +41,9 @@ public sealed class HookDescriptionTests : IDisposable
             foreach (var installation in integrator.DescribeHooks(projectDir, HookScope.Project))
             {
                 var registration = await File.ReadAllTextAsync(installation.RegistrationPath);
-                registration.Should().Contain(installation.PluginArtifact is null ? installation.Command : OpenCodePlugin.InvocationSignature);
+                registration.Should().Contain(installation.PluginArtifact is null
+                    ? installation.Command
+                    : PluginRuntime.InvocationSignature(installation.ProviderName));
                 File.Exists(installation.LegacyScriptPath).Should().BeFalse("init no longer writes a script");
             }
         }

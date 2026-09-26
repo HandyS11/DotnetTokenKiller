@@ -254,7 +254,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 $"stale — {path} was written by a different dtk version. Run '{RemedyCommand(installation)}'");
         }
 
-        return normalized.Contains(OpenCodePlugin.InvocationSignature, StringComparison.Ordinal)
+        return normalized.Contains(PluginRuntime.InvocationSignature(installation.ProviderName), StringComparison.Ordinal)
             ? new Registration(RegistrationKind.Modified, string.Empty)
             : new Registration(RegistrationKind.Absent, $"not registered — {path} does not run '{installation.Command}'");
     }

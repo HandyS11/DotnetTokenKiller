@@ -310,7 +310,7 @@ internal static class UninstallHelpers
             return installation.PluginArtifact is null
                 ? content.Contains(HookCommands.Invocation(installation.ProviderName), StringComparison.Ordinal)
                   || content.Contains(IntegratorHelpers.LegacyHookScriptName, StringComparison.Ordinal)
-                : content.Contains(OpenCodePlugin.InvocationSignature, StringComparison.Ordinal);
+                : content.Contains(PluginRuntime.InvocationSignature(installation.ProviderName), StringComparison.Ordinal);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
