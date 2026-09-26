@@ -67,6 +67,30 @@ public sealed class HookEntryPointTests
         output.Length.Should().Be(0);
     }
 
+    [Fact]
+    public void Run_CursorEmptyStdin_PrintsTheNeutralReply()
+    {
+        var (exitCode, stdout, stderr) = Run(["cursor"], "");
+
+        exitCode.Should().Be(0);
+        stdout.Should().Contain("{}");
+        stderr.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Run_CursorInputStreamThrows_PrintsTheNeutralReplyAndExitsZero()
+    {
+        using var output = new MemoryStream();
+        using var error = new StringWriter();
+
+        var exitCode = HookEntryPoint.Run(["cursor"], isInputRedirected: true,
+            () => throw new IOException("broken pipe"), () => output, error);
+
+        exitCode.Should().Be(0, "Cursor blocks the tool call on a non-zero hook exit, same as every other harness");
+        Encoding.UTF8.GetString(output.ToArray()).Should().Contain("{}",
+            "Cursor also blocks the tool call when a preToolUse hook's output isn't valid JSON, so this must never be empty");
+    }
+
     private static (int ExitCode, string StdOut, string StdErr) Run(string[] args, string stdin)
     {
         using var output = new MemoryStream();
