@@ -15,6 +15,8 @@ public sealed class HookPayloadsTests
     [InlineData("codex", HookPayloadKind.CodexCli)]
     [InlineData("opencode", HookPayloadKind.OpenCode)]
     [InlineData("antigravity", HookPayloadKind.AntigravityCli)]
+    [InlineData("pi", HookPayloadKind.Pi)]
+    [InlineData("oh-my-pi", HookPayloadKind.OhMyPi)]
     internal void TryGetKind_KnownProvider_Resolves(string provider, HookPayloadKind expected)
     {
         HookPayloads.TryGetKind(provider, out var kind).Should().BeTrue();
@@ -300,6 +302,17 @@ public sealed class HookPayloadsTests
 
         JsonNode.Parse(reply!)!["overwrite"]!["CommandLine"]!.GetValue<string>()
             .Should().Be("dtk dotnet build # répertoire ’ok’");
+    }
+
+    [Theory]
+    [InlineData(HookPayloadKind.Pi)]
+    [InlineData(HookPayloadKind.OhMyPi)]
+    internal void PiFamily_UsesTheOpenCodeContract(HookPayloadKind kind)
+    {
+        var reply = JsonNode.Parse(Reply(kind, """{"command":"dotnet build"}""")!)!;
+
+        reply.ToJsonString().Should().Be("""{"command":"dtk dotnet build"}""");
+        Reply(kind, """{"command":"ls -la"}""").Should().BeNull();
     }
 
     private static string? Reply(HookPayloadKind kind, string payload) =>

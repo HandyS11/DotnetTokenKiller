@@ -63,7 +63,9 @@ internal sealed class HomePaths
     /// <summary>Gets Codex CLI's home directory: <c>$CODEX_HOME</c> when it is an absolute path, else <c>~/.codex</c>.</summary>
     internal string CodexDir => RootedOrDefault("CODEX_HOME", Path.Combine(Home, ".codex"));
 
-    /// <summary>Gets the user-level skills directory Codex CLI and OpenCode both read (<c>~/.agents/skills</c>).</summary>
+    /// <summary>
+    /// Gets the user-level skills directory Codex CLI, OpenCode, pi and oh-my-pi all read (<c>~/.agents/skills</c>).
+    /// </summary>
     internal string AgentsSkillsDir => Path.Combine(Home, ".agents", "skills");
 
     /// <summary>
@@ -72,6 +74,12 @@ internal sealed class HomePaths
     /// </summary>
     internal string OpenCodeConfigDir =>
         Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "opencode");
+
+    /// <summary>Gets pi's agent directory: <c>$PI_CODING_AGENT_DIR</c> when it is an absolute path, else <c>~/.pi/agent</c>.</summary>
+    internal string PiAgentDir => RootedOrDefault("PI_CODING_AGENT_DIR", Path.Combine(Home, ".pi", "agent"));
+
+    /// <summary>Gets oh-my-pi's default-profile agent directory (<c>~/.omp/agent</c>).</summary>
+    internal string OhMyPiAgentDir => Path.Combine(Home, ".omp", "agent");
 
     /// <summary>An environment variable's value when it is an absolute path, otherwise <paramref name="fallback"/>.</summary>
     /// <param name="variable">The variable to read.</param>

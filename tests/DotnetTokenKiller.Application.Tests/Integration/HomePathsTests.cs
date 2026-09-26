@@ -84,4 +84,32 @@ public sealed class HomePathsTests
         sut.AntigravityConfigDir.Should().Be(Path.Combine(home, ".gemini", "config"));
         sut.AntigravitySkillsDir.Should().Be(Path.Combine(home, ".gemini", "config", "skills"));
     }
+
+    [Fact]
+    public void PiAgentDir_DefaultsToDotPiAgent()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "home");
+        new HomePaths(home).PiAgentDir.Should().Be(Path.Combine(home, ".pi", "agent"));
+    }
+
+    [Theory]
+    [InlineData("rooted")]
+    [InlineData("relative")]
+    [InlineData("empty")]
+    public void PiAgentDir_HonorsOnlyAnAbsolutePiCodingAgentDir(string kind)
+    {
+        var home = Path.Combine(Path.GetTempPath(), "home");
+        var custom = Path.Combine(Path.GetTempPath(), "pi-agent");
+        var value = kind switch { "rooted" => custom, "relative" => "pi-agent", _ => string.Empty };
+
+        var expected = kind == "rooted" ? custom : Path.Combine(home, ".pi", "agent");
+        new HomePaths(home, name => name == "PI_CODING_AGENT_DIR" ? value : null).PiAgentDir.Should().Be(expected);
+    }
+
+    [Fact]
+    public void OhMyPiAgentDir_IsDotOmpAgent()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "home");
+        new HomePaths(home).OhMyPiAgentDir.Should().Be(Path.Combine(home, ".omp", "agent"));
+    }
 }

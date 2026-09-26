@@ -363,7 +363,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 ["toolName"] = "bash",
                 ["toolArgs"] = new JsonObject { ["command"] = command }
             },
-            HookPayloadKind.OpenCode => new JsonObject { ["command"] = command },
+            HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi => new JsonObject { ["command"] = command },
             HookPayloadKind.AntigravityCli => new JsonObject
             {
                 ["toolCall"] = new JsonObject
