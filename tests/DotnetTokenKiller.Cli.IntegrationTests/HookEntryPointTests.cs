@@ -28,7 +28,7 @@ public sealed class HookEntryPointTests
 
     [Theory]
     [InlineData([new string[0]])]
-    [InlineData([new[] { "cursor" }])]
+    [InlineData([new[] { "aider" }])]
     [InlineData([new[] { "claude", "extra" }])]
     public void Run_BadArguments_PrintsUsageToStderrAndExitsZero(string[] args)
     {
@@ -36,7 +36,7 @@ public sealed class HookEntryPointTests
 
         exitCode.Should().Be(0, "a harness blocks the tool call on a non-zero hook exit");
         stdout.Should().BeEmpty();
-        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi>");
+        stderr.Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin>");
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class HookEntryPointTests
 
         exitCode.Should().Be(0);
         opened.Should().BeFalse("a person who types 'dtk hook claude' must not be left waiting on stdin");
-        error.ToString().Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi>");
+        error.ToString().Should().Contain("dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin>");
     }
 
     [Fact]
@@ -65,6 +65,30 @@ public sealed class HookEntryPointTests
 
         exitCode.Should().Be(0);
         output.Length.Should().Be(0);
+    }
+
+    [Fact]
+    public void Run_CursorEmptyStdin_PrintsTheNeutralReply()
+    {
+        var (exitCode, stdout, stderr) = Run(["cursor"], "");
+
+        exitCode.Should().Be(0);
+        stdout.Should().Contain("{}");
+        stderr.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Run_CursorInputStreamThrows_PrintsTheNeutralReplyAndExitsZero()
+    {
+        using var output = new MemoryStream();
+        using var error = new StringWriter();
+
+        var exitCode = HookEntryPoint.Run(["cursor"], isInputRedirected: true,
+            () => throw new IOException("broken pipe"), () => output, error);
+
+        exitCode.Should().Be(0, "Cursor blocks the tool call on a non-zero hook exit, same as every other harness");
+        Encoding.UTF8.GetString(output.ToArray()).Should().Contain("{}",
+            "Cursor also blocks the tool call when a preToolUse hook's output isn't valid JSON, so this must never be empty");
     }
 
     private static (int ExitCode, string StdOut, string StdErr) Run(string[] args, string stdin)

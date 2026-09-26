@@ -162,6 +162,39 @@ public sealed class UninstallHelpersTests : IDisposable
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
+    [Fact]
+    public async Task RemoveHookRegistrationAsync_NullContainer_RemovesDtkAndKeepsOtherRootEvents()
+    {
+        var path = Path.Combine(_tempDir, "hooks.v1.json");
+        await File.WriteAllTextAsync(path, """
+            {"PostToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"lint"}]}],
+             "PreToolUse":[{"matcher":"exec","hooks":[{"type":"command","command":"dtk hook devin","timeout":10}]}]}
+            """);
+        var context = IntegrationContext.ForUninstall(_tempDir, new Dictionary<string, string>());
+
+        await UninstallHelpers.RemoveHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "exec", "dtk hook devin", 10, ContainerKey: null), context, default);
+
+        JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject().Select(pair => pair.Key).Should().Equal("PostToolUse");
+        context.Updated.Should().Equal(path);
+    }
+
+    [Fact]
+    public async Task RemoveHookRegistrationAsync_NullContainer_DeletesTheFileItEmpties()
+    {
+        var path = Path.Combine(_tempDir, ".devin", "hooks.v1.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path,
+            """{"PreToolUse":[{"matcher":"exec","hooks":[{"type":"command","command":"dtk hook devin","timeout":10}]}]}""");
+        var context = IntegrationContext.ForUninstall(_tempDir, new Dictionary<string, string>());
+
+        await UninstallHelpers.RemoveHookRegistrationAsync(
+            new HookRegistrationSpec(path, "PreToolUse", "exec", "dtk hook devin", 10, ContainerKey: null), context, default);
+
+        File.Exists(path).Should().BeFalse();
+        Directory.Exists(Path.GetDirectoryName(path)).Should().BeFalse("the uninstall prunes the directory it empties");
+    }
+
     // --- RemoveSectionAsync ---
 
     [Fact]

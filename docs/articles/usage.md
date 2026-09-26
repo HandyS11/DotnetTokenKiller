@@ -207,13 +207,13 @@ dtk init opencode    # OpenCode plugin + AGENTS.md section + skill
 dtk init antigravity # Antigravity CLI hook + AGENTS.md section + skill
 dtk init pi          # pi extension + AGENTS.md section + skill
 dtk init oh-my-pi    # oh-my-pi extension + AGENTS.md section + skill
-dtk init cursor      # Cursor rules file
-dtk init windsurf    # Windsurf rules file
+dtk init cursor      # Cursor rule + rewrite hook (--global: hook only)
+dtk init devin       # Devin (formerly Windsurf) rule + rewrite hook; 'windsurf' is an alias
 dtk init aider       # Aider instructions + .aider.conf.yml section
 dtk init jetbrains   # JetBrains AI guidelines section
 ```
 
-All commands accept `--force`/`-f` to overwrite existing files and `--dir <path>`/`-d` to target a specific directory. `--global`/`-g` installs into your home config instead of the project — supported for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, and **copilot-cli** (the providers with a home config) — and cannot be combined with `--dir`:
+All commands accept `--force`/`-f` to overwrite existing files and `--dir <path>`/`-d` to target a specific directory. `--global`/`-g` installs into your home config instead of the project — supported for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, and **devin** (the providers with a home config) — and cannot be combined with `--dir`:
 
 ```sh
 dtk init claude --global      # ~/.claude, applies to every project

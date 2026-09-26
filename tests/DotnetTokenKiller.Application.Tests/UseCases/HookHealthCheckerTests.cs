@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Application.Tests.Integration;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Execution;
@@ -18,6 +20,9 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     /// <summary>The arguments the probe must pass to <c>dtk</c> for the OpenCode hook.</summary>
     private static readonly string[] OpenCodeHookArguments = ["hook", "opencode"];
+
+    /// <summary>The arguments the probe must pass to <c>dtk</c> for the Cursor hook.</summary>
+    private static readonly string[] CursorHookArguments = ["hook", "cursor"];
 
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-hookhealth-{Guid.NewGuid()}");
@@ -56,6 +61,8 @@ public sealed class HookHealthCheckerTests : IDisposable
     private OpenCodeIntegrator OpenCode => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
 
     private PiIntegrator Pi => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
+    private CursorIntegrator Cursor => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
 
     private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
 
@@ -477,6 +484,26 @@ public sealed class HookHealthCheckerTests : IDisposable
         var checks = await _sut.RunAsync([Pi], _tempDir, default);
 
         checks[0].Message.Should().Contain("stale").And.Contain("dtk init pi");
+    }
+
+    [Fact]
+    public async Task RunAsync_CursorHook_ProbesEachAutoApprovableSubcommandAlone()
+    {
+        await Cursor.IntegrateAsync(_tempDir, force: false, default);
+        _runner.RunCapturedWithInputAsync(null!, null!, null!).ReturnsForAnyArgs(call =>
+        {
+            var command = JsonNode.Parse(call.ArgAt<string>(2))!["tool_input"]!["command"]!.GetValue<string>();
+            return new CommandResult($$$"""{"permission":"allow","updated_input":{"command":"dtk {{{command}}}"}}""", string.Empty, 0);
+        });
+
+        var checks = await _sut.RunAsync([Cursor], _tempDir, default);
+
+        checks.Should().Contain(c => c.Name == "cursor hook probe (project)" && c.Passed);
+        await _runner.Received(DotnetCommandRewriter.AutoApprovableSubcommands.Count).RunCapturedWithInputAsync(
+            Arg.Any<string>(),
+            Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(CursorHookArguments)),
+            Arg.Is<string>(payload => !payload.Contains(';', StringComparison.Ordinal)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

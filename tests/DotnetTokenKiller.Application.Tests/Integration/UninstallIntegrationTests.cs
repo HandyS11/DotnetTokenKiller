@@ -28,10 +28,10 @@ public sealed class UninstallIntegrationTests : IDisposable
     }
 
     public static TheoryData<string> AllProviders =>
-        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "windsurf", "aider", "jetbrains"];
+        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin", "aider", "jetbrains"];
 
     public static TheoryData<string> GlobalProviders =>
-        ["claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "aider"];
+        ["claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "aider", "cursor", "devin"];
 
     private string ProjectDir => Path.Combine(_tempDir, "project");
     private string HomeDir => Path.Combine(_tempDir, "home");
@@ -54,8 +54,8 @@ public sealed class UninstallIntegrationTests : IDisposable
             new PiIntegrator(Rtk(), home),
             new OhMyPiIntegrator(Rtk(), home),
             new AntigravityIntegrator(Rtk(), home),
-            new CursorIntegrator(),
-            new WindsurfIntegrator(),
+            new CursorIntegrator(Rtk(), home),
+            new DevinIntegrator(home),
             new AiderIntegrator(home),
             new JetBrainsAiIntegrator()
         ];
@@ -319,7 +319,7 @@ public sealed class UninstallIntegrationTests : IDisposable
     [Fact]
     public async Task Uninstall_RepositoryScopedProviderWithGlobal_Throws()
     {
-        var act = () => UninstallAsync("cursor", global: true);
+        var act = () => UninstallAsync("jetbrains", global: true);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*repository-scoped*");
     }
@@ -327,7 +327,7 @@ public sealed class UninstallIntegrationTests : IDisposable
     [Fact]
     public async Task Doctor_AfterUninstallingEveryHook_ReportsNoHookInstalled()
     {
-        var hookProviders = new[] { "claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi" };
+        var hookProviders = new[] { "claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin" };
         foreach (var provider in hookProviders)
         {
             await InstallAsync(provider);

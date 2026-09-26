@@ -83,7 +83,7 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     [Fact]
     public async Task CurrentCursorRule_MatchesThePinnedHash()
     {
-        await new CursorIntegrator().IntegrateAsync(ProjectDir, false, default);
+        await Cursor(ProjectDir).IntegrateAsync(ProjectDir, false, default);
 
         var hash = UninstallHelpers.HashOwnedFile(await ReadAsync(Path.Combine(ProjectDir, ".cursor", "rules", "dtk.mdc")));
 
@@ -92,14 +92,14 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     }
 
     [Fact]
-    public async Task CurrentMarkdownRules_MatchThePinnedHash()
+    public async Task CurrentDevinRule_MatchesThePinnedHash()
     {
-        await new WindsurfIntegrator().IntegrateAsync(ProjectDir, false, default);
+        await new DevinIntegrator(new HomePaths(Path.Combine(ProjectDir, "no-home"))).IntegrateAsync(ProjectDir, false, default);
         await new AiderIntegrator(Home).IntegrateAsync(ProjectDir, false, default);
 
-        UninstallHelpers.HashOwnedFile(await ReadAsync(Path.Combine(ProjectDir, ".windsurf", "rules", "dtk.md")))
+        UninstallHelpers.HashOwnedFile(await ReadAsync(Path.Combine(ProjectDir, ".devin", "rules", "dtk.md")))
             .Should().Be(CurrentMarkdownRuleHash,
-                "a changed Windsurf rule must append the previous body's hash to ReleasedMarkdownRuleHashes once it has shipped");
+                "a changed Devin rule must append the previous body's hash to ReleasedMarkdownRuleHashes once it has shipped");
         UninstallHelpers.HashOwnedFile(await ReadAsync(Path.Combine(ProjectDir, ".aider-dtk-instructions.md")))
             .Should().Be(CurrentMarkdownRuleHash,
                 "a changed Aider instructions file must append the previous body's hash to ReleasedMarkdownRuleHashes once it has shipped");
@@ -110,7 +110,7 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     {
         var path = await WriteAsync(Path.Combine(ProjectDir, ".cursor", "rules", "dtk.mdc"), V080CursorRule);
 
-        var result = await ((IUninstallIntegrator)new CursorIntegrator()).UninstallAsync(
+        var result = await Cursor(ProjectDir).UninstallAsync(
             ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
 
         result.RemovedFiles.Should().Equal(path);
@@ -118,11 +118,11 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     }
 
     [Fact]
-    public async Task Uninstall_WindsurfRuleWrittenByV080_IsRemoved()
+    public async Task Uninstall_WindsurfRuleWrittenByV080_IsRemovedByDevin()
     {
         var path = await WriteAsync(Path.Combine(ProjectDir, ".windsurf", "rules", "dtk.md"), V080MarkdownRule);
 
-        var result = await ((IUninstallIntegrator)new WindsurfIntegrator()).UninstallAsync(
+        var result = await new DevinIntegrator(new HomePaths(Path.Combine(ProjectDir, "no-home"))).UninstallAsync(
             ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
 
         result.RemovedFiles.Should().Equal(path);
@@ -163,6 +163,10 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
             .And.EndWith($"run `{command} --force` to restore dtk's version, then `{command} --uninstall`.");
         File.Exists(path).Should().BeTrue();
     }
+
+    private static CursorIntegrator Cursor(string root) => new(
+        new RtkHookCoexistence(Path.Combine(root, "no-claude"), Path.Combine(root, "no-rtk.toml")),
+        new HomePaths(Path.Combine(root, "no-home")));
 
     private static async Task<string> WriteAsync(string path, string content)
     {

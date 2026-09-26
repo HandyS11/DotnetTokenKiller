@@ -4,8 +4,8 @@ namespace DotnetTokenKiller.Application.Integration;
 
 /// <summary>
 /// Shared "how to use dtk" instructions markdown, embedded verbatim by every provider integrator
-/// that documents dtk usage (Aider, Claude Code, Cursor, Gemini CLI, GitHub Copilot, GitHub Copilot
-/// CLI, JetBrains AI, Windsurf). Keeping this text in one place means those copies can never drift
+/// that documents dtk usage (Aider, Claude Code, Cursor, Devin, Gemini CLI, GitHub Copilot, GitHub Copilot
+/// CLI, JetBrains AI). Keeping this text in one place means those copies can never drift
 /// out of sync; each integrator still supplies its own heading, section markers, or frontmatter
 /// around it.
 /// </summary>
@@ -34,7 +34,7 @@ internal static class IntegrationInstructions
 
     /// <summary>
     /// Introductory sentence describing dtk's purpose. Used standalone (followed by a "## Usage"
-    /// subheading) by Aider, Cursor, and Windsurf, or as the lead-in of <see cref="Markdown"/> for
+    /// subheading) by Aider, Cursor, and Devin, or as the lead-in of <see cref="Markdown"/> for
     /// providers that embed the instructions directly under their own heading.
     /// </summary>
     internal static readonly string Intro =

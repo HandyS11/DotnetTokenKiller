@@ -53,7 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IProviderIntegrator, OhMyPiIntegrator>();
         services.AddTransient<IProviderIntegrator, AntigravityIntegrator>();
         services.AddTransient<IProviderIntegrator, CursorIntegrator>();
-        services.AddTransient<IProviderIntegrator, WindsurfIntegrator>();
+        services.AddTransient<IProviderIntegrator, DevinIntegrator>();
         services.AddTransient<IProviderIntegrator, AiderIntegrator>();
         services.AddTransient<IProviderIntegrator, JetBrainsAiIntegrator>();
         services.AddTransient<IntegrateUseCase>();

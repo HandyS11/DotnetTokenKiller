@@ -88,7 +88,7 @@ context consumed.
 - **Log retrieval** — `dtk log` returns a previous run's full output instead of re-running the build
 - **Filter coverage** — `dtk gain --coverage` ranks every command by unfiltered tokens at stake, so
   the next filter is chosen from data
-- **13 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Windsurf, Aider, JetBrains AI
+- **13 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Devin (formerly Windsurf), Aider, JetBrains AI
 - **Token analytics** — tracks per-command savings over time with `dtk gain`
 - **Self-diagnostics** — `dtk doctor` validates your setup, including feeding a sample payload
   through your installed hook to prove it still fires
@@ -225,10 +225,12 @@ dtk init pi          --global   # ~/.pi/agent, ~/.agents/skills
 dtk init oh-my-pi    --global   # ~/.omp/agent, ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
+dtk init cursor      --global   # ~/.cursor/hooks.json (hook only)
+dtk init devin       --global   # ~/.config/devin/config.json, global_rules.md
 ```
 
 Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
-for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, and **copilot-cli** (the providers with a home config).
+for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, and **devin** (the providers with a home config).
 
 ### Per-project install
 
@@ -246,8 +248,8 @@ For the other providers — or when you want dtk scoped to a single repository �
 | **Antigravity CLI**    | `dtk init antigravity` | PreToolUse hook group in .agents/hooks.json running dtk hook antigravity, AGENTS.md section, skill |
 | **pi**                 | `dtk init pi`          | .pi/extensions/dtk.js running dtk hook pi, AGENTS.md section, skill |
 | **oh-my-pi**           | `dtk init oh-my-pi`    | .omp/extensions/dtk.js running dtk hook oh-my-pi, AGENTS.md section, skill |
-| **Cursor**             | `dtk init cursor`      | `.cursor/rules/dtk.mdc`                                    |
-| **Windsurf**           | `dtk init windsurf`    | `.windsurf/rules/dtk.md`                                   |
+| **Cursor**             | `dtk init cursor`      | `.cursor/rules/dtk.mdc`, `.cursor/hooks.json` (`--global`: `~/.cursor/hooks.json`) |
+| **Devin** (Windsurf)   | `dtk init devin`       | `.devin/rules/dtk.md`, `.devin/hooks.v1.json` (`--global`: `~/.config/devin/config.json`, `global_rules.md`) |
 | **Aider**              | `dtk init aider`       | Instructions file, `.aider.conf.yml` section               |
 | **JetBrains AI**       | `dtk init jetbrains`   | Section in `.junie/guidelines.md`                          |
 
@@ -255,7 +257,8 @@ For the other providers — or when you want dtk scoped to a single repository �
 else on `PATH` — no Python, no `jq`. Re-running `dtk init <provider>` on a project set up by an older dtk
 replaces its Python hook registration and deletes the `dotnet-to-dtk.py` script dtk wrote there.
 
-`copilot`, `cursor`, `windsurf`, and `jetbrains` are repository-scoped and have no global mode.
+`copilot` and `jetbrains` are repository-scoped and have no global mode.
+`windsurf` is an alias of `devin`.
 `copilot-cli` is distinct from `copilot` (instruction-only, Copilot IDE) and supports `--global`.
 `--global` cannot be combined with `--dir`.
 

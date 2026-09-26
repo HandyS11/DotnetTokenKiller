@@ -368,6 +368,7 @@ public class InitCommandTests
     [InlineData("pi")]
     [InlineData("oh-my-pi")]
     [InlineData("cursor")]
+    [InlineData("devin")]
     [InlineData("windsurf")]
     [InlineData("aider")]
     [InlineData("jetbrains")]
@@ -385,6 +386,32 @@ public class InitCommandTests
         exitCode.Should().Be(0);
         stub.LastDirectory.Should().NotBeNull();
         otherStub.LastDirectory.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunAsync_WindsurfAlias_RunsDevinAndPrintsTheAliasNote()
+    {
+        var console = new TestConsole();
+        var devin = new StubIntegrator("devin");
+        var command = new InitCommand(new IntegrateUseCase([devin]), console);
+
+        var exitCode = await command.RunAsync(new InitCommandSettings { Provider = "WINDSURF" }, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        console.Output.Should().Contain("Windsurf is now Devin Desktop");
+        console.Output.Should().Contain("devin");
+    }
+
+    [Fact]
+    public async Task RunAsync_UnknownProvider_ListsTheAlias()
+    {
+        var console = new TestConsole();
+        var command = new InitCommand(new IntegrateUseCase([new StubIntegrator("devin")]), console);
+
+        var exitCode = await command.RunAsync(new InitCommandSettings { Provider = "zed" }, CancellationToken.None);
+
+        exitCode.Should().Be(1);
+        console.Output.Should().Contain("windsurf → devin");
     }
 
     [Fact]
@@ -699,10 +726,10 @@ public class InitCommandTests
     public async Task RunAsync_UninstallGlobalForARepositoryScopedProvider_FailsWithTheReason()
     {
         var console = new TestConsole();
-        var command = new InitCommand(new IntegrateUseCase([new CursorIntegrator()]), console);
+        var command = new InitCommand(new IntegrateUseCase([new JetBrainsAiIntegrator()]), console);
 
         var exitCode = await command.RunAsync(
-            new InitCommandSettings { Provider = "cursor", Uninstall = true, Global = true }, CancellationToken.None);
+            new InitCommandSettings { Provider = "jetbrains", Uninstall = true, Global = true }, CancellationToken.None);
 
         exitCode.Should().Be(1);
         console.Output.Should().Contain("repository-scoped");

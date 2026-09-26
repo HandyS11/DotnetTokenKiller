@@ -26,7 +26,7 @@ internal static class UninstallHelpers
 {
     /// <summary>Removes dtk's entries from a hook registration merged into a settings file.</summary>
     /// <remarks>
-    /// dtk's entries are those <see cref="IntegratorHelpers.MergeJsonSettingsAsync(string, string, string, JsonObject, string, IntegrationContext, CancellationToken)"/>
+    /// dtk's entries are those <see cref="IntegratorHelpers.MergeJsonSettingsAsync(string, string?, string, JsonObject, string, IntegrationContext, CancellationToken)"/>
     /// treats as its own: the current command, a quoting variant of it, or the Python hook script it replaced. A group
     /// left with no handler, and the event array and container left empty, are dropped; a settings file left as
     /// <c>{}</c> is deleted.
@@ -46,7 +46,8 @@ internal static class UninstallHelpers
 
         var root = await IntegratorHelpers.ReadRootObjectAsync(path, exists: true, cancellationToken).ConfigureAwait(false);
 
-        if (root[spec.ContainerKey] is not JsonObject container
+        var container = spec.ContainerKey is null ? root : root[spec.ContainerKey] as JsonObject;
+        if (container is null
             || container[spec.EventKey] is not JsonArray hookArray
             || IntegratorHelpers.FindEquivalentEntries(hookArray, spec.Command) is not { Count: > 0 } matches)
         {
@@ -61,7 +62,7 @@ internal static class UninstallHelpers
             container.Remove(spec.EventKey);
         }
 
-        if (container.Count == 0)
+        if (spec.ContainerKey is not null && container.Count == 0)
         {
             root.Remove(spec.ContainerKey);
         }

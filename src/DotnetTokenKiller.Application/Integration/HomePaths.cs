@@ -63,6 +63,23 @@ internal sealed class HomePaths
     /// <summary>Gets Codex CLI's home directory: <c>$CODEX_HOME</c> when it is an absolute path, else <c>~/.codex</c>.</summary>
     internal string CodexDir => RootedOrDefault("CODEX_HOME", Path.Combine(Home, ".codex"));
 
+    /// <summary>Gets Cursor's user directory (<c>~/.cursor</c>), which holds its user-level <c>hooks.json</c>.</summary>
+    internal string CursorDir => Path.Combine(Home, ".cursor");
+
+    /// <summary>
+    /// Gets Devin CLI's and Devin Local's user config directory: <c>%APPDATA%\devin</c> on Windows (when
+    /// <c>APPDATA</c> is an absolute path, else <c>~\AppData\Roaming\devin</c>), <c>~/.config/devin</c> elsewhere.
+    /// </summary>
+    internal string DevinConfigDir => OperatingSystem.IsWindows()
+        ? Path.Combine(RootedOrDefault("APPDATA", Path.Combine(Home, "AppData", "Roaming")), "devin")
+        : Path.Combine(Home, ".config", "devin");
+
+    /// <summary>
+    /// Gets the global rules file Devin Desktop (formerly Windsurf) always loads:
+    /// <c>~/.codeium/windsurf/memories/global_rules.md</c>.
+    /// </summary>
+    internal string WindsurfGlobalRulesPath => Path.Combine(Home, ".codeium", "windsurf", "memories", "global_rules.md");
+
     /// <summary>
     /// Gets the user-level skills directory Codex CLI, OpenCode, pi and oh-my-pi all read (<c>~/.agents/skills</c>).
     /// </summary>

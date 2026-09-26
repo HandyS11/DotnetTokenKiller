@@ -57,14 +57,14 @@ public sealed class CommandDispatchIntegrationTests
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Integrate_RunsThroughTheRealCliAndWritesIntoTheGivenDirectoryAsync()
     {
-        // --dir keeps every write inside the temp directory; cursor is used because it touches
+        // --dir keeps every write inside the temp directory; jetbrains is used because it touches
         // nothing outside the project it is pointed at.
         var dir = IntegrationTestHelper.NewIsolatedDir();
         var projectDir = Path.Combine(dir, "project");
         Directory.CreateDirectory(projectDir);
 
         var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(
-            dir, "integrate", "cursor", "--dir", projectDir);
+            dir, "integrate", "jetbrains", "--dir", projectDir);
 
         exitCode.Should().Be(0);
         output.Should().NotBeEmpty();
@@ -80,8 +80,8 @@ public sealed class CommandDispatchIntegrationTests
         Directory.CreateDirectory(viaInit);
         Directory.CreateDirectory(viaAlias);
 
-        var (initOutput, initExit) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "init", "cursor", "--dir", viaInit);
-        var (aliasOutput, aliasExit) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "integrate", "cursor", "--dir", viaAlias);
+        var (initOutput, initExit) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "init", "jetbrains", "--dir", viaInit);
+        var (aliasOutput, aliasExit) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "integrate", "jetbrains", "--dir", viaAlias);
 
         initExit.Should().Be(0);
         aliasExit.Should().Be(initExit);

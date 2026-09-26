@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Helpers;
@@ -276,6 +277,24 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         };
     }
 
+    /// <summary>
+    /// The subcommands a probe expects rewritten: Cursor's hook rewrites only what
+    /// <see cref="DotnetCommandRewriter.IsAutoApprovable"/> accepts, every other hook all of them.
+    /// </summary>
+    /// <param name="kind">The hook's payload shape.</param>
+    private static IReadOnlyList<string> ProbedSubcommands(HookPayloadKind kind) =>
+        kind == HookPayloadKind.Cursor ? DotnetCommandRewriter.AutoApprovableSubcommands : DotnetSubcommands.Ordered;
+
+    /// <summary>
+    /// The commands one probe sends, one hook run each: a single chained command normally, but one simple command per
+    /// subcommand for Cursor, whose hook leaves chained commands alone.
+    /// </summary>
+    /// <param name="kind">The hook's payload shape.</param>
+    private static IReadOnlyList<string> ProbeCommands(HookPayloadKind kind) =>
+        kind == HookPayloadKind.Cursor
+            ? [.. ProbedSubcommands(kind).Select(sub => $"dotnet {sub}")]
+            : [string.Join("; ", DotnetSubcommands.Ordered.Select(sub => $"dotnet {sub}"))];
+
     /// <summary>Feeds a payload through the <c>dtk</c> on <c>PATH</c> and asserts every subcommand is rewritten.</summary>
     /// <param name="installation">The installation to probe.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -294,36 +313,42 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         }
 
         var hook = $"{dtk} {HookCommands.Verb} {installation.ProviderName}";
-        var command = string.Join("; ", DotnetSubcommands.Ordered.Select(sub => $"dotnet {sub}"));
+        var expected = ProbedSubcommands(installation.PayloadKind);
+        var output = new StringBuilder();
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(ProbeTimeout);
 
         try
         {
-            var result = await runner
-                .RunCapturedWithInputAsync(
-                    dtk,
-                    [HookCommands.Verb, installation.ProviderName],
-                    BuildPayload(installation.PayloadKind, command),
-                    timeout.Token)
-                .ConfigureAwait(false);
-
-            if (result.ExitCode != 0)
+            foreach (var command in ProbeCommands(installation.PayloadKind))
             {
-                return new DiagnosticCheck(
-                    name,
-                    false,
-                    $"'{hook}' exited with code {result.ExitCode}: {FirstErrorLine(result)} "
-                    + $"A dtk older than 'dtk hook' cannot answer it; run '{UpdateCommand}'.");
+                var result = await runner
+                    .RunCapturedWithInputAsync(
+                        dtk,
+                        [HookCommands.Verb, installation.ProviderName],
+                        BuildPayload(installation.PayloadKind, command),
+                        timeout.Token)
+                    .ConfigureAwait(false);
+
+                if (result.ExitCode != 0)
+                {
+                    return new DiagnosticCheck(
+                        name,
+                        false,
+                        $"'{hook}' exited with code {result.ExitCode}: {FirstErrorLine(result)} "
+                        + $"A dtk older than 'dtk hook' cannot answer it; run '{UpdateCommand}'.");
+                }
+
+                output.Append(result.StdOut);
             }
 
-            var missing = DotnetSubcommands.Ordered
-                .Where(sub => !result.StdOut.Contains($"dtk dotnet {sub}", StringComparison.Ordinal))
+            var missing = expected
+                .Where(sub => !output.ToString().Contains($"dtk dotnet {sub}", StringComparison.Ordinal))
                 .ToList();
 
             return missing.Count == 0
-                ? new DiagnosticCheck(name, true, $"{dtk} rewrites all {DotnetSubcommands.Ordered.Count} subcommands")
+                ? new DiagnosticCheck(name, true, $"{dtk} rewrites all {expected.Count} subcommands")
                 : new DiagnosticCheck(
                     name,
                     false,

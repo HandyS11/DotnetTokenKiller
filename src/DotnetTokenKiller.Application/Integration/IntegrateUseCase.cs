@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using DotnetTokenKiller.Domain.Integration;
 
 namespace DotnetTokenKiller.Application.Integration;
@@ -6,11 +7,22 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <param name="integrators">All registered provider integrators.</param>
 public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrators)
 {
+    /// <summary>Provider names kept for compatibility, mapped to the provider that replaced them.</summary>
+    private static readonly Dictionary<string, (string Canonical, string Note)> AliasTable =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["windsurf"] = ("devin", "Windsurf is now Devin Desktop: 'dtk init windsurf' runs 'dtk init devin'.")
+        };
+
     private readonly IReadOnlyDictionary<string, IProviderIntegrator> _integrators =
         integrators.ToDictionary(i => i.ProviderName, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Gets the names of all available providers.</summary>
     public IEnumerable<string> AvailableProviders => _integrators.Keys;
+
+    /// <summary>Gets the provider aliases, each mapped to its canonical provider name.</summary>
+    public static IReadOnlyDictionary<string, string> Aliases { get; } =
+        AliasTable.ToDictionary(pair => pair.Key, pair => pair.Value.Canonical, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Runs the named provider's integration.</summary>
     /// <param name="providerName">Provider identifier (e.g. "claude", "copilot").</param>
@@ -125,22 +137,50 @@ public sealed class IntegrateUseCase(IEnumerable<IProviderIntegrator> integrator
         return inUse;
     }
 
+    /// <summary>
+    /// Resolves a provider name as typed — any casing, or an alias — to a registered provider's name. A registered
+    /// name wins over an alias spelled the same.
+    /// </summary>
+    /// <param name="name">The name the user typed.</param>
+    /// <param name="canonical">The registered provider's name, when resolved.</param>
+    /// <param name="aliasNote">The note to print when <paramref name="name"/> was an alias; otherwise <see langword="null"/>.</param>
+    /// <returns>Whether <paramref name="name"/> names a registered provider.</returns>
+    public bool TryResolveProvider(string name, [NotNullWhen(true)] out string? canonical, out string? aliasNote)
+    {
+        aliasNote = null;
+        if (_integrators.TryGetValue(name, out var integrator))
+        {
+            canonical = integrator.ProviderName;
+            return true;
+        }
+
+        if (AliasTable.TryGetValue(name, out var alias) && _integrators.TryGetValue(alias.Canonical, out integrator))
+        {
+            canonical = integrator.ProviderName;
+            aliasNote = alias.Note;
+            return true;
+        }
+
+        canonical = null;
+        return false;
+    }
+
     /// <summary>Resolves a provider by name, throwing if it is not registered.</summary>
     /// <param name="providerName">Provider identifier (e.g. "claude", "copilot").</param>
     /// <returns>The resolved integrator.</returns>
     /// <exception cref="InvalidOperationException">Thrown when <paramref name="providerName"/> is unknown.</exception>
     private IProviderIntegrator ResolveOrThrow(string providerName)
     {
-        // InvalidOperationException (not ArgumentException): InitCommand validates
-        // settings.Provider against AvailableProviders before calling RunAsync, so this path
+        // InvalidOperationException (not ArgumentException): InitCommand already resolves
+        // settings.Provider via TryResolveProvider before calling RunAsync, so this path
         // is a defense-in-depth guard for other callers of this public use case rather than
         // the CLI's primary error path.
-        if (!_integrators.TryGetValue(providerName, out var integrator))
+        if (!TryResolveProvider(providerName, out var canonical, out _))
         {
             throw new InvalidOperationException(
                 $"Unknown provider '{providerName}'. Available: {string.Join(", ", _integrators.Keys)}");
         }
 
-        return integrator;
+        return _integrators[canonical];
     }
 }

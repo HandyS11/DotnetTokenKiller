@@ -17,6 +17,8 @@ public sealed class HookPayloadsTests
     [InlineData("antigravity", HookPayloadKind.AntigravityCli)]
     [InlineData("pi", HookPayloadKind.Pi)]
     [InlineData("oh-my-pi", HookPayloadKind.OhMyPi)]
+    [InlineData("cursor", HookPayloadKind.Cursor)]
+    [InlineData("devin", HookPayloadKind.Devin)]
     internal void TryGetKind_KnownProvider_Resolves(string provider, HookPayloadKind expected)
     {
         HookPayloads.TryGetKind(provider, out var kind).Should().BeTrue();
@@ -313,6 +315,100 @@ public sealed class HookPayloadsTests
 
         reply.ToJsonString().Should().Be("""{"command":"dtk dotnet build"}""");
         Reply(kind, """{"command":"ls -la"}""").Should().BeNull();
+    }
+
+    // Payload and reply shapes: cursor.com/docs/hooks.md (preToolUse), checked 2026-09-26.
+
+    [Fact]
+    public void Cursor_SimpleCommand_AllowsTheWholeToolInputWithTheCommandReplaced()
+    {
+        var reply = Reply(HookPayloadKind.Cursor,
+            """{"tool_name":"Shell","tool_input":{"command":"dotnet build","working_directory":"/p"},"cwd":"/p"}""");
+
+        var root = JsonNode.Parse(reply!)!.AsObject();
+        root.Count.Should().Be(2);
+        root["permission"]!.GetValue<string>().Should().Be("allow");
+        root["updated_input"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build");
+        root["updated_input"]!["working_directory"]!.GetValue<string>().Should().Be("/p");
+    }
+
+    [Fact]
+    public void Cursor_ProbeShapedPayloadWithoutToolName_IsRewritten()
+    {
+        var reply = Reply(HookPayloadKind.Cursor, """{"tool_input":{"command":"dotnet test"}}""");
+
+        JsonNode.Parse(reply!)!["updated_input"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test");
+    }
+
+    [Theory]
+    [InlineData("""{"tool_name":"Shell","tool_input":{"command":"dotnet build && dotnet test"}}""")]
+    [InlineData("""{"tool_name":"Shell","tool_input":{"command":"dotnet build | tee log"}}""")]
+    [InlineData("""{"tool_name":"Shell","tool_input":{"command":"dotnet publish"}}""")]
+    [InlineData("""{"tool_name":"Shell","tool_input":{"command":"dotnet pack"}}""")]
+    [InlineData("""{"tool_name":"Shell","tool_input":{"command":"ls -la"}}""")]
+    [InlineData("""{"tool_name":"Shell","tool_input":{"command":"dtk dotnet build"}}""")]
+    [InlineData("""{"tool_name":"Read","tool_input":{"command":"dotnet build"}}""")]
+    [InlineData("""{"tool_name":42,"tool_input":{"command":"dotnet build"}}""")]
+    [InlineData("""{"tool_name":"Shell","tool_input":{"command":"dotnet build","command":"x"}}""")]
+    [InlineData("""{"tool_name":"Shell"}""")]
+    [InlineData("{}")]
+    [InlineData("[1,2]")]
+    [InlineData("null")]
+    [InlineData("not json")]
+    [InlineData("")]
+    public void Cursor_AnythingElse_PrintsTheNeutralJsonReply(string payload)
+    {
+        Reply(HookPayloadKind.Cursor, payload).Should().Be("{}");
+    }
+
+    [Fact]
+    public void Cursor_ByteOrderMark_IsIgnored()
+    {
+        var bytes = Encoding.UTF8.GetPreamble()
+            .Concat(Encoding.UTF8.GetBytes("""{"tool_name":"Shell","tool_input":{"command":"dotnet build"}}"""))
+            .ToArray();
+
+        JsonNode.Parse(HookPayloads.Reply(HookPayloadKind.Cursor, bytes)!)!["permission"]!.GetValue<string>()
+            .Should().Be("allow");
+    }
+
+    // Payload and reply shapes: docs.devin.ai/cli/extensibility/hooks/overview (PreToolUse), checked 2026-09-26.
+
+    [Fact]
+    public void Devin_ExecTool_ReturnsClaudesReplyWithoutADecision()
+    {
+        var reply = Reply(HookPayloadKind.Devin,
+            """{"hook_event_name":"PreToolUse","tool_name":"exec","tool_input":{"command":"dotnet build","shell_id":"main"}}""");
+
+        var output = JsonNode.Parse(reply!)!["hookSpecificOutput"]!.AsObject();
+        output.Count.Should().Be(2, "no permissionDecision: Devin's own approval applies to the rewritten command");
+        output["hookEventName"]!.GetValue<string>().Should().Be("PreToolUse");
+        output["updatedInput"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build");
+        output["updatedInput"]!["shell_id"]!.GetValue<string>().Should().Be("main");
+    }
+
+    [Fact]
+    public void Devin_ChainedCommand_IsRewrittenBecauseDevinStillAsks()
+    {
+        var reply = Reply(HookPayloadKind.Devin, """{"tool_name":"exec","tool_input":{"command":"dotnet build && dotnet publish"}}""");
+
+        JsonNode.Parse(reply!)!["hookSpecificOutput"]!["updatedInput"]!["command"]!.GetValue<string>()
+            .Should().Be("dtk dotnet build && dtk dotnet publish");
+    }
+
+    [Theory]
+    [InlineData("""{"tool_name":"read","tool_input":{"command":"dotnet build"}}""")]
+    [InlineData("""{"tool_name":"exec","tool_input":{"command":"ls"}}""")]
+    [InlineData("not json")]
+    public void Devin_NothingToRewrite_PrintsNothing(string payload)
+    {
+        Reply(HookPayloadKind.Devin, payload).Should().BeNull();
+    }
+
+    [Fact]
+    public void Devin_ProbeShapedPayloadWithoutToolName_IsRewritten()
+    {
+        Reply(HookPayloadKind.Devin, """{"tool_input":{"command":"dotnet build"}}""").Should().Contain("dtk dotnet build");
     }
 
     private static string? Reply(HookPayloadKind kind, string payload) =>
