@@ -36,7 +36,7 @@ internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths hom
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    public virtual IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
     {
         var path = Path.Combine(ConfigDirectory(directory, scope), "extensions", "dtk.js");
 
@@ -58,7 +58,7 @@ internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths hom
         => IntegrateCoreAsync(directory, HookScope.Project, force, cancellationToken);
 
     /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
+    public virtual Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
         => IntegrateCoreAsync(home.Home, HookScope.Global, force, cancellationToken);
 
     /// <inheritdoc/>
@@ -66,7 +66,7 @@ internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths hom
         [InstructionsPath(directory, scope), SharedInstructionArtifacts.SkillPath(SkillsDirectory(directory, scope))];
 
     /// <inheritdoc/>
-    public async Task<IntegrationResult> UninstallAsync(
+    public virtual async Task<IntegrationResult> UninstallAsync(
         string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
     {
         var hookDirectory = scope == HookScope.Global ? home.Home : directory;

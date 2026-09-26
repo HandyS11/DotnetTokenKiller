@@ -106,6 +106,57 @@ public sealed class HomePathsTests
         new HomePaths(home, name => name == "PI_CODING_AGENT_DIR" ? value : null).PiAgentDir.Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("~")]
+    [InlineData("~/custom-agent")]
+    public void PiAgentDir_ExpandsALeadingTildeAgainstHome(string value)
+    {
+        var home = Path.Combine(Path.GetTempPath(), "home");
+
+        var expected = value == "~" ? home : Path.Combine(home, "custom-agent");
+        new HomePaths(home, name => name == "PI_CODING_AGENT_DIR" ? value : null).PiAgentDir.Should().Be(expected);
+    }
+
+    [Fact]
+    public void CodexDir_DoesNotExpandATilde()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "home");
+
+        new HomePaths(home, name => name == "CODEX_HOME" ? "~/codex" : null).CodexDir.Should().Be(Path.Combine(home, ".codex"));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", "")]
+    public void OhMyPiAgentDir_WithNoProfile_HonorsPiCodingAgentDir(string? ompProfile, string? piProfile)
+    {
+        var home = Path.Combine(Path.GetTempPath(), "home");
+        var custom = Path.Combine(Path.GetTempPath(), "shared-agent");
+        var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["PI_CODING_AGENT_DIR"] = custom, ["OMP_PROFILE"] = ompProfile, ["PI_PROFILE"] = piProfile
+        };
+
+        new HomePaths(home, name => environment.GetValueOrDefault(name)).OhMyPiAgentDir.Should().Be(custom);
+        new HomePaths(home, name => name == "PI_CODING_AGENT_DIR" ? "~/agent" : null).OhMyPiAgentDir
+            .Should().Be(Path.Combine(home, "agent"));
+    }
+
+    [Theory]
+    [InlineData("OMP_PROFILE")]
+    [InlineData("PI_PROFILE")]
+    public void OhMyPiAgentDir_WithAProfile_IgnoresPiCodingAgentDir(string profileVariable)
+    {
+        var home = Path.Combine(Path.GetTempPath(), "home");
+        var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["PI_CODING_AGENT_DIR"] = Path.Combine(Path.GetTempPath(), "shared-agent"), [profileVariable] = "work"
+        };
+
+        new HomePaths(home, name => environment.GetValueOrDefault(name)).OhMyPiAgentDir
+            .Should().Be(Path.Combine(home, ".omp", "agent"));
+    }
+
     [Fact]
     public void OhMyPiAgentDir_IsDotOmpAgent()
     {

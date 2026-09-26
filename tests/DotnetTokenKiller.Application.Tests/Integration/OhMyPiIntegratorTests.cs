@@ -1,5 +1,9 @@
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Application.UseCases;
+using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Integration;
 using FluentAssertions;
+using NSubstitute;
 
 namespace DotnetTokenKiller.Application.Tests.Integration;
 
@@ -28,6 +32,15 @@ public sealed class OhMyPiIntegratorTests : IDisposable
     private RtkHookCoexistence Rtk() => new(Home.ClaudeDir, RtkConfigPath);
 
     private OhMyPiIntegrator CreateSut() => new(Rtk(), Home);
+
+    private PiIntegrator CreatePi() => new(Rtk(), Home);
+
+    private string SharedAgentDir => Path.Combine(_tempDir, "shared-agent");
+
+    private string SharedExtensionPath => Path.Combine(SharedAgentDir, "extensions", "dtk.js");
+
+    /// <summary>Points both harnesses' global agent directory at <see cref="SharedAgentDir"/>, as oh-my-pi does with no profile.</summary>
+    private void ShareTheAgentDir() => _environment["PI_CODING_AGENT_DIR"] = SharedAgentDir;
 
     [Fact]
     public void ProviderName_IsOhMyPi() => CreateSut().ProviderName.Should().Be("oh-my-pi");
@@ -125,5 +138,88 @@ public sealed class OhMyPiIntegratorTests : IDisposable
 
         File.Exists(ExtensionPath).Should().BeFalse();
         File.Exists(SkillPath).Should().BeTrue("OpenCode's hook is still registered in the project");
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_AgentDirSharedWithPi_WritesPisExtensionAndSaysSo()
+    {
+        ShareTheAgentDir();
+
+        var result = await CreateSut().IntegrateGlobalAsync(false, default);
+
+        result.CreatedFiles.Should().Equal(
+            Path.Combine(SharedAgentDir, "AGENTS.md"),
+            Path.Combine(HomeDir, ".agents", "skills", "dotnet-token-killer", "SKILL.md"),
+            SharedExtensionPath);
+        (await File.ReadAllTextAsync(SharedExtensionPath)).Should().StartWith(PiExtension.Body("pi", "pi"));
+        result.Notes.Should().Contain(
+            $"pi and oh-my-pi share {SharedAgentDir} (PI_CODING_AGENT_DIR); one extension serves both, installed as 'dtk init pi --global'.");
+        Directory.Exists(Path.Combine(HomeDir, ".omp")).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task IntegrateGlobalAsync_AgentDirSharedWithPi_EitherOrderLeavesOneStableExtension(bool piFirst)
+    {
+        ShareTheAgentDir();
+        Task<IntegrationResult> PiAsync() => CreatePi().IntegrateGlobalAsync(false, default);
+        Task<IntegrationResult> OmpAsync() => CreateSut().IntegrateGlobalAsync(false, default);
+
+        await (piFirst ? PiAsync() : OmpAsync());
+        var second = await (piFirst ? OmpAsync() : PiAsync());
+
+        second.UnchangedFiles.Should().Contain(SharedExtensionPath);
+        second.CreatedFiles.Should().BeEmpty();
+        second.UpdatedFiles.Should().BeEmpty();
+        second.SkippedFiles.Should().BeEmpty();
+        Directory.GetFiles(Path.GetDirectoryName(SharedExtensionPath)!).Should().Equal(SharedExtensionPath);
+        (await File.ReadAllTextAsync(SharedExtensionPath)).Should().StartWith(PiExtension.Body("pi", "pi"));
+    }
+
+    [Fact]
+    public async Task UninstallGlobal_AgentDirSharedWithPi_KeepsTheExtensionAndPointsAtPi()
+    {
+        ShareTheAgentDir();
+        var useCase = new IntegrateUseCase([CreatePi(), CreateSut()]);
+        await useCase.RunGlobalAsync("oh-my-pi", false, default);
+        var before = await File.ReadAllTextAsync(SharedExtensionPath);
+
+        var result = await useCase.UninstallAsync("oh-my-pi", ProjectDir, true, default);
+
+        (await File.ReadAllTextAsync(SharedExtensionPath)).Should().Be(before);
+        File.Exists(Path.Combine(SharedAgentDir, "AGENTS.md")).Should().BeTrue();
+        result.RemovedFiles.Should().BeEmpty();
+        result.Notes.Should().ContainSingle().Which.Should().Contain(SharedAgentDir).And.Contain("dtk init pi --global --uninstall");
+    }
+
+    [Fact]
+    public async Task Doctor_AgentDirSharedWithPi_ReportsTheExtensionOnceUnderPiWithoutAFailure()
+    {
+        ShareTheAgentDir();
+        await CreateSut().IntegrateGlobalAsync(false, default);
+        var checker = new HookHealthChecker(Substitute.For<ICommandRunner>(), () => null);
+
+        var checks = await checker.RunAsync([CreatePi(), CreateSut()], ProjectDir, default);
+
+        checks.Should().ContainSingle(check => check.Name == "pi hook (global)").Which.Passed.Should().BeTrue();
+        checks.Where(check => check.Name != "pi hook probe (global)").Should().OnlyContain(check => check.Passed);
+        checks.Should().NotContain(check => check.Name.StartsWith("oh-my-pi", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UninstallGlobal_Pi_AgentDirSharedWithOhMyPi_RemovesTheSharedFiles()
+    {
+        ShareTheAgentDir();
+        var useCase = new IntegrateUseCase([CreatePi(), CreateSut()]);
+        await useCase.RunGlobalAsync("pi", false, default);
+        await useCase.RunGlobalAsync("oh-my-pi", false, default);
+        var skill = Path.Combine(HomeDir, ".agents", "skills", "dotnet-token-killer", "SKILL.md");
+
+        var result = await useCase.UninstallAsync("pi", ProjectDir, true, default);
+
+        result.RemovedFiles.Should().Contain([SharedExtensionPath, Path.Combine(SharedAgentDir, "AGENTS.md"), skill]);
+        result.UnchangedFiles.Should().BeEmpty("oh-my-pi registers nothing of its own in a shared agent dir");
+        File.Exists(skill).Should().BeFalse();
     }
 }

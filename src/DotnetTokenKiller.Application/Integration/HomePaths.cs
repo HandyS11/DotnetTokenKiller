@@ -75,11 +75,54 @@ internal sealed class HomePaths
     internal string OpenCodeConfigDir =>
         Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "opencode");
 
-    /// <summary>Gets pi's agent directory: <c>$PI_CODING_AGENT_DIR</c> when it is an absolute path, else <c>~/.pi/agent</c>.</summary>
-    internal string PiAgentDir => RootedOrDefault("PI_CODING_AGENT_DIR", Path.Combine(Home, ".pi", "agent"));
+    /// <summary>
+    /// Gets pi's agent directory: <c>$PI_CODING_AGENT_DIR</c> when it is an absolute path or starts with <c>~</c>
+    /// (expanded against <see cref="Home"/>, as pi does), else <c>~/.pi/agent</c>.
+    /// </summary>
+    internal string PiAgentDir => PiCodingAgentDir() ?? Path.Combine(Home, ".pi", "agent");
 
-    /// <summary>Gets oh-my-pi's default-profile agent directory (<c>~/.omp/agent</c>).</summary>
-    internal string OhMyPiAgentDir => Path.Combine(Home, ".omp", "agent");
+    /// <summary>
+    /// Gets oh-my-pi's agent directory: with no profile selected (<c>OMP_PROFILE</c> and <c>PI_PROFILE</c> unset or
+    /// empty) oh-my-pi honors <c>$PI_CODING_AGENT_DIR</c> too, resolved as for <see cref="PiAgentDir"/>; otherwise, or
+    /// when it is unset, <c>~/.omp/agent</c>. Named profiles and <c>PI_CONFIG_DIR</c> are not supported.
+    /// </summary>
+    internal string OhMyPiAgentDir =>
+        (string.IsNullOrEmpty(_environment("OMP_PROFILE")) && string.IsNullOrEmpty(_environment("PI_PROFILE"))
+            ? PiCodingAgentDir()
+            : null)
+        ?? Path.Combine(Home, ".omp", "agent");
+
+    /// <summary>Gets whether pi and oh-my-pi resolve to the same global agent directory, so both load one extension.</summary>
+    internal bool PiAndOhMyPiShareAgentDir =>
+        string.Equals(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(PiAgentDir)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(OhMyPiAgentDir)),
+            OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    /// <summary>
+    /// <c>$PI_CODING_AGENT_DIR</c> with a leading <c>~</c>, <c>~/</c> or (on Windows) <c>~\</c> expanded against
+    /// <see cref="Home"/>, when the result is an absolute path; otherwise <see langword="null"/>.
+    /// </summary>
+    private string? PiCodingAgentDir()
+    {
+        var value = _environment("PI_CODING_AGENT_DIR");
+        if (string.IsNullOrEmpty(value))
+        {
+            return null;
+        }
+
+        if (value == "~")
+        {
+            value = Home;
+        }
+        else if (value.Length > 1 && value[0] == '~'
+                 && (value[1] == Path.DirectorySeparatorChar || value[1] == Path.AltDirectorySeparatorChar))
+        {
+            value = Path.Combine(Home, value[2..]);
+        }
+
+        return Path.IsPathRooted(value) ? value : null;
+    }
 
     /// <summary>An environment variable's value when it is an absolute path, otherwise <paramref name="fallback"/>.</summary>
     /// <param name="variable">The variable to read.</param>
