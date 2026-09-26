@@ -94,6 +94,8 @@ dotnet test: <span class="dtk-fail">1 failed</span>, <span class="dtk-kept">3 pa
 <span class="dtk-agent">Codex CLI</span>
 <span class="dtk-agent">OpenCode</span>
 <span class="dtk-agent">Antigravity CLI</span>
+<span class="dtk-agent">pi</span>
+<span class="dtk-agent">oh-my-pi</span>
 <span class="dtk-agent">Cursor</span>
 <span class="dtk-agent">Windsurf</span>
 <span class="dtk-agent">Aider</span>

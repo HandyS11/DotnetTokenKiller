@@ -16,11 +16,13 @@ dtk init gemini      --global   # ~/.gemini
 dtk init codex       --global   # ~/.codex (or $CODEX_HOME), ~/.agents/skills
 dtk init opencode    --global   # ~/.config/opencode, ~/.agents/skills
 dtk init antigravity --global   # ~/.gemini/config, ~/.gemini/GEMINI.md
+dtk init pi          --global   # <pi agent dir> (~/.pi/agent or $PI_CODING_AGENT_DIR), ~/.agents/skills
+dtk init oh-my-pi    --global   # ~/.omp/agent, ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
 
-`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
+`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
 
 ## Uninstalling
 
@@ -42,18 +44,19 @@ It removes only dtk's own parts, and reports each file as `removed`, `unchanged`
   `.aider.conf.yml`): only the section between dtk's markers is removed; the file is deleted when nothing else is left
   in it. For Aider, the instructions file is also taken back out of your own `read:` key when `dtk init` merged it
   there.
-- **Generated files** (`SKILL.md`, the OpenCode plugin, Copilot CLI's `dtk-dotnet.json`, the Cursor and Windsurf
-  rules, `.aider-dtk-instructions.md`): deleted only when dtk can prove the content is its own — a provenance stamp
-  that still verifies, or content identical to what this dtk or an earlier release wrote. An edited file is `kept`,
-  with a note; to remove it anyway, run `dtk init <provider> --force` to restore dtk's version, then `--uninstall`.
+- **Generated files** (`SKILL.md`, the OpenCode plugin, the pi and oh-my-pi extensions, Copilot CLI's
+  `dtk-dotnet.json`, the Cursor and Windsurf rules, `.aider-dtk-instructions.md`): deleted only when dtk can prove the
+  content is its own — a provenance stamp that still verifies, or content identical to what this dtk or an earlier
+  release wrote. An edited file is `kept`, with a note; to remove it anyway, run `dtk init <provider> --force` to
+  restore dtk's version, then `--uninstall`.
 
 Directories the removal leaves empty are deleted too, up to the project or home directory. A second run finds nothing
 to remove. `--force` cannot be combined with `--uninstall`.
 
 Some things are deliberately left alone:
 
-- **Shared instructions still in use.** Codex CLI, OpenCode and Antigravity CLI share `AGENTS.md` and the
-  `.agents/skills` skill; Gemini CLI and Antigravity CLI share `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
+- **Shared instructions still in use.** Codex CLI, OpenCode, Antigravity CLI, pi and oh-my-pi share `AGENTS.md` and
+  the `.agents/skills` skill; Gemini CLI and Antigravity CLI share `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
   share `.github/copilot-instructions.md`. While another of these still has its dtk hook registered in the same scope,
   the shared file keeps dtk's section and is reported `unchanged`, with a note naming that provider. (GitHub Copilot
   has no hook, so it never holds the file back for Copilot CLI.)
@@ -397,6 +400,35 @@ the `dtk dotnet …` command it gets back. Other commands never start `dtk`. The
 never in the project directory. If `dtk` is not on `PATH`, fails or takes longer than five seconds, the original command
 runs unchanged. OpenCode checks its permission rules against the rewritten
 command.
+
+## pi
+
+`dtk init pi` writes a generated extension, `.pi/extensions/dtk.js`, plus the shared `AGENTS.md` section and the
+`.agents/skills/dotnet-token-killer` skill. `--global` writes `~/.pi/agent/extensions/dtk.js` (or under
+`$PI_CODING_AGENT_DIR`) and `~/.pi/agent/AGENTS.md`, and the skill to `~/.agents/skills`.
+
+The extension handles pi's `tool_call` event: for a `bash` call whose command contains `dotnet`, it asks
+`dtk hook pi` for the rewrite and changes the command before pi runs it. It finds `dtk` on `PATH` itself and never
+blocks a tool call: if dtk is missing, slow or fails, the command runs unchanged. Commands you type with `!` are not
+rewritten.
+
+pi 0.73 and later load `.pi/extensions` only in a trusted project: approve it when pi asks, or run `/trust`. Print,
+JSON and RPC modes (`pi -p`) skip project extensions until then, so use `--global` for those. Requires pi 0.73.1 or
+later.
+
+If rtk's pi extension (`rtk init --agent pi`) is installed, `dtk init pi` adds `dotnet` to rtk's `exclude_commands`
+so dtk owns dotnet commands.
+
+## oh-my-pi
+
+`dtk init oh-my-pi` writes the same extension to `.omp/extensions/dtk.js` (`--global`: `~/.omp/agent/extensions/dtk.js`
+and `~/.omp/agent/AGENTS.md`), plus the shared `AGENTS.md` section and skill. oh-my-pi does not read pi's `.pi`
+folder, so install each harness you use. Requires oh-my-pi 18.2.1 or later; older versions load the extension but
+run commands unchanged.
+
+oh-my-pi's shell minimizer (`shellMinimizer.enabled`, on by default) has its own `dotnet` filter, chosen by program
+name. Once a command runs as `dtk dotnet …` that filter no longer applies, so the output is filtered once, by dtk.
+dtk does not change oh-my-pi's `config.yml`.
 
 ## Antigravity CLI
 

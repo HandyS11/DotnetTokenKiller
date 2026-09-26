@@ -88,7 +88,7 @@ context consumed.
 - **Log retrieval** — `dtk log` returns a previous run's full output instead of re-running the build
 - **Filter coverage** — `dtk gain --coverage` ranks every command by unfiltered tokens at stake, so
   the next filter is chosen from data
-- **11 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, Cursor, Windsurf, Aider, JetBrains AI
+- **13 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Windsurf, Aider, JetBrains AI
 - **Token analytics** — tracks per-command savings over time with `dtk gain`
 - **Self-diagnostics** — `dtk doctor` validates your setup, including feeding a sample payload
   through your installed hook to prove it still fires
@@ -221,12 +221,14 @@ dtk init gemini      --global   # ~/.gemini
 dtk init codex       --global   # ~/.codex, ~/.agents/skills
 dtk init opencode    --global   # ~/.config/opencode, ~/.agents/skills
 dtk init antigravity --global   # ~/.gemini/config, ~/.gemini/GEMINI.md
+dtk init pi          --global   # ~/.pi/agent, ~/.agents/skills
+dtk init oh-my-pi    --global   # ~/.omp/agent, ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
 
 Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
-for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **aider**, and **copilot-cli** (the providers with a home config).
+for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, and **copilot-cli** (the providers with a home config).
 
 ### Per-project install
 
@@ -242,6 +244,8 @@ For the other providers — or when you want dtk scoped to a single repository �
 | **Codex CLI**          | `dtk init codex`       | PreToolUse hook in .codex/hooks.json running dtk hook codex, AGENTS.md section, skill (approve it under /hooks) |
 | **OpenCode**           | `dtk init opencode`    | .opencode/plugins/dtk.js running dtk hook opencode, AGENTS.md section, skill |
 | **Antigravity CLI**    | `dtk init antigravity` | PreToolUse hook group in .agents/hooks.json running dtk hook antigravity, AGENTS.md section, skill |
+| **pi**                 | `dtk init pi`          | `.pi/extensions/dtk.js` + `AGENTS.md` + skill               |
+| **oh-my-pi**           | `dtk init oh-my-pi`    | `.omp/extensions/dtk.js` + `AGENTS.md` + skill               |
 | **Cursor**             | `dtk init cursor`      | `.cursor/rules/dtk.mdc`                                    |
 | **Windsurf**           | `dtk init windsurf`    | `.windsurf/rules/dtk.md`                                   |
 | **Aider**              | `dtk init aider`       | Instructions file, `.aider.conf.yml` section               |
