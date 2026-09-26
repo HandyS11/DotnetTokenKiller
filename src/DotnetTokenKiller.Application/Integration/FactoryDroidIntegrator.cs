@@ -65,8 +65,17 @@ internal sealed class FactoryDroidIntegrator(RtkHookCoexistence rtk, HomePaths h
 
         foreach (var (path, containerKey) in FactoryDroidHooks.Candidates(FactoryDir(root, scope)))
         {
-            await UninstallHelpers.RemoveHookRegistrationAsync(Registration(path, containerKey), context, cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await UninstallHelpers.RemoveHookRegistrationAsync(Registration(path, containerKey), context, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                // Malformed JSON in one candidate must not stop dtk from removing its hook from the others: the
+                // loop's remaining files may be where the hook actually lives.
+                UninstallHelpers.Keep(path, "it is not valid JSON, so dtk could not remove its hook entry from it", context);
+            }
         }
 
         rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(root, scope)));

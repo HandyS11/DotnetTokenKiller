@@ -129,6 +129,22 @@ public sealed class FactoryDroidIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task UninstallAsync_MalformedCandidateFile_KeepsItAndContinuesToOthers()
+    {
+        Write(ProjectSettingsJson,
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"lint"}]}]}}""");
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(ProjectHooksJson, "not json");
+
+        var result = await CreateSut().UninstallAsync(ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
+
+        result.SkippedFiles.Should().Contain(ProjectHooksJson);
+        result.Notes.Should().ContainSingle(note => note.StartsWith(ProjectHooksJson, StringComparison.Ordinal));
+        (await File.ReadAllTextAsync(ProjectHooksJson)).Should().Be("not json");
+        (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Contain("lint").And.NotContain("dtk hook droid");
+    }
+
+    [Fact]
     public async Task UninstallAsync_RemovesDtkFromEveryCandidateAndKeepsOtherHooks()
     {
         await CreateSut().IntegrateAsync(ProjectDir, false, default);
