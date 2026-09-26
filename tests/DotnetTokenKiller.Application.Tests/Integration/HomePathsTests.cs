@@ -134,7 +134,9 @@ public sealed class HomePathsTests
         var custom = Path.Combine(Path.GetTempPath(), "shared-agent");
         var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            ["PI_CODING_AGENT_DIR"] = custom, ["OMP_PROFILE"] = ompProfile, ["PI_PROFILE"] = piProfile
+            ["PI_CODING_AGENT_DIR"] = custom,
+            ["OMP_PROFILE"] = ompProfile,
+            ["PI_PROFILE"] = piProfile
         };
 
         new HomePaths(home, name => environment.GetValueOrDefault(name)).OhMyPiAgentDir.Should().Be(custom);
@@ -150,7 +152,8 @@ public sealed class HomePathsTests
         var home = Path.Combine(Path.GetTempPath(), "home");
         var environment = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
-            ["PI_CODING_AGENT_DIR"] = Path.Combine(Path.GetTempPath(), "shared-agent"), [profileVariable] = "work"
+            ["PI_CODING_AGENT_DIR"] = Path.Combine(Path.GetTempPath(), "shared-agent"),
+            [profileVariable] = "work"
         };
 
         new HomePaths(home, name => environment.GetValueOrDefault(name)).OhMyPiAgentDir
