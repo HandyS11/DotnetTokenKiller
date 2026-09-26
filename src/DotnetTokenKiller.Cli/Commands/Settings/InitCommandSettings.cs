@@ -9,7 +9,7 @@ internal sealed class InitCommandSettings : CommandSettings
     /// <summary>Gets the AI assistant provider to integrate with.</summary>
     [CommandArgument(0, "<provider>")]
     [Description(
-        "AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex, opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), aider, jetbrains)")]
+        "AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex, opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), droid, crush, aider, jetbrains)")]
     public string Provider { get; init; } = string.Empty;
 
     /// <summary>Gets the target project directory (defaults to the current directory).</summary>

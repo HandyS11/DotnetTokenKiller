@@ -13,7 +13,7 @@ internal static class ParityCases
 
     /// <summary>Every provider <c>dtk init</c> accepts. Declared before the cases that use it, which read it at initialization.</summary>
     private static readonly string[] InitProviders =
-        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin", "windsurf", "aider", "jetbrains"];
+        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin", "windsurf", "droid", "crush", "aider", "jetbrains"];
 
     private static readonly Dictionary<string, ParityCase> Portable = new(StringComparer.Ordinal)
     {

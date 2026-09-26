@@ -22,6 +22,10 @@ EXAMPLES:
     dtk init cursor --global
     dtk init devin
     dtk init devin --global
+    dtk init droid
+    dtk init droid --global
+    dtk init crush
+    dtk init crush --global
     dtk init aider
     dtk init jetbrains
     dtk init claude --uninstall
@@ -29,8 +33,8 @@ EXAMPLES:
 
 ARGUMENTS:
     <provider>    AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex,     
-                  opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), aider,      
-                  jetbrains)                                                                        
+                  opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), droid,      
+                  crush, aider, jetbrains)                                                          
 
 OPTIONS:
     -h, --help         Prints help information                                                      
