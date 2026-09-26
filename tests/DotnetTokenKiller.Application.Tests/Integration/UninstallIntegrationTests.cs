@@ -28,10 +28,10 @@ public sealed class UninstallIntegrationTests : IDisposable
     }
 
     public static TheoryData<string> AllProviders =>
-        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin", "droid", "aider", "jetbrains"];
+        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin", "droid", "crush", "aider", "jetbrains"];
 
     public static TheoryData<string> GlobalProviders =>
-        ["claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "aider", "cursor", "devin", "droid"];
+        ["claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "aider", "cursor", "devin", "droid", "crush"];
 
     private string ProjectDir => Path.Combine(_tempDir, "project");
     private string HomeDir => Path.Combine(_tempDir, "home");
@@ -57,6 +57,7 @@ public sealed class UninstallIntegrationTests : IDisposable
             new CursorIntegrator(Rtk(), home),
             new DevinIntegrator(home),
             new FactoryDroidIntegrator(Rtk(), home),
+            new CrushIntegrator(home),
             new AiderIntegrator(home),
             new JetBrainsAiIntegrator()
         ];
@@ -328,7 +329,7 @@ public sealed class UninstallIntegrationTests : IDisposable
     [Fact]
     public async Task Doctor_AfterUninstallingEveryHook_ReportsNoHookInstalled()
     {
-        var hookProviders = new[] { "claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin", "droid" };
+        var hookProviders = new[] { "claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "devin", "droid", "crush" };
         foreach (var provider in hookProviders)
         {
             await InstallAsync(provider);

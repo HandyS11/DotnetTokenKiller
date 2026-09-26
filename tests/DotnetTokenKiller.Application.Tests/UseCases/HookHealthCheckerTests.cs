@@ -64,6 +64,8 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private CursorIntegrator Cursor => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
 
+    private CrushIntegrator Crush => new(Home);
+
     private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
 
     private string CodexGlobalHooksPath => Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
@@ -783,5 +785,16 @@ public sealed class HookHealthCheckerTests : IDisposable
         checks.Should().ContainSingle();
         checks[0].Passed.Should().BeTrue("dtk works without hooks, so their absence is not a failure");
         checks[0].Message.Should().Contain("dtk init");
+    }
+
+    [Fact]
+    public async Task RunAsync_RealCrushInstall_IsRegisteredAndProbed()
+    {
+        await Crush.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([Crush], _tempDir, default);
+
+        checks.Should().Contain(c => c.Name == "crush hook (project)" && c.Passed && c.Message == "registered");
+        checks.Should().Contain(c => c.Name == "crush hook probe (project)");
     }
 }
