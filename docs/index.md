@@ -116,7 +116,7 @@ dotnet test: <span class="dtk-fail">1 failed</span>, <span class="dtk-kept">3 pa
 <a href="articles/examples/index.md"><strong>Output examples</strong><span>Real raw output beside real filtered output.</span></a>
 <a href="articles/configuration.md"><strong>Configuration</strong><span>Tune what dtk keeps and where it logs.</span></a>
 <a href="articles/token-analytics.md"><strong>Token analytics</strong><span>Track what you have saved with dtk gain.</span></a>
-<a href="articles/ai-agent-setup.md"><strong>Agent setup</strong><span>Wire dtk into all eight supported agents.</span></a>
+<a href="articles/ai-agent-setup.md"><strong>Agent setup</strong><span>Wire dtk into all thirteen supported agents.</span></a>
 <a href="articles/architecture.md"><strong>Architecture</strong><span>How the filters and the CLI fit together.</span></a>
 <a href="xref:DotnetTokenKiller.Application"><strong>API reference</strong><span>Generated documentation for every public type.</span></a>
 </div>

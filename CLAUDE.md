@@ -104,7 +104,10 @@ would try the project directory first, before OpenCode's permission check. `Open
 CI sets `DTK_NODE_REQUIRED=1`.
 
 `dtk init pi` and `dtk init oh-my-pi` write the shared `AGENTS.md` section and skill plus a generated, stamped
-`extensions/dtk.js` (`.pi/`, `.omp/`; `--global`: `$PI_CODING_AGENT_DIR` or `~/.pi/agent`, and `~/.omp/agent`). One
+`extensions/dtk.js` (`.pi/`, `.omp/`; `--global`: `$PI_CODING_AGENT_DIR` or `~/.pi/agent`, and `~/.omp/agent`, which
+oh-my-pi also moves to `$PI_CODING_AGENT_DIR` when `OMP_PROFILE`/`PI_PROFILE` are unset; a leading `~` is expanded).
+When both resolve to one directory, `init oh-my-pi --global` writes pi's install, its uninstall removes nothing, and
+its global `DescribeHooks` is empty, so doctor and `SharedArtifactsInUse` see only pi. One
 body (`PiExtension`) serves both: its `tool_call` handler mutates `event.input.command` (pi runs the args it passed)
 *and* returns `{ input }` (oh-my-pi runs a returned input, 18.2.1+), and never throws, since a throw blocks the tool
 in both. It shares `PluginRuntime` (PATH lookup, spawn) with the OpenCode plugin, whose bytes a test pins. pi's

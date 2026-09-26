@@ -244,8 +244,8 @@ For the other providers â€” or when you want dtk scoped to a single repository â
 | **Codex CLI**          | `dtk init codex`       | PreToolUse hook in .codex/hooks.json running dtk hook codex, AGENTS.md section, skill (approve it under /hooks) |
 | **OpenCode**           | `dtk init opencode`    | .opencode/plugins/dtk.js running dtk hook opencode, AGENTS.md section, skill |
 | **Antigravity CLI**    | `dtk init antigravity` | PreToolUse hook group in .agents/hooks.json running dtk hook antigravity, AGENTS.md section, skill |
-| **pi**                 | `dtk init pi`          | `.pi/extensions/dtk.js` + `AGENTS.md` + skill               |
-| **oh-my-pi**           | `dtk init oh-my-pi`    | `.omp/extensions/dtk.js` + `AGENTS.md` + skill               |
+| **pi**                 | `dtk init pi`          | .pi/extensions/dtk.js running dtk hook pi, AGENTS.md section, skill |
+| **oh-my-pi**           | `dtk init oh-my-pi`    | .omp/extensions/dtk.js running dtk hook oh-my-pi, AGENTS.md section, skill |
 | **Cursor**             | `dtk init cursor`      | `.cursor/rules/dtk.mdc`                                    |
 | **Windsurf**           | `dtk init windsurf`    | `.windsurf/rules/dtk.md`                                   |
 | **Aider**              | `dtk init aider`       | Instructions file, `.aider.conf.yml` section               |

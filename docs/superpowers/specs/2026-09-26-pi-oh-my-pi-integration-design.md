@@ -56,7 +56,10 @@ deprecated `@mariozechner/pi-coding-agent`, last 0.73.1; binary and directories 
 
 ### oh-my-pi
 
-- **Directories**: `.omp/` (project) and `~/.omp/agent/` (global). It does not read `.pi/`. Ambient
+- **Directories**: `.omp/` (project) and `~/.omp/agent/` (global). With no profile active (`OMP_PROFILE` and
+  `PI_PROFILE` unset or empty), the global agent dir is `PI_CODING_AGENT_DIR` when set (`path.resolve`d), else
+  `~/.omp/agent` (`PI_CONFIG_DIR` can rename `.omp`; `@oh-my-pi/pi-utils` 18.3.2 `src/dirs.ts`), and user
+  extensions load from it. It does not read `.pi/`. Ambient
   extension discovery uses the native provider only, so it will not load `.opencode/plugins/dtk.js`.
 - **Extensions**: same `ExtensionFactory` default export, from `.omp/extensions/` and
   `~/.omp/agent/extensions/`, `*.ts`/`*.js`/`index.{ts,js}` (`extensions/loader.ts`).
@@ -89,15 +92,25 @@ deprecated `@mariozechner/pi-coding-agent`, last 0.73.1; binary and directories 
 | | `pi` | `oh-my-pi` |
 |---|---|---|
 | Project extension | `.pi/extensions/dtk.js` | `.omp/extensions/dtk.js` |
-| Global extension | `<pi agent dir>/extensions/dtk.js` | `~/.omp/agent/extensions/dtk.js` |
+| Global extension | `<pi agent dir>/extensions/dtk.js` | `<omp agent dir>/extensions/dtk.js` |
 | Project instructions | `AGENTS.md` | `AGENTS.md` |
-| Global instructions | `<pi agent dir>/AGENTS.md` | `~/.omp/agent/AGENTS.md` |
+| Global instructions | `<pi agent dir>/AGENTS.md` | `<omp agent dir>/AGENTS.md` |
 | Project skill | `.agents/skills/dotnet-token-killer/` | same |
 | Global skill | `~/.agents/skills/dotnet-token-killer/` | same |
 
-`<pi agent dir>` is `$PI_CODING_AGENT_DIR` when set, else `~/.pi/agent`. oh-my-pi's profiles
-(`~/.omp/profiles/<name>/agent`) are not targeted; the default profile is `~/.omp/agent`. Both go in
-`HomePaths` (`PiAgentDir`, `OhMyPiAgentDir`).
+`<pi agent dir>` is `$PI_CODING_AGENT_DIR` when set (a leading `~`, `~/` or, on Windows, `~\` is expanded, as pi
+does) and absolute, else `~/.pi/agent`. `<omp agent dir>` is that same `$PI_CODING_AGENT_DIR` value when
+`OMP_PROFILE` and `PI_PROFILE` are both unset or empty, else `~/.omp/agent`. oh-my-pi's named profiles
+(`~/.omp/profiles/<name>/agent`) and `PI_CONFIG_DIR` are not supported. Both go in `HomePaths` (`PiAgentDir`,
+`OhMyPiAgentDir`).
+
+When the two global agent dirs resolve to one directory (compared after `Path.GetFullPath`, case-insensitively on
+Windows), both harnesses load one `extensions/dtk.js`, and `dtk hook pi` answers as `dtk hook oh-my-pi` does. pi's
+install owns it: `dtk init oh-my-pi --global` writes exactly what `dtk init pi --global` writes (pi's body) and notes
+that one extension serves both, so the file never flips between two bodies; `dtk init oh-my-pi --global --uninstall`
+removes nothing and points to `dtk init pi --global --uninstall`; and oh-my-pi's global `DescribeHooks` is empty, so
+doctor reports the extension once, under pi, and uninstalling pi does not count oh-my-pi as still using the shared
+`AGENTS.md` and skill.
 
 The file is `.js`, not `.ts`: both harnesses load it, it needs no type imports (so it depends on neither
 package name), and the Node tests run it without a TypeScript step.

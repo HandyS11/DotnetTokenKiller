@@ -17,7 +17,7 @@ dtk init codex       --global   # ~/.codex (or $CODEX_HOME), ~/.agents/skills
 dtk init opencode    --global   # ~/.config/opencode, ~/.agents/skills
 dtk init antigravity --global   # ~/.gemini/config, ~/.gemini/GEMINI.md
 dtk init pi          --global   # <pi agent dir> (~/.pi/agent or $PI_CODING_AGENT_DIR), ~/.agents/skills
-dtk init oh-my-pi    --global   # ~/.omp/agent, ~/.agents/skills
+dtk init oh-my-pi    --global   # ~/.omp/agent (or $PI_CODING_AGENT_DIR), ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 ```
@@ -404,8 +404,9 @@ command.
 ## pi
 
 `dtk init pi` writes a generated extension, `.pi/extensions/dtk.js`, plus the shared `AGENTS.md` section and the
-`.agents/skills/dotnet-token-killer` skill. `--global` writes `~/.pi/agent/extensions/dtk.js` (or under
-`$PI_CODING_AGENT_DIR`) and `~/.pi/agent/AGENTS.md`, and the skill to `~/.agents/skills`.
+`.agents/skills/dotnet-token-killer` skill. `--global` writes `<pi agent dir>/extensions/dtk.js` and
+`<pi agent dir>/AGENTS.md`, where `<pi agent dir>` is `$PI_CODING_AGENT_DIR` (a leading `~` is expanded) and defaults to
+`~/.pi/agent`, and the skill to `~/.agents/skills`.
 
 The extension handles pi's `tool_call` event: for a `bash` call whose command contains `dotnet`, it asks
 `dtk hook pi` for the rewrite and changes the command before pi runs it. It finds `dtk` on `PATH` itself and never
@@ -426,9 +427,16 @@ and `~/.omp/agent/AGENTS.md`), plus the shared `AGENTS.md` section and skill. oh
 folder, so install each harness you use. Requires oh-my-pi 18.2.1 or later; older versions load the extension but
 run commands unchanged.
 
+Without a profile (`OMP_PROFILE` and `PI_PROFILE` unset), oh-my-pi also honors `PI_CODING_AGENT_DIR`, and so does
+`dtk init oh-my-pi --global`. When that makes pi and oh-my-pi share one agent directory, they load one extension: `dtk init
+oh-my-pi --global` then writes exactly what `dtk init pi --global` writes and says so, its `--uninstall` removes nothing
+and points to `dtk init pi --global --uninstall`, and `dtk doctor` reports the extension once, under pi. Named profiles
+(`~/.omp/profiles/<name>/agent`) and `PI_CONFIG_DIR` are not supported: dtk installs into the default profile only.
+
 oh-my-pi's shell minimizer (`shellMinimizer.enabled`, on by default) has its own `dotnet` filter, chosen by program
 name. Once a command runs as `dtk dotnet …` that filter no longer applies, so the output is filtered once, by dtk.
-dtk does not change oh-my-pi's `config.yml`.
+dtk does not change oh-my-pi's `config.yml`. To have oh-my-pi leave other commands unfiltered too, list them in
+`shellMinimizer.except`.
 
 ## Antigravity CLI
 
