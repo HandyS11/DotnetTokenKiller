@@ -28,9 +28,10 @@ public sealed class UninstallIntegrationTests : IDisposable
     }
 
     public static TheoryData<string> AllProviders =>
-        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "cursor", "windsurf", "aider", "jetbrains"];
+        ["claude", "copilot", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "cursor", "windsurf", "aider", "jetbrains"];
 
-    public static TheoryData<string> GlobalProviders => ["claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "aider"];
+    public static TheoryData<string> GlobalProviders =>
+        ["claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi", "aider"];
 
     private string ProjectDir => Path.Combine(_tempDir, "project");
     private string HomeDir => Path.Combine(_tempDir, "home");
@@ -50,6 +51,8 @@ public sealed class UninstallIntegrationTests : IDisposable
             new GeminiCliIntegrator(home),
             new CodexIntegrator(Rtk(), home),
             new OpenCodeIntegrator(Rtk(), home),
+            new PiIntegrator(Rtk(), home),
+            new OhMyPiIntegrator(Rtk(), home),
             new AntigravityIntegrator(Rtk(), home),
             new CursorIntegrator(),
             new WindsurfIntegrator(),
@@ -298,7 +301,7 @@ public sealed class UninstallIntegrationTests : IDisposable
     [Fact]
     public async Task Doctor_AfterUninstallingEveryHook_ReportsNoHookInstalled()
     {
-        var hookProviders = new[] { "claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity" };
+        var hookProviders = new[] { "claude", "copilot-cli", "gemini", "codex", "opencode", "antigravity", "pi", "oh-my-pi" };
         foreach (var provider in hookProviders)
         {
             await InstallAsync(provider);

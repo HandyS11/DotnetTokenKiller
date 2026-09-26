@@ -365,6 +365,8 @@ public class InitCommandTests
     [InlineData("codex")]
     [InlineData("opencode")]
     [InlineData("antigravity")]
+    [InlineData("pi")]
+    [InlineData("oh-my-pi")]
     [InlineData("cursor")]
     [InlineData("windsurf")]
     [InlineData("aider")]

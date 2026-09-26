@@ -30,7 +30,9 @@ public sealed class HookDescriptionTests : IDisposable
             new CopilotCliIntegrator(home),
             new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
             new OpenCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
-            new AntigravityIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
+            new AntigravityIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
+            new PiIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
+            new OhMyPiIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
         };
 
         foreach (var integrator in integrators)
@@ -73,7 +75,9 @@ public sealed class HookDescriptionTests : IDisposable
             ["copilot-cli"] = "dtk hook copilot-cli; exit 0",
             ["codex"] = "dtk hook codex",
             ["opencode"] = "dtk hook opencode",
-            ["antigravity"] = "dtk hook antigravity || exit 0"
+            ["antigravity"] = "dtk hook antigravity || exit 0",
+            ["pi"] = "dtk hook pi",
+            ["oh-my-pi"] = "dtk hook oh-my-pi"
         };
         var integrators = new IHookIntegrator[]
         {
@@ -82,7 +86,9 @@ public sealed class HookDescriptionTests : IDisposable
             new CopilotCliIntegrator(home),
             new CodexIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
             new OpenCodeIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
-            new AntigravityIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
+            new AntigravityIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
+            new PiIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home),
+            new OhMyPiIntegrator(new RtkHookCoexistence(home.ClaudeDir, rtkConfigPath), home)
         };
 
         foreach (var installation in integrators.SelectMany(i => i.DescribeHooks(_tempDir, HookScope.Project)))

@@ -15,6 +15,7 @@ EXAMPLES:
     dtk init codex --global
     dtk init opencode
     dtk init opencode --global
+    dtk init pi --global
     dtk init antigravity
     dtk init antigravity --global
     dtk init cursor
@@ -26,13 +27,13 @@ EXAMPLES:
 
 ARGUMENTS:
     <provider>    AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex,     
-                  opencode, antigravity, cursor, windsurf, aider, jetbrains)                        
+                  opencode, antigravity, pi, oh-my-pi, cursor, windsurf, aider, jetbrains)          
 
 OPTIONS:
     -h, --help         Prints help information                                                      
     -d, --dir          Target project root directory (default: current directory)                   
     -f, --force        Overwrite existing files instead of skipping them                            
     -g, --global       Install into the user's home config (claude, copilot-cli, gemini, codex,     
-                       opencode, antigravity, aider) instead of a project                           
+                       opencode, antigravity, pi, oh-my-pi, aider) instead of a project             
         --uninstall    Remove what 'dtk init' installed for the provider instead (respects --dir and
                        --global); edited files are kept                                             

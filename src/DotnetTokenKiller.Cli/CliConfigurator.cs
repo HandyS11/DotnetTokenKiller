@@ -109,6 +109,7 @@ internal static class CliConfigurator
             .WithExample(InitCommand, "codex", GlobalOption)
             .WithExample(InitCommand, "opencode")
             .WithExample(InitCommand, "opencode", GlobalOption)
+            .WithExample(InitCommand, "pi", GlobalOption)
             .WithExample(InitCommand, "antigravity")
             .WithExample(InitCommand, "antigravity", GlobalOption)
             .WithExample(InitCommand, "cursor")
