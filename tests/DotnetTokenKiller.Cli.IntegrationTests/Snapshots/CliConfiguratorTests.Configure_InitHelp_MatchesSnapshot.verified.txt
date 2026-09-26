@@ -1,4 +1,4 @@
-DESCRIPTION:
+﻿DESCRIPTION:
 Install dtk integration artifacts for an AI assistant provider
 
 USAGE:
@@ -19,7 +19,9 @@ EXAMPLES:
     dtk init antigravity
     dtk init antigravity --global
     dtk init cursor
-    dtk init windsurf
+    dtk init cursor --global
+    dtk init devin
+    dtk init devin --global
     dtk init aider
     dtk init jetbrains
     dtk init claude --uninstall
@@ -27,7 +29,8 @@ EXAMPLES:
 
 ARGUMENTS:
     <provider>    AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex,     
-                  opencode, antigravity, pi, oh-my-pi, cursor, windsurf, aider, jetbrains)          
+                  opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), aider,      
+                  jetbrains)                                                                        
 
 OPTIONS:
     -h, --help         Prints help information                                                      

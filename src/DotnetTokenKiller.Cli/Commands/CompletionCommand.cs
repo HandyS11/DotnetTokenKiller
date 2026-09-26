@@ -34,7 +34,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             _init_completion || return
 
             local dotnet_cmds="__DOTNET_CMDS_BASH__"
-            local init_providers="claude copilot copilot-cli gemini codex opencode antigravity pi oh-my-pi cursor windsurf aider jetbrains"
+            local init_providers="claude copilot copilot-cli gemini codex opencode antigravity pi oh-my-pi cursor devin windsurf aider jetbrains"
             local config_subcmds="show set"
             local top_cmds="dotnet pipe init config doctor completion gain log reset --version --help"
 
@@ -110,8 +110,9 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                 'antigravity:Install dtk hook and instructions for Antigravity CLI'
                 'pi:Install dtk extension and instructions for pi'
                 'oh-my-pi:Install dtk extension and instructions for oh-my-pi'
-                'cursor:Install dtk rules for Cursor'
-                'windsurf:Install dtk rules for Windsurf'
+                'cursor:Install dtk rules and rewrite hook for Cursor'
+                'devin:Install dtk rules and rewrite hook for Devin (Windsurf)'
+                'windsurf:Alias of devin'
                 'aider:Install dtk rules for Aider'
                 'jetbrains:Install dtk guidelines for JetBrains AI'
             )
@@ -174,8 +175,9 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a antigravity -d 'Install dtk hook and instructions for Antigravity CLI'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a pi -d 'Install dtk extension and instructions for pi'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a oh-my-pi -d 'Install dtk extension and instructions for oh-my-pi'
-        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a cursor    -d 'Install dtk rules for Cursor'
-        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a windsurf  -d 'Install dtk rules for Windsurf'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a cursor    -d 'Install dtk rules and rewrite hook for Cursor'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a devin     -d 'Install dtk rules and rewrite hook for Devin (Windsurf)'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a windsurf  -d 'Alias of devin'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a aider     -d 'Install dtk rules for Aider'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a jetbrains -d 'Install dtk guidelines for JetBrains AI'
 
@@ -203,7 +205,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
 
             $topCmds = @('dotnet', 'pipe', 'init', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')
             $dotnetCmds = @(__DOTNET_CMDS_PS__)
-            $providers = @('claude', 'copilot', 'copilot-cli', 'gemini', 'codex', 'opencode', 'antigravity', 'pi', 'oh-my-pi', 'cursor', 'windsurf', 'aider', 'jetbrains')
+            $providers = @('claude', 'copilot', 'copilot-cli', 'gemini', 'codex', 'opencode', 'antigravity', 'pi', 'oh-my-pi', 'cursor', 'devin', 'windsurf', 'aider', 'jetbrains')
             $configCmds = @('show', 'set')
             $shells = @('bash', 'zsh', 'fish', 'powershell')
 

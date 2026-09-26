@@ -162,6 +162,46 @@ public class IntegrateUseCaseTests
         }
     }
 
+    [Theory]
+    [InlineData("windsurf")]
+    [InlineData("Windsurf")]
+    public void TryResolveProvider_Alias_ResolvesToDevinWithANote(string name)
+    {
+        var useCase = new IntegrateUseCase([new StubIntegrator("devin")]);
+
+        useCase.TryResolveProvider(name, out var canonical, out var note).Should().BeTrue();
+
+        canonical.Should().Be("devin");
+        note.Should().Contain("Devin");
+    }
+
+    [Fact]
+    public void TryResolveProvider_RegisteredName_WinsOverAnAlias()
+    {
+        var useCase = new IntegrateUseCase([new StubIntegrator("windsurf"), new StubIntegrator("devin")]);
+
+        useCase.TryResolveProvider("windsurf", out var canonical, out var note).Should().BeTrue();
+
+        canonical.Should().Be("windsurf");
+        note.Should().BeNull();
+    }
+
+    [Fact]
+    public void TryResolveProvider_Unknown_Fails()
+    {
+        new IntegrateUseCase([new StubIntegrator("devin")]).TryResolveProvider("zed", out _, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_Alias_RunsTheCanonicalIntegrator()
+    {
+        var devin = new StubIntegrator("devin");
+
+        await new IntegrateUseCase([devin]).RunAsync("windsurf", "/tmp/x", false, default);
+
+        devin.LastDirectory.Should().Be("/tmp/x");
+    }
+
     private sealed class StubIntegrator(string providerName) : IProviderIntegrator
     {
         public string? LastDirectory { get; private set; }

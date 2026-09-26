@@ -28,16 +28,19 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var availableProviders = integrateUseCase.AvailableProviders.ToList();
-        var canonicalProvider = availableProviders.FirstOrDefault(
-            p => string.Equals(p, settings.Provider, StringComparison.OrdinalIgnoreCase));
-
-        if (canonicalProvider is null)
+        if (!integrateUseCase.TryResolveProvider(settings.Provider, out var canonicalProvider, out var aliasNote))
         {
+            var aliases = string.Join(", ", IntegrateUseCase.Aliases.Select(pair => $"{pair.Key} → {pair.Value}"));
             console.MarkupLine(
                 $"[red]Error:[/] Unknown provider '{Markup.Escape(settings.Provider)}'. " +
-                $"Available: {Markup.Escape(string.Join(", ", availableProviders))}");
+                $"Available: {Markup.Escape(string.Join(", ", integrateUseCase.AvailableProviders))} " +
+                $"(alias: {Markup.Escape(aliases)})");
             return 1;
+        }
+
+        if (aliasNote is not null)
+        {
+            console.MarkupLine($"[cyan]note[/]     {Markup.Escape(aliasNote)}");
         }
 
         if (settings.Global && settings.Directory is not null)
