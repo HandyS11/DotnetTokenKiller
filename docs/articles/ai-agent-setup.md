@@ -45,7 +45,7 @@ It removes only dtk's own parts, and reports each file as `removed`, `unchanged`
   in it. For Aider, the instructions file is also taken back out of your own `read:` key when `dtk init` merged it
   there.
 - **Generated files** (`SKILL.md`, the OpenCode plugin, the pi and oh-my-pi extensions, Copilot CLI's
-  `dtk-dotnet.json`, the Cursor and Windsurf rules, `.aider-dtk-instructions.md`): deleted only when dtk can prove the
+  `dtk-dotnet.json`, the Cursor and Devin rules, `.aider-dtk-instructions.md`): deleted only when dtk can prove the
   content is its own — a provenance stamp that still verifies, or content identical to what this dtk or an earlier
   release wrote. An edited file is `kept`, with a note; to remove it anyway, run `dtk init <provider> --force` to
   restore dtk's version, then `--uninstall`.
@@ -514,23 +514,75 @@ Add a `dtk` group to `.agents/hooks.json` (or `~/.gemini/config/hooks.json`):
 
 ## Cursor
 
+A `preToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package` commands to use `dtk`, alongside
+the existing rule file.
+
 ### Installation
 
 ```sh
 dtk init cursor
 ```
 
-This creates `.cursor/rules/dtk.mdc` — a Cursor rule file with `alwaysApply: false` that instructs the agent to use `dtk` for dotnet commands.
+This creates two files:
 
-Use `--force` to overwrite an existing file. Use `--dir` to target a specific project directory.
+- `.cursor/rules/dtk.mdc` — a Cursor rule with `alwaysApply: false` that instructs the agent to prefer `dtk`
+- `.cursor/hooks.json` — registers `dtk hook cursor` under `preToolUse` for the `Shell` tool (merges with any
+  existing hooks; `version: 1` is added if it is missing)
+
+`dtk init cursor --global` writes only `~/.cursor/hooks.json`: Cursor keeps user rules in its settings UI, not a
+file, so the global install has no rule to write — run `dtk init cursor` in a project too for the rule.
+
+Use `--force` to overwrite an existing rule file. Use `--dir` to target a specific project directory.
 
 ### How It Works
 
-Cursor loads `.mdc` rule files from `.cursor/rules/` and applies them based on their `alwaysApply` setting. The generated rule tells the agent to prefer `dtk dotnet build|test|restore|clean|format|list package|publish|pack` over raw `dotnet` commands. No hook is needed — it's a plain text instruction file.
+When the hook fires, Cursor's `preToolUse` reply can carry `permission: "allow"`, which skips its own approval
+prompt for the command it rewrote. dtk only takes that shortcut for a command
+`DotnetCommandRewriter.IsAutoApprovable` accepts — a single, plain `dotnet build`, `test`, `restore`, `clean`,
+`format` or `list package` invocation, the same rule Copilot CLI's `allow` reply uses — so it never auto-approves
+something riskier on Cursor's behalf. A chained, piped or backgrounded command, and `dotnet publish`/`pack` (which
+write artifacts and, with a publish profile, can deploy), run as written and are left to the rule instead. Every
+reply the hook does not rewrite is exactly `{}`, never nothing, because Cursor blocks the tool call on output that
+does not match its schema.
+
+Cursor runs project hooks only in trusted workspaces, and `cursor-agent` needs `--trust` to run headless; the
+global hook has no such requirement.
+
+Known gaps: Cursor sends the hook no payload in remote Linux workspaces, and may drop rewrites for subagents'
+shell calls; those commands run as written, guided only by the rule.
+
+If rtk's own Cursor hook is found — `rtk hook cursor` in `hooks.json`, or its legacy
+`~/.cursor/hooks/rtk-rewrite.sh` script — `dtk init cursor` excludes `dotnet` from rtk so the two proxies don't
+both rewrite it.
+
+Cursor imports hooks from a Claude settings file (`~/.claude/settings.json`, `.claude/settings*.json`) by default.
+When dtk's Claude hook is also registered in a settings file Cursor imports, the install prints a note about it; a
+double rewrite is harmless, because the rewriter skips commands `dtk` already ran. `dtk doctor` probes the Cursor
+hook with one simple command per auto-approvable subcommand.
+
+> [!NOTE]
+> Not verified against a live run — see [Harness verification](harness-verification.md).
 
 ### Manual Installation
 
-Create `.cursor/rules/dtk.mdc`:
+Create `.cursor/hooks.json` (or `~/.cursor/hooks.json`):
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "dtk hook cursor",
+        "matcher": "Shell",
+        "timeout": 10
+      }
+    ]
+  }
+}
+```
+
+And, in a project, `.cursor/rules/dtk.mdc`:
 
 ````markdown
 ---
@@ -541,25 +593,72 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list 
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ````
 
-## Windsurf
+## Devin (formerly Windsurf)
+
+A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use
+`dtk` for Devin Local and Devin CLI, alongside a rule file. `windsurf` is an alias of `devin`: `dtk init windsurf`
+runs `dtk init devin` and prints a note saying so.
 
 ### Installation
 
 ```sh
-dtk init windsurf
+dtk init devin
 ```
 
-This creates `.windsurf/rules/dtk.md` — a Windsurf rule file that instructs the agent to prefer `dtk` over raw `dotnet` commands.
+This creates two files:
 
-Use `--force` to overwrite. Use `--dir` to target a specific project directory.
+- `.devin/rules/dtk.md` — the same rule text `dtk init windsurf` used to write
+- `.devin/hooks.v1.json` — the whole file is the hooks object, registering `dtk hook devin` under `PreToolUse` for
+  the `exec` tool
+
+If the project has a `.windsurf/rules/dtk.md` an older dtk wrote, this run deletes it — Devin still reads
+`.windsurf/rules` as a fallback and would otherwise load both — unless it was edited, in which case it is kept
+with a note.
+
+`dtk init devin --global` writes the hook under the `hooks` key of `~/.config/devin/config.json`
+(`%APPDATA%\devin\config.json` on Windows) and adds a `<!-- dtk -->` section to Devin Desktop's always-on
+`~/.codeium/windsurf/memories/global_rules.md`.
+
+Use `--force` to overwrite an existing rule file. Use `--dir` to target a specific project directory.
 
 ### How It Works
 
-Windsurf loads rule files from `.windsurf/rules/` and applies them as system-level instructions. The generated file tells the agent to use `dtk dotnet build|test|restore|clean|format|list package|publish|pack` to reduce token usage. No hook is needed.
+Before Devin Local or Devin CLI runs a shell command, it sends it to `dtk hook devin`, which replies with Claude's
+`hookSpecificOutput.updatedInput` and no decision, so Devin's own approval still applies to the rewritten command.
+The legacy Cascade agent cannot rewrite commands and only gets the rule.
+
+Devin Desktop runs no hooks while a workspace is in Restricted Mode: trust the workspace for the project hook to
+run.
+
+Devin also imports hooks from a Claude settings file (`~/.claude/settings.json`, `.claude/settings*.json`) by
+default; when dtk's Claude hook is registered there too, the install prints a note — a double rewrite is harmless,
+because the rewriter skips commands `dtk` already ran.
+
+> [!NOTE]
+> Not verified against a live run — see [Harness verification](harness-verification.md).
 
 ### Manual Installation
 
-Create `.windsurf/rules/dtk.md`:
+Create `.devin/hooks.v1.json`:
+
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "exec",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "dtk hook devin",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}
+```
+
+And `.devin/rules/dtk.md`:
 
 ```markdown
 Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.

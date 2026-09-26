@@ -118,6 +118,15 @@ project scope needs project trust; init and doctor only say so. `PiExtensionTest
 `{"decision":"ask","overwrite":{"CommandLine":…}}` — never `allow`, which auto-approves. Hooks run through
 `sh -c`/`cmd /c` and a failing hook blocks the command, hence `|| exit 0`. Gate G results are in the PR that added it.
 
+`dtk init cursor` writes `.cursor/rules/dtk.mdc` and a `preToolUse` entry in `.cursor/hooks.json` (`--global`:
+`~/.cursor/hooks.json`, hook only). `dtk hook cursor` must always print JSON — Cursor blocks the tool on any output
+that does not match its schema — so every non-rewrite is `{}`; a rewrite carries `permission: "allow"`, so it is
+gated by `IsAutoApprovable` like Copilot CLI's. doctor probes it one simple command per subcommand. `dtk init devin`
+(alias `windsurf`) writes `.devin/rules/dtk.md` and `.devin/hooks.v1.json`, whose root is the hooks object
+(`HookRegistrationSpec.ContainerKey: null`); globally `~/.config/devin/config.json` and a section in
+`~/.codeium/windsurf/memories/global_rules.md`. Both harnesses also import Claude Code's hooks; a double rewrite is
+harmless. Unverified points are listed in docs/articles/harness-verification.md.
+
 `dtk init <provider> --uninstall` (respects `--dir`/`--global`) removes what that install writes, through
 `UninstallHelpers` (every integrator implements `IUninstallIntegrator`): dtk's hook entries (the install's own match),
 marked sections, and generated files only when their stamp or exact content proves them dtk's; edited files are kept.

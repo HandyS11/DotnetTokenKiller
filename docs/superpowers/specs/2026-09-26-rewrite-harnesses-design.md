@@ -1,6 +1,6 @@
 # Rewrite-capable harnesses (Cursor, Devin, Factory Droid, Crush, Kilo Code, Amp) — design
 
-Date: 2026-09-26. Status: awaiting review.
+Date: 2026-09-26. Status: approved; PR 1 implemented.
 
 ## Goal
 
@@ -170,9 +170,9 @@ exact command, as for Codex. Uninstall removes that entry and deletes the file w
 
 `CursorIntegrator` gains `IGlobalIntegrator` and `IHookIntegrator`. `RtkHookCoexistence` additionally scans
 `~/.cursor/hooks.json` (and the project's) for an rtk hook and applies the existing reconciliation: exclude
-`dotnet` in rtk's `config.toml`. `doctor` reports, as information, when dtk's Claude hook is also registered in a
-Claude settings file Cursor imports; a double rewrite is harmless because the rewriter skips commands `dtk`
-already runs.
+`dotnet` in rtk's `config.toml`. The install prints a note when dtk's Claude hook is also registered in a Claude
+settings file Cursor imports (`ImportedClaudeHook`); a double rewrite is harmless because the rewriter skips
+commands `dtk` already runs. `doctor` probes Cursor with one simple command per auto-approvable subcommand.
 
 Init output notes: project hooks run only in trusted workspaces; `cursor-agent` needs `--trust` headless;
 rewrites do not happen on remote Linux workspaces or, possibly, in subagents.

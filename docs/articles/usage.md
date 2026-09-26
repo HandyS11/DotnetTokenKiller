@@ -207,8 +207,8 @@ dtk init opencode    # OpenCode plugin + AGENTS.md section + skill
 dtk init antigravity # Antigravity CLI hook + AGENTS.md section + skill
 dtk init pi          # pi extension + AGENTS.md section + skill
 dtk init oh-my-pi    # oh-my-pi extension + AGENTS.md section + skill
-dtk init cursor      # Cursor rules file
-dtk init windsurf    # Windsurf rules file
+dtk init cursor      # Cursor rule + rewrite hook (--global: hook only)
+dtk init devin       # Devin (formerly Windsurf) rule + rewrite hook; 'windsurf' is an alias
 dtk init aider       # Aider instructions + .aider.conf.yml section
 dtk init jetbrains   # JetBrains AI guidelines section
 ```
