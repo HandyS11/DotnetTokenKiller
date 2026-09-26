@@ -91,6 +91,19 @@ public sealed class DevinIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateAsync_MalformedHooksFile_ThrowsAndLeavesTheOwnedLegacyRuleInPlace()
+    {
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        await WriteAsync(LegacyRulePath, await File.ReadAllTextAsync(RulePath));
+        await File.WriteAllTextAsync(ProjectHooksPath, "not json");
+
+        var act = () => CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        File.Exists(LegacyRulePath).Should().BeTrue("the hook write failed before the legacy rule was ever retired");
+    }
+
+    [Fact]
     public async Task IntegrateAsync_DtkClaudeHookInProjectSettings_AddsTheImportNote()
     {
         await WriteAsync(Path.Combine(ProjectDir, ".claude", "settings.json"),
@@ -111,6 +124,19 @@ public sealed class DevinIntegratorTests : IDisposable
 
         result.RemovedFiles.Should().BeEquivalentTo(RulePath, ProjectHooksPath, LegacyRulePath);
         Directory.Exists(Path.Combine(ProjectDir, ".devin")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UninstallAsync_EditedWindsurfRule_IsKeptWithTheUninstallWordingNotTheInstallWording()
+    {
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        await WriteAsync(LegacyRulePath, "# my own rules\n");
+
+        var result = await CreateSut().UninstallAsync(ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
+
+        File.Exists(LegacyRulePath).Should().BeTrue();
+        result.Notes.Should().Contain(DevinIntegrator.LegacyRuleKeptOnUninstallNote(LegacyRulePath));
+        result.Notes.Should().NotContain(DevinIntegrator.LegacyRuleKeptNote(LegacyRulePath));
     }
 
     [Fact]

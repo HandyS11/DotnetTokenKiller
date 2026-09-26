@@ -9,7 +9,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Creates, in a project: <c>.devin/rules/dtk.md</c> and <c>.devin/hooks.v1.json</c>, whose root is the hooks object
 /// registering <c>dtk hook devin</c> under <c>PreToolUse</c> for the <c>exec</c> tool. Globally: that registration
 /// under <c>hooks</c> in Devin's <c>config.json</c>, and a dtk section in Devin Desktop's always-on
-/// <c>global_rules.md</c>. Devin Local and Devin CLI run the hook; the legacy Cascade agent reads only the rule.
+/// <c>global_rules.md</c>. Devin Local and Devin CLI run the hook; the legacy Cascade agent cannot rewrite commands.
 /// A project install and uninstall also retire the <c>.windsurf/rules/dtk.md</c> an older dtk wrote, which Devin still
 /// reads as a fallback, when its content proves dtk wrote it.
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
@@ -19,8 +19,7 @@ internal sealed class DevinIntegrator(HomePaths home)
 {
     /// <summary>Printed when this run wrote the hook.</summary>
     internal const string CascadeNote =
-        "Devin Local and Devin CLI run the rewrite hook; the legacy Cascade agent cannot rewrite commands and follows "
-        + "only the rule.";
+        "Devin Local and Devin CLI run the rewrite hook; the legacy Cascade agent cannot rewrite commands.";
 
     /// <summary>Printed when this run wrote a project hook.</summary>
     internal const string RestrictedModeNote =
@@ -44,11 +43,21 @@ internal sealed class DevinIntegrator(HomePaths home)
         {IntegrationInstructions.UsageBody}
         """;
 
-    /// <summary>Printed when an edited <c>.windsurf/rules/dtk.md</c> is left in place.</summary>
+    /// <summary>Printed by an install when an edited <c>.windsurf/rules/dtk.md</c> is left in place.</summary>
     /// <param name="path">The legacy rule's path.</param>
     internal static string LegacyRuleKeptNote(string path) =>
         $"{path} was left in place: it differs from every rule dtk wrote, so it was edited. Devin still reads "
         + ".windsurf/rules, so delete it once .devin/rules/dtk.md covers it.";
+
+    /// <summary>
+    /// Printed by an uninstall when an edited <c>.windsurf/rules/dtk.md</c> is left in place. Unlike
+    /// <see cref="LegacyRuleKeptNote"/>, an uninstall has just removed <c>.devin/rules/dtk.md</c>, so it cannot point
+    /// there as the reason to delete the legacy file later.
+    /// </summary>
+    /// <param name="path">The legacy rule's path.</param>
+    internal static string LegacyRuleKeptOnUninstallNote(string path) =>
+        $"{path} was left in place: it differs from every rule dtk wrote, so it was edited. Delete it yourself if "
+        + "nothing needs it.";
 
     /// <inheritdoc/>
     public string ProviderName => "devin";
@@ -73,8 +82,8 @@ internal sealed class DevinIntegrator(HomePaths home)
         var context = new IntegrationContext(force);
 
         await IntegratorHelpers.WriteFileAsync(RulePath(directory), DevinRule, context, cancellationToken).ConfigureAwait(false);
-        await RetireWindsurfRuleAsync(directory, context, cancellationToken).ConfigureAwait(false);
         await WriteHookAsync(directory, HookScope.Project, context, cancellationToken).ConfigureAwait(false);
+        await RetireWindsurfRuleAsync(directory, context, isUninstall: false, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
@@ -107,7 +116,7 @@ internal sealed class DevinIntegrator(HomePaths home)
             await UninstallHelpers.RemoveOwnedFileAsync(
                 RulePath(directory), DevinRule, IntegrationInstructions.ReleasedMarkdownRuleHashes, "dtk init devin", context,
                 cancellationToken).ConfigureAwait(false);
-            await RetireWindsurfRuleAsync(directory, context, cancellationToken).ConfigureAwait(false);
+            await RetireWindsurfRuleAsync(directory, context, isUninstall: true, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -139,8 +148,14 @@ internal sealed class DevinIntegrator(HomePaths home)
     /// </summary>
     /// <param name="directory">The project root.</param>
     /// <param name="context">The accumulator to fold the deletion's outcome into.</param>
+    /// <param name="isUninstall">
+    /// Whether this runs from <see cref="UninstallAsync"/>, which has already removed <c>.devin/rules/dtk.md</c> and so
+    /// needs <see cref="LegacyRuleKeptOnUninstallNote"/> instead of <see cref="LegacyRuleKeptNote"/> when the legacy
+    /// file is kept.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    private static async Task RetireWindsurfRuleAsync(string directory, IntegrationContext context, CancellationToken cancellationToken)
+    private static async Task RetireWindsurfRuleAsync(
+        string directory, IntegrationContext context, bool isUninstall, CancellationToken cancellationToken)
     {
         var path = LegacyRulePath(directory);
         if (!File.Exists(path))
@@ -155,7 +170,7 @@ internal sealed class DevinIntegrator(HomePaths home)
 
         if (!ownsIt)
         {
-            context.Notes.Add(LegacyRuleKeptNote(path));
+            context.Notes.Add(isUninstall ? LegacyRuleKeptOnUninstallNote(path) : LegacyRuleKeptNote(path));
             return;
         }
 
