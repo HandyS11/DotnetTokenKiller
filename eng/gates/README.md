@@ -93,3 +93,20 @@ Needs `npm`, `git`, `curl` and Node. A cold first run of `kilo` takes a couple o
 | Kilo CLI version | Date checked | Main run | Control run | Notes |
 | --- | --- | --- | --- | --- |
 | 7.8.1 (latest at time of check) | 2026-09-27 | PASS | PASS | `dtk dotnet build` logged, no bare `dotnet build`; control logged `dotnet build` |
+| 7.4.2 | 2026-09-27 | PASS | PASS | same as 7.8.1 |
+| 7.0.26 (first 7.x release) | 2026-09-27 | FAIL | FAIL | Harness limitation, not dtk — see below |
+
+No minimum Kilo version is pinned: 7.4.2 and 7.8.1 pass, and the releases between 7.0.26 and 7.4.2 were not
+bisected.
+
+#### 7.0.26 failure (verbatim)
+
+Both runs fail identically before any tool call, so the gate cannot test dtk's plugin there:
+
+```
+Error: Model not found: mock/mock.
+ProviderModelNotFoundError: ProviderModelNotFoundError
+```
+
+7.0.26 does not register the custom `mock` provider from this `kilo.json` shape. The control run fails the
+same way, so this says nothing about whether dtk's plugin would load on that release.
