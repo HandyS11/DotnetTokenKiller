@@ -94,7 +94,7 @@ Needs `npm`, `git`, `curl` and Node. A cold first run of `kilo` takes a couple o
 | --- | --- | --- | --- | --- |
 | 7.8.1 (latest at time of check) | 2026-09-27 | PASS | PASS | `dtk dotnet build` logged, no bare `dotnet build`; control logged `dotnet build` |
 | 7.4.2 | 2026-09-27 | PASS | PASS | same as 7.8.1 |
-| 7.0.26 (first 7.x release) | 2026-09-27 | FAIL | FAIL | Harness limitation, not dtk — see below |
+| 7.0.26 (first 7.x release) | 2026-09-27 | FAIL | FAIL | Kilo 7.0.26 itself rejects the gate's custom-provider config, not dtk or the script — see below |
 
 No minimum Kilo version is pinned: 7.4.2 and 7.8.1 pass, and the releases between 7.0.26 and 7.4.2 were not
 bisected.
@@ -109,4 +109,5 @@ ProviderModelNotFoundError: ProviderModelNotFoundError
 ```
 
 7.0.26 does not register the custom `mock` provider from this `kilo.json` shape. The control run fails the
-same way, so this says nothing about whether dtk's plugin would load on that release.
+same way, so this says nothing about whether dtk's plugin would load on that release. Both runs also hang
+until the gate's 180 s timeout (exit 124) before failing, rather than failing fast on the bad config.
