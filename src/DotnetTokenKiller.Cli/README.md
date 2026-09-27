@@ -3,7 +3,7 @@
 A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
 down to only what matters. Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`,
 `publish`, and `pack` with `dtk` for 60–90% fewer tokens — per-command filters, token analytics, and
-one-command setup for 8 AI coding agents.
+one-command setup for 15 AI coding agents.
 
 ## Why
 

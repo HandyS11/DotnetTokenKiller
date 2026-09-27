@@ -20,9 +20,13 @@ dtk init pi          --global   # <pi agent dir> (~/.pi/agent or $PI_CODING_AGEN
 dtk init oh-my-pi    --global   # ~/.omp/agent (or $PI_CODING_AGENT_DIR), ~/.agents/skills
 dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
+dtk init cursor      --global   # ~/.cursor/hooks.json (hook only)
+dtk init devin       --global   # ~/.config/devin/config.json, global_rules.md
+dtk init droid       --global   # ~/.factory, ~/.agents/skills
+dtk init crush       --global   # ~/.config/crush, ~/.agents/skills
 ```
 
-`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, and **copilot-cli** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
+`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, **devin**, **droid**, and **crush** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
 
 ## Uninstalling
 
