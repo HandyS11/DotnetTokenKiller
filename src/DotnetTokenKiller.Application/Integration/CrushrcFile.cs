@@ -21,6 +21,28 @@ internal static class CrushrcFile
     internal static string Section(string command) =>
         $"{BeginMarker}\nhook add PreToolUse --name dtk --matcher '^bash$' --command '{command}'\n{EndMarker}\n";
 
+    /// <summary>
+    /// Whether a line of <paramref name="content"/> that is not a comment (its first non-blank character is not
+    /// <c>#</c>) contains <paramref name="command"/>: how doctor and uninstall tell a script registration is live.
+    /// </summary>
+    /// <param name="content">The script's text.</param>
+    /// <param name="command">The hook command to look for, e.g. <c>dtk hook crush</c>.</param>
+    internal static bool RunsCommand(string content, string command)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        foreach (var line in content.AsSpan().EnumerateLines())
+        {
+            var trimmed = line.TrimStart();
+            if (!trimmed.StartsWith('#') && trimmed.Contains(command, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Creates the file with the section, appends the section, or replaces a stale one.</summary>
     /// <param name="path">The <c>crushrc</c> to write.</param>
     /// <param name="command">The hook command.</param>

@@ -790,6 +790,19 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
+    public async Task RunAsync_ScriptRegistrationCommentedOut_IsNotRegistered()
+    {
+        var path = Path.Combine(_tempDir, ".crushrc");
+        await File.WriteAllTextAsync(path,
+            "option debug true\n  # hook add PreToolUse --name dtk --matcher '^bash$' --command 'dtk hook crush'\n");
+
+        var checks = await _sut.RunAsync([new ScriptHookIntegrator(path)], _tempDir, default);
+
+        checks.Should().ContainSingle("a commented-out line registers nothing");
+        checks[0].Message.Should().Contain("dtk init");
+    }
+
+    [Fact]
     public async Task RunAsync_RealCrushInstall_IsRegisteredAndProbed()
     {
         await Crush.IntegrateAsync(_tempDir, force: false, default);

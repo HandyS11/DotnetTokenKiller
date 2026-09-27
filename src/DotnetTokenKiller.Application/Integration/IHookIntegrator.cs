@@ -81,7 +81,8 @@ internal sealed record HookInstallation(
 {
     /// <summary>
     /// Gets a value indicating whether <see cref="RegistrationPath"/> is a script (Crush's <c>crushrc</c>) rather than
-    /// JSON, so diagnostics search its text for the hook command instead of parsing it.
+    /// JSON, so diagnostics search its uncommented lines for the hook command (<see cref="CrushrcFile.RunsCommand"/>)
+    /// instead of parsing it.
     /// </summary>
     internal bool IsScriptRegistration { get; init; }
 }
