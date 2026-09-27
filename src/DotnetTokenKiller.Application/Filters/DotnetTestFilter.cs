@@ -45,63 +45,75 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         var i = 0;
         while (i < lines.Length)
         {
-            var line = lines[i].TrimEnd('\r');
-
-            var summaryMatch = SummaryPattern().Match(line);
-            if (summaryMatch.Success)
-            {
-                AccumulateSummary(summaryMatch, state);
-                i++;
-                continue;
-            }
-
-            var terminalLoggerSummaryMatch = TerminalLoggerSummaryPattern().Match(line);
-            if (terminalLoggerSummaryMatch.Success)
-            {
-                AccumulateTerminalLoggerSummary(terminalLoggerSummaryMatch, state);
-                i++;
-                continue;
-            }
-
-            var mtpRunSummaryMatch = MtpRunSummaryHeaderPattern().Match(line);
-            if (mtpRunSummaryMatch.Success)
-            {
-                i = ParseMtpRunSummary(lines, i, mtpRunSummaryMatch, state);
-                continue;
-            }
-
-            if (MtpRunningTestsPattern().IsMatch(line))
-            {
-                state.MtpAssembliesRun++;
-                i++;
-                continue;
-            }
-
-            if (NoTestsPattern().IsMatch(line) || MtpAssemblyZeroTestsPattern().IsMatch(line))
-            {
-                state.ZeroTestsFound = true;
-                i++;
-                continue;
-            }
-
-            var failedHeaderMatch = FailedTestHeaderPattern().Match(line);
-            if (failedHeaderMatch.Success)
-            {
-                i = ParseFailure(lines, i, failedHeaderMatch, state);
-                continue;
-            }
-
-            var mtpFailedMatch = MtpFailedTestPattern().Match(line);
-            if (mtpFailedMatch.Success)
-            {
-                i = ParseMtpFailure(lines, i, mtpFailedMatch, state);
-                continue;
-            }
-
-            i++;
+            i = ParseLine(lines, i, state);
         }
 
         return state;
+    }
+
+    /// <summary>Parses the line at <paramref name="i"/>, and any lines that belong to it.</summary>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="i">The index of the line to parse.</param>
+    /// <param name="state">The state accumulated so far.</param>
+    /// <returns>The index of the next line to parse.</returns>
+    private int ParseLine(string[] lines, int i, ParseState state)
+    {
+        var line = lines[i].TrimEnd('\r');
+
+        if (TryParseSingleLine(line, state))
+        {
+            return i + 1;
+        }
+
+        var mtpRunSummaryMatch = MtpRunSummaryHeaderPattern().Match(line);
+        if (mtpRunSummaryMatch.Success)
+        {
+            return ParseMtpRunSummary(lines, i, mtpRunSummaryMatch, state);
+        }
+
+        var failedHeaderMatch = FailedTestHeaderPattern().Match(line);
+        if (failedHeaderMatch.Success)
+        {
+            return ParseFailure(lines, i, failedHeaderMatch, state);
+        }
+
+        var mtpFailedMatch = MtpFailedTestPattern().Match(line);
+        return mtpFailedMatch.Success ? ParseMtpFailure(lines, i, mtpFailedMatch, state) : i + 1;
+    }
+
+    /// <summary>Records <paramref name="line"/> when it is one of the single-line shapes: a summary or a test count.</summary>
+    /// <param name="line">The line, without its carriage return.</param>
+    /// <param name="state">The state accumulated so far.</param>
+    /// <returns>Whether the line was recognised.</returns>
+    private static bool TryParseSingleLine(string line, ParseState state)
+    {
+        var summaryMatch = SummaryPattern().Match(line);
+        if (summaryMatch.Success)
+        {
+            AccumulateSummary(summaryMatch, state);
+            return true;
+        }
+
+        var terminalLoggerSummaryMatch = TerminalLoggerSummaryPattern().Match(line);
+        if (terminalLoggerSummaryMatch.Success)
+        {
+            AccumulateTerminalLoggerSummary(terminalLoggerSummaryMatch, state);
+            return true;
+        }
+
+        if (MtpRunningTestsPattern().IsMatch(line))
+        {
+            state.MtpAssembliesRun++;
+            return true;
+        }
+
+        if (NoTestsPattern().IsMatch(line) || MtpAssemblyZeroTestsPattern().IsMatch(line))
+        {
+            state.ZeroTestsFound = true;
+            return true;
+        }
+
+        return false;
     }
 
     private int ParseFailure(string[] lines, int i, Match failedHeaderMatch, ParseState state)
@@ -347,24 +359,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return $"✓ dotnet test: {state.TotalSkipped} skipped, 0 executed\n";
         }
 
-        // A "nothing ran" verdict requires that no assembly produced evidence of a test.
-        // ZeroTestsFound is per-assembly: in a multi-project run, one assembly matching nothing must
-        // never override another's real results. Stated in full — rather than relying on the earlier
-        // skipped-only and failure branches — so the guard is self-contained and survives a future
-        // reordering of those branches. TotalSkipped: 0 is currently shadowed by the skipped-only
-        // branch above (it always returns first when TotalSkipped > 0), so that conjunct is defensive,
-        // not load-bearing.
-        var noTestEvidence = state is { TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0 }
-                             && state.Failures.Count == 0;
-        // MTP exits 8 when zero tests ran, so exit 8 together with its run-level "Zero tests ran"
-        // verdict stands in for the zero exit: that exit code means exactly this outcome, not a failure
-        // to hide. Any other non-zero exit is a real failure and falls through to the raw-tail fallback.
-        var zeroTestsExit = exitCode == 0 || (exitCode == MtpZeroTestsExitCode && state.MtpZeroTestsVerdict);
-        if (zeroTestsExit && noTestEvidence && (state.ZeroTestsFound || state.ProjectCount > 0))
+        if (FormatZeroTests(state, exitCode) is { } zeroTests)
         {
-            return state.ZeroTestsFound
-                ? "⚠ dotnet test: 0 tests found (no assembly matched)\n"
-                : "⚠ dotnet test: 0 tests found\n";
+            return zeroTests;
         }
 
         if (state.ProjectCount == 0)
@@ -386,6 +383,34 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             : string.Empty;
         return
             $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})\n";
+    }
+
+    /// <summary>The "0 tests found" verdict, or <see langword="null"/> when the run is not one.</summary>
+    /// <param name="state">The parsed run.</param>
+    /// <param name="exitCode">The run's exit code.</param>
+    private static string? FormatZeroTests(ParseState state, int exitCode)
+    {
+        // A "nothing ran" verdict requires that no assembly produced evidence of a test.
+        // ZeroTestsFound is per-assembly: in a multi-project run, one assembly matching nothing must
+        // never override another's real results. Stated in full — rather than relying on the earlier
+        // skipped-only and failure branches — so the guard is self-contained and survives a future
+        // reordering of those branches. TotalSkipped: 0 is currently shadowed by FormatOutput's
+        // skipped-only branch (it always returns first when TotalSkipped > 0), so that conjunct is defensive,
+        // not load-bearing.
+        var noTestEvidence = state is { TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0 }
+                             && state.Failures.Count == 0;
+        // MTP exits 8 when zero tests ran, so exit 8 together with its run-level "Zero tests ran"
+        // verdict stands in for the zero exit: that exit code means exactly this outcome, not a failure
+        // to hide. Any other non-zero exit is a real failure and falls through to the raw-tail fallback.
+        var zeroTestsExit = exitCode == 0 || (exitCode == MtpZeroTestsExitCode && state.MtpZeroTestsVerdict);
+        if (!zeroTestsExit || !noTestEvidence || (!state.ZeroTestsFound && state.ProjectCount == 0))
+        {
+            return null;
+        }
+
+        return state.ZeroTestsFound
+            ? "⚠ dotnet test: 0 tests found (no assembly matched)\n"
+            : "⚠ dotnet test: 0 tests found\n";
     }
 
     private static string FormatFailures(ParseState state, string elapsed)

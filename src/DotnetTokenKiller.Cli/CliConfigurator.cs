@@ -105,25 +105,9 @@ internal static class CliConfigurator
             .WithExample(InitCommand, "copilot-cli")
             .WithExample(InitCommand, "copilot-cli", GlobalOption)
             .WithExample(InitCommand, "gemini")
-            .WithExample(InitCommand, "codex")
-            .WithExample(InitCommand, "codex", GlobalOption)
-            .WithExample(InitCommand, "opencode")
-            .WithExample(InitCommand, "opencode", GlobalOption)
+            .WithProjectAndGlobalExamples("codex", "opencode")
             .WithExample(InitCommand, "pi", GlobalOption)
-            .WithExample(InitCommand, "antigravity")
-            .WithExample(InitCommand, "antigravity", GlobalOption)
-            .WithExample(InitCommand, "cursor")
-            .WithExample(InitCommand, "cursor", GlobalOption)
-            .WithExample(InitCommand, "devin")
-            .WithExample(InitCommand, "devin", GlobalOption)
-            .WithExample(InitCommand, "droid")
-            .WithExample(InitCommand, "droid", GlobalOption)
-            .WithExample(InitCommand, "crush")
-            .WithExample(InitCommand, "crush", GlobalOption)
-            .WithExample(InitCommand, "kilo")
-            .WithExample(InitCommand, "kilo", GlobalOption)
-            .WithExample(InitCommand, "amp")
-            .WithExample(InitCommand, "amp", GlobalOption)
+            .WithProjectAndGlobalExamples("antigravity", "cursor", "devin", "droid", "crush", "kilo", "amp")
             .WithExample(InitCommand, "aider")
             .WithExample(InitCommand, "jetbrains")
             .WithExample(InitCommand, "claude", "--uninstall")
@@ -170,5 +154,20 @@ internal static class CliConfigurator
         config.AddCommand<ResetCommand>("reset")
             .WithDescription("Clear all tracking data")
             .WithExample("reset");
+    }
+
+    /// <summary>Adds a project and a <c>--global</c> <c>init</c> example for each provider, in order.</summary>
+    /// <param name="command">The <c>init</c> command's configurator.</param>
+    /// <param name="providers">The providers to add examples for.</param>
+    /// <returns>The same configurator, for chaining.</returns>
+    private static ICommandConfigurator WithProjectAndGlobalExamples(
+        this ICommandConfigurator command, params string[] providers)
+    {
+        foreach (var provider in providers)
+        {
+            command.WithExample(InitCommand, provider).WithExample(InitCommand, provider, GlobalOption);
+        }
+
+        return command;
     }
 }

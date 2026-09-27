@@ -91,6 +91,19 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
             return 0;
         }
 
+        PrintInstall(result, directory, canonicalProvider, settings.Force, console);
+        return 0;
+    }
+
+    /// <summary>Prints what an install did: one line per file, then the notes and the summary.</summary>
+    /// <param name="result">The install result.</param>
+    /// <param name="directory">The directory paths are shown relative to.</param>
+    /// <param name="provider">The canonical provider name.</param>
+    /// <param name="force">Whether --force was passed.</param>
+    /// <param name="console">The Spectre.Console output sink.</param>
+    private static void PrintInstall(
+        IntegrationResult result, string directory, string provider, bool force, IAnsiConsole console)
+    {
         foreach (var file in result.CreatedFiles)
         {
             console.MarkupLine($"[green]created[/]  {Markup.Escape(RelativePath(directory, file))}");
@@ -120,7 +133,7 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
             // merge whose hook entry is already registered — is reported in UnchangedFiles instead,
             // never here. Force *merges/appends* the managed section and preserves user content — it
             // never overwrites — so the hint must not say "overwrite".
-            var hint = settings.Force ? string.Empty : " [grey](use --force to integrate into existing files)[/]";
+            var hint = force ? string.Empty : " [grey](use --force to integrate into existing files)[/]";
             console.MarkupLine($"[grey]skipped[/]  {Markup.Escape(RelativePath(directory, file))}{hint}");
         }
 
@@ -129,9 +142,7 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
             console.MarkupLine($"[cyan]note[/]     {Markup.Escape(note)}");
         }
 
-        PrintSummary(result, settings.Force, canonicalProvider, console);
-
-        return 0;
+        PrintSummary(result, force, provider, console);
     }
 
     /// <summary>

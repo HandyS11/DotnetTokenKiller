@@ -149,22 +149,14 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
         if (value.Length == 0)
         {
             // Block style: drop the "- readTarget" item line.
-            for (var i = readLineIndex + 1; i < lines.Length; i++)
+            var itemIndex = FindBlockItemIndex(lines, readLineIndex, readTarget);
+            if (itemIndex < 0)
             {
-                var trimmedStart = lines[i].TrimStart();
-                if (trimmedStart.Length == lines[i].Length || !trimmedStart.StartsWith(BlockItemPrefix, StringComparison.Ordinal))
-                {
-                    break;
-                }
-
-                if (IsReadTarget(trimmedStart[BlockItemPrefix.Length..], readTarget))
-                {
-                    updated.RemoveAt(i);
-                    return string.Join('\n', updated);
-                }
+                return content;
             }
 
-            return content;
+            updated.RemoveAt(itemIndex);
+            return string.Join('\n', updated);
         }
 
         var listed = value.StartsWith('[') && value.EndsWith(']') ? value[1..^1] : value;
@@ -178,6 +170,30 @@ internal sealed class AiderIntegrator(HomePaths home) : IProviderIntegrator, IGl
         var lineEnding = lines[readLineIndex].EndsWith('\r') ? "\r" : string.Empty;
         updated[readLineIndex] = $"{ReadKeyPrefix} [{string.Join(", ", items)}]{commentSuffix}{lineEnding}";
         return string.Join('\n', updated);
+    }
+
+    /// <summary>Finds the <c>- readTarget</c> item line of the block-style <c>read:</c> key at <paramref name="readLineIndex"/>.</summary>
+    /// <param name="lines">The conf file's lines.</param>
+    /// <param name="readLineIndex">The index of the <c>read:</c> line.</param>
+    /// <param name="readTarget">The instructions file to look for.</param>
+    /// <returns>The item line's index, or -1 when the block does not list it.</returns>
+    private static int FindBlockItemIndex(string[] lines, int readLineIndex, string readTarget)
+    {
+        for (var i = readLineIndex + 1; i < lines.Length; i++)
+        {
+            var trimmedStart = lines[i].TrimStart();
+            if (trimmedStart.Length == lines[i].Length || !trimmedStart.StartsWith(BlockItemPrefix, StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            if (IsReadTarget(trimmedStart[BlockItemPrefix.Length..], readTarget))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static bool IsReadTarget(string item, string readTarget) =>

@@ -70,6 +70,12 @@ internal static class HookPayloads
     private const string CommandProperty = "command";
 
     /// <summary>
+    /// The decision value a reply uses to accept the rewritten command. Whether it also skips the harness's own
+    /// permission check depends on the harness: Codex still applies its approval policy, and Gemini ignores it.
+    /// </summary>
+    private const string AllowDecision = "allow";
+
+    /// <summary>
     /// Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>,
     /// <c>antigravity</c>, <c>pi</c>, <c>oh-my-pi</c>, <c>cursor</c>, <c>devin</c>, <c>droid</c>, <c>crush</c>, <c>kilo</c>, <c>amp</c>) to its payload shape.
     /// </summary>
@@ -202,7 +208,7 @@ internal static class HookPayloads
 
         var updatedInput = (JsonObject)toolInput.DeepClone();
         updatedInput[CommandProperty] = rewritten;
-        return new JsonObject { ["permission"] = "allow", ["updated_input"] = updatedInput }.ToJsonString();
+        return new JsonObject { ["permission"] = AllowDecision, ["updated_input"] = updatedInput }.ToJsonString();
     }
 
     /// <summary>
@@ -230,7 +236,7 @@ internal static class HookPayloads
 
     private static string ReplyToGemini(JsonNode? root)
     {
-        var reply = new JsonObject { ["decision"] = "allow" };
+        var reply = new JsonObject { ["decision"] = AllowDecision };
         if (root is JsonObject payload
             && payload[ToolInputProperty] is JsonObject toolInput
             && TryRewrite(toolInput, out _, out var rewritten))
@@ -269,7 +275,7 @@ internal static class HookPayloads
         toolArgs[CommandProperty] = rewritten;
         return new JsonObject
         {
-            ["permissionDecision"] = DotnetCommandRewriter.IsAutoApprovable(command) ? "allow" : "ask",
+            ["permissionDecision"] = DotnetCommandRewriter.IsAutoApprovable(command) ? AllowDecision : "ask",
             ["modifiedArgs"] = toolArgs
         }.ToJsonString();
     }
@@ -293,7 +299,7 @@ internal static class HookPayloads
                 ["hookEventName"] = "PreToolUse",
                 // Codex rejects updatedInput unless the reply also allows; it still applies its approval policy and
                 // sandbox to the rewritten command.
-                ["permissionDecision"] = "allow",
+                ["permissionDecision"] = AllowDecision,
                 ["updatedInput"] = updatedInput
             }
         }.ToJsonString();

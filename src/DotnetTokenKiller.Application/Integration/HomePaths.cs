@@ -92,7 +92,7 @@ internal sealed class HomePaths
     /// <c>~/.config/crush</c> — on Windows too.
     /// </summary>
     internal string CrushConfigDir => RootedOrDefault(
-        "CRUSH_GLOBAL_CONFIG", Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "crush"));
+        "CRUSH_GLOBAL_CONFIG", Path.Combine(XdgConfigHome, "crush"));
 
     /// <summary>
     /// Gets Kilo Code's global config directory: <c>$KILO_CONFIG_DIR</c> when it is an absolute path (Kilo reads it as an
@@ -100,14 +100,17 @@ internal sealed class HomePaths
     /// is absolute, else <c>~/.config/kilo</c> — on Windows too.
     /// </summary>
     internal string KiloConfigDir => RootedOrDefault(
-        "KILO_CONFIG_DIR", Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "kilo"));
+        "KILO_CONFIG_DIR", Path.Combine(XdgConfigHome, "kilo"));
 
     /// <summary>
     /// Gets Amp's user config directory: <c>$XDG_CONFIG_HOME/amp</c> when that variable is an absolute path, else
     /// <c>~/.config/amp</c> — on Windows too (<c>%USERPROFILE%\.config\amp</c>).
     /// </summary>
     internal string AmpConfigDir =>
-        Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "amp");
+        Path.Combine(XdgConfigHome, "amp");
+
+    /// <summary>Gets <c>$XDG_CONFIG_HOME</c> when it is an absolute path, else <c>~/.config</c>.</summary>
+    private string XdgConfigHome => RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config"));
 
     /// <summary>
     /// Gets the user-level skills directory Codex CLI, OpenCode, pi and oh-my-pi all read (<c>~/.agents/skills</c>).
@@ -119,7 +122,7 @@ internal sealed class HomePaths
     /// else <c>~/.config/opencode</c> — on Windows too, where OpenCode also uses <c>~/.config</c>.
     /// </summary>
     internal string OpenCodeConfigDir =>
-        Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "opencode");
+        Path.Combine(XdgConfigHome, "opencode");
 
     /// <summary>
     /// Gets pi's agent directory: <c>$PI_CODING_AGENT_DIR</c> when it is an absolute path or starts with <c>~</c>
