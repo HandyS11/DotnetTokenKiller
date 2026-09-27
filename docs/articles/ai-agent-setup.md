@@ -715,6 +715,9 @@ Having written the hook there, `dtk init droid` removes dtk's entry from the oth
 left empty, so the hook is registered exactly once, where Droid reads it — for example, when you add a `PreToolUse`
 hook to `settings.json` after dtk created a `hooks.json` holding only its own, re-running `dtk init droid` moves
 dtk's hook into `settings.json` and deletes that `hooks.json`, which would otherwise shadow your hook.
+The reverse also happens: a `PreToolUse` added to `hooks.json` later (by hand or through Droid's `/hooks` UI) takes
+precedence over the `settings.json` one holding dtk's hook, so `dtk doctor` flags a hook Droid no longer reads, and
+running `dtk init droid` again moves dtk's hook to where Droid reads it.
 
 `dtk init droid --uninstall` removes dtk's entry from all three candidate files — wherever an earlier run or the
 user moved it — and leaves every other hook alone. A candidate file that isn't valid JSON is kept as is, with a

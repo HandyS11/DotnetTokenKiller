@@ -127,6 +127,14 @@ internal static class FactoryDroidHooks
         }
     }
 
+    /// <summary>The <c>hooks.json</c> Droid reads: the root one when it exists, else the legacy one when that exists.</summary>
+    /// <param name="factoryDir">A <c>.factory</c> directory: the project's or the user's.</param>
+    internal static string? LiveHooksJson(string factoryDir)
+    {
+        var candidates = Candidates(factoryDir);
+        return GetLiveHooksJson(candidates[0].Path, candidates[1].Path);
+    }
+
     /// <summary>Returns the root hooks.json path if it exists, the legacy path if that exists, or null.</summary>
     /// <param name="root">The root hooks.json path.</param>
     /// <param name="legacy">The legacy hooks/hooks.json path.</param>

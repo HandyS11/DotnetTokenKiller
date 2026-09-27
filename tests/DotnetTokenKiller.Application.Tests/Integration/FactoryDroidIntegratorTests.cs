@@ -235,4 +235,79 @@ public sealed class FactoryDroidIntegratorTests : IDisposable
         result.Notes.Should().Equal(FactoryDroidIntegrator.SessionNote);
         (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Be(settings);
     }
+
+    private const string UserPreToolUse =
+        """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"lint"}]}]}""";
+
+    [Fact]
+    internal void DescribeHooks_DtkInAFileDroidNoLongerReads_PointsAtThatFile()
+    {
+        Write(ProjectSettingsJson,
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"dtk hook droid"}]}]}}""");
+        Write(ProjectHooksJson, UserPreToolUse);
+
+        var hook = CreateSut().DescribeHooks(ProjectDir, HookScope.Project).Should().ContainSingle().Subject;
+
+        hook.RegistrationPath.Should().Be(ProjectSettingsJson, "doctor must check the file that actually holds dtk's hook");
+    }
+
+    [Fact]
+    internal async Task InspectApproval_DtkWhereDroidReadsPreToolUse_ReportsNothing()
+    {
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        var sut = CreateSut();
+        var hook = sut.DescribeHooks(ProjectDir, HookScope.Project).Single();
+
+        sut.InspectApproval(hook, ProjectDir).Should().BeEmpty();
+    }
+
+    [Fact]
+    internal async Task InspectApproval_DtkShadowedByAHooksJsonPreToolUse_FailsNamingBothFiles()
+    {
+        Write(ProjectSettingsJson,
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(ProjectHooksJson, UserPreToolUse);
+        var sut = CreateSut();
+        var hook = sut.DescribeHooks(ProjectDir, HookScope.Project).Single();
+
+        var finding = sut.InspectApproval(hook, ProjectDir).Should().ContainSingle().Subject;
+
+        finding.Label.Should().Be("hook location");
+        finding.Satisfied.Should().BeFalse();
+        finding.Message.Should().Be(
+            $"dtk's droid hook is in {ProjectSettingsJson}, but Droid reads PreToolUse from {ProjectHooksJson}: "
+            + "run 'dtk init droid' to move it");
+    }
+
+    [Fact]
+    internal async Task InspectApproval_DtkOnlyHooksJsonShadowingSettings_FailsSayingItShadowsTheUsersHooks()
+    {
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(ProjectSettingsJson,
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+        var sut = CreateSut();
+        var hook = sut.DescribeHooks(ProjectDir, HookScope.Project).Single();
+
+        var finding = sut.InspectApproval(hook, ProjectDir).Should().ContainSingle().Subject;
+
+        finding.Satisfied.Should().BeFalse();
+        finding.Message.Should().Contain(ProjectHooksJson).And.Contain(ProjectSettingsJson).And.Contain("'dtk init droid'");
+    }
+
+    [Fact]
+    internal async Task InspectApproval_GlobalScope_NamesTheGlobalRemedy()
+    {
+        var factory = Path.Combine(HomeDir, ".factory");
+        Write(Path.Combine(factory, "settings.json"),
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+        await CreateSut().IntegrateGlobalAsync(false, default);
+        Write(Path.Combine(factory, "hooks.json"), UserPreToolUse);
+        var sut = CreateSut();
+        var hook = sut.DescribeHooks(ProjectDir, HookScope.Global).Single();
+
+        var finding = sut.InspectApproval(hook, ProjectDir).Should().ContainSingle().Subject;
+
+        finding.Message.Should().EndWith("run 'dtk init droid --global' to move it");
+    }
 }

@@ -13,7 +13,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
 internal sealed class FactoryDroidIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IHookApprovalInspector, IUninstallIntegrator
 {
     /// <summary>Printed when this run wrote the hook: Droid snapshots hooks when a session starts.</summary>
     internal const string SessionNote =
@@ -25,20 +25,63 @@ internal sealed class FactoryDroidIntegrator(RtkHookCoexistence rtk, HomePaths h
     /// <summary>Droid's shell tool, which the hook's matcher selects.</summary>
     private const string ShellTool = "Execute";
 
+    /// <summary>The name of the finding that reports whether Droid reads dtk's hook from where it is registered.</summary>
+    private const string HookLocationCheck = "hook location";
+
     /// <inheritdoc/>
     public string ProviderName => "droid";
 
     /// <inheritdoc/>
-    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
-    [
-        new HookInstallation(
-            ProviderName,
-            scope,
-            FactoryDroidHooks.ResolveTarget(FactoryDir(directory, scope)).Path,
-            HookCommands.Invocation(ProviderName),
-            LegacyScriptPath: null,
-            HookPayloadKind.FactoryDroid)
-    ];
+    /// <remarks>
+    /// Points at the candidate that holds dtk's handler — the resolved target when it does, else the first candidate that
+    /// does — so doctor checks the hook that is actually registered; at the resolved target when none holds it.
+    /// </remarks>
+    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    {
+        var factoryDir = FactoryDir(directory, scope);
+        var target = FactoryDroidHooks.ResolveTarget(factoryDir);
+        var holder = FactoryDroidHooks.HoldsDtkHandler(target.Path, target.ContainerKey)
+            ? target
+            : FactoryDroidHooks.Candidates(factoryDir)
+                .FirstOrDefault(candidate => FactoryDroidHooks.HoldsDtkHandler(candidate.Path, candidate.ContainerKey), target);
+
+        return
+        [
+            new HookInstallation(
+                ProviderName,
+                scope,
+                holder.Path,
+                HookCommands.Invocation(ProviderName),
+                LegacyScriptPath: null,
+                HookPayloadKind.FactoryDroid)
+        ];
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Droid runs the hook only from the file it reads <c>PreToolUse</c> from, and a <c>hooks.json</c> holding only dtk's
+    /// hook shadows the user's <c>settings.json</c> ones, so this reports a failing <c>hook location</c> whenever dtk's
+    /// hook is anywhere but the file <see cref="FactoryDroidHooks.ResolveTarget"/> picks; nothing when it is there.
+    /// </remarks>
+    public IReadOnlyList<HookApprovalFinding> InspectApproval(HookInstallation installation, string projectDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(installation);
+
+        var factoryDir = FactoryDir(projectDirectory, installation.Scope);
+        var target = FactoryDroidHooks.ResolveTarget(factoryDir).Path;
+        var registered = installation.RegistrationPath;
+        if (string.Equals(registered, target, StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        var remedy = installation.Scope == HookScope.Global ? $"dtk init {ProviderName} --global" : $"dtk init {ProviderName}";
+        var found = string.Equals(registered, FactoryDroidHooks.LiveHooksJson(factoryDir), StringComparison.Ordinal)
+            ? $"dtk's droid hook in {registered} shadows the PreToolUse hooks in {target}"
+            : $"dtk's droid hook is in {registered}, but Droid reads PreToolUse from {target}";
+
+        return [new HookApprovalFinding(HookLocationCheck, false, $"{found}: run '{remedy}' to move it")];
+    }
 
     /// <inheritdoc/>
     public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken) =>

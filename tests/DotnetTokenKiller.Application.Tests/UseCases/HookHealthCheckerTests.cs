@@ -66,6 +66,8 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private CrushIntegrator Crush => new(Home);
 
+    private FactoryDroidIntegrator Droid => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
     private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
 
     private string CodexGlobalHooksPath => Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
@@ -796,5 +798,24 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         checks.Should().Contain(c => c.Name == "crush hook (project)" && c.Passed && c.Message == "registered");
         checks.Should().Contain(c => c.Name == "crush hook probe (project)");
+    }
+
+    [Fact]
+    public async Task RunAsync_DroidHookShadowedByAHooksJsonPreToolUse_WarnsWithTheRemedy()
+    {
+        var factory = Path.Combine(_tempDir, ".factory");
+        Directory.CreateDirectory(factory);
+        await File.WriteAllTextAsync(Path.Combine(factory, "settings.json"),
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+        await Droid.IntegrateAsync(_tempDir, force: false, default);
+        await File.WriteAllTextAsync(Path.Combine(factory, "hooks.json"),
+            """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"lint"}]}]}""");
+
+        var checks = await _sut.RunAsync([Droid], _tempDir, default);
+
+        checks.Should().Contain(c => c.Name == "droid hook (project)" && c.Passed);
+        var location = checks.Should().ContainSingle(c => c.Name == "droid hook location (project)").Subject;
+        location.IsWarning.Should().BeTrue();
+        location.Message.Should().Contain("run 'dtk init droid' to move it");
     }
 }
