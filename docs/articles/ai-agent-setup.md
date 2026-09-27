@@ -722,6 +722,8 @@ running `dtk init droid` again moves dtk's hook to where Droid reads it.
 `dtk init droid --uninstall` removes dtk's entry from all three candidate files — wherever an earlier run or the
 user moved it — and leaves every other hook alone. A candidate file that isn't valid JSON is kept as is, with a
 note, rather than aborting the whole uninstall: the hook may still live in one of the other files.
+dtk never rewrites a `settings.json` or `hooks.json` holding comments or trailing commas, which it could not keep:
+install stops and says so, and uninstall keeps the file with a note. Remove them, or edit dtk's entry by hand.
 
 Droid snapshots hooks when a session starts, so restart any running `droid` session after installing or
 uninstalling for the change to take effect.

@@ -310,4 +310,35 @@ public sealed class FactoryDroidIntegratorTests : IDisposable
 
         finding.Message.Should().EndWith("run 'dtk init droid --global' to move it");
     }
+
+    private const string SettingsWithComments = """
+        {
+          // keep the guard first
+          "hooks": {"PreToolUse": [{"matcher": "Execute", "hooks": [{"type": "command", "command": "guard"},]}]},
+        }
+        """;
+
+    [Fact]
+    public async Task IntegrateAsync_SettingsWithComments_ThrowsSayingDtkCannotKeepThem()
+    {
+        Write(ProjectSettingsJson, SettingsWithComments);
+
+        var act = () => CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*comments or trailing commas*Remove them*hook entry by hand*");
+        (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Be(SettingsWithComments);
+    }
+
+    [Fact]
+    public async Task UninstallAsync_CandidateWithComments_KeepsItNamingTheCause()
+    {
+        Write(ProjectSettingsJson, SettingsWithComments.Replace("guard", "dtk hook droid", StringComparison.Ordinal));
+
+        var result = await CreateSut().UninstallAsync(ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
+
+        result.SkippedFiles.Should().Equal(ProjectSettingsJson);
+        result.Notes.Should().ContainSingle(note => note.StartsWith(ProjectSettingsJson, StringComparison.Ordinal))
+            .Which.Should().Contain("comments or trailing commas");
+    }
 }

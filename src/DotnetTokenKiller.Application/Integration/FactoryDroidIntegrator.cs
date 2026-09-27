@@ -117,7 +117,13 @@ internal sealed class FactoryDroidIntegrator(RtkHookCoexistence rtk, HomePaths h
             {
                 // Malformed JSON in one candidate must not stop dtk from removing its hook from the others: the
                 // loop's remaining files may be where the hook actually lives.
-                UninstallHelpers.Keep(path, "it is not valid JSON, so dtk could not remove its hook entry from it", context);
+                UninstallHelpers.Keep(
+                    path,
+                    FactoryDroidHooks.IsReadable(path)
+                        ? "it has comments or trailing commas, which dtk cannot rewrite without losing them, so dtk did not "
+                          + "remove its hook entry from it"
+                        : "it is not valid JSON, so dtk could not remove its hook entry from it",
+                    context);
             }
         }
 

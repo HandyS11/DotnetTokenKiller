@@ -705,7 +705,8 @@ internal static class IntegratorHelpers
     /// <summary>
     /// Reads and parses the settings file into its root <see cref="JsonObject"/>, or returns an empty
     /// object when the file does not exist. Throws <see cref="InvalidOperationException"/> when the file
-    /// contains invalid JSON or a non-object root.
+    /// contains invalid JSON or a non-object root; the message says so when the only problem is comments or
+    /// trailing commas, which every caller would lose by writing the parsed object back.
     /// </summary>
     /// <param name="path">Path to the settings.json file.</param>
     /// <param name="exists">Whether the file already exists on disk.</param>
@@ -730,7 +731,10 @@ internal static class IntegratorHelpers
         catch (JsonException ex)
         {
             throw new InvalidOperationException(
-                $"Failed to parse JSON settings file '{path}'. The file must contain a valid JSON object at the root.",
+                ParsesLeniently(json)
+                    ? $"The settings file '{path}' has comments or trailing commas, which dtk cannot rewrite without losing "
+                      + "them. Remove them and run the command again, or edit dtk's hook entry by hand."
+                    : $"Failed to parse JSON settings file '{path}'. The file must contain a valid JSON object at the root.",
                 ex);
         }
 
@@ -742,6 +746,21 @@ internal static class IntegratorHelpers
         var actualType = parsed?.GetType().Name ?? "null";
         throw new InvalidOperationException(
             $"The settings file '{path}' must contain a JSON object at the root, but found '{actualType}'.");
+    }
+
+    /// <summary>Whether <paramref name="json"/> parses once comments and trailing commas are allowed.</summary>
+    /// <param name="json">Text that failed the strict parse.</param>
+    private static bool ParsesLeniently(string json)
+    {
+        try
+        {
+            _ = JsonNode.Parse(json, documentOptions: LenientJson);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
