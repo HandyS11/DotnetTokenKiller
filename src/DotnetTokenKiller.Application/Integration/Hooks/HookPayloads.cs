@@ -69,7 +69,10 @@ internal static class HookPayloads
     /// <summary>The tool input property holding the shell command.</summary>
     private const string CommandProperty = "command";
 
-    /// <summary>The permission value that auto-approves a rewritten command, in every harness that has one.</summary>
+    /// <summary>
+    /// The decision value a reply uses to accept the rewritten command. Whether it also skips the harness's own
+    /// permission check depends on the harness: Codex still applies its approval policy, and Gemini ignores it.
+    /// </summary>
     private const string AllowDecision = "allow";
 
     /// <summary>
