@@ -12,7 +12,8 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <para>
 /// Amp requires every <c>tool.call</c> handler to return a result, and a throw or an <c>error</c> result stops the
 /// thread, so every other path — another tool, no dotnet, no dtk, a slow or malformed reply — returns
-/// <c>{ action: "allow" }</c>.
+/// <c>{ action: "allow" }</c>. Registration itself stays outside that guard, so it checks <c>amp.on</c> is callable
+/// before using it, rather than throwing at load against a plugin host that never wires it up.
 /// </para>
 /// </remarks>
 internal static class AmpPlugin
@@ -29,6 +30,7 @@ internal static class AmpPlugin
         const ALLOW = { action: "allow" };
 
         export default function (amp) {
+          if (typeof amp?.on !== "function") return;
           amp.on("tool.call", async (event) => {
             try {
               const input = event?.input;
