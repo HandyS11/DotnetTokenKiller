@@ -308,18 +308,22 @@ call, `dotnet build`, and the next with a final message. A fake `dotnet` and `dt
   on older releases to pin the minimum version.
 - **Gate K (Kilo, PR 3):** the `@kilocode/cli` npm package installed into a scratch prefix and run directly (not
   Docker) with the mock provider, plus a control run after `--uninstall`. Kilo CLI 7.4.2 and 7.8.1 both pass — the
-  recorded command is `dtk dotnet build`, the control run's is a bare `dotnet build`, and `.agents/skills` is read
-  (kept, not dropped); 7.0.26 fails both runs before any tool call because it rejects the gate's custom-provider
-  config, a harness limitation unrelated to dtk's plugin. No minimum Kilo version is pinned. Full results in
-  `eng/gates/README.md`.
+  recorded command is `dtk dotnet build`, the control run's is a bare `dotnet build`; 7.0.26 fails both runs before
+  any tool call because it rejects the gate's custom-provider config, a harness limitation unrelated to dtk's
+  plugin. No minimum Kilo version is pinned. Full results in `eng/gates/README.md`. The gate does not exercise
+  `.agents/skills` at all — the skill is kept, not dropped, because Kilo's source scans `.agents/skills`
+  (`packages/opencode/src/skill/index.ts` in Kilo-Org/kilocode at commit 7d977bc, the plan's deviation 2), verified
+  by reading that source, not by this gate.
 
 ### Manual checklist (docs page, for anyone with an account)
 
 Cursor: `{}` accepted as neutral; `permission: "allow"` bypasses approval or not (if not, loosen the Q1 rule in a
 follow-up); rewrite lands in `cursor-agent` and the IDE; interaction with an imported Claude hook. Devin: matcher
-`exec`; Windows shell; Restricted Mode. Droid: rewrite on the current release; Windows shell. Amp: `cmd` field;
-`undefined` return; spawn under Bun. Until checked, the docs label these four providers "not verified against a
-live run".
+`exec`; Windows shell; Restricted Mode. Droid: rewrite on the current release; Windows shell. Amp: `dotnet build`
+becomes `dtk dotnet build` in `amp`; which input field the shell tool actually holds the command in (`cmd` or
+`command`); whether dtk's `{ action: "allow" }` reply overrides another plugin's `reject-and-continue` for the same
+call; whether the plugin can spawn `dtk hook amp` under Amp's Bun runtime on Windows. Until checked, the docs label
+these four providers "not verified against a live run".
 
 ## Documentation
 

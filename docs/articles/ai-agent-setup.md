@@ -61,8 +61,9 @@ to remove. `--force` cannot be combined with `--uninstall`.
 
 Some things are deliberately left alone:
 
-- **Shared instructions still in use.** Codex CLI, OpenCode, Antigravity CLI, pi and oh-my-pi share `AGENTS.md` and
-  the `.agents/skills` skill; Gemini CLI and Antigravity CLI share `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
+- **Shared instructions still in use.** Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Factory Droid, Crush,
+  Kilo Code and Amp share `AGENTS.md` and the `.agents/skills` skill; Gemini CLI and Antigravity CLI share
+  `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
   share `.github/copilot-instructions.md`. While another of these still has its dtk hook registered in the same scope,
   the shared file keeps dtk's section and is reported `unchanged`, with a note naming that provider. (GitHub Copilot
   has no hook, so it never holds the file back for Copilot CLI.)
