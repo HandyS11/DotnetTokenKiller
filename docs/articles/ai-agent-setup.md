@@ -671,6 +671,131 @@ Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list 
 `dtk` filters output to actionable signal only, reducing noise by 50–97%.
 ```
 
+## Factory Droid
+
+A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use
+`dtk` in Factory Droid.
+
+### Installation
+
+```sh
+dtk init droid
+```
+
+This creates:
+
+- `AGENTS.md` — a `dtk` instructions section, created if the file does not exist yet (an existing `AGENTS.md`
+  gets it only with `--force`)
+- `.agents/skills/dotnet-token-killer/SKILL.md` — the dtk skill
+- a `PreToolUse` hook entry for the `Execute` tool, in whichever file Droid actually reads `PreToolUse` from (see
+  below)
+
+`dtk init droid --global` writes `~/.factory/AGENTS.md` and `~/.agents/skills/dotnet-token-killer/SKILL.md`, plus
+the hook entry under the same `.factory` directory. Set `FACTORY_HOME_OVERRIDE` to use a different home directory
+for the global install; `.factory` is still appended to it.
+
+### Where the hook is registered
+
+Droid reads `PreToolUse` from the root `.factory/hooks.json`, merged **per event key** over the `hooks` key of
+`.factory/settings.json` (a legacy `.factory/hooks/hooks.json` is read only when the root file is absent). Writing
+a `PreToolUse` array into a new `hooks.json` would silently shadow `PreToolUse` hooks the user already keeps in
+`settings.json`, so dtk picks the file Droid actually reads `PreToolUse` from, in this order:
+
+1. the live `hooks.json`, when it already defines a non-empty `PreToolUse`;
+2. else `settings.json`, when its `hooks.PreToolUse` is non-empty;
+3. else the live `hooks.json`, when one exists (even without a `PreToolUse` yet);
+4. else a new `hooks.json`.
+
+`dtk init droid --uninstall` removes dtk's entry from all three candidate files — wherever an earlier run or the
+user moved it — and leaves every other hook alone. A candidate file that isn't valid JSON is kept as is, with a
+note, rather than aborting the whole uninstall: the hook may still live in one of the other files.
+
+Droid snapshots hooks when a session starts, so restart any running `droid` session after installing or
+uninstalling for the change to take effect.
+
+### How It Works
+
+Before Droid runs a shell command through its `Execute` tool, it sends it to `dtk hook droid`, which replies with
+Claude's `hookSpecificOutput.updatedInput` and no decision, so Droid's own approval and sandboxing still apply to
+the rewritten command.
+
+If rtk's own Droid hook (`rtk hook droid`) is found in any of the candidate files, `dtk init droid` excludes
+`dotnet` from rtk's config so the two proxies don't both rewrite it.
+
+> [!NOTE]
+> Not verified against a live run — see [Harness verification](harness-verification.md).
+
+### Manual Installation
+
+Add to `.factory/hooks.json` (or wherever `PreToolUse` already lives — see above):
+
+```json
+{
+  "PreToolUse": [
+    {
+      "matcher": "Execute",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "dtk hook droid",
+          "timeout": 10
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Crush
+
+A `PreToolUse` hook rewrites `dotnet build|test|restore|clean|format|list package|publish|pack` commands to use
+`dtk`, registered as one line in `crushrc`, the Bash script Crush runs to build its configuration.
+
+### Installation
+
+```sh
+dtk init crush
+```
+
+This creates:
+
+- `AGENTS.md` — a `dtk` instructions section, created if the file does not exist yet (an existing `AGENTS.md`
+  gets it only with `--force`)
+- `.agents/skills/dotnet-token-killer/SKILL.md` — the dtk skill
+- a marked section in `.crushrc` (or in an existing `crushrc`, without the dot, when the project has one and no
+  `.crushrc`)
+
+Re-running `dtk init crush` writes back into whichever of `.crushrc` or `crushrc` already holds dtk's section; the
+existence rule above only applies the first time, before either file has one. `dtk init crush --global` writes the
+same section into `crushrc` under `$CRUSH_GLOBAL_CONFIG`, else `$XDG_CONFIG_HOME/crush`, else `~/.config/crush`
+(the same on Windows), plus a section in `CRUSH.md` in that directory and the skill in `~/.agents/skills`.
+
+Requires Crush 0.88.0 or later, the first release that reads `crushrc` with `hook add`; an older Crush never sees
+the section. dtk edits only the lines between its markers — the rest of `crushrc` (providers, other hooks, line
+endings) is written back exactly as read. A file with a missing, duplicated or out-of-order marker is never
+guessed at: install and uninstall both refuse, naming the file, and leave it untouched.
+
+### How It Works
+
+Before Crush runs a `bash` tool call, it sends it to `dtk hook crush`, which replies with its own envelope,
+`{"version":1,"updated_input":{"command":"…"}}`, and no decision: unlike Droid's reply, Crush's own permission
+prompt still runs for the rewritten command, because only a `decision` of `"allow"` would bypass it and dtk never
+sends one. Crush runs hooks for the main agent's tool calls only, so a sub-agent's `dotnet` commands run as
+written.
+
+> [!NOTE]
+> Verified against the real Crush binary (gate C, see `eng/gates/README.md`).
+
+### Manual Installation
+
+Add to `.crushrc` (or `crushrc`, or the global file):
+
+```sh
+# >>> dtk (DotnetTokenKiller) >>>
+hook add PreToolUse --name dtk --matcher '^bash$' --command 'dtk hook crush'
+# <<< dtk <<<
+```
+
 ## Aider
 
 ### Installation

@@ -1,6 +1,6 @@
 # Rewrite-capable harnesses (Cursor, Devin, Factory Droid, Crush, Kilo Code, Amp) — design
 
-Date: 2026-09-26. Status: approved; PR 1 implemented.
+Date: 2026-09-26. Status: approved; PR 1 merged (#168), PR 2 implemented.
 
 ## Goal
 
@@ -109,8 +109,11 @@ or live run confirmed; those points go on the manual checklist (see *Verificatio
   anything but exit 0/2/49 is "no opinion" (fail open). Hooks fire only for top-level agent tool calls.
 - Instructions: `AGENTS.md`, `CRUSH.md`, …; global `~/.config/crush/CRUSH.md`, `~/.config/AGENTS.md`. Skills:
   `.agents/skills`, `~/.agents/skills`, and others.
-- **Unverified:** the Windows global path (README says `%USERPROFILE%\.config\crush`, config doc says
-  `%XDG_CONFIG_HOME%\crush`); the first version that reads `crushrc` (to be pinned by gate C).
+- **Verified in source** (charmbracelet/crush `internal/config/load.go`, `internal/home`, commit 68d768c,
+  2026-09-26): the global path is `$CRUSH_GLOBAL_CONFIG` when set, else `$XDG_CONFIG_HOME/crush`, else
+  `~/.config/crush` — on Windows too (`%USERPROFILE%\.config\crush`), resolving the README/config-doc
+  discrepancy above in favor of the config doc. The minimum version that reads `crushrc` with `hook add`
+  is pinned at 0.88.0 by gate C (`eng/gates/README.md`); v0.87.0 has no `crushrc`/`shellconfig` package at all.
 
 ### Kilo Code (v7, VS Code extension and `kilo` CLI)
 
@@ -202,10 +205,16 @@ note. The Cascade agent gets no hook.
 | Project | `AGENTS.md` section, `.agents/skills/dotnet-token-killer/SKILL.md`, hook registration |
 | Global | `~/.factory/AGENTS.md` section, `~/.agents/skills/…`, hook registration |
 
-Registration file: `.factory/hooks.json` (or `~/.factory/hooks.json`), **unless** it is absent and the matching
-`settings.json` already has a `hooks` key — then dtk merges into that key, because creating `hooks.json` would
-silently disable the user's settings hooks. `DescribeHooks`, doctor and uninstall resolve the file the same way.
-Entry: `{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"dtk hook droid",
+Droid merges the root `hooks.json` over the `hooks` key of `settings.json` **per event key** (a legacy
+`hooks/hooks.json` read only when the root file is absent; rtk `src/hooks/init/droid.rs`, verified on Droid
+v0.164.0), so a `PreToolUse` written to `hooks.json` would shadow a `PreToolUse` the user already keeps in
+`settings.json`. dtk therefore picks the file Droid actually reads `PreToolUse` from, by a four-step rule: (1)
+the live `hooks.json` when it already defines a non-empty `PreToolUse`; (2) else `settings.json` when its
+`hooks.PreToolUse` is non-empty; (3) else the live `hooks.json` when one exists; (4) else create `hooks.json`.
+`DescribeHooks`, doctor and uninstall resolve the file the same way; uninstall removes dtk's entry from all three
+candidate files, wherever an earlier run or the user moved it. `$FACTORY_HOME_OVERRIDE` replaces the home
+directory for the global scope, with `.factory` still appended. Entry:
+`{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"dtk hook droid",
 "timeout":10}]}]}`.
 
 ### PR 2b: Crush
@@ -280,7 +289,8 @@ No harness account or model key is available on the development machine, so live
 OpenAI-compatible server (`eng/gates/mock-openai`) that answers the first request with one scripted `bash` tool
 call, `dotnet build`, and the next with a final message. A fake `dotnet` and `dtk` on `PATH` record what ran.
 
-- **Gate C (Crush, PR 2):** the released `crush` binary in Docker, configured with a custom provider at the mock.
+- **Gate C (Crush, PR 2):** the released `crush` Linux binary run directly under a scratch `HOME` (not Docker: it is
+  a single static binary, and a scratch `HOME` isolates it as well), configured with a custom provider at the mock.
   Passes when the recorded command is `dtk dotnet build`, with dtk's `.crushrc` section as the only hook. Repeated
   on older releases to pin the minimum version.
 - **Gate K (Kilo, PR 3):** the `kilo` CLI in Docker with the mock provider. Passes when the export shape loads, the

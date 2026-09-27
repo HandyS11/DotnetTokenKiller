@@ -19,3 +19,9 @@ unconfirmed. If you can run one, please report the result in an issue.
 2. Which shell runs the hook command on Windows.
 3. Whether a workspace in Restricted Mode runs the project hook.
 4. Whether the legacy Cascade agent reads .devin/rules (dtk removes its own .windsurf/rules/dtk.md).
+
+## Factory Droid
+
+1. `dotnet build` becomes `dtk dotnet build` in `droid` on the current release.
+2. Which shell runs the hook command on Windows.
+3. With the user's own `settings.json` `PreToolUse` hooks already registered, both theirs and dtk's run.
