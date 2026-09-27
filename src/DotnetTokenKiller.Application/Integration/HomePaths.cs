@@ -95,6 +95,21 @@ internal sealed class HomePaths
         "CRUSH_GLOBAL_CONFIG", Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "crush"));
 
     /// <summary>
+    /// Gets Kilo Code's global config directory: <c>$KILO_CONFIG_DIR</c> when it is an absolute path (Kilo reads it as an
+    /// extra config directory and prefers it for the global <c>AGENTS.md</c>), else <c>$XDG_CONFIG_HOME/kilo</c> when that
+    /// is absolute, else <c>~/.config/kilo</c> — on Windows too.
+    /// </summary>
+    internal string KiloConfigDir => RootedOrDefault(
+        "KILO_CONFIG_DIR", Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "kilo"));
+
+    /// <summary>
+    /// Gets Amp's user config directory: <c>$XDG_CONFIG_HOME/amp</c> when that variable is an absolute path, else
+    /// <c>~/.config/amp</c> — on Windows too (<c>%USERPROFILE%\.config\amp</c>).
+    /// </summary>
+    internal string AmpConfigDir =>
+        Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "amp");
+
+    /// <summary>
     /// Gets the user-level skills directory Codex CLI, OpenCode, pi and oh-my-pi all read (<c>~/.agents/skills</c>).
     /// </summary>
     internal string AgentsSkillsDir => Path.Combine(Home, ".agents", "skills");
