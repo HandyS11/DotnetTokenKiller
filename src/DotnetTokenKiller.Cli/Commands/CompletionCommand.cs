@@ -34,7 +34,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
             _init_completion || return
 
             local dotnet_cmds="__DOTNET_CMDS_BASH__"
-            local init_providers="claude copilot copilot-cli gemini codex opencode antigravity pi oh-my-pi cursor devin windsurf droid crush aider jetbrains"
+            local init_providers="claude copilot copilot-cli gemini codex opencode antigravity pi oh-my-pi cursor devin windsurf droid crush kilo amp aider jetbrains"
             local config_subcmds="show set"
             local top_cmds="dotnet pipe init config doctor completion gain log reset --version --help"
 
@@ -115,6 +115,8 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                 'windsurf:Alias of devin'
                 'droid:Install dtk instructions and rewrite hook for Factory Droid'
                 'crush:Install dtk instructions and rewrite hook for Crush'
+                'kilo:Install dtk instructions and rewrite plugin for Kilo Code'
+                'amp:Install dtk instructions and rewrite plugin for Amp'
                 'aider:Install dtk rules for Aider'
                 'jetbrains:Install dtk guidelines for JetBrains AI'
             )
@@ -182,6 +184,8 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a windsurf  -d 'Alias of devin'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a droid     -d 'Install dtk instructions and rewrite hook for Factory Droid'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a crush     -d 'Install dtk instructions and rewrite hook for Crush'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a kilo      -d 'Install dtk instructions and rewrite plugin for Kilo Code'
+        complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a amp       -d 'Install dtk instructions and rewrite plugin for Amp'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a aider     -d 'Install dtk rules for Aider'
         complete -c dtk -f -n '__fish_seen_subcommand_from init integrate' -a jetbrains -d 'Install dtk guidelines for JetBrains AI'
 
@@ -209,7 +213,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
 
             $topCmds = @('dotnet', 'pipe', 'init', 'config', 'doctor', 'completion', 'gain', 'log', 'reset')
             $dotnetCmds = @(__DOTNET_CMDS_PS__)
-            $providers = @('claude', 'copilot', 'copilot-cli', 'gemini', 'codex', 'opencode', 'antigravity', 'pi', 'oh-my-pi', 'cursor', 'devin', 'windsurf', 'droid', 'crush', 'aider', 'jetbrains')
+            $providers = @('claude', 'copilot', 'copilot-cli', 'gemini', 'codex', 'opencode', 'antigravity', 'pi', 'oh-my-pi', 'cursor', 'devin', 'windsurf', 'droid', 'crush', 'kilo', 'amp', 'aider', 'jetbrains')
             $configCmds = @('show', 'set')
             $shells = @('bash', 'zsh', 'fish', 'powershell')
 

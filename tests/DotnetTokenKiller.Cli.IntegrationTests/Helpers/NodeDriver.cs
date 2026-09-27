@@ -8,9 +8,9 @@ namespace DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 
 /// <summary>
 /// Runs a test's <c>driver.mjs</c> under Node with a restricted <c>PATH</c>, and builds a fake <c>dtk</c> shell script for
-/// tests that don't need the real binary. Shared by <c>OpenCodePluginTests</c> and <c>PiExtensionTests</c>, which each
-/// write their own <c>driver.mjs</c> into <paramref name="dir"/> and drive a different generated plugin/extension
-/// through it.
+/// tests that don't need the real binary. Shared by <c>ExportedPluginTestsBase</c> (OpenCode and Kilo),
+/// <c>PiExtensionTests</c> and <c>AmpPluginTests</c>, which each write their own <c>driver.mjs</c> into
+/// <paramref name="dir"/> and drive a different generated plugin/extension through it.
 /// </summary>
 /// <param name="dir">The test's temporary directory, holding <c>driver.mjs</c> and used as the default working directory.</param>
 public sealed class NodeDriver(string dir)

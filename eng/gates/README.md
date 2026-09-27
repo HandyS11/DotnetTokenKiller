@@ -59,3 +59,55 @@ yet. `.crushrc` is present in the scratch project but is simply never read, so n
 provider nor dtk's hook section take effect and Crush has no provider to run with. `dtk init crush`'s own
 `VersionNote` already says as much: "The hook is registered in crushrc, which Crush reads from version
 0.88.0 on; update Crush if it is older."
+
+## Gate K — Kilo Code
+
+`kilo-gate.sh` proves that a `dtk init kilo` project makes the real `kilo` CLI run `dtk dotnet build`
+(instead of a bare `dotnet build`) when the model asks for a build, via the `.kilo/plugin/dtk.js` plugin
+`dtk init kilo` writes (its `tool.execute.before` handler spawns `dtk hook kilo`).
+
+It installs the given `@kilocode/cli` release from npm into a scratch prefix (running the package's
+`postinstall.mjs` by hand, because npm 11's install-script allowlist skips it and the `kilo` wrapper then
+has no native binary), builds a throwaway git-root project with `dtk init kilo`, points it at
+`mock-openai.mjs` with a project `kilo.json` (an `@ai-sdk/openai-compatible` provider, `"model": "mock/mock"`,
+and `"permission": {"bash": "allow"}` for this scratch project only), and runs
+`kilo run -m mock/mock "build the project"` with the same fake `dotnet`/`dtk` as gate C. The control run
+repeats it after `dtk init kilo --uninstall` and must show the bare `dotnet build`. `HOME` and every
+`XDG_*` directory point at the scratch tree; `KILO_DISABLE_AUTOUPDATE=1` and `KILO_DISABLE_LSP_DOWNLOAD=1`
+keep the run offline apart from the npm install (and, if the installed CLI doesn't bundle it, fetching
+`@ai-sdk/openai-compatible`).
+
+### Running it
+
+```sh
+dtk dotnet build DotnetTokenKiller.slnx
+sh eng/gates/kilo-gate.sh <kilo-version>              # e.g. 7.8.1 (the @kilocode/cli npm version)
+sh eng/gates/kilo-gate.sh <kilo-version> <dtk-binary>
+```
+
+Needs `npm`, `git`, `curl` and Node. A cold first run of `kilo` takes a couple of minutes; each run has a
+180 s timeout.
+
+### Results
+
+| Kilo CLI version | Date checked | Main run | Control run | Notes |
+| --- | --- | --- | --- | --- |
+| 7.8.1 (latest at time of check) | 2026-09-27 | PASS | PASS | `dtk dotnet build` logged, no bare `dotnet build`; control logged `dotnet build` |
+| 7.4.2 | 2026-09-27 | PASS | PASS | same as 7.8.1 |
+| 7.0.26 (first 7.x release) | 2026-09-27 | FAIL | FAIL | Kilo 7.0.26 itself rejects the gate's custom-provider config, not dtk or the script — see below |
+
+No minimum Kilo version is pinned: 7.4.2 and 7.8.1 pass, and the releases between 7.0.26 and 7.4.2 were not
+bisected.
+
+#### 7.0.26 failure (verbatim)
+
+Both runs fail identically before any tool call, so the gate cannot test dtk's plugin there:
+
+```
+Error: Model not found: mock/mock.
+ProviderModelNotFoundError: ProviderModelNotFoundError
+```
+
+7.0.26 does not register the custom `mock` provider from this `kilo.json` shape. The control run fails the
+same way, so this says nothing about whether dtk's plugin would load on that release. Both runs also hang
+until the gate's 180 s timeout (exit 124) before failing, rather than failing fast on the bad config.

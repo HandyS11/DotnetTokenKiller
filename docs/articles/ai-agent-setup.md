@@ -24,9 +24,11 @@ dtk init cursor      --global   # ~/.cursor/hooks.json (hook only)
 dtk init devin       --global   # ~/.config/devin/config.json, global_rules.md
 dtk init droid       --global   # ~/.factory, ~/.agents/skills
 dtk init crush       --global   # ~/.config/crush, ~/.agents/skills
+dtk init kilo        --global   # ~/.config/kilo, ~/.agents/skills
+dtk init amp         --global   # ~/.config/amp, ~/.agents/skills
 ```
 
-`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, **devin**, **droid**, and **crush** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
+`--global` is supported only for the providers with a home config — **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, **devin**, **droid**, **crush**, **kilo**, and **amp** — and cannot be combined with `--dir`. Every other provider below is repository-scoped.
 
 ## Uninstalling
 
@@ -59,8 +61,9 @@ to remove. `--force` cannot be combined with `--uninstall`.
 
 Some things are deliberately left alone:
 
-- **Shared instructions still in use.** Codex CLI, OpenCode, Antigravity CLI, pi and oh-my-pi share `AGENTS.md` and
-  the `.agents/skills` skill; Gemini CLI and Antigravity CLI share `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
+- **Shared instructions still in use.** Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Factory Droid, Crush,
+  Kilo Code and Amp share `AGENTS.md` and the `.agents/skills` skill; Gemini CLI and Antigravity CLI share
+  `~/.gemini/GEMINI.md`; GitHub Copilot and Copilot CLI
   share `.github/copilot-instructions.md`. While another of these still has its dtk hook registered in the same scope,
   the shared file keeps dtk's section and is reported `unchanged`, with a note naming that provider. (GitHub Copilot
   has no hook, so it never holds the file back for Copilot CLI.)
@@ -810,6 +813,89 @@ Add to `.crushrc` (or `crushrc`, or the global file):
 hook add PreToolUse --name dtk --matcher '^bash$' --command 'dtk hook crush'
 # <<< dtk <<<
 ```
+
+## Kilo Code
+
+Kilo Code is an OpenCode fork whose plugin loader accepts OpenCode's plugin format unchanged, so `dtk init kilo`
+installs the same generated plugin `dtk init opencode` does, aimed at Kilo Code: it rewrites
+`dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk`.
+
+### Installation
+
+From your project root, run:
+
+```sh
+dtk init kilo
+```
+
+This creates three files:
+
+- `AGENTS.md` — a `dtk` instructions section, created if the file does not exist yet (an existing `AGENTS.md`
+  gets it only with `--force`)
+- `.agents/skills/dotnet-token-killer/SKILL.md` — the dtk skill
+- `.kilo/plugin/dtk.js` — the plugin
+
+`dtk init kilo --global` writes `<Kilo config dir>/AGENTS.md` and `<Kilo config dir>/plugin/dtk.js`, plus
+`~/.agents/skills/dotnet-token-killer/SKILL.md`. `<Kilo config dir>` is `$KILO_CONFIG_DIR` when it is set, else
+`$XDG_CONFIG_HOME/kilo`, else `~/.config/kilo`; `$KILO_CONFIG_DIR` is also the directory Kilo itself prefers for the
+global `AGENTS.md`.
+
+Re-running the command refreshes `dtk.js` if dtk wrote it and leaves an edited copy alone unless you pass `--force`.
+
+### How It Works
+
+Kilo fires `tool.execute.before` for its `bash` tool before the tool's own permission check — the same contract
+OpenCode uses — so the plugin's body is OpenCode's, unchanged apart from the provider name. Before Kilo runs a
+`bash` command that mentions `dotnet`, the plugin passes it to `dtk hook kilo` and mutates `output.args.command` in
+place with the rewrite it gets back; other commands never start `dtk`. Kilo Code loads plugins only when it starts:
+restart Kilo (or the VS Code extension) for a newly installed or updated plugin to take effect.
+
+> [!NOTE]
+> Verified against the real `kilo` CLI, versions 7.4.2 and 7.8.1 (gate K, see `eng/gates/README.md`). No minimum
+> version is pinned: those are the only releases that pass, and 7.0.26 fails both the main and control run for a
+> reason unrelated to dtk's plugin — it rejects the gate's custom provider config outright, before any tool call.
+
+## Amp
+
+Amp runs plugins rather than hook commands, so dtk installs a small plugin on Amp's `tool.call` event that rewrites
+`dotnet build|test|restore|clean|format|list package|publish|pack` commands to use `dtk`.
+
+### Installation
+
+From your project root, run:
+
+```sh
+dtk init amp
+```
+
+This creates three files:
+
+- `AGENTS.md` — a `dtk` instructions section, created if the file does not exist yet (an existing `AGENTS.md`
+  gets it only with `--force`)
+- `.agents/skills/dotnet-token-killer/SKILL.md` — the dtk skill
+- `.amp/plugins/dtk.js` — the plugin
+
+`dtk init amp --global` writes `<Amp config dir>/AGENTS.md` and `<Amp config dir>/plugins/dtk.js`, plus
+`~/.agents/skills/dotnet-token-killer/SKILL.md`. `<Amp config dir>` is `$XDG_CONFIG_HOME/amp` when it is set, else
+`~/.config/amp` — on Windows too.
+
+Re-running the command refreshes `dtk.js` if dtk wrote it and leaves an edited copy alone unless you pass `--force`.
+
+### How It Works
+
+Amp fires `tool.call` for every tool call and requires every handler to return a result. For a shell call whose
+command mentions `dotnet`, the plugin asks `dtk hook amp` for the rewrite and returns `{ action: "modify" }` with
+the rewritten command written back into whichever input field held it (`cmd` or `command`), leaving the rest of the
+tool's input untouched. Every other case — another tool, no `dotnet`, nothing to rewrite, a missing or slow `dtk`,
+an unexpected error — returns `{ action: "allow" }` and never throws, so it never blocks the tool call or overrides
+another plugin's `reject-and-continue` for the same call. Amp loads plugins only when it starts: run "plugins:
+reload" from Amp's command palette, or restart Amp, after installing or updating the plugin.
+
+Amp runs project plugins without asking, so everyone who opens this project with Amp also runs dtk's plugin (it
+only rewrites `dotnet` commands) — the project install prints a note saying so.
+
+> [!NOTE]
+> Not verified against a live run — see [Harness verification](harness-verification.md).
 
 ## Aider
 

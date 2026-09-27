@@ -18,7 +18,7 @@ namespace DotnetTokenKiller.Cli;
 internal static class HookEntryPoint
 {
     private const string Usage =
-        "usage: dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin|droid|crush> "
+        "usage: dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin|droid|crush|kilo|amp> "
         + "(run by an AI agent's pre-tool hook; reads the payload on stdin)";
 
     /// <summary>Handles <c>dtk hook</c> with the process's own standard streams.</summary>

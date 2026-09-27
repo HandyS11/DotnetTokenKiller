@@ -21,6 +21,8 @@ public sealed class HookPayloadsTests
     [InlineData("devin", HookPayloadKind.Devin)]
     [InlineData("droid", HookPayloadKind.FactoryDroid)]
     [InlineData("crush", HookPayloadKind.Crush)]
+    [InlineData("kilo", HookPayloadKind.Kilo)]
+    [InlineData("amp", HookPayloadKind.Amp)]
     internal void TryGetKind_KnownProvider_Resolves(string provider, HookPayloadKind expected)
     {
         HookPayloads.TryGetKind(provider, out var kind).Should().BeTrue();
@@ -311,7 +313,9 @@ public sealed class HookPayloadsTests
     [Theory]
     [InlineData(HookPayloadKind.Pi)]
     [InlineData(HookPayloadKind.OhMyPi)]
-    internal void PiFamily_UsesTheOpenCodeContract(HookPayloadKind kind)
+    [InlineData(HookPayloadKind.Kilo)]
+    [InlineData(HookPayloadKind.Amp)]
+    internal void PluginHarnesses_UseTheOpenCodeContract(HookPayloadKind kind)
     {
         var reply = JsonNode.Parse(Reply(kind, """{"command":"dotnet build"}""")!)!;
 

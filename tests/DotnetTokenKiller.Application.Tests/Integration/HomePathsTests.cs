@@ -217,4 +217,27 @@ public sealed class HomePathsTests
         new HomePaths(home, name => name switch { "CRUSH_GLOBAL_CONFIG" => global, "XDG_CONFIG_HOME" => xdg, _ => null })
             .CrushConfigDir.Should().Be(global, "CRUSH_GLOBAL_CONFIG is the directory itself");
     }
+
+    [Fact]
+    public void KiloConfigDir_PrefersKiloConfigDir_ThenXdgConfigHome_ThenDotConfig()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "dtk-home-test");
+        var profile = Path.Combine(Path.GetTempPath(), "kilo-profile");
+        var xdg = Path.Combine(Path.GetTempPath(), "xdg");
+
+        new HomePaths(home).KiloConfigDir.Should().Be(Path.Combine(home, ".config", "kilo"));
+        new HomePaths(home, name => name == "XDG_CONFIG_HOME" ? xdg : null).KiloConfigDir.Should().Be(Path.Combine(xdg, "kilo"));
+        new HomePaths(home, name => name switch { "KILO_CONFIG_DIR" => profile, "XDG_CONFIG_HOME" => xdg, _ => null })
+            .KiloConfigDir.Should().Be(profile, "KILO_CONFIG_DIR is the directory itself");
+    }
+
+    [Fact]
+    public void AmpConfigDir_UsesXdgConfigHome_ElseDotConfig()
+    {
+        var home = Path.Combine(Path.GetTempPath(), "dtk-home-test");
+        var xdg = Path.Combine(Path.GetTempPath(), "xdg");
+
+        new HomePaths(home).AmpConfigDir.Should().Be(Path.Combine(home, ".config", "amp"));
+        new HomePaths(home, name => name == "XDG_CONFIG_HOME" ? xdg : null).AmpConfigDir.Should().Be(Path.Combine(xdg, "amp"));
+    }
 }

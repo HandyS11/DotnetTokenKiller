@@ -139,6 +139,15 @@ and refuses a damaged section; `--global` uses `$CRUSH_GLOBAL_CONFIG`, `$XDG_CON
 skips its permission prompt). Doctor reads the `crushrc` registration as text (`HookInstallation.IsScriptRegistration`).
 `eng/gates/crush-gate.sh` runs the real `crush` against a mock model to prove the rewrite.
 
+`dtk init kilo` writes the shared `AGENTS.md` section and skill plus `.kilo/plugin/dtk.js` (`--global`:
+`$KILO_CONFIG_DIR`, `$XDG_CONFIG_HOME/kilo` or `~/.config/kilo`). Kilo Code is an OpenCode fork whose loader accepts
+OpenCode's plugin format, so `KiloPlugin.Body` is `OpenCodePlugin.BodyFor("kilo", "Kilo Code")`; `OpenCodePlugin.Body`
+itself stays byte for byte (a SHA-256 pin). `dtk init amp` writes the section and skill plus `.amp/plugins/dtk.js`
+(`--global`: `$XDG_CONFIG_HOME/amp` or `~/.config/amp`): an `amp.on("tool.call")` handler that returns
+`{ action: "modify" }` with the rewritten command in the field that held it, and otherwise `{ action: "allow" }` —
+Amp requires a result, and a throw stops its thread. `dtk hook kilo|amp` reply like `dtk hook opencode`.
+`eng/gates/kilo-gate.sh` runs the real `kilo` CLI against the mock model.
+
 `dtk init <provider> --uninstall` (respects `--dir`/`--global`) removes what that install writes, through
 `UninstallHelpers` (every integrator implements `IUninstallIntegrator`): dtk's hook entries (the install's own match),
 marked sections, and generated files only when their stamp or exact content proves them dtk's; edited files are kept.
