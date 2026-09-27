@@ -372,6 +372,8 @@ public class InitCommandTests
     [InlineData("windsurf")]
     [InlineData("droid")]
     [InlineData("crush")]
+    [InlineData("kilo")]
+    [InlineData("amp")]
     [InlineData("aider")]
     [InlineData("jetbrains")]
     public async Task ExecuteAsync_EveryProviderName_RoutesToMatchingIntegrator(string provider)
