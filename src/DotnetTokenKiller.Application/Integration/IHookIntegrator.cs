@@ -47,7 +47,13 @@ internal enum HookPayloadKind
     FactoryDroid = 10,
 
     /// <summary>Crush's <c>PreToolUse</c> payload, for its <c>bash</c> tool.</summary>
-    Crush = 11
+    Crush = 11,
+
+    /// <summary>dtk's own Kilo Code plugin payload, the same as <see cref="OpenCode"/>'s.</summary>
+    Kilo = 12,
+
+    /// <summary>dtk's own Amp plugin payload, the same as <see cref="OpenCode"/>'s.</summary>
+    Amp = 13
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>

@@ -71,7 +71,7 @@ internal static class HookPayloads
 
     /// <summary>
     /// Resolves a provider name (<c>claude</c>, <c>gemini</c>, <c>copilot-cli</c>, <c>codex</c>, <c>opencode</c>,
-    /// <c>antigravity</c>, <c>pi</c>, <c>oh-my-pi</c>, <c>cursor</c>, <c>devin</c>, <c>droid</c>, <c>crush</c>) to its payload shape.
+    /// <c>antigravity</c>, <c>pi</c>, <c>oh-my-pi</c>, <c>cursor</c>, <c>devin</c>, <c>droid</c>, <c>crush</c>, <c>kilo</c>, <c>amp</c>) to its payload shape.
     /// </summary>
     /// <param name="provider">The name passed to <c>dtk hook</c>.</param>
     /// <param name="kind">The payload shape, when the name is known.</param>
@@ -91,6 +91,8 @@ internal static class HookPayloads
             "devin" => (true, HookPayloadKind.Devin),
             "droid" => (true, HookPayloadKind.FactoryDroid),
             "crush" => (true, HookPayloadKind.Crush),
+            "kilo" => (true, HookPayloadKind.Kilo),
+            "amp" => (true, HookPayloadKind.Amp),
             _ => (false, default)
         };
         return known;
@@ -128,7 +130,7 @@ internal static class HookPayloads
                 HookPayloadKind.GeminiCli => ReplyToGemini(root),
                 HookPayloadKind.CopilotCli => ReplyToCopilot(root),
                 HookPayloadKind.CodexCli => ReplyToCodex(root),
-                HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi => ReplyToOpenCode(root),
+                HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi or HookPayloadKind.Kilo or HookPayloadKind.Amp => ReplyToOpenCode(root),
                 HookPayloadKind.AntigravityCli => ReplyToAntigravity(root),
                 HookPayloadKind.Crush => ReplyToCrush(root),
                 _ => null
@@ -298,8 +300,8 @@ internal static class HookPayloads
     }
 
     /// <summary>
-    /// Replies to dtk's generated OpenCode plugin and pi-family extension. The contract is dtk's own, because dtk
-    /// writes both ends: only the command crosses the process boundary.
+    /// Replies to dtk's generated OpenCode plugin, pi-family extension, Kilo Code plugin, and Amp plugin. The contract
+    /// is dtk's own, because dtk writes both ends: only the command crosses the process boundary.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
     private static string? ReplyToOpenCode(JsonNode? root)
