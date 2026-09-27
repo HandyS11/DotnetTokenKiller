@@ -14,8 +14,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </list>
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
-internal sealed class KiloIntegrator(HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
+internal sealed class KiloIntegrator(HomePaths home) : AgentsFileIntegrator(home)
 {
     /// <summary>
     /// Printed when this run creates or updates the plugin file: Kilo Code only reads plugins at startup.
@@ -24,10 +23,13 @@ internal sealed class KiloIntegrator(HomePaths home)
         "Kilo Code loads plugins when it starts: restart Kilo (or the VS Code extension) for the rewrite to take effect.";
 
     /// <inheritdoc/>
-    public string ProviderName => "kilo";
+    public override string ProviderName => "kilo";
 
     /// <inheritdoc/>
-    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    protected override string GlobalInstructionsDirectory => Home.KiloConfigDir;
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
     {
         var path = PluginPath(directory, scope);
 
@@ -45,73 +47,28 @@ internal sealed class KiloIntegrator(HomePaths home)
     }
 
     /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(
-            InstructionsPath(directory, HookScope.Project), SkillsDirectory(directory, HookScope.Project), directory,
-            HookScope.Project, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(
-            InstructionsPath(home.Home, HookScope.Global), SkillsDirectory(home.Home, HookScope.Global), home.Home,
-            HookScope.Global, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) =>
-        [InstructionsPath(directory, scope), SharedInstructionArtifacts.SkillPath(SkillsDirectory(directory, scope))];
-
-    /// <inheritdoc/>
-    public async Task<IntegrationResult> UninstallAsync(
-        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    protected override async Task InstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
     {
-        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
-        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
-
-        await SharedInstructionArtifacts.RemoveAgentsFilesAsync(
-            InstructionsPath(hookDirectory, scope), SkillsDirectory(hookDirectory, scope), context, cancellationToken)
+        var pluginPath = PluginPath(directory, scope);
+        await IntegratorHelpers.WriteGeneratedFileAsync(KiloPlugin.Artifact(pluginPath), context, cancellationToken)
             .ConfigureAwait(false);
 
-        await UninstallHelpers.RemoveGeneratedFileAsync(DescribeHooks(hookDirectory, scope)[0].PluginArtifact!, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        return context.ToResult();
+        if (Wrote(context, pluginPath))
+        {
+            context.Notes.Add(ReloadNote);
+        }
     }
 
-    private string InstructionsPath(string directory, HookScope scope) =>
-        Path.Combine(scope == HookScope.Global ? home.KiloConfigDir : directory, "AGENTS.md");
-
-    private string SkillsDirectory(string directory, HookScope scope) =>
-        scope == HookScope.Global ? home.AgentsSkillsDir : Path.Combine(directory, ".agents", "skills");
+    /// <inheritdoc/>
+    protected override Task UninstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken) =>
+        UninstallHelpers.RemoveGeneratedFileAsync(KiloPlugin.Artifact(PluginPath(directory, scope)), context, cancellationToken);
 
     /// <summary>Kilo Code's plugin folder, singular in both scopes.</summary>
     /// <param name="directory">The project root; ignored when <paramref name="scope"/> is <see cref="HookScope.Global"/>.</param>
     /// <param name="scope">Which install to resolve.</param>
     private string PluginPath(string directory, HookScope scope) =>
         Path.Combine(
-            scope == HookScope.Global ? home.KiloConfigDir : Path.Combine(directory, ".kilo"), "plugin", "dtk.js");
-
-    private async Task<IntegrationResult> IntegrateCoreAsync(
-        string instructionsPath,
-        string skillsDirectory,
-        string hookDirectory,
-        HookScope scope,
-        bool force,
-        CancellationToken cancellationToken)
-    {
-        var context = new IntegrationContext(force);
-
-        await SharedInstructionArtifacts.WriteAgentsFilesAsync(instructionsPath, skillsDirectory, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        var pluginPath = PluginPath(hookDirectory, scope);
-        await IntegratorHelpers.WriteGeneratedFileAsync(KiloPlugin.Artifact(pluginPath), context, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (context.Created.Contains(pluginPath) || context.Updated.Contains(pluginPath))
-        {
-            context.Notes.Add(ReloadNote);
-        }
-
-        return context.ToResult();
-    }
+            scope == HookScope.Global ? Home.KiloConfigDir : Path.Combine(directory, ".kilo"), "plugin", "dtk.js");
 }

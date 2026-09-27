@@ -457,4 +457,223 @@ public sealed class UninstallHelpersTests : IDisposable
         await File.WriteAllTextAsync(path, "  hook add PreToolUse --name dtk --command 'dtk hook crush'\n");
         UninstallHelpers.IsRegistered(installation).Should().BeTrue();
     }
+
+    // --- Unreadable and undeletable files ---
+
+    [Fact]
+    public async Task RemoveSectionAsync_UnreadableFile_KeepsItWithANote()
+    {
+        var path = Path.Combine(_tempDir, "AGENTS.md");
+        await File.WriteAllTextAsync(path, Section);
+        if (!TryMakeUnreadable(path))
+        {
+            return;
+        }
+
+        var context = Uninstall();
+
+        await UninstallHelpers.RemoveSectionAsync(path, Marker, EndMarker, context, default);
+
+        context.Skipped.Should().Equal(path);
+        context.Notes.Should().ContainSingle().Which.Should().Contain("could not be read");
+    }
+
+    [Fact]
+    public async Task RemoveGeneratedFileAsync_UnreadableFile_KeepsItWithANote()
+    {
+        var artifact = Artifact();
+        await IntegratorHelpers.WriteGeneratedFileAsync(artifact, new IntegrationContext(false), default);
+        if (!TryMakeUnreadable(artifact.Path))
+        {
+            return;
+        }
+
+        var context = Uninstall();
+
+        await UninstallHelpers.RemoveGeneratedFileAsync(artifact, context, default);
+
+        context.Skipped.Should().Equal(artifact.Path);
+        context.Notes.Should().ContainSingle().Which.Should().Contain("could not be read");
+        File.Exists(artifact.Path).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RemoveOwnedFileAsync_UnreadableFile_KeepsItWithANote()
+    {
+        var path = Path.Combine(_tempDir, "dtk.mdc");
+        await File.WriteAllTextAsync(path, "rule\n");
+        if (!TryMakeUnreadable(path))
+        {
+            return;
+        }
+
+        var context = Uninstall();
+
+        await UninstallHelpers.RemoveOwnedFileAsync(path, "rule\n", [], "dtk init cursor", context, default);
+
+        context.Skipped.Should().Equal(path);
+        context.Notes.Should().ContainSingle().Which.Should().Contain("could not be read");
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_RegistrationWithoutTheScript_Deletes()
+    {
+        var script = Path.Combine(_tempDir, "hooks", IntegratorHelpers.LegacyHookScriptName);
+        LegacyHookFixtures.WriteStampedScript(script);
+        var settings = Path.Combine(_tempDir, "settings.json");
+        await File.WriteAllTextAsync(settings, "{}");
+        var context = Uninstall();
+
+        await UninstallHelpers.RemoveLegacyHookScriptAsync(script, [settings], context, default);
+
+        context.Removed.Should().Equal(script);
+    }
+
+    [Fact]
+    public async Task RemoveLegacyHookScriptAsync_UnreadableRegistration_KeepsTheScript()
+    {
+        var script = Path.Combine(_tempDir, "hooks", IntegratorHelpers.LegacyHookScriptName);
+        LegacyHookFixtures.WriteStampedScript(script);
+        var settings = Path.Combine(_tempDir, "settings.json");
+        await File.WriteAllTextAsync(settings, "{}");
+        if (!TryMakeUnreadable(settings))
+        {
+            return;
+        }
+
+        var context = Uninstall();
+
+        await UninstallHelpers.RemoveLegacyHookScriptAsync(script, [settings], context, default);
+
+        context.Skipped.Should().Equal(script);
+        context.Notes.Should().ContainSingle().Which.Should().Contain($"{settings} may still run it");
+    }
+
+    [Fact]
+    public async Task IsRegistered_UnreadableFile_CountsAsRegistered()
+    {
+        var path = Path.Combine(_tempDir, "settings.json");
+        await IntegratorHelpers.WriteHookRegistrationAsync(Spec(path), new IntegrationContext(false), default);
+        if (!TryMakeUnreadable(path))
+        {
+            return;
+        }
+
+        var installation = new HookInstallation(
+            "claude", HookScope.Project, path, HookCommands.Invocation("claude"), null, HookPayloadKind.ClaudeCode);
+
+        UninstallHelpers.IsRegistered(installation).Should().BeTrue("a file dtk cannot read may still run dtk");
+    }
+
+    [Fact]
+    public async Task DeleteFile_DirectoryNotWritable_KeepsTheFileWithANote()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var directory = Path.Combine(_tempDir, "locked");
+        var path = Path.Combine(directory, "dtk.js");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(path, "x");
+        var originalMode = File.GetUnixFileMode(directory);
+        try
+        {
+            File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            if (CanCreateFileIn(directory))
+            {
+                return;
+            }
+
+            var context = Uninstall();
+
+            UninstallHelpers.DeleteFile(path, context);
+
+            File.Exists(path).Should().BeTrue();
+            context.Removed.Should().BeEmpty();
+            context.Skipped.Should().Equal(path);
+            context.Notes.Should().ContainSingle().Which.Should().Contain("could not be deleted");
+        }
+        finally
+        {
+            File.SetUnixFileMode(directory, originalMode);
+        }
+    }
+
+    [Fact]
+    public async Task DeleteFile_EmptiedDirectoryCannotBeRemoved_StillReportsTheFileRemoved()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var parent = Path.Combine(_tempDir, "provider");
+        var path = Path.Combine(parent, "plugins", "dtk.js");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        await File.WriteAllTextAsync(path, "x");
+        var originalMode = File.GetUnixFileMode(parent);
+        try
+        {
+            File.SetUnixFileMode(parent, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+            if (CanCreateFileIn(parent))
+            {
+                return;
+            }
+
+            var context = Uninstall();
+
+            UninstallHelpers.DeleteFile(path, context);
+
+            File.Exists(path).Should().BeFalse();
+            Directory.Exists(Path.GetDirectoryName(path)).Should().BeTrue("its parent does not allow removing it");
+            context.Removed.Should().Equal(path);
+        }
+        finally
+        {
+            File.SetUnixFileMode(parent, originalMode);
+        }
+    }
+
+    /// <summary>
+    /// Makes <paramref name="path"/> unreadable; <see langword="false"/> where that cannot be done (Windows, or a user
+    /// such as root who reads it anyway), so the test returns without asserting.
+    /// </summary>
+    /// <param name="path">The file to make unreadable.</param>
+    private static bool TryMakeUnreadable(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        File.SetUnixFileMode(path, UnixFileMode.None);
+        try
+        {
+            File.ReadAllBytes(path);
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>Whether this user can create a file in <paramref name="directory"/> despite its mode (true as root).</summary>
+    /// <param name="directory">The directory to probe.</param>
+    private static bool CanCreateFileIn(string directory)
+    {
+        var probe = Path.Combine(directory, ".dtk-writability-probe");
+        try
+        {
+            File.WriteAllText(probe, string.Empty);
+            File.Delete(probe);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 }

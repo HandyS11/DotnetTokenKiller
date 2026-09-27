@@ -71,7 +71,7 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
         run: |
-          ./.sonar/scanner/dotnet-sonarscanner begin /k:"$SONAR_PROJECT_KEY" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.exclusions="samples/**/*,.claude/**/*,benchmarks/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,samples/**/*,benchmarks/**/*,docs/**/*,src/DotnetTokenKiller.Cli/Program.cs,src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs"
+          ./.sonar/scanner/dotnet-sonarscanner begin /k:"$SONAR_PROJECT_KEY" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.exclusions="samples/**/*,.claude/**/*,benchmarks/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,samples/**/*,benchmarks/**/*,docs/**/*,eng/**/*,src/DotnetTokenKiller.Cli/Program.cs,src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs"
           dotnet build DotnetTokenKiller.slnx
           dotnet test DotnetTokenKiller.slnx --no-build --collect:"XPlat Code Coverage" --logger trx -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
           ./.sonar/scanner/dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"

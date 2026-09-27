@@ -53,8 +53,12 @@ function hasToolResult(messages) {
     return (messages ?? []).some((message) => message?.role === "tool");
 }
 
+let completionCount = 0;
+
+/** A completion id unique within this server's lifetime; a counter, since nothing needs it unpredictable. */
 function chatCompletionId() {
-    return `chatcmpl-mock-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    completionCount += 1;
+    return `chatcmpl-mock-${Date.now()}-${completionCount}`;
 }
 
 /** Builds the non-streaming `chat.completion` response body for either turn shape. */

@@ -20,8 +20,7 @@ namespace DotnetTokenKiller.Application.Integration;
 /// user-global rule.
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
-internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
+internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths home) : AgentsFileIntegrator(home)
 {
     /// <summary>Printed when this run wrote a project hook, which Antigravity loads only in trusted workspaces.</summary>
     internal const string WorkspaceTrustNote = "Antigravity loads .agents/hooks.json only in workspaces you have trusted.";
@@ -40,12 +39,15 @@ internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths ho
     private const int HookTimeoutSeconds = 10;
 
     /// <inheritdoc/>
-    public string ProviderName => "antigravity";
+    public override string ProviderName => "antigravity";
 
     /// <inheritdoc/>
-    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    protected override string GlobalInstructionsDirectory => Home.GeminiDir;
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
     {
-        var configDir = scope == HookScope.Global ? home.AntigravityConfigDir : Path.Combine(directory, ".agents");
+        var configDir = scope == HookScope.Global ? Home.AntigravityConfigDir : Path.Combine(directory, ".agents");
 
         return
         [
@@ -60,66 +62,13 @@ internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths ho
     }
 
     /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(
-            InstructionsPath(directory, HookScope.Project), SkillsDirectory(directory, HookScope.Project), directory,
-            HookScope.Project, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(
-            InstructionsPath(home.Home, HookScope.Global), SkillsDirectory(home.Home, HookScope.Global), home.Home,
-            HookScope.Global, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) =>
-        [InstructionsPath(directory, scope), SharedInstructionArtifacts.SkillPath(SkillsDirectory(directory, scope))];
-
-    /// <inheritdoc/>
-    public async Task<IntegrationResult> UninstallAsync(
-        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    protected override async Task InstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
     {
-        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
-        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
-
-        await SharedInstructionArtifacts.RemoveAgentsFilesAsync(
-            InstructionsPath(hookDirectory, scope), SkillsDirectory(hookDirectory, scope), context, cancellationToken)
-            .ConfigureAwait(false);
-
-        var hook = DescribeHooks(hookDirectory, scope)[0];
-        await UninstallHelpers.RemoveHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
-
-        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook.RegistrationPath)));
-
-        return context.ToResult();
-    }
-
-    private string InstructionsPath(string directory, HookScope scope) =>
-        scope == HookScope.Global ? Path.Combine(home.GeminiDir, "GEMINI.md") : Path.Combine(directory, "AGENTS.md");
-
-    private string SkillsDirectory(string directory, HookScope scope) =>
-        scope == HookScope.Global ? home.AntigravitySkillsDir : Path.Combine(directory, ".agents", "skills");
-
-    private static HookRegistrationSpec Registration(HookInstallation hook) =>
-        new(hook.RegistrationPath, "PreToolUse", "run_command", hook.Command, HookTimeoutSeconds, ContainerKey: GroupName);
-
-    private async Task<IntegrationResult> IntegrateCoreAsync(
-        string instructionsPath,
-        string skillsDirectory,
-        string hookDirectory,
-        HookScope scope,
-        bool force,
-        CancellationToken cancellationToken)
-    {
-        var context = new IntegrationContext(force);
-
-        await SharedInstructionArtifacts.WriteAgentsFilesAsync(instructionsPath, skillsDirectory, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        var hook = DescribeHooks(hookDirectory, scope)[0];
+        var hook = DescribeHooks(directory, scope)[0];
         await IntegratorHelpers.WriteHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
 
-        if (context.Created.Contains(hook.RegistrationPath) || context.Updated.Contains(hook.RegistrationPath))
+        if (Wrote(context, hook.RegistrationPath))
         {
             if (scope == HookScope.Project)
             {
@@ -131,9 +80,29 @@ internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths ho
 
         var rtkOutcome = await rtk.ReconcileFilesAsync(RtkCandidates(hook.RegistrationPath), cancellationToken).ConfigureAwait(false);
         rtkOutcome.ApplyTo(context);
-
-        return context.ToResult();
     }
+
+    /// <inheritdoc/>
+    protected override async Task UninstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        var hook = DescribeHooks(directory, scope)[0];
+        await UninstallHelpers.RemoveHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
+
+        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook.RegistrationPath)));
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Globally, the section goes into <c>~/.gemini/GEMINI.md</c> rather than an <c>AGENTS.md</c>.</remarks>
+    protected override string InstructionsPath(string directory, HookScope scope) =>
+        scope == HookScope.Global ? Path.Combine(Home.GeminiDir, "GEMINI.md") : Path.Combine(directory, "AGENTS.md");
+
+    /// <inheritdoc/>
+    protected override string SkillsDirectory(string directory, HookScope scope) =>
+        scope == HookScope.Global ? Home.AntigravitySkillsDir : Path.Combine(directory, ".agents", "skills");
+
+    private static HookRegistrationSpec Registration(HookInstallation hook) =>
+        new(hook.RegistrationPath, "PreToolUse", "run_command", hook.Command, HookTimeoutSeconds, ContainerKey: GroupName);
 
     /// <summary>Where rtk registers itself for Antigravity: a hooks file, or a plugin's hooks file, in either scope.</summary>
     /// <param name="registrationPath">
@@ -146,7 +115,7 @@ internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths ho
     private List<string> RtkCandidates(string registrationPath)
     {
         string[] configDirectories =
-            [.. new[] { Path.GetDirectoryName(registrationPath)!, home.AntigravityConfigDir }.Distinct(StringComparer.Ordinal)];
+            [.. new[] { Path.GetDirectoryName(registrationPath)!, Home.AntigravityConfigDir }.Distinct(StringComparer.Ordinal)];
         var plugins = configDirectories
             .Select(directory => Path.Combine(directory, "plugins"))
             .Where(Directory.Exists)

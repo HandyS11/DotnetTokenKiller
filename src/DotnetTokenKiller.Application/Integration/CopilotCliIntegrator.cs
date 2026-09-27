@@ -27,6 +27,9 @@ internal sealed class CopilotCliIntegrator(HomePaths home)
     private const string SectionEndMarker = "<!-- /dtk -->";
     private const string HookJsonName = "dtk-dotnet.json";
 
+    /// <summary>Both the hooks folder's name and the JSON property holding the hooks.</summary>
+    private const string Hooks = "hooks";
+
     /// <summary>
     /// The dtk-managed section written into <c>.github/copilot-instructions.md</c>, between
     /// <see cref="SectionMarker"/> and <see cref="SectionEndMarker"/>. Internal (rather than
@@ -57,7 +60,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home)
     /// <inheritdoc/>
     public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
     {
-        var hooksDir = scope == HookScope.Global ? home.CopilotHooksDir : Path.Combine(directory, ".github", "hooks");
+        var hooksDir = scope == HookScope.Global ? home.CopilotHooksDir : Path.Combine(directory, ".github", Hooks);
 
         return
         [
@@ -181,8 +184,8 @@ internal sealed class CopilotCliIntegrator(HomePaths home)
         try
         {
             return JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false)) is JsonObject root
-                   && root.All(property => property.Key is "version" or "hooks")
-                   && root["hooks"] is JsonObject { Count: 1 };
+                   && root.All(property => property.Key is "version" or Hooks)
+                   && root[Hooks] is JsonObject { Count: 1 };
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -250,7 +253,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home)
         try
         {
             var root = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false));
-            if (root?["hooks"]?["preToolUse"] is not JsonArray { Count: > 0 } entries)
+            if (root?[Hooks]?["preToolUse"] is not JsonArray { Count: > 0 } entries)
             {
                 return false;
             }
@@ -300,7 +303,7 @@ internal sealed class CopilotCliIntegrator(HomePaths home)
         var root = new JsonObject
         {
             ["version"] = 1,
-            ["hooks"] = new JsonObject
+            [Hooks] = new JsonObject
             {
                 ["preToolUse"] = new JsonArray(
                     new JsonObject

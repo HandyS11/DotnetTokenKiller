@@ -9,11 +9,9 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </summary>
 /// <param name="rtk">Detects and reconciles an rtk extension so dtk owns dotnet commands.</param>
 /// <param name="home">Resolves the user's home and the harnesses' agent directories.</param>
-internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
+internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths home) : AgentsFileIntegrator(home)
 {
-    /// <inheritdoc/>
-    public abstract string ProviderName { get; }
+    private const string ExtensionsFolder = "extensions";
 
     /// <summary>Gets the harness's display name, for the generated file's comments.</summary>
     protected abstract string HarnessName { get; }
@@ -36,9 +34,12 @@ internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths hom
     }
 
     /// <inheritdoc/>
-    public virtual IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    protected override string GlobalInstructionsDirectory => GlobalAgentDirectory(Home);
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
     {
-        var path = Path.Combine(ConfigDirectory(directory, scope), "extensions", "dtk.js");
+        var path = Path.Combine(ConfigDirectory(directory, scope), ExtensionsFolder, "dtk.js");
 
         return
         [
@@ -54,45 +55,9 @@ internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths hom
     }
 
     /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(directory, HookScope.Project, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public virtual Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(home.Home, HookScope.Global, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) =>
-        [InstructionsPath(directory, scope), SharedInstructionArtifacts.SkillPath(SkillsDirectory(directory, scope))];
-
-    /// <inheritdoc/>
-    public virtual async Task<IntegrationResult> UninstallAsync(
-        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    protected override async Task InstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
     {
-        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
-        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
-
-        await SharedInstructionArtifacts.RemoveAgentsFilesAsync(
-            InstructionsPath(hookDirectory, scope), SkillsDirectory(hookDirectory, scope), context, cancellationToken)
-            .ConfigureAwait(false);
-
-        await UninstallHelpers.RemoveGeneratedFileAsync(DescribeHooks(hookDirectory, scope)[0].PluginArtifact!, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hookDirectory)));
-
-        return context.ToResult();
-    }
-
-    private async Task<IntegrationResult> IntegrateCoreAsync(
-        string directory, HookScope scope, bool force, CancellationToken cancellationToken)
-    {
-        var context = new IntegrationContext(force);
-
-        await SharedInstructionArtifacts.WriteAgentsFilesAsync(
-            InstructionsPath(directory, scope), SkillsDirectory(directory, scope), context, cancellationToken)
-            .ConfigureAwait(false);
-
         await IntegratorHelpers.WriteGeneratedFileAsync(DescribeHooks(directory, scope)[0].PluginArtifact!, context, cancellationToken)
             .ConfigureAwait(false);
 
@@ -100,18 +65,20 @@ internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths hom
         rtkOutcome.ApplyTo(context);
 
         AddNotes(scope, context);
+    }
 
-        return context.ToResult();
+    /// <inheritdoc/>
+    protected override async Task UninstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        await UninstallHelpers.RemoveGeneratedFileAsync(DescribeHooks(directory, scope)[0].PluginArtifact!, context, cancellationToken)
+            .ConfigureAwait(false);
+
+        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(directory)));
     }
 
     private string ConfigDirectory(string directory, HookScope scope) =>
-        scope == HookScope.Global ? GlobalAgentDirectory(home) : Path.Combine(directory, ProjectFolder);
-
-    private string InstructionsPath(string directory, HookScope scope) =>
-        scope == HookScope.Global ? Path.Combine(GlobalAgentDirectory(home), "AGENTS.md") : Path.Combine(directory, "AGENTS.md");
-
-    private string SkillsDirectory(string directory, HookScope scope) =>
-        scope == HookScope.Global ? home.AgentsSkillsDir : Path.Combine(directory, ".agents", "skills");
+        scope == HookScope.Global ? GlobalAgentDirectory(Home) : Path.Combine(directory, ProjectFolder);
 
     /// <summary>
     /// Every file either pi-family harness would load as an extension, in both scopes: rtk installs its pi extension
@@ -122,10 +89,10 @@ internal abstract class PiFamilyIntegrator(RtkHookCoexistence rtk, HomePaths hom
     [
         .. new[]
             {
-                Path.Combine(directory, ".pi", "extensions"),
-                Path.Combine(home.PiAgentDir, "extensions"),
-                Path.Combine(directory, ".omp", "extensions"),
-                Path.Combine(home.OhMyPiAgentDir, "extensions")
+                Path.Combine(directory, ".pi", ExtensionsFolder),
+                Path.Combine(Home.PiAgentDir, ExtensionsFolder),
+                Path.Combine(directory, ".omp", ExtensionsFolder),
+                Path.Combine(Home.OhMyPiAgentDir, ExtensionsFolder)
             }
             .Where(Directory.Exists)
             .SelectMany(folder => IntegratorHelpers.EnumerateSafely(folder, Directory.EnumerateFiles))

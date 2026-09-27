@@ -14,14 +14,19 @@ namespace DotnetTokenKiller.Application.Integration;
 /// </list>
 /// Internal for the same reason as <see cref="ClaudeCodeIntegrator"/>: its constructor takes internal types.
 /// </remarks>
-internal sealed class OpenCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
+internal sealed class OpenCodeIntegrator(RtkHookCoexistence rtk, HomePaths home) : AgentsFileIntegrator(home)
 {
-    /// <inheritdoc/>
-    public string ProviderName => "opencode";
+    /// <summary>The folder names rtk's OpenCode plugin might use, singular or plural.</summary>
+    private static readonly string[] RtkPluginFolderNames = ["plugin", "plugins"];
 
     /// <inheritdoc/>
-    public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
+    public override string ProviderName => "opencode";
+
+    /// <inheritdoc/>
+    protected override string GlobalInstructionsDirectory => Home.OpenCodeConfigDir;
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope)
     {
         var path = Path.Combine(ConfigDirectory(directory, scope), "plugins", "dtk.js");
 
@@ -39,73 +44,28 @@ internal sealed class OpenCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
     }
 
     /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(
-            InstructionsPath(directory, HookScope.Project), SkillsDirectory(directory, HookScope.Project), directory,
-            HookScope.Project, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
-        => IntegrateCoreAsync(
-            InstructionsPath(home.Home, HookScope.Global), SkillsDirectory(home.Home, HookScope.Global), home.Home,
-            HookScope.Global, force, cancellationToken);
-
-    /// <inheritdoc/>
-    public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) =>
-        [InstructionsPath(directory, scope), SharedInstructionArtifacts.SkillPath(SkillsDirectory(directory, scope))];
-
-    /// <inheritdoc/>
-    public async Task<IntegrationResult> UninstallAsync(
-        string directory, HookScope scope, IReadOnlyDictionary<string, string> sharedInUse, CancellationToken cancellationToken)
+    protected override async Task InstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
     {
-        var hookDirectory = scope == HookScope.Global ? home.Home : directory;
-        var context = IntegrationContext.ForUninstall(hookDirectory, sharedInUse);
-
-        await SharedInstructionArtifacts.RemoveAgentsFilesAsync(
-            InstructionsPath(hookDirectory, scope), SkillsDirectory(hookDirectory, scope), context, cancellationToken)
+        await IntegratorHelpers.WriteGeneratedFileAsync(DescribeHooks(directory, scope)[0].PluginArtifact!, context, cancellationToken)
             .ConfigureAwait(false);
 
-        await UninstallHelpers.RemoveGeneratedFileAsync(DescribeHooks(hookDirectory, scope)[0].PluginArtifact!, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hookDirectory)));
-
-        return context.ToResult();
+        var rtkOutcome = await rtk.ReconcileFilesAsync(RtkCandidates(directory), cancellationToken).ConfigureAwait(false);
+        rtkOutcome.ApplyTo(context);
     }
 
-    private string InstructionsPath(string directory, HookScope scope) =>
-        Path.Combine(scope == HookScope.Global ? home.OpenCodeConfigDir : directory, "AGENTS.md");
+    /// <inheritdoc/>
+    protected override async Task UninstallHookAsync(
+        string directory, HookScope scope, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        await UninstallHelpers.RemoveGeneratedFileAsync(DescribeHooks(directory, scope)[0].PluginArtifact!, context, cancellationToken)
+            .ConfigureAwait(false);
 
-    private string SkillsDirectory(string directory, HookScope scope) =>
-        scope == HookScope.Global ? home.AgentsSkillsDir : Path.Combine(directory, ".agents", "skills");
-
-    /// <summary>The folder names rtk's OpenCode plugin might use, singular or plural.</summary>
-    private static readonly string[] RtkPluginFolderNames = ["plugin", "plugins"];
+        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(directory)));
+    }
 
     private string ConfigDirectory(string directory, HookScope scope) =>
-        scope == HookScope.Global ? home.OpenCodeConfigDir : Path.Combine(directory, ".opencode");
-
-    private async Task<IntegrationResult> IntegrateCoreAsync(
-        string instructionsPath,
-        string skillsDirectory,
-        string hookDirectory,
-        HookScope scope,
-        bool force,
-        CancellationToken cancellationToken)
-    {
-        var context = new IntegrationContext(force);
-
-        await SharedInstructionArtifacts.WriteAgentsFilesAsync(instructionsPath, skillsDirectory, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        await IntegratorHelpers.WriteGeneratedFileAsync(DescribeHooks(hookDirectory, scope)[0].PluginArtifact!, context, cancellationToken)
-            .ConfigureAwait(false);
-
-        var rtkOutcome = await rtk.ReconcileFilesAsync(RtkCandidates(hookDirectory), cancellationToken).ConfigureAwait(false);
-        rtkOutcome.ApplyTo(context);
-
-        return context.ToResult();
-    }
+        scope == HookScope.Global ? Home.OpenCodeConfigDir : Path.Combine(directory, ".opencode");
 
     /// <summary>Every plugin file OpenCode would load from either scope, where rtk installs its own plugin.</summary>
     /// <param name="hookDirectory">The project root.</param>
