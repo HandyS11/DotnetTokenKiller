@@ -25,3 +25,11 @@ unconfirmed. If you can run one, please report the result in an issue.
 1. `dotnet build` becomes `dtk dotnet build` in `droid` on the current release.
 2. Which shell runs the hook command on Windows.
 3. With the user's own `settings.json` `PreToolUse` hooks already registered, both theirs and dtk's run.
+
+## Amp
+
+1. `dotnet build` becomes `dtk dotnet build` in `amp`.
+2. Which input field the shell tool actually holds the command in (`cmd` or `command`).
+3. Whether a `{ action: "allow" }` reply from dtk's plugin overrides another plugin's `reject-and-continue` for the
+   same call, rather than leaving it in force as intended.
+4. Whether the plugin can spawn `dtk hook amp` under Amp's Bun runtime on Windows.

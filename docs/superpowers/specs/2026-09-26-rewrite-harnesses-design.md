@@ -1,6 +1,6 @@
 # Rewrite-capable harnesses (Cursor, Devin, Factory Droid, Crush, Kilo Code, Amp) — design
 
-Date: 2026-09-26. Status: approved; PR 1 merged (#168), PR 2 implemented.
+Date: 2026-09-26. Status: approved; PR 1 merged (#168), PR 2 merged (#169), PR 3 implemented.
 
 ## Goal
 
@@ -118,13 +118,18 @@ or live run confirmed; those points go on the manual checklist (see *Verificatio
 ### Kilo Code (v7, VS Code extension and `kilo` CLI)
 
 - An OpenCode fork: JS/TS plugins, "behavior is identical to OpenCode" (kilo.ai/docs/automate/extending/plugins).
-  Directories `~/.config/kilo/plugin/`, `.kilo/plugin/` (legacy `.kilocode/plugin/`); a plugin must
-  `export default { id, server }`.
-- `tool.execute.before(input:{tool,…}, output:{args})`; shell tool `bash`, `args.command`; mutating `output.args`
-  rewrites; a throw blocks the tool. The bash permission prompt runs inside `execute`, after the hook.
-- Instructions: `AGENTS.md` (walking up), global `~/.config/kilo/AGENTS.md` or `$KILO_CONFIG_DIR/AGENTS.md`.
-  `KILO_PURE=1` disables external plugins.
-- **Unverified:** the Windows global path; whether Kilo reads `.agents/skills` (gate K decides).
+  Verified in source (Kilo-Org/kilocode `packages/opencode/src/plugin/index.ts`, commit 7d977bc, 2026-09-26): the
+  loader accepts `export default { id, server }` **or** OpenCode's named function exports (`getLegacyPlugins`), and
+  discovers `{plugin,plugins}/*.{ts,js}` in `.kilo/`, `.kilocode/`, the global config dir and `$KILO_CONFIG_DIR`. So
+  Kilo reuses OpenCode's plugin body byte for byte, apart from the provider name and harness label baked into its
+  comments (deviation 1).
+- `tool.execute.before(input:{tool,…}, output:{args})`; the shell tool id is `bash` (`tool/shell/id.ts`); mutating
+  `output.args` rewrites; a throw blocks the tool. `tool.execute.before` fires **before** the tool's own permission
+  check (`session/tools.ts`), not after, as first assumed.
+- Instructions: `AGENTS.md` (walking up); global config dir is `$XDG_CONFIG_HOME/kilo` or `~/.config/kilo`
+  (`xdg-basedir`, `packages/core/src/global.ts`); `$KILO_CONFIG_DIR` is an extra config dir and wins for the global
+  `AGENTS.md` (`session/instruction.ts`) (deviation 2). Kilo scans `.agents/skills` (`skill/index.ts`), so the skill
+  is kept, not dropped. `KILO_PURE=1` disables external plugins.
 
 ### Amp
 
@@ -134,11 +139,14 @@ or live run confirmed; those points go on the manual checklist (see *Verificatio
   (`%USERPROFILE%\.config\amp\plugins\` on Windows). Plugins run under Bun.
 - `amp.on('tool.call', (event, ctx) => ToolCallResult)`; results `allow`, `reject-and-continue`,
   `modify {input}`, `synthesize`, `error`. `amp.helpers.shellCommandFromToolCall(event)` returns `{command, dir?}`
-  for `Bash` or `shell_command` calls. Handler order between plugins is undefined.
+  for `Bash` or `shell_command` calls. Handler order between plugins is undefined. Amp's Plugin API reference
+  (ampcode.com/docs/markdown/plugin-api, 2026-09-27) says a request event handler (`tool.call` among them) must
+  return a result, so a handler cannot answer with `undefined` (deviation 3).
 - Instructions: `AGENTS.md` walking up to `$HOME`, global `~/.config/amp/AGENTS.md`; skills include
   `.agents/skills` and `~/.agents/skills`.
-- **Unverified:** the input field name (`cmd` on `Bash` in 2025 docs); what a handler returning nothing or
-  throwing does; project plugins apparently load without a prompt.
+- **Unverified:** the input field name (`cmd` on `Bash` in 2025 docs); whether an `{ action: "allow" }` reply
+  overrides another plugin's `reject-and-continue` for the same call; project plugins apparently load without a
+  prompt.
 
 ## Design
 
@@ -240,13 +248,15 @@ docs.
 
 | Scope | Artifacts |
 |-------|-----------|
-| Project | `.kilo/plugin/dtk.js`, `AGENTS.md` section, `.agents/skills/…` (dropped if gate K shows Kilo ignores it) |
-| Global | `$KILO_CONFIG_DIR` or `~/.config/kilo/`: `plugin/dtk.js` and `AGENTS.md` section; `~/.agents/skills/…` |
+| Project | `.kilo/plugin/dtk.js`, `AGENTS.md` section, `.agents/skills/…` |
+| Global | `$KILO_CONFIG_DIR`, `$XDG_CONFIG_HOME/kilo` or `~/.config/kilo`: `plugin/dtk.js` and `AGENTS.md` section; `~/.agents/skills/…` |
 
-`KiloPlugin.Body` is OpenCode's handler (`tool.execute.before`, `tool === "bash"`, `includes("dotnet")`
-pre-filter, in-place `output.args.command`, every path resolving to no rewrite) wrapped as
-`export default { id: "dtk", server: async () => ({ … }) }`, over `PluginRuntime.Source("kilo", "Kilo Code")`.
-Stamped with `StampStyle.SlashComment`; never written to `.kilocode/`.
+`KiloPlugin.Body` is `OpenCodePlugin.BodyFor("kilo", "Kilo Code")` — OpenCode's plugin body reused byte for byte,
+apart from the provider name and harness label baked into its comments and `PluginRuntime.Source` call: the named
+`export const DtkPlugin = async () => ({ "tool.execute.before": … })` export Kilo's loader accepts, not the
+`{ id, server }` shape first assumed (deviation 1). `OpenCodePlugin.Body` itself is unchanged, so existing OpenCode
+installs stay byte for byte. Stamped with `StampStyle.SlashComment`; never written to `.kilocode/`. No rtk
+coexistence: rtk ships no Kilo plugin (deviation 4).
 
 ### PR 3b: Amp
 
@@ -258,9 +268,12 @@ Stamped with `StampStyle.SlashComment`; never written to `.kilocode/`.
 `AmpPlugin.Body` registers `amp.on('tool.call', …)`: it gets the command from
 `amp.helpers.shellCommandFromToolCall(event)`, skips anything without `dotnet`, spawns `dtk hook amp`, and on a
 rewrite returns `{action: "modify", input: {...event.input, [field]: rewritten}}`, where `field` is whichever of
-`cmd` or `command` holds the original string (neither → no rewrite). Otherwise it returns `undefined`, so dtk
-never overrides another plugin's decision; if Amp requires a result, the fallback is `{action: "allow"}`. The
-handler never throws. Init output notes that Amp loads project plugins without asking.
+`cmd` or `command` holds the original string (neither → no rewrite). Otherwise it returns `{ action: "allow" }`,
+never `undefined`: Amp's Plugin API reference says a request-event handler must return a result, so `undefined`
+is not an option (deviation 3). `allow` is intended as neutral, so it should not override another plugin's
+`reject-and-continue` for the same call, but that interaction is unverified (see harness-verification.md). The
+handler never throws. Init output notes that Amp loads project plugins without asking. No rtk coexistence: its
+Amp integration was never merged (deviation 4).
 
 ### doctor, uninstall and shared files
 
@@ -293,8 +306,12 @@ call, `dotnet build`, and the next with a final message. A fake `dotnet` and `dt
   a single static binary, and a scratch `HOME` isolates it as well), configured with a custom provider at the mock.
   Passes when the recorded command is `dtk dotnet build`, with dtk's `.crushrc` section as the only hook. Repeated
   on older releases to pin the minimum version.
-- **Gate K (Kilo, PR 3):** the `kilo` CLI in Docker with the mock provider. Passes when the export shape loads, the
-  recorded command is `dtk dotnet build`, and records whether `.agents/skills` is read.
+- **Gate K (Kilo, PR 3):** the `@kilocode/cli` npm package installed into a scratch prefix and run directly (not
+  Docker) with the mock provider, plus a control run after `--uninstall`. Kilo CLI 7.4.2 and 7.8.1 both pass — the
+  recorded command is `dtk dotnet build`, the control run's is a bare `dotnet build`, and `.agents/skills` is read
+  (kept, not dropped); 7.0.26 fails both runs before any tool call because it rejects the gate's custom-provider
+  config, a harness limitation unrelated to dtk's plugin. No minimum Kilo version is pinned. Full results in
+  `eng/gates/README.md`.
 
 ### Manual checklist (docs page, for anyone with an account)
 
