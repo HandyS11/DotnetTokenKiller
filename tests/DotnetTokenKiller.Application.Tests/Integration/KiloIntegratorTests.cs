@@ -54,6 +54,17 @@ public sealed class KiloIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task IntegrateGlobalAsync_DefaultsUnderDotConfigKilo()
+    {
+        var result = await CreateSut().IntegrateGlobalAsync(false, default);
+
+        result.CreatedFiles.Should().Equal(
+            Path.Combine(HomeDir, ".config", "kilo", "AGENTS.md"),
+            Path.Combine(HomeDir, ".agents", "skills", "dotnet-token-killer", "SKILL.md"),
+            Path.Combine(HomeDir, ".config", "kilo", "plugin", "dtk.js"));
+    }
+
+    [Fact]
     public async Task IntegrateGlobalAsync_HonorsKiloConfigDir()
     {
         var kiloConfig = Path.Combine(_tempDir, "kilo-config");
