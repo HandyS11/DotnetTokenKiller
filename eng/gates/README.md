@@ -63,7 +63,7 @@ provider nor dtk's hook section take effect and Crush has no provider to run wit
 ## Gate K — Kilo Code
 
 `kilo-gate.sh` proves that a `dtk init kilo` project makes the real `kilo` CLI run `dtk dotnet build`
-(instead of a bare `dtk dotnet build`) when the model asks for a build, via the `.kilo/plugin/dtk.js` plugin
+(instead of a bare `dotnet build`) when the model asks for a build, via the `.kilo/plugin/dtk.js` plugin
 `dtk init kilo` writes (its `tool.execute.before` handler spawns `dtk hook kilo`).
 
 It installs the given `@kilocode/cli` release from npm into a scratch prefix (running the package's
@@ -72,7 +72,7 @@ has no native binary), builds a throwaway git-root project with `dtk init kilo`,
 `mock-openai.mjs` with a project `kilo.json` (an `@ai-sdk/openai-compatible` provider, `"model": "mock/mock"`,
 and `"permission": {"bash": "allow"}` for this scratch project only), and runs
 `kilo run -m mock/mock "build the project"` with the same fake `dotnet`/`dtk` as gate C. The control run
-repeats it after `dtk init kilo --uninstall` and must show the bare `dtk dotnet build`. `HOME` and every
+repeats it after `dtk init kilo --uninstall` and must show the bare `dotnet build`. `HOME` and every
 `XDG_*` directory point at the scratch tree; `KILO_DISABLE_AUTOUPDATE=1` and `KILO_DISABLE_LSP_DOWNLOAD=1`
 keep the run offline apart from the npm install (and, if the installed CLI doesn't bundle it, fetching
 `@ai-sdk/openai-compatible`).
