@@ -705,10 +705,16 @@ Droid reads `PreToolUse` from the root `.factory/hooks.json`, merged **per event
 a `PreToolUse` array into a new `hooks.json` would silently shadow `PreToolUse` hooks the user already keeps in
 `settings.json`, so dtk picks the file Droid actually reads `PreToolUse` from, in this order:
 
-1. the live `hooks.json`, when it already defines a non-empty `PreToolUse`;
+1. the live `hooks.json`, when it already defines a non-empty `PreToolUse` — unless that `PreToolUse` holds only
+   dtk's own hook and `settings.json`'s is non-empty;
 2. else `settings.json`, when its `hooks.PreToolUse` is non-empty;
 3. else the live `hooks.json`, when one exists (even without a `PreToolUse` yet);
 4. else a new `hooks.json`.
+
+Having written the hook there, `dtk init droid` removes dtk's entry from the other candidate files, deleting a file
+left empty, so the hook is registered exactly once, where Droid reads it — for example, when you add a `PreToolUse`
+hook to `settings.json` after dtk created a `hooks.json` holding only its own, re-running `dtk init droid` moves
+dtk's hook into `settings.json` and deletes that `hooks.json`, which would otherwise shadow your hook.
 
 `dtk init droid --uninstall` removes dtk's entry from all three candidate files — wherever an earlier run or the
 user moved it — and leaves every other hook alone. A candidate file that isn't valid JSON is kept as is, with a

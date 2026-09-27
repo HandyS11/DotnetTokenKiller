@@ -156,4 +156,83 @@ public sealed class FactoryDroidIntegratorTests : IDisposable
         result.RemovedFiles.Should().Contain([ProjectHooksJson, AgentsPath, SkillPath]);
         (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Contain("lint").And.NotContain("dtk hook droid");
     }
+
+    [Fact]
+    public async Task IntegrateAsync_DtkOnlyHooksJsonAndALaterSettingsGuard_MovesDtkIntoSettings()
+    {
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(ProjectSettingsJson,
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UpdatedFiles.Should().Contain(ProjectSettingsJson);
+        result.RemovedFiles.Should().Equal(ProjectHooksJson);
+        result.Notes.Should().Contain(FactoryDroidIntegrator.SessionNote);
+        File.Exists(ProjectHooksJson).Should().BeFalse("its only PreToolUse was dtk's, which shadowed the guard");
+        DtkHandler(ProjectSettingsJson, "hooks").Should().NotBeNull();
+        (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Contain("\"guard\"");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_HooksJsonWithAUserPreToolUse_KeepsDtkThere()
+    {
+        Write(ProjectHooksJson,
+            """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"lint"}]}]}""");
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(ProjectSettingsJson,
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UnchangedFiles.Should().Contain(ProjectHooksJson);
+        result.RemovedFiles.Should().BeEmpty();
+        result.UpdatedFiles.Should().BeEmpty();
+        DtkHandler(ProjectHooksJson, null).Should().NotBeNull();
+        (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().NotContain("dtk hook droid");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_DtkInSettingsAndAUserPreToolUseAddedToHooksJson_MovesDtkIntoHooksJson()
+    {
+        Write(ProjectSettingsJson,
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(ProjectHooksJson,
+            """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"lint"}]}]}""");
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UpdatedFiles.Should().Contain([ProjectHooksJson, ProjectSettingsJson]);
+        DtkHandler(ProjectHooksJson, null).Should().NotBeNull();
+        (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Contain("guard").And.NotContain("dtk hook droid");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_MalformedOtherCandidate_KeepsItWithANoteAndStillInstalls()
+    {
+        Write(ProjectHooksJson, "{}");
+        Write(ProjectSettingsJson, "not json");
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        DtkHandler(ProjectHooksJson, null).Should().NotBeNull();
+        result.UpdatedFiles.Should().Contain(ProjectHooksJson);
+        result.SkippedFiles.Should().Equal(ProjectSettingsJson);
+        result.Notes.Should().ContainSingle(note => note.StartsWith(ProjectSettingsJson, StringComparison.Ordinal));
+        (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Be("not json");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_OtherCandidateWithCommentsAndNoDtkHook_IsLeftAloneWithoutANote()
+    {
+        const string settings = "{\n  // the model\n  \"model\": \"x\",\n}\n";
+        Write(ProjectSettingsJson, settings);
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.SkippedFiles.Should().BeEmpty();
+        result.Notes.Should().Equal(FactoryDroidIntegrator.SessionNote);
+        (await File.ReadAllTextAsync(ProjectSettingsJson)).Should().Be(settings);
+    }
 }

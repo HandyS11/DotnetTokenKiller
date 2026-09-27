@@ -129,7 +129,8 @@ harmless. Unverified points are listed in docs/articles/harness-verification.md.
 
 `dtk init droid` writes the shared `AGENTS.md` section and skill plus a `PreToolUse` entry for the `Execute` tool,
 in the file `FactoryDroidHooks.ResolveTarget` picks (Droid merges `hooks.json` over `settings.json`'s `hooks` per
-event key, so dtk writes where `PreToolUse` already lives; uninstall cleans every candidate). `--global` uses
+event key, so dtk writes where `PreToolUse` already lives, not counting a `hooks.json` holding only dtk's own entry,
+then removes its entry from the other candidates; uninstall cleans every candidate). `--global` uses
 `$FACTORY_HOME_OVERRIDE/.factory` or `~/.factory`. `dtk init crush` writes the section and skill plus a marked section
 in `.crushrc` (or an existing `crushrc`), a Bash script Crush runs, so `CrushrcFile` edits only between its markers
 and refuses a damaged section; `--global` uses `$CRUSH_GLOBAL_CONFIG`, `$XDG_CONFIG_HOME/crush` or `~/.config/crush`

@@ -114,11 +114,15 @@ internal sealed class FactoryDroidIntegrator(RtkHookCoexistence rtk, HomePaths h
             InstructionsPath(directory, scope), SkillsDirectory(directory, scope), context, cancellationToken)
             .ConfigureAwait(false);
 
-        var (path, containerKey) = FactoryDroidHooks.ResolveTarget(FactoryDir(directory, scope));
+        var factoryDir = FactoryDir(directory, scope);
+        var (path, containerKey) = FactoryDroidHooks.ResolveTarget(factoryDir);
         await IntegratorHelpers.WriteHookRegistrationAsync(Registration(path, containerKey), context, cancellationToken)
             .ConfigureAwait(false);
 
-        if (context.Created.Contains(path) || context.Updated.Contains(path))
+        var wroteHook = context.Created.Contains(path) || context.Updated.Contains(path);
+        wroteHook |= await RemoveFromOtherCandidatesAsync(factoryDir, path, context, cancellationToken).ConfigureAwait(false);
+
+        if (wroteHook)
         {
             context.Notes.Add(SessionNote);
         }
@@ -127,5 +131,59 @@ internal sealed class FactoryDroidIntegrator(RtkHookCoexistence rtk, HomePaths h
         rtkOutcome.ApplyTo(context);
 
         return context.ToResult();
+    }
+
+    /// <summary>
+    /// Removes dtk's handler from every candidate but <paramref name="target"/>, so the hook is registered once, where
+    /// Droid reads <c>PreToolUse</c> from: an earlier install may have put it in a file Droid no longer reads it from.
+    /// A candidate left empty is deleted. One dtk cannot rewrite is kept, with a note, when it may hold dtk's handler.
+    /// </summary>
+    /// <param name="factoryDir">The <c>.factory</c> directory being installed into.</param>
+    /// <param name="target">The file this run registered the hook in.</param>
+    /// <param name="context">The install context; receives the files updated, removed or kept.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Whether any candidate was changed.</returns>
+    private static async Task<bool> RemoveFromOtherCandidatesAsync(
+        string factoryDir, string target, IntegrationContext context, CancellationToken cancellationToken)
+    {
+        var changed = false;
+
+        foreach (var (path, containerKey) in FactoryDroidHooks.Candidates(factoryDir))
+        {
+            if (string.Equals(path, target, StringComparison.Ordinal) || !File.Exists(path))
+            {
+                continue;
+            }
+
+            // A scratch context: a candidate without dtk's handler is not part of this install's report.
+            var removal = new IntegrationContext(context.Force);
+            try
+            {
+                await UninstallHelpers.RemoveHookRegistrationAsync(Registration(path, containerKey), removal, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Like uninstall, one unreadable candidate must not stop the install. It is reported only when it may
+                // hold dtk's handler: a settings.json with comments and no dtk hook is none of this run's business.
+                if (!FactoryDroidHooks.IsReadable(path) || FactoryDroidHooks.HoldsDtkHandler(path, containerKey))
+                {
+                    context.Skipped.Add(path);
+                    context.Notes.Add(
+                        $"{path} was kept: dtk could not check it for an older registration of its hook ({ex.Message}). "
+                        + $"Remove any '{HookCommands.Invocation("droid")}' entry from it by hand.");
+                }
+
+                continue;
+            }
+
+            context.Updated.AddRange(removal.Updated);
+            context.Removed.AddRange(removal.Removed);
+            context.Skipped.AddRange(removal.Skipped);
+            context.Notes.AddRange(removal.Notes);
+            changed |= removal.Updated.Count > 0 || removal.Removed.Count > 0;
+        }
+
+        return changed;
     }
 }

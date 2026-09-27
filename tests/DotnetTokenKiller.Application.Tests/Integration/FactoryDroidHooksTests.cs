@@ -8,6 +8,9 @@ public sealed class FactoryDroidHooksTests : IDisposable
     private const string LivePreToolUse =
         """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"lint"}]}]}""";
 
+    private const string DtkOnlyPreToolUse =
+        """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"dtk hook droid","timeout":10}]}]}""";
+
     private readonly string _dir = Path.Combine(Path.GetTempPath(), $"dtk-droid-hooks-{Guid.NewGuid()}", ".factory");
 
     private string HooksJson => Path.Combine(_dir, "hooks.json");
@@ -101,6 +104,34 @@ public sealed class FactoryDroidHooksTests : IDisposable
     public void ResolveTarget_UnreadableSettings_FallsBackToHooksJson(string settings)
     {
         Write(SettingsJson, settings);
+
+        FactoryDroidHooks.ResolveTarget(_dir).Should().Be((HooksJson, (string?)null));
+    }
+
+    [Fact]
+    public void ResolveTarget_HooksJsonHoldsOnlyDtk_AndSettingsRunsPreToolUse_UsesSettings()
+    {
+        Write(HooksJson, DtkOnlyPreToolUse);
+        Write(SettingsJson, $$"""{"hooks":{{LivePreToolUse}}}""");
+
+        FactoryDroidHooks.ResolveTarget(_dir).Should().Be((SettingsJson, "hooks"),
+            "dtk's own entry must not keep shadowing the user's settings.json PreToolUse");
+    }
+
+    [Fact]
+    public void ResolveTarget_HooksJsonHoldsOnlyDtk_AndNoSettingsHooks_UsesHooksJson()
+    {
+        Write(HooksJson, DtkOnlyPreToolUse);
+
+        FactoryDroidHooks.ResolveTarget(_dir).Should().Be((HooksJson, (string?)null));
+    }
+
+    [Fact]
+    public void ResolveTarget_HooksJsonHoldsDtkAndAUserHook_StillWinsOverSettings()
+    {
+        Write(HooksJson,
+            """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"dtk hook droid"},{"type":"command","command":"lint"}]}]}""");
+        Write(SettingsJson, $$"""{"hooks":{{LivePreToolUse}}}""");
 
         FactoryDroidHooks.ResolveTarget(_dir).Should().Be((HooksJson, (string?)null));
     }
