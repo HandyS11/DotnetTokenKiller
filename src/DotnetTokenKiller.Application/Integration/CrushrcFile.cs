@@ -64,8 +64,15 @@ internal static class CrushrcFile
     }
 
     /// <summary>
-    /// Removes the section and the blank line dtk put before it; deletes the file when nothing else is left.
+    /// Removes the section and the one separator newline <see cref="WriteAsync"/> put before it; deletes the file when
+    /// nothing but whitespace is left.
     /// </summary>
+    /// <remarks>
+    /// The separator is the newline immediately before the begin marker, removed only when the character before it is
+    /// also a newline (a blank line precedes the section); every other byte — user lines after the section, trailing
+    /// blank lines — stays as it is. A file that had no trailing newline before the install comes back with one: the
+    /// install added two newlines after its last line, and only one of them is the separator.
+    /// </remarks>
     /// <param name="path">The <c>crushrc</c> to edit.</param>
     /// <param name="context">The uninstall context.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -85,6 +92,7 @@ internal static class CrushrcFile
         }
 
         var (start, end) = span;
+        start -= SeparatorLength(content, start);
 
         var remaining = content[..start] + content[end..];
         if (remaining.Trim().Length == 0)
@@ -93,13 +101,40 @@ internal static class CrushrcFile
             return;
         }
 
-        if (end == content.Length)
-        {
-            remaining = remaining.TrimEnd('\r', '\n') + NewlineOf(content);
-        }
-
         await File.WriteAllTextAsync(path, remaining, cancellationToken).ConfigureAwait(false);
         context.Updated.Add(path);
+    }
+
+    /// <summary>
+    /// Throws when <paramref name="path"/> holds a damaged dtk section, exactly as <see cref="WriteAsync"/> and
+    /// <see cref="RemoveAsync"/> would; does nothing when the file is absent or its section is sound. Lets an integrator
+    /// check every <c>crushrc</c> it will touch before it writes or removes anything else.
+    /// </summary>
+    /// <param name="path">The <c>crushrc</c> to check.</param>
+    /// <exception cref="InvalidOperationException">The file holds a damaged dtk section.</exception>
+    internal static void Validate(string path)
+    {
+        if (File.Exists(path))
+        {
+            _ = FindSection(File.ReadAllText(path), path);
+        }
+    }
+
+    /// <summary>
+    /// The length of the separator newline before <paramref name="start"/>: that newline (<c>\n</c> or <c>\r\n</c>)
+    /// when the character before it is also a newline, else zero.
+    /// </summary>
+    /// <param name="content">The file content.</param>
+    /// <param name="start">Where the section begins.</param>
+    private static int SeparatorLength(string content, int start)
+    {
+        if (start < 2 || content[start - 1] != '\n')
+        {
+            return 0;
+        }
+
+        var length = content[start - 2] == '\r' ? 2 : 1;
+        return start > length && content[start - length - 1] == '\n' ? length : 0;
     }
 
     /// <summary>CRLF when the file already uses it, else LF.</summary>

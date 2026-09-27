@@ -45,11 +45,15 @@ internal sealed class CrushIntegrator(HomePaths home)
     public async Task<IntegrationResult> IntegrateAsync(string directory, bool force, CancellationToken cancellationToken)
     {
         var context = new IntegrationContext(force);
+        var rcPath = RcPath(directory, HookScope.Project);
+
+        // Checked before anything is written, so a damaged crushrc leaves no partial install behind.
+        CrushrcFile.Validate(rcPath);
 
         await SharedInstructionArtifacts.WriteAgentsFilesAsync(
             Path.Combine(directory, "AGENTS.md"), Path.Combine(directory, ".agents", "skills"), context, cancellationToken)
             .ConfigureAwait(false);
-        await WriteHookAsync(RcPath(directory, HookScope.Project), context, cancellationToken).ConfigureAwait(false);
+        await WriteHookAsync(rcPath, context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
@@ -58,13 +62,15 @@ internal sealed class CrushIntegrator(HomePaths home)
     public async Task<IntegrationResult> IntegrateGlobalAsync(bool force, CancellationToken cancellationToken)
     {
         var context = new IntegrationContext(force);
+        var rcPath = RcPath(home.Home, HookScope.Global);
+        CrushrcFile.Validate(rcPath);
 
         await IntegratorHelpers.WriteSectionBasedFileAsync(
             GlobalInstructionsPath, SharedInstructionArtifacts.SectionMarker, SharedInstructionArtifacts.SectionEndMarker,
             SharedInstructionArtifacts.Section, context, cancellationToken).ConfigureAwait(false);
         await IntegratorHelpers.WriteGeneratedFileAsync(
             SharedInstructionArtifacts.SkillArtifact(home.AgentsSkillsDir), context, cancellationToken).ConfigureAwait(false);
-        await WriteHookAsync(RcPath(home.Home, HookScope.Global), context, cancellationToken).ConfigureAwait(false);
+        await WriteHookAsync(rcPath, context, cancellationToken).ConfigureAwait(false);
 
         return context.ToResult();
     }
@@ -82,6 +88,15 @@ internal sealed class CrushIntegrator(HomePaths home)
         var root = scope == HookScope.Global ? home.Home : directory;
         var context = IntegrationContext.ForUninstall(root, sharedInUse);
 
+        // Every rc file this uninstall edits is checked first, so a damaged one leaves nothing half removed.
+        var rcPaths = scope == HookScope.Global
+            ? [RcPath(root, scope)]
+            : new[] { Path.Combine(directory, ".crushrc"), Path.Combine(directory, "crushrc") };
+        foreach (var rcPath in rcPaths)
+        {
+            CrushrcFile.Validate(rcPath);
+        }
+
         if (scope == HookScope.Global)
         {
             await UninstallHelpers.RemoveSectionAsync(
@@ -89,15 +104,17 @@ internal sealed class CrushIntegrator(HomePaths home)
                 context, cancellationToken).ConfigureAwait(false);
             await UninstallHelpers.RemoveGeneratedFileAsync(
                 SharedInstructionArtifacts.SkillArtifact(home.AgentsSkillsDir), context, cancellationToken).ConfigureAwait(false);
-            await CrushrcFile.RemoveAsync(RcPath(root, scope), context, cancellationToken).ConfigureAwait(false);
+            await CrushrcFile.RemoveAsync(rcPaths[0], context, cancellationToken).ConfigureAwait(false);
         }
         else
         {
             await SharedInstructionArtifacts.RemoveAgentsFilesAsync(
                 Path.Combine(directory, "AGENTS.md"), Path.Combine(directory, ".agents", "skills"), context, cancellationToken)
                 .ConfigureAwait(false);
-            await CrushrcFile.RemoveAsync(Path.Combine(directory, ".crushrc"), context, cancellationToken).ConfigureAwait(false);
-            await CrushrcFile.RemoveAsync(Path.Combine(directory, "crushrc"), context, cancellationToken).ConfigureAwait(false);
+            foreach (var rcPath in rcPaths)
+            {
+                await CrushrcFile.RemoveAsync(rcPath, context, cancellationToken).ConfigureAwait(false);
+            }
         }
 
         return context.ToResult();

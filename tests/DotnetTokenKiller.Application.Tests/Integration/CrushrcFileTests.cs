@@ -126,9 +126,9 @@ public sealed class CrushrcFileTests : IDisposable
 
     [Theory]
     [InlineData(UserConfig)]
-    [InlineData("option debug true")]
     [InlineData("option debug true\r\n")]
-    public async Task InstallThenRemove_RestoresTheUserFileByteForByte(string original)
+    [InlineData("option debug true\n\n")]
+    public async Task InstallThenRemove_FileEndingWithANewline_IsRestoredByteForByte(string original)
     {
         ArgumentNullException.ThrowIfNull(original);
         Seed(original);
@@ -137,8 +137,20 @@ public sealed class CrushrcFileTests : IDisposable
 
         await CrushrcFile.RemoveAsync(RcPath, context, default);
 
-        (await File.ReadAllTextAsync(RcPath)).Should().Be(original.EndsWith('\n') ? original : original + "\n");
+        (await File.ReadAllTextAsync(RcPath)).Should().Be(original);
         context.Updated.Should().Equal(RcPath);
+    }
+
+    [Fact]
+    public async Task InstallThenRemove_FileWithoutAFinalNewline_ComesBackWithOne()
+    {
+        // The install ends the last line and adds the separator; the uninstall removes only the separator.
+        Seed("option debug true");
+        await CrushrcFile.WriteAsync(RcPath, Command, Install(), default);
+
+        await CrushrcFile.RemoveAsync(RcPath, Uninstall(), default);
+
+        (await File.ReadAllTextAsync(RcPath)).Should().Be("option debug true\n");
     }
 
     [Fact]
@@ -174,5 +186,66 @@ public sealed class CrushrcFileTests : IDisposable
 
         context.Unchanged.Should().BeEmpty();
         context.Removed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RemoveAsync_UserLinesAfterTheSection_RemovesOnlyTheSeparatorDtkAdded()
+    {
+        Seed("a\n");
+        await CrushrcFile.WriteAsync(RcPath, Command, Install(), default);
+        await File.AppendAllTextAsync(RcPath, "b\n");
+
+        await CrushrcFile.RemoveAsync(RcPath, Uninstall(), default);
+
+        (await File.ReadAllTextAsync(RcPath)).Should().Be("a\nb\n");
+    }
+
+    [Fact]
+    public async Task RemoveAsync_TrailingBlankLinesAfterTheSection_AreKept()
+    {
+        Seed("a\n");
+        await CrushrcFile.WriteAsync(RcPath, Command, Install(), default);
+        await File.AppendAllTextAsync(RcPath, "\n\n");
+
+        await CrushrcFile.RemoveAsync(RcPath, Uninstall(), default);
+
+        (await File.ReadAllTextAsync(RcPath)).Should().Be("a\n\n\n");
+    }
+
+    [Fact]
+    public async Task RemoveAsync_SectionNotPrecededByABlankLine_RemovesOnlyTheSection()
+    {
+        Seed("a\n" + CrushrcFile.Section(Command) + "b\n");
+
+        await CrushrcFile.RemoveAsync(RcPath, Uninstall(), default);
+
+        (await File.ReadAllTextAsync(RcPath)).Should().Be("a\nb\n");
+    }
+
+    [Fact]
+    public async Task Validate_DamagedSection_ThrowsNamingTheFile()
+    {
+        Seed("# <<< dtk <<<\n");
+
+        var validate = () => CrushrcFile.Validate(RcPath);
+
+        validate.Should().Throw<InvalidOperationException>().WithMessage($"*{RcPath}*");
+        (await File.ReadAllTextAsync(RcPath)).Should().Be("# <<< dtk <<<\n");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(UserConfig)]
+    [InlineData("a\n\n# >>> dtk (DotnetTokenKiller) >>>\nhook add x\n# <<< dtk <<<\n")]
+    public void Validate_AbsentOrSoundFile_DoesNotThrow(string? content)
+    {
+        if (content is not null)
+        {
+            Seed(content);
+        }
+
+        var validate = () => CrushrcFile.Validate(RcPath);
+
+        validate.Should().NotThrow();
     }
 }

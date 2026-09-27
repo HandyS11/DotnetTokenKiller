@@ -148,4 +148,44 @@ public sealed class CrushIntegratorTests : IDisposable
         (await File.ReadAllTextAsync(DotRc)).Should().Contain(CrushrcFile.BeginMarker);
         (await File.ReadAllTextAsync(PlainRc)).Should().Be("option bar true\n");
     }
+
+    [Fact]
+    public async Task IntegrateAsync_DamagedCrushrc_ThrowsBeforeWritingAnything()
+    {
+        Write(DotRc, "# >>> dtk (DotnetTokenKiller) >>>\n");
+
+        var act = () => CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{DotRc}*");
+        File.Exists(AgentsPath).Should().BeFalse("a damaged crushrc must not leave a partial install");
+        File.Exists(SkillPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_DamagedCrushrc_ThrowsBeforeWritingAnything()
+    {
+        var global = Path.Combine(_tempDir, "crush-global");
+        _environment["CRUSH_GLOBAL_CONFIG"] = global;
+        Write(Path.Combine(global, "crushrc"), "# <<< dtk <<<\n");
+
+        var act = () => CreateSut().IntegrateGlobalAsync(false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        File.Exists(Path.Combine(global, "CRUSH.md")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UninstallAsync_DamagedDotCrushrc_ThrowsBeforeRemovingAnything()
+    {
+        Write(PlainRc, "option debug true\n");
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(DotRc, "# <<< dtk <<<\n");
+
+        var act = () => CreateSut().UninstallAsync(ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{DotRc}*");
+        File.Exists(SkillPath).Should().BeTrue("a damaged .crushrc must not leave a partial uninstall");
+        File.Exists(AgentsPath).Should().BeTrue();
+        (await File.ReadAllTextAsync(PlainRc)).Should().Contain("dtk hook crush");
+    }
 }

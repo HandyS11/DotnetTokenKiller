@@ -786,7 +786,7 @@ same section into `crushrc` under `$CRUSH_GLOBAL_CONFIG`, else `$XDG_CONFIG_HOME
 Requires Crush 0.88.0 or later, the first release that reads `crushrc` with `hook add`; an older Crush never sees
 the section. dtk edits only the lines between its markers — the rest of `crushrc` (providers, other hooks, line
 endings) is written back exactly as read. A file with a missing, duplicated or out-of-order marker is never
-guessed at: install and uninstall both refuse, naming the file, and leave it untouched.
+guessed at: install and uninstall both refuse, naming the file, before writing or removing anything else.
 
 ### How It Works
 
