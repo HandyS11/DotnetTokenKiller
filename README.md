@@ -7,7 +7,7 @@
 **A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
 down to only what matters.**
 Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, and `pack` with `dtk` for
-60–90% fewer tokens — per-command filters, token analytics, and one-command setup for 8 AI coding agents.
+60–90% fewer tokens — per-command filters, token analytics, and one-command setup for 15 AI coding agents.
 
 [![CI](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml)
 [![CD](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/publish.yml)
@@ -88,7 +88,7 @@ context consumed.
 - **Log retrieval** — `dtk log` returns a previous run's full output instead of re-running the build
 - **Filter coverage** — `dtk gain --coverage` ranks every command by unfiltered tokens at stake, so
   the next filter is chosen from data
-- **13 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Devin (formerly Windsurf), Aider, JetBrains AI
+- **15 AI agent integrations** — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Devin (formerly Windsurf), Factory Droid, Crush, Aider, JetBrains AI
 - **Token analytics** — tracks per-command savings over time with `dtk gain`
 - **Self-diagnostics** — `dtk doctor` validates your setup, including feeding a sample payload
   through your installed hook to prove it still fires
@@ -227,10 +227,12 @@ dtk init aider       --global   # ~/.aider.conf.yml
 dtk init copilot-cli --global   # ~/.copilot/hooks
 dtk init cursor      --global   # ~/.cursor/hooks.json (hook only)
 dtk init devin       --global   # ~/.config/devin/config.json, global_rules.md
+dtk init droid       --global   # ~/.factory, ~/.agents/skills
+dtk init crush       --global   # ~/.config/crush, ~/.agents/skills
 ```
 
 Run this once per machine and you're done — new projects need no extra setup. `--global` is supported
-for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, and **devin** (the providers with a home config).
+for **claude**, **gemini**, **codex**, **opencode**, **antigravity**, **pi**, **oh-my-pi**, **aider**, **copilot-cli**, **cursor**, **devin**, **droid**, and **crush** (the providers with a home config).
 
 ### Per-project install
 
@@ -250,6 +252,8 @@ For the other providers — or when you want dtk scoped to a single repository �
 | **oh-my-pi**           | `dtk init oh-my-pi`    | .omp/extensions/dtk.js running dtk hook oh-my-pi, AGENTS.md section, skill |
 | **Cursor**             | `dtk init cursor`      | `.cursor/rules/dtk.mdc`, `.cursor/hooks.json` (`--global`: `~/.cursor/hooks.json`) |
 | **Devin** (Windsurf)   | `dtk init devin`       | `.devin/rules/dtk.md`, `.devin/hooks.v1.json` (`--global`: `~/.config/devin/config.json`, `global_rules.md`) |
+| **Factory Droid**      | `dtk init droid`       | `AGENTS.md`, `.agents/skills/…`, `.factory/hooks.json` (or `settings.json`) (`--global`: `~/.factory/`) |
+| **Crush**              | `dtk init crush`       | `AGENTS.md`, `.agents/skills/…`, `.crushrc` section (`--global`: `~/.config/crush/crushrc`, `CRUSH.md`) |
 | **Aider**              | `dtk init aider`       | Instructions file, `.aider.conf.yml` section               |
 | **JetBrains AI**       | `dtk init jetbrains`   | Section in `.junie/guidelines.md`                          |
 

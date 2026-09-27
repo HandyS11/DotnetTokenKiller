@@ -1,0 +1,191 @@
+using DotnetTokenKiller.Application.Integration;
+using FluentAssertions;
+
+namespace DotnetTokenKiller.Application.Tests.Integration;
+
+public sealed class CrushIntegratorTests : IDisposable
+{
+    private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-crush-test-{Guid.NewGuid()}");
+    private readonly Dictionary<string, string?> _environment = new(StringComparer.Ordinal);
+
+    private string ProjectDir => Path.Combine(_tempDir, "project");
+    private string HomeDir => Path.Combine(_tempDir, "home");
+    private HomePaths Home => new(HomeDir, name => _environment.GetValueOrDefault(name));
+    private string DotRc => Path.Combine(ProjectDir, ".crushrc");
+    private string PlainRc => Path.Combine(ProjectDir, "crushrc");
+    private string AgentsPath => Path.Combine(ProjectDir, "AGENTS.md");
+    private string SkillPath => Path.Combine(ProjectDir, ".agents", "skills", "dotnet-token-killer", "SKILL.md");
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, true);
+        }
+    }
+
+    private CrushIntegrator CreateSut() => new(Home);
+
+    private static void Write(string path, string content)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+    }
+
+    [Fact]
+    public void ProviderName_IsCrush() => CreateSut().ProviderName.Should().Be("crush");
+
+    [Fact]
+    public async Task IntegrateAsync_FreshProject_WritesInstructionsSkillAndDotCrushrc()
+    {
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.CreatedFiles.Should().Equal(AgentsPath, SkillPath, DotRc);
+        result.Notes.Should().Equal(CrushIntegrator.VersionNote, CrushIntegrator.SubagentNote);
+        (await File.ReadAllTextAsync(DotRc)).Should().Be(CrushrcFile.Section("dtk hook crush"));
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_ProjectUsesPlainCrushrc_WritesThere()
+    {
+        Write(PlainRc, "option debug true\n");
+
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        File.Exists(DotRc).Should().BeFalse();
+        (await File.ReadAllTextAsync(PlainRc)).Should().Contain("--command 'dtk hook crush'");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_SecondRun_ReportsUnchangedWithoutNotes()
+    {
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UnchangedFiles.Should().Contain(DotRc);
+        result.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_HonorsCrushGlobalConfig()
+    {
+        var global = Path.Combine(_tempDir, "crush-global");
+        _environment["CRUSH_GLOBAL_CONFIG"] = global;
+
+        var result = await CreateSut().IntegrateGlobalAsync(false, default);
+
+        result.CreatedFiles.Should().Contain(
+        [
+            Path.Combine(global, "CRUSH.md"),
+            Path.Combine(HomeDir, ".agents", "skills", "dotnet-token-killer", "SKILL.md"),
+            Path.Combine(global, "crushrc")
+        ]);
+        (await File.ReadAllTextAsync(Path.Combine(global, "CRUSH.md"))).Should().Be(SharedInstructionArtifacts.Section);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    internal void DescribeHooks_IsAScriptRegistrationAtTheScopesCrushrc(bool global)
+    {
+        var scope = global ? HookScope.Global : HookScope.Project;
+
+        var hook = CreateSut().DescribeHooks(ProjectDir, scope).Should().ContainSingle().Subject;
+
+        hook.RegistrationPath.Should().Be(global ? Path.Combine(HomeDir, ".config", "crush", "crushrc") : DotRc);
+        hook.IsScriptRegistration.Should().BeTrue();
+        hook.Command.Should().Be("dtk hook crush");
+        hook.PayloadKind.Should().Be(HookPayloadKind.Crush);
+    }
+
+    [Fact]
+    public async Task UninstallAsync_Project_RemovesEverythingAndKeepsUserConfig()
+    {
+        Write(PlainRc, "option debug true\n");
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        var result = await CreateSut().UninstallAsync(ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
+
+        result.RemovedFiles.Should().Contain([AgentsPath, SkillPath]);
+        (await File.ReadAllTextAsync(PlainRc)).Should().Be("option debug true\n");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_DamagedSection_ThrowsNamingTheFile()
+    {
+        Write(DotRc, "# >>> dtk (DotnetTokenKiller) >>>\n");
+
+        var act = () => CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{DotRc}*");
+    }
+
+    [Fact]
+    public async Task BothFilesExist_SectionInPlainCrushrc_DescribeHooksAndReinstallUseThatFile()
+    {
+        Write(DotRc, "option foo true\n");
+        Write(PlainRc, CrushrcFile.Section("dtk hook crush"));
+
+        CreateSut().DescribeHooks(ProjectDir, HookScope.Project).Should().ContainSingle()
+            .Which.RegistrationPath.Should().Be(PlainRc);
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UnchangedFiles.Should().Contain(PlainRc);
+        (await File.ReadAllTextAsync(DotRc)).Should().NotContain(CrushrcFile.BeginMarker);
+    }
+
+    [Fact]
+    public async Task BothFilesExist_NoSectionAnywhere_WritesIntoDotCrushrc()
+    {
+        Write(DotRc, "option foo true\n");
+        Write(PlainRc, "option bar true\n");
+
+        var result = await CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        result.UpdatedFiles.Should().Contain(DotRc);
+        (await File.ReadAllTextAsync(DotRc)).Should().Contain(CrushrcFile.BeginMarker);
+        (await File.ReadAllTextAsync(PlainRc)).Should().Be("option bar true\n");
+    }
+
+    [Fact]
+    public async Task IntegrateAsync_DamagedCrushrc_ThrowsBeforeWritingAnything()
+    {
+        Write(DotRc, "# >>> dtk (DotnetTokenKiller) >>>\n");
+
+        var act = () => CreateSut().IntegrateAsync(ProjectDir, false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{DotRc}*");
+        File.Exists(AgentsPath).Should().BeFalse("a damaged crushrc must not leave a partial install");
+        File.Exists(SkillPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task IntegrateGlobalAsync_DamagedCrushrc_ThrowsBeforeWritingAnything()
+    {
+        var global = Path.Combine(_tempDir, "crush-global");
+        _environment["CRUSH_GLOBAL_CONFIG"] = global;
+        Write(Path.Combine(global, "crushrc"), "# <<< dtk <<<\n");
+
+        var act = () => CreateSut().IntegrateGlobalAsync(false, default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        File.Exists(Path.Combine(global, "CRUSH.md")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task UninstallAsync_DamagedDotCrushrc_ThrowsBeforeRemovingAnything()
+    {
+        Write(PlainRc, "option debug true\n");
+        await CreateSut().IntegrateAsync(ProjectDir, false, default);
+        Write(DotRc, "# <<< dtk <<<\n");
+
+        var act = () => CreateSut().UninstallAsync(ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"*{DotRc}*");
+        File.Exists(SkillPath).Should().BeTrue("a damaged .crushrc must not leave a partial uninstall");
+        File.Exists(AgentsPath).Should().BeTrue();
+        (await File.ReadAllTextAsync(PlainRc)).Should().Contain("dtk hook crush");
+    }
+}

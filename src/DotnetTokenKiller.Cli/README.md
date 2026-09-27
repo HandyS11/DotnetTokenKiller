@@ -3,7 +3,7 @@
 A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
 down to only what matters. Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`,
 `publish`, and `pack` with `dtk` for 60–90% fewer tokens — per-command filters, token analytics, and
-one-command setup for 8 AI coding agents.
+one-command setup for 15 AI coding agents.
 
 ## Why
 
@@ -71,7 +71,7 @@ Unknown subcommands pass through to `dotnet` unchanged.
   `--deprecated`, and `--vulnerable` (~80.9% savings)
 - Publish/Pack filtering — the build's error/warning summary, plus the publish directories or created
   packages on success
-- 13 AI agent integrations — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Devin (formerly Windsurf), Aider, JetBrains AI
+- 15 AI agent integrations — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Devin (formerly Windsurf), Factory Droid, Crush, Aider, JetBrains AI
 - Token analytics — tracks per-command savings over time with `dtk gain`
 - Self-diagnostics — `dtk doctor` validates your setup in one command
 - Shell completion — bash, zsh, fish, and PowerShell
@@ -85,7 +85,7 @@ once and every project your agent touches picks it up automatically:
 dtk init claude --global   # ~/.claude
 ```
 
-`--global` is supported for `claude`, `gemini`, `codex`, `opencode`, `antigravity`, `pi`, `oh-my-pi`, `aider`, `copilot-cli`, `cursor`, and `devin`. The other providers
+`--global` is supported for `claude`, `gemini`, `codex`, `opencode`, `antigravity`, `pi`, `oh-my-pi`, `aider`, `copilot-cli`, `cursor`, `devin`, `droid`, and `crush`. The other providers
 (`copilot`, `jetbrains`) are repository-scoped — run `dtk init <provider>`
 inside the project. `windsurf` is an alias of `devin`.
 

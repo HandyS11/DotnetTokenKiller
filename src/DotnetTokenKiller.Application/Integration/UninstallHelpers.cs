@@ -292,8 +292,8 @@ internal static class UninstallHelpers
 
     /// <summary>
     /// Whether an installation's registration is in place, as far as a text search can tell: its file runs
-    /// <c>dtk hook &lt;provider&gt;</c> (or, for a generated plugin, calls it), or still runs the Python script an
-    /// older dtk registered. A file that cannot be read counts as registered, so its shared files are kept.
+    /// <c>dtk hook &lt;provider&gt;</c> (or, for a generated plugin, calls it; for a script registration, on a line that
+    /// is not commented out), or still runs the Python script an older dtk registered. A file that cannot be read counts as registered, so its shared files are kept.
     /// </summary>
     /// <param name="installation">The installation to look for.</param>
     internal static bool IsRegistered(HookInstallation installation)
@@ -308,6 +308,11 @@ internal static class UninstallHelpers
             }
 
             var content = File.ReadAllText(installation.RegistrationPath);
+            if (installation.IsScriptRegistration)
+            {
+                return CrushrcFile.RunsCommand(content, HookCommands.Invocation(installation.ProviderName));
+            }
+
             return installation.PluginArtifact is null
                 ? content.Contains(HookCommands.Invocation(installation.ProviderName), StringComparison.Ordinal)
                   || content.Contains(IntegratorHelpers.LegacyHookScriptName, StringComparison.Ordinal)

@@ -19,6 +19,8 @@ public sealed class HookPayloadsTests
     [InlineData("oh-my-pi", HookPayloadKind.OhMyPi)]
     [InlineData("cursor", HookPayloadKind.Cursor)]
     [InlineData("devin", HookPayloadKind.Devin)]
+    [InlineData("droid", HookPayloadKind.FactoryDroid)]
+    [InlineData("crush", HookPayloadKind.Crush)]
     internal void TryGetKind_KnownProvider_Resolves(string provider, HookPayloadKind expected)
     {
         HookPayloads.TryGetKind(provider, out var kind).Should().BeTrue();
@@ -409,6 +411,63 @@ public sealed class HookPayloadsTests
     public void Devin_ProbeShapedPayloadWithoutToolName_IsRewritten()
     {
         Reply(HookPayloadKind.Devin, """{"tool_input":{"command":"dotnet build"}}""").Should().Contain("dtk dotnet build");
+    }
+
+    // Payload and reply shapes: docs.factory.ai/reference/hooks-reference (PreToolUse), checked 2026-09-27.
+
+    [Fact]
+    public void Droid_ExecuteTool_ReturnsClaudesReplyWithoutADecision()
+    {
+        var reply = Reply(HookPayloadKind.FactoryDroid,
+            """{"hook_event_name":"PreToolUse","tool_name":"Execute","tool_input":{"command":"dotnet build","timeout":60},"permission_mode":"auto-low"}""");
+
+        var output = JsonNode.Parse(reply!)!["hookSpecificOutput"]!.AsObject();
+        output.Count.Should().Be(2, "no permissionDecision: Droid's own approval applies to the rewritten command");
+        output["updatedInput"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build");
+        output["updatedInput"]!["timeout"]!.GetValue<int>().Should().Be(60);
+    }
+
+    [Theory]
+    [InlineData("""{"tool_name":"Read","tool_input":{"command":"dotnet build"}}""")]
+    [InlineData("""{"tool_name":"Execute","tool_input":{"command":"ls"}}""")]
+    [InlineData("not json")]
+    public void Droid_NothingToRewrite_PrintsNothing(string payload)
+    {
+        Reply(HookPayloadKind.FactoryDroid, payload).Should().BeNull();
+    }
+
+    // Payload and reply shapes: github.com/charmbracelet/crush docs/hooks/README.md and internal/hooks/input.go, checked 2026-09-27.
+
+    [Fact]
+    public void Crush_BashTool_ReturnsOnlyTheCommandPatchAndNoDecision()
+    {
+        var reply = Reply(HookPayloadKind.Crush,
+            """{"event":"PreToolUse","session_id":"s","cwd":"/p","tool_name":"bash","tool_input":{"command":"dotnet test && dotnet build","description":"x"}}""");
+
+        var root = JsonNode.Parse(reply!)!;
+        root["version"]!.GetValue<int>().Should().Be(1);
+        root["updated_input"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test && dtk dotnet build");
+    }
+
+    [Fact]
+    public void Crush_ProbeShapedPayloadWithoutToolName_IsRewritten()
+    {
+        var reply = Reply(HookPayloadKind.Crush, """{"tool_input":{"command":"dotnet build"}}""");
+
+        var root = JsonNode.Parse(reply!)!;
+        root["version"]!.GetValue<int>().Should().Be(1);
+        root["updated_input"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build");
+    }
+
+    [Theory]
+    [InlineData("""{"tool_name":"edit","tool_input":{"command":"dotnet build"}}""")]
+    [InlineData("""{"tool_name":"bash","tool_input":{"command":"ls"}}""")]
+    [InlineData("""{"tool_name":"bash","tool_input":{"command":"dotnet build","command":"x"}}""")]
+    [InlineData("not json")]
+    [InlineData("")]
+    public void Crush_NothingToRewrite_PrintsNothing(string payload)
+    {
+        Reply(HookPayloadKind.Crush, payload).Should().BeNull();
     }
 
     private static string? Reply(HookPayloadKind kind, string payload) =>

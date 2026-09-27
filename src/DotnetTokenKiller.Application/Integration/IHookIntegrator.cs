@@ -41,7 +41,13 @@ internal enum HookPayloadKind
     Cursor = 8,
 
     /// <summary>Devin Local's and Devin CLI's <c>PreToolUse</c> payload: Claude Code's shape, for the <c>exec</c> tool.</summary>
-    Devin = 9
+    Devin = 9,
+
+    /// <summary>Factory Droid's <c>PreToolUse</c> payload: Claude Code's shape, for the <c>Execute</c> tool.</summary>
+    FactoryDroid = 10,
+
+    /// <summary>Crush's <c>PreToolUse</c> payload, for its <c>bash</c> tool.</summary>
+    Crush = 11
 }
 
 /// <summary>One installed (or installable) rewrite hook, described once for both installer and diagnostics.</summary>
@@ -51,7 +57,8 @@ internal enum HookPayloadKind
 /// The file that registers the hook with the host CLI — a merged <c>settings.json</c> for Claude Code and
 /// Gemini CLI, a dedicated <c>dtk-dotnet.json</c> for Copilot CLI, a merged <c>.codex/hooks.json</c> for Codex CLI,
 /// a merged <c>.agents/hooks.json</c> (project) or <c>~/.gemini/config/hooks.json</c> (global) for Antigravity CLI,
-/// or — when <see cref="PluginArtifact"/> is non-null — the generated plugin file itself, for OpenCode.
+/// a Bash script (Crush's <c>crushrc</c>, see <see cref="IsScriptRegistration"/>), or — when
+/// <see cref="PluginArtifact"/> is non-null — the generated plugin file itself, for OpenCode.
 /// </param>
 /// <param name="Command">The exact command dtk registers, e.g. <c>dtk hook gemini; exit 0</c>.</param>
 /// <param name="LegacyScriptPath">
@@ -70,7 +77,15 @@ internal sealed record HookInstallation(
     string Command,
     string? LegacyScriptPath,
     HookPayloadKind PayloadKind,
-    GeneratedArtifact? PluginArtifact = null);
+    GeneratedArtifact? PluginArtifact = null)
+{
+    /// <summary>
+    /// Gets a value indicating whether <see cref="RegistrationPath"/> is a script (Crush's <c>crushrc</c>) rather than
+    /// JSON, so diagnostics search its uncommented lines for the hook command (<see cref="CrushrcFile.RunsCommand"/>)
+    /// instead of parsing it.
+    /// </summary>
+    internal bool IsScriptRegistration { get; init; }
+}
 
 /// <summary>
 /// Implemented by provider integrators that install a rewrite hook, so a diagnostic can find that

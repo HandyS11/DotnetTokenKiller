@@ -64,6 +64,10 @@ public sealed class HookHealthCheckerTests : IDisposable
 
     private CursorIntegrator Cursor => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
 
+    private CrushIntegrator Crush => new(Home);
+
+    private FactoryDroidIntegrator Droid => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
     private string CodexConfigPath => Path.Combine(Home.CodexDir, "config.toml");
 
     private string CodexGlobalHooksPath => Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
@@ -743,5 +747,88 @@ public sealed class HookHealthCheckerTests : IDisposable
     {
         public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
             [.. installations.Where(installation => installation.Scope == scope)];
+    }
+
+    /// <summary>
+    /// A hook integrator describing a single project-scoped registration read as a script (Crush's <c>crushrc</c>)
+    /// rather than JSON. A local stub so this test does not depend on the real Crush integrator.
+    /// </summary>
+    /// <param name="path">The script file's path.</param>
+    private sealed class ScriptHookIntegrator(string path) : IHookIntegrator
+    {
+        public IReadOnlyList<HookInstallation> DescribeHooks(string directory, HookScope scope) =>
+            scope == HookScope.Project
+                ? [new HookInstallation("crush", scope, path, "dtk hook crush", null, HookPayloadKind.Crush) { IsScriptRegistration = true }]
+                : [];
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptRegistrationRunningTheHook_IsRegisteredAndProbed()
+    {
+        var path = Path.Combine(_tempDir, ".crushrc");
+        await File.WriteAllTextAsync(path, "option debug true\nhook add PreToolUse --name dtk --matcher '^bash$' --command 'dtk hook crush'\n");
+
+        var checks = await _sut.RunAsync([new ScriptHookIntegrator(path)], _tempDir, default);
+
+        checks.Should().Contain(c => c.Name == "crush hook (project)" && c.Passed && c.Message == "registered");
+        checks.Should().Contain(c => c.Name == "crush hook probe (project)");
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptRegistrationWithoutTheHook_IsNotRegistered()
+    {
+        // ScriptHookIntegrator's installation has no LegacyScriptPath, so an Absent registration is treated the
+        // same way a JSON registration's would be: RunAsync skips it and falls back to the informational check.
+        var path = Path.Combine(_tempDir, ".crushrc");
+        await File.WriteAllTextAsync(path, "option debug true\n");
+
+        var checks = await _sut.RunAsync([new ScriptHookIntegrator(path)], _tempDir, default);
+
+        checks.Should().ContainSingle();
+        checks[0].Passed.Should().BeTrue("dtk works without hooks, so their absence is not a failure");
+        checks[0].Message.Should().Contain("dtk init");
+    }
+
+    [Fact]
+    public async Task RunAsync_ScriptRegistrationCommentedOut_IsNotRegistered()
+    {
+        var path = Path.Combine(_tempDir, ".crushrc");
+        await File.WriteAllTextAsync(path,
+            "option debug true\n  # hook add PreToolUse --name dtk --matcher '^bash$' --command 'dtk hook crush'\n");
+
+        var checks = await _sut.RunAsync([new ScriptHookIntegrator(path)], _tempDir, default);
+
+        checks.Should().ContainSingle("a commented-out line registers nothing");
+        checks[0].Message.Should().Contain("dtk init");
+    }
+
+    [Fact]
+    public async Task RunAsync_RealCrushInstall_IsRegisteredAndProbed()
+    {
+        await Crush.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([Crush], _tempDir, default);
+
+        checks.Should().Contain(c => c.Name == "crush hook (project)" && c.Passed && c.Message == "registered");
+        checks.Should().Contain(c => c.Name == "crush hook probe (project)");
+    }
+
+    [Fact]
+    public async Task RunAsync_DroidHookShadowedByAHooksJsonPreToolUse_WarnsWithTheRemedy()
+    {
+        var factory = Path.Combine(_tempDir, ".factory");
+        Directory.CreateDirectory(factory);
+        await File.WriteAllTextAsync(Path.Combine(factory, "settings.json"),
+            """{"hooks":{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"guard"}]}]}}""");
+        await Droid.IntegrateAsync(_tempDir, force: false, default);
+        await File.WriteAllTextAsync(Path.Combine(factory, "hooks.json"),
+            """{"PreToolUse":[{"matcher":"Execute","hooks":[{"type":"command","command":"lint"}]}]}""");
+
+        var checks = await _sut.RunAsync([Droid], _tempDir, default);
+
+        checks.Should().Contain(c => c.Name == "droid hook (project)" && c.Passed);
+        var location = checks.Should().ContainSingle(c => c.Name == "droid hook location (project)").Subject;
+        location.IsWarning.Should().BeTrue();
+        location.Message.Should().Contain("run 'dtk init droid' to move it");
     }
 }

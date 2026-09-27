@@ -451,6 +451,24 @@ public sealed class IntegratorHelpersTests : IDisposable
     }
 
     [Fact]
+    public async Task MergeJsonSettingsAsync_JsonWithCommentsOrTrailingCommas_ThrowsNamingTheCause()
+    {
+        var context = new IntegrationContext(false);
+        var path = Path.Combine(_tempDir, "settings.json");
+        Directory.CreateDirectory(_tempDir);
+        const string original = "{\n  // my model\n  \"model\": \"x\",\n}\n";
+        await File.WriteAllTextAsync(path, original);
+        var hookEntry = new JsonObject();
+
+        var act = () => IntegratorHelpers.MergeJsonSettingsAsync(
+            path, "PreToolUse", hookEntry, "cmd", context, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"*'{path}' has comments or trailing commas, which dtk cannot rewrite without losing them*");
+        (await File.ReadAllTextAsync(path)).Should().Be(original);
+    }
+
+    [Fact]
     public async Task MergeJsonSettingsAsync_InvalidJson_ThrowsInvalidOperation()
     {
         var context = new IntegrationContext(false);

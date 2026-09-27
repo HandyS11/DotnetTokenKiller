@@ -439,4 +439,22 @@ public sealed class UninstallHelpersTests : IDisposable
         await IntegratorHelpers.WriteHookRegistrationAsync(Spec(path), new IntegrationContext(false), default);
         UninstallHelpers.IsRegistered(installation).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task IsRegistered_ScriptRegistration_IgnoresCommentedOutLines()
+    {
+        var path = Path.Combine(_tempDir, ".crushrc");
+        var installation = new HookInstallation(
+            "crush", HookScope.Project, path, HookCommands.Invocation("crush"), null, HookPayloadKind.Crush)
+        {
+            IsScriptRegistration = true
+        };
+        Directory.CreateDirectory(_tempDir);
+
+        await File.WriteAllTextAsync(path, "# hook add PreToolUse --name dtk --command 'dtk hook crush'\n");
+        UninstallHelpers.IsRegistered(installation).Should().BeFalse("a commented-out line registers nothing");
+
+        await File.WriteAllTextAsync(path, "  hook add PreToolUse --name dtk --command 'dtk hook crush'\n");
+        UninstallHelpers.IsRegistered(installation).Should().BeTrue();
+    }
 }

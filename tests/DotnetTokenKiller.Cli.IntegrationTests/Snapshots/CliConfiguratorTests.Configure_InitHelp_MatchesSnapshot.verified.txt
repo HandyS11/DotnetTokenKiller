@@ -22,6 +22,10 @@ EXAMPLES:
     dtk init cursor --global
     dtk init devin
     dtk init devin --global
+    dtk init droid
+    dtk init droid --global
+    dtk init crush
+    dtk init crush --global
     dtk init aider
     dtk init jetbrains
     dtk init claude --uninstall
@@ -29,14 +33,15 @@ EXAMPLES:
 
 ARGUMENTS:
     <provider>    AI assistant provider to set up (claude, copilot, copilot-cli, gemini, codex,     
-                  opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), aider,      
-                  jetbrains)                                                                        
+                  opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), droid,      
+                  crush, aider, jetbrains)                                                          
 
 OPTIONS:
     -h, --help         Prints help information                                                      
     -d, --dir          Target project root directory (default: current directory)                   
     -f, --force        Overwrite existing files instead of skipping them                            
     -g, --global       Install into the user's home config (claude, copilot-cli, gemini, codex,     
-                       opencode, antigravity, pi, oh-my-pi, aider) instead of a project             
+                       opencode, antigravity, pi, oh-my-pi, cursor, devin (alias: windsurf), droid, 
+                       crush, aider) instead of a project                                           
         --uninstall    Remove what 'dtk init' installed for the provider instead (respects --dir and
                        --global); edited files are kept                                             

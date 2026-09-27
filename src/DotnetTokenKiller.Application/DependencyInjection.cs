@@ -54,6 +54,8 @@ public static class ServiceCollectionExtensions
         services.AddTransient<IProviderIntegrator, AntigravityIntegrator>();
         services.AddTransient<IProviderIntegrator, CursorIntegrator>();
         services.AddTransient<IProviderIntegrator, DevinIntegrator>();
+        services.AddTransient<IProviderIntegrator, FactoryDroidIntegrator>();
+        services.AddTransient<IProviderIntegrator, CrushIntegrator>();
         services.AddTransient<IProviderIntegrator, AiderIntegrator>();
         services.AddTransient<IProviderIntegrator, JetBrainsAiIntegrator>();
         services.AddTransient<IntegrateUseCase>();

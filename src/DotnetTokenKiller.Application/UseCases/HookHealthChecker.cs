@@ -184,9 +184,11 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
 
     /// <summary>
     /// Classifies the registration. A generated plugin (<see cref="HookInstallation.PluginArtifact"/> non-null) is
-    /// classified by its provenance stamp; every other registration is a JSON file, classified by searching every
-    /// string in it — which spans Claude Code's and Gemini CLI's nested <c>hooks[event][].hooks[].command</c> and
-    /// Copilot CLI's <c>hooks.preToolUse[].bash</c> with no per-provider branching.
+    /// classified by its provenance stamp; a script registration (<see cref="HookInstallation.IsScriptRegistration"/>,
+    /// Crush's <c>crushrc</c>) is classified by searching its uncommented lines for the hook command; every other registration
+    /// is a JSON file, classified by searching every string in it — which spans Claude Code's and Gemini CLI's
+    /// nested <c>hooks[event][].hooks[].command</c> and Copilot CLI's <c>hooks.preToolUse[].bash</c> with no
+    /// per-provider branching.
     /// </summary>
     /// <param name="installation">The installation whose registration to read.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -212,6 +214,13 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         if (installation.PluginArtifact is { } artifact)
         {
             return ClassifyPlugin(artifact, content, path, installation);
+        }
+
+        if (installation.IsScriptRegistration)
+        {
+            return CrushrcFile.RunsCommand(content, HookCommands.Invocation(installation.ProviderName))
+                ? new Registration(RegistrationKind.Current, string.Empty)
+                : new Registration(RegistrationKind.Absent, $"not registered — {path} does not run '{installation.Command}'");
         }
 
         // JsonNode.Parse accepts a repeated key and throws ArgumentException only when the object is

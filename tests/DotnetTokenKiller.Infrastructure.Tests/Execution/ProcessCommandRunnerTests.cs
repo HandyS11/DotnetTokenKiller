@@ -411,6 +411,14 @@ public sealed class ProcessCommandRunnerTests
             : ("sh", ["-c", "head -c 1048576 /dev/zero | tr '\\0' 'a' & head -c 1048576 /dev/zero | tr '\\0' 'b' 1>&2 & wait"]);
     }
 
+    /// <summary>
+    /// How long a cancellation test waits for its child's "started" marker before giving up. PowerShell's cold start on
+    /// a loaded Windows CI runner has taken 38 to 55 s: with a shorter wait the canceller gave up first, never cancelled,
+    /// and the child simply finished, so the test saw no <see cref="OperationCanceledException"/>. Only a child that
+    /// never starts at all waits this long.
+    /// </summary>
+    private static readonly TimeSpan ChildStartTimeout = TimeSpan.FromMinutes(3);
+
     private static (string command, string[] args) StartedThenDelayedMarkerCommand(
         string startedPath,
         string donePath,
@@ -475,7 +483,7 @@ public sealed class ProcessCommandRunnerTests
             // makes the test deterministic regardless of scheduling latency.
             var cancelWhenStarted = Task.Run(async () =>
             {
-                await WaitForFileAsync(started, TimeSpan.FromSeconds(30));
+                await WaitForFileAsync(started, ChildStartTimeout);
                 await cts.CancelAsync();
             });
 
@@ -524,7 +532,7 @@ public sealed class ProcessCommandRunnerTests
             using var cts = new CancellationTokenSource();
             var cancelWhenStarted = Task.Run(async () =>
             {
-                await WaitForFileAsync(started, TimeSpan.FromSeconds(30));
+                await WaitForFileAsync(started, ChildStartTimeout);
                 await cts.CancelAsync();
             });
 

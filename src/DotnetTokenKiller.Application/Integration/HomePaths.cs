@@ -81,6 +81,20 @@ internal sealed class HomePaths
     internal string WindsurfGlobalRulesPath => Path.Combine(Home, ".codeium", "windsurf", "memories", "global_rules.md");
 
     /// <summary>
+    /// Gets Factory Droid's user directory: <c>$FACTORY_HOME_OVERRIDE/.factory</c> when that variable is an absolute
+    /// path (Droid replaces the home directory with it and still appends <c>.factory</c>), else <c>~/.factory</c>.
+    /// </summary>
+    internal string FactoryDir => Path.Combine(RootedOrDefault("FACTORY_HOME_OVERRIDE", Home), ".factory");
+
+    /// <summary>
+    /// Gets Crush's global config directory, which holds its global <c>crushrc</c> and <c>CRUSH.md</c>:
+    /// <c>$CRUSH_GLOBAL_CONFIG</c> when it is an absolute path, else <c>$XDG_CONFIG_HOME/crush</c> when that is, else
+    /// <c>~/.config/crush</c> — on Windows too.
+    /// </summary>
+    internal string CrushConfigDir => RootedOrDefault(
+        "CRUSH_GLOBAL_CONFIG", Path.Combine(RootedOrDefault("XDG_CONFIG_HOME", Path.Combine(Home, ".config")), "crush"));
+
+    /// <summary>
     /// Gets the user-level skills directory Codex CLI, OpenCode, pi and oh-my-pi all read (<c>~/.agents/skills</c>).
     /// </summary>
     internal string AgentsSkillsDir => Path.Combine(Home, ".agents", "skills");

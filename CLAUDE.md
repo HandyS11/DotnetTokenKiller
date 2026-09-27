@@ -127,6 +127,18 @@ gated by `IsAutoApprovable` like Copilot CLI's. doctor probes it one simple comm
 `~/.codeium/windsurf/memories/global_rules.md`. Both harnesses also import Claude Code's hooks; a double rewrite is
 harmless. Unverified points are listed in docs/articles/harness-verification.md.
 
+`dtk init droid` writes the shared `AGENTS.md` section and skill plus a `PreToolUse` entry for the `Execute` tool,
+in the file `FactoryDroidHooks.ResolveTarget` picks (Droid merges `hooks.json` over `settings.json`'s `hooks` per
+event key, so dtk writes where `PreToolUse` already lives, not counting a `hooks.json` holding only dtk's own entry,
+then removes its entry from the other candidates; uninstall cleans every candidate; doctor's `InspectApproval` warns
+when dtk's entry sits anywhere else). `--global` uses
+`$FACTORY_HOME_OVERRIDE/.factory` or `~/.factory`. `dtk init crush` writes the section and skill plus a marked section
+in `.crushrc` (or an existing `crushrc`), a Bash script Crush runs, so `CrushrcFile` edits only between its markers
+and refuses a damaged section; `--global` uses `$CRUSH_GLOBAL_CONFIG`, `$XDG_CONFIG_HOME/crush` or `~/.config/crush`
+(`crushrc`, `CRUSH.md`). `dtk hook crush` replies in Crush's own envelope and never with a `decision` (Crush's `allow`
+skips its permission prompt). Doctor reads the `crushrc` registration as text (`HookInstallation.IsScriptRegistration`).
+`eng/gates/crush-gate.sh` runs the real `crush` against a mock model to prove the rewrite.
+
 `dtk init <provider> --uninstall` (respects `--dir`/`--global`) removes what that install writes, through
 `UninstallHelpers` (every integrator implements `IUninstallIntegrator`): dtk's hook entries (the install's own match),
 marked sections, and generated files only when their stamp or exact content proves them dtk's; edited files are kept.
