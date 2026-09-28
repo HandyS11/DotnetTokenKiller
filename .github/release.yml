@@ -1,4 +1,5 @@
-# Categorizes GitHub's auto-generated release notes by pull request label.
+# Categorizes GitHub's auto-generated release notes by pull request label. The PR labels workflow
+# (workflows/pr-labels.yml) sets enhancement, bug and documentation from each pull request's title.
 # https://docs.github.com/repositories/releasing-projects-on-github/automatically-generated-release-notes
 changelog:
   exclude:
@@ -13,6 +14,9 @@ changelog:
     - title: Fixes
       labels:
         - bug
+    - title: Documentation
+      labels:
+        - documentation
     - title: Dependencies
       labels:
         - dependencies
