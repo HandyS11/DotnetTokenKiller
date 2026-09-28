@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-28
+
 ### Security
 
 - Hardened the shell-aware `dotnet` command rewriter against command substitution, heredocs, and quoting edge
@@ -19,6 +21,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Rewrite hooks for nine more coding agents, each installed by `dtk init <provider>` (project or `--global`) and
+  probed by `dtk doctor`. Each also writes the shared `AGENTS.md` section and `.agents/skills/dotnet-token-killer`
+  skill:
+  - Codex CLI (`dtk init codex`): a `PreToolUse` hook in `.codex/hooks.json`. Codex runs it only once you approve
+    it under `/hooks`.
+  - OpenCode (`dtk init opencode`) and Kilo Code (`dtk init kilo`): a generated plugin, `.opencode/plugins/dtk.js`
+    or `.kilo/plugin/dtk.js`.
+  - Antigravity CLI (`dtk init antigravity`): a hook in `.agents/hooks.json` that replies `ask`, never `allow`.
+  - pi and oh-my-pi (`dtk init pi`, `dtk init oh-my-pi`): a generated extension in `.pi/extensions/` or
+    `.omp/extensions/`.
+  - Factory Droid (`dtk init droid`): a `PreToolUse` hook for the `Execute` tool, in whichever of `hooks.json` and
+    `settings.json` Droid reads its hooks from.
+  - Crush 0.88.0 or later (`dtk init crush`): a marked section in `.crushrc`.
+  - Amp (`dtk init amp`): a generated plugin in `.amp/plugins/dtk.js`.
+- `dtk init cursor` also installs a rewrite hook in `.cursor/hooks.json`, and `dtk init cursor --global` installs
+  that hook alone in `~/.cursor/hooks.json`. It auto-approves only the commands the Copilot CLI hook does.
+- `dtk init devin` installs a rule in `.devin/rules/dtk.md` and a rewrite hook in `.devin/hooks.v1.json` for Devin
+  Local and Devin CLI.
 - `dtk init <provider> --uninstall` removes a previously installed provider integration and reports each file as
   removed, unchanged, or kept. It also recognizes, and removes, the unedited Cursor, Windsurf and Aider files an
   earlier dtk release wrote; a kept file's note says how to remove it anyway.
@@ -37,10 +57,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `dtk init windsurf` is now an alias of `dtk init devin`, since Windsurf is now Devin Desktop. It removes the
+  `.windsurf/rules/dtk.md` an older dtk wrote, unless it was edited.
+- `dtk doctor` can now report a warning, which leaves its exit code unchanged: a Codex hook not yet approved, a
+  Codex project not yet trusted, or a Factory Droid hook in a file Droid does not read.
+- Re-running `dtk init` on an instructions file whose dtk section is already current reports it as `unchanged`
+  instead of suggesting `--force`.
 - Local/dev builds now report version `0.0.0-dev` instead of a stale released version number.
 
 ### Fixed
 
+- A settings file with comments or trailing commas now gets an error that names the cause, instead of "must
+  contain a valid JSON object".
 - `dotnet test` output is now parsed correctly when a project uses the Microsoft.Testing.Platform test runner.
 - Build diagnostic deduplication no longer merges identical-looking diagnostics that come from different projects.
 - `dotnet ef database drop`'s interactive confirmation prompt is passed through instead of being captured (and
@@ -158,7 +186,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - JSON configuration support.
 - Packaging as a .NET tool (`dotnet tool install DotnetTokenKiller`).
 
-[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0-beta.1...v0.8.0
 [0.8.0-beta.1]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.7.2...v0.8.0-beta.1
 [0.7.2]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.7.1...v0.7.2
