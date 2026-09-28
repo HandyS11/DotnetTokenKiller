@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Rewrite hooks for nine more coding agents, each installed by `dtk init <provider>` and probed by `dtk doctor`.
   In a project, each writes the shared `AGENTS.md` section and `.agents/skills/dotnet-token-killer` skill plus the
-  file listed below; `--global` writes their equivalents in the agent's user configuration directory instead:
+  file listed below; `--global` writes their equivalents under your home directory instead:
   - Codex CLI (`dtk init codex`): a `PreToolUse` hook in `.codex/hooks.json`. Codex runs it only once you approve
     it under `/hooks`.
   - OpenCode (`dtk init opencode`) and Kilo Code (`dtk init kilo`): a generated plugin, `.opencode/plugins/dtk.js`
