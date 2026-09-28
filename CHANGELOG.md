@@ -21,9 +21,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- Rewrite hooks for nine more coding agents, each installed by `dtk init <provider>` (project or `--global`) and
-  probed by `dtk doctor`. Each also writes the shared `AGENTS.md` section and `.agents/skills/dotnet-token-killer`
-  skill:
+- Rewrite hooks for nine more coding agents, each installed by `dtk init <provider>` and probed by `dtk doctor`.
+  In a project, each writes the shared `AGENTS.md` section and `.agents/skills/dotnet-token-killer` skill plus the
+  file listed below; `--global` writes their equivalents in the agent's user configuration directory instead:
   - Codex CLI (`dtk init codex`): a `PreToolUse` hook in `.codex/hooks.json`. Codex runs it only once you approve
     it under `/hooks`.
   - OpenCode (`dtk init opencode`) and Kilo Code (`dtk init kilo`): a generated plugin, `.opencode/plugins/dtk.js`
@@ -37,8 +37,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Amp (`dtk init amp`): a generated plugin in `.amp/plugins/dtk.js`.
 - `dtk init cursor` also installs a rewrite hook in `.cursor/hooks.json`, and `dtk init cursor --global` installs
   that hook alone in `~/.cursor/hooks.json`. It auto-approves only the commands the Copilot CLI hook does.
-- `dtk init devin` installs a rule in `.devin/rules/dtk.md` and a rewrite hook in `.devin/hooks.v1.json` for Devin
-  Local and Devin CLI.
+- `dtk init devin` installs a rule and a rewrite hook for Devin Local and Devin CLI: `.devin/rules/dtk.md` and
+  `.devin/hooks.v1.json` in a project. With `--global` it writes the hook under the `hooks` key of
+  `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows) and a section in
+  `~/.codeium/windsurf/memories/global_rules.md`.
 - `dtk init <provider> --uninstall` removes a previously installed provider integration and reports each file as
   removed, unchanged, or kept. It also recognizes, and removes, the unedited Cursor, Windsurf and Aider files an
   earlier dtk release wrote; a kept file's note says how to remove it anyway.
