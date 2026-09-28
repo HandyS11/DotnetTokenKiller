@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     # A normal run takes a few seconds.
     timeout-minutes: 5
+    # No issues: write. On a pull request, the /issues/{n}/labels endpoints below accept pull-requests: write too
+    # (GitHub's fine-grained permissions table lists them under both), and all three labels already exist.
     permissions:
       pull-requests: write
 
