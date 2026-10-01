@@ -32,7 +32,7 @@
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23"/>
     <PackageVersion Include="Roslynator.Analyzers" Version="5.0.0"/>
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="5.0.0"/>
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.34.0.3385"/>
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138"/>
     <PackageVersion Include="MSTest.TestAdapter" Version="3.7.0"/>
     <PackageVersion Include="MSTest.TestFramework" Version="3.7.0"/>
     <PackageVersion Include="NUnit" Version="4.3.2"/>
