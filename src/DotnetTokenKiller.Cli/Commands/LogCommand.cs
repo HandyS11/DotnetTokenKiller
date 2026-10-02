@@ -37,7 +37,7 @@ internal sealed class LogCommand(
         DotnetSubcommands.Ordered.Concat(PassthroughSubcommands.Measurable.Order(StringComparer.Ordinal)));
 
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         LogCommandSettings settings,
         CancellationToken cancellationToken)

@@ -21,7 +21,7 @@ internal sealed class PipeCommand(
     IStandardInputState standardInput) : AsyncCommand<PipeCommandSettings>
 {
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         PipeCommandSettings settings,
         CancellationToken cancellationToken)
