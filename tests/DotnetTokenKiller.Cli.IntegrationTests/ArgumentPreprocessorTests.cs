@@ -334,7 +334,7 @@ public sealed class ArgumentPreprocessorTests
     {
         public static int LastLevel { get; set; } = -1;
 
-        protected override int Execute(
+        public override int Execute(
             CommandContext context, DotnetCommandSettings settings, CancellationToken cancellationToken)
         {
             LastLevel = settings.VerbosityLevel;

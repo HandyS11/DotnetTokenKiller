@@ -273,7 +273,7 @@ internal sealed class CompletionCommand(IAnsiConsole console, TextWriter output)
                 sub => $"complete -c dtk -f -n '__fish_seen_subcommand_from dotnet' -a {sub} -d 'Run dotnet {sub} with filtered output'"));
 
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         CompletionCommandSettings settings,
         CancellationToken cancellationToken)

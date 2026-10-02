@@ -10,7 +10,7 @@
     <PackageVersion Include="Microsoft.Bcl.Memory" Version="10.0.9"/>
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.53.3"/>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8"/>
-    <PackageVersion Include="coverlet.collector" Version="10.0.1"/>
+    <PackageVersion Include="coverlet.collector" Version="10.1.0"/>
     <PackageVersion Include="FluentAssertions" Version="8.11.0"/>
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12"/>
     <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.12"/>
@@ -32,14 +32,14 @@
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23"/>
     <PackageVersion Include="Roslynator.Analyzers" Version="5.0.0"/>
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="5.0.0"/>
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.34.0.3385"/>
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138"/>
     <PackageVersion Include="MSTest.TestAdapter" Version="3.7.0"/>
     <PackageVersion Include="MSTest.TestFramework" Version="3.7.0"/>
     <PackageVersion Include="NUnit" Version="4.3.2"/>
     <PackageVersion Include="NUnit3TestAdapter" Version="5.0.0"/>
     <PackageVersion Include="Reqnroll.xUnit" Version="2.4.1"/>
     <PackageVersion Include="Spectre.Console" Version="0.57.2"/>
-    <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0"/>
+    <PackageVersion Include="Spectre.Console.Cli" Version="0.57.2"/>
     <PackageVersion Include="Spectre.Console.Testing" Version="0.57.2"/>
     <PackageVersion Include="Tomlyn" Version="2.10.1"/>
     <PackageVersion Include="Verify.Xunit" Version="31.12.5"/>

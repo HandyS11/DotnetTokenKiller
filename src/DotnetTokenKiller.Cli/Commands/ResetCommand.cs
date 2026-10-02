@@ -15,7 +15,7 @@ internal sealed class ResetCommand(
     IAnsiConsole console) : AsyncCommand<ResetCommandSettings>
 {
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         ResetCommandSettings settings,
         CancellationToken cancellationToken)

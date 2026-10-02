@@ -13,7 +13,7 @@ internal sealed class ConfigSetCommand(
     IAnsiConsole console) : AsyncCommand<ConfigSetCommandSettings>
 {
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         ConfigSetCommandSettings settings,
         CancellationToken cancellationToken)

@@ -13,7 +13,7 @@ internal sealed class ConfigShowCommand(
     IAnsiConsole console) : AsyncCommand
 {
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
+    public override Task<int> ExecuteAsync(CommandContext context, CancellationToken cancellationToken)
         => RunAsync(cancellationToken);
 
     internal async Task<int> RunAsync(CancellationToken cancellationToken)

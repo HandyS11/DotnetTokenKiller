@@ -23,7 +23,7 @@ internal sealed class GainCommand(
         "timestamp,command,project_path,input_tokens,output_tokens,saved_tokens,savings_pct,execution_time_ms,success,outcome,source";
 
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         GainCommandSettings settings,
         CancellationToken cancellationToken)

@@ -16,7 +16,7 @@ internal sealed class InitCommand(IntegrateUseCase integrateUseCase, IAnsiConsol
     : AsyncCommand<InitCommandSettings>
 {
     /// <inheritdoc/>
-    protected override Task<int> ExecuteAsync(
+    public override Task<int> ExecuteAsync(
         CommandContext context,
         InitCommandSettings settings,
         CancellationToken cancellationToken)
