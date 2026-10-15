@@ -13,7 +13,7 @@
     <PackageVersion Include="coverlet.collector" Version="10.1.0"/>
     <PackageVersion Include="FluentAssertions" Version="8.11.0"/>
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12"/>
-    <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.12"/>
+    <PackageVersion Include="Microsoft.Data.Sqlite.Core" Version="10.0.13"/>
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5"/>
     <!--
       Windows' own SQLite, for the Native AOT dtk.exe that is installed alone as the win-x64 package's shim.
@@ -22,14 +22,14 @@
       so the two SQLitePCLRaw major versions coexisting here is unavoidable, not something to align.
     -->
     <PackageVersion Include="SQLitePCLRaw.bundle_winsqlite3" Version="2.1.11"/>
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12"/>
-    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0"/>
-    <PackageVersion Include="Microsoft.ML.Tokenizers.Data.Cl100kBase" Version="2.0.0"/>
-    <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0"/>
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13"/>
+    <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.1"/>
+    <PackageVersion Include="Microsoft.ML.Tokenizers.Data.Cl100kBase" Version="2.0.1"/>
+    <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.1"/>
     <PackageVersion Include="NSubstitute" Version="6.2.0"/>
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.401"/>
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1"/>
-    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23"/>
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.402"/>
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0"/>
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1"/>
     <PackageVersion Include="Roslynator.Analyzers" Version="5.0.1"/>
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="5.0.1"/>
     <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138"/>
@@ -44,6 +44,6 @@
     <PackageVersion Include="Tomlyn" Version="2.10.1"/>
     <PackageVersion Include="Verify.Xunit" Version="31.12.5"/>
     <PackageVersion Include="xunit" Version="2.9.3"/>
-    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0"/>
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1"/>
   </ItemGroup>
 </Project>
