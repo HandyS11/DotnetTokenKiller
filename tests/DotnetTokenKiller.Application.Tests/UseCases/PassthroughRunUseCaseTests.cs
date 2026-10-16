@@ -436,11 +436,10 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
             .Returns(session);
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
+            .Returns(async callInfo =>
             {
                 var outWriter = callInfo.ArgAt<TextWriter>(2);
-                outWriter.WriteLineAsync("stdout line".AsMemory(), CancellationToken.None)
-                    .GetAwaiter().GetResult();
+                await outWriter.WriteLineAsync("stdout line".AsMemory(), CancellationToken.None);
                 return new CommandResult("stdout line", "", 0);
             });
 
@@ -544,11 +543,10 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
             .Returns(session);
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo =>
+            .Returns(async callInfo =>
             {
                 var errWriter = callInfo.ArgAt<TextWriter>(3);
-                errWriter.WriteLineAsync("stderr line".AsMemory(), CancellationToken.None)
-                    .GetAwaiter().GetResult();
+                await errWriter.WriteLineAsync("stderr line".AsMemory(), CancellationToken.None);
                 return new CommandResult("", "stderr line", 0);
             });
 
