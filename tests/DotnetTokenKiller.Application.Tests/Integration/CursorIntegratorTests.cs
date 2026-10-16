@@ -29,10 +29,10 @@ public sealed class CursorIntegratorTests : IDisposable
         return new CursorIntegrator(new RtkHookCoexistence(home.ClaudeDir, RtkConfigPath), home);
     }
 
-    private static async Task WriteAsync(string path, string content)
+    private static Task WriteAsync(string path, string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, content);
+        return File.WriteAllTextAsync(path, content);
     }
 
     [Fact]

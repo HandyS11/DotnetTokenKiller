@@ -15,7 +15,7 @@ internal sealed class DotnetListPackageCommand(
     IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
+    public override Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -29,7 +29,7 @@ internal sealed class DotnetListPackageCommand(
             .Concat(context.Remaining.Raw)
             .ToArray();
 
-        return await filteredRun.RunAsync(filter, "dotnet", args, settings.VerbosityLevel, settings.ShowLog,
-            settings.Quiet, cancellationToken).ConfigureAwait(false);
+        return filteredRun.RunAsync(filter, "dotnet", args, settings.VerbosityLevel, settings.ShowLog,
+            settings.Quiet, cancellationToken);
     }
 }
