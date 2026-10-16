@@ -73,10 +73,10 @@ public sealed class HookHealthCheckerTests : IDisposable
     private string CodexGlobalHooksPath => Codex.DescribeHooks(_tempDir, HookScope.Global)[0].RegistrationPath;
 
     /// <summary>Writes a global <c>hooks.json</c> whose first group runs rtk's hook, putting dtk's at 1:0.</summary>
-    private async Task WriteCodexGlobalHooksAfterAForeignGroupAsync()
+    private Task WriteCodexGlobalHooksAfterAForeignGroupAsync()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(CodexGlobalHooksPath)!);
-        await File.WriteAllTextAsync(CodexGlobalHooksPath, """
+        return File.WriteAllTextAsync(CodexGlobalHooksPath, """
             {"hooks":{"PreToolUse":[
               {"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook codex"}]},
               {"matcher":"Bash","hooks":[{"type":"command","command":"dtk hook codex","timeout":10}]}

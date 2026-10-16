@@ -63,11 +63,11 @@ public sealed class SqliteLoaderTests
         return output;
     }
 
-    private static async Task<ProcessOutput> RunWithLoaderTraceAsync(
+    private static Task<ProcessOutput> RunWithLoaderTraceAsync(
         string binary, ParitySandbox sandbox, string[] arguments, string? stdin = null)
     {
         var startInfo = ParityRunner.CreateStartInfo(binary, sandbox, arguments);
         startInfo.Environment["DYLD_PRINT_LIBRARIES"] = "1";
-        return await ParityProcess.RunAsync(startInfo, stdin);
+        return ParityProcess.RunAsync(startInfo, stdin);
     }
 }

@@ -14,14 +14,14 @@ internal sealed class DotnetBuildCommand(
     [FromKeyedServices(FilterKeys.Build)] IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
 {
     /// <inheritdoc/>
-    public override async Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
+    public override Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(context);
 
         var args = settings.PositionalArgs.Prepend("build").Concat(context.Remaining.Raw).ToArray();
-        return await filteredRun.RunAsync(filter, "dotnet", args, settings.VerbosityLevel, settings.ShowLog,
-            settings.Quiet, cancellationToken).ConfigureAwait(false);
+        return filteredRun.RunAsync(filter, "dotnet", args, settings.VerbosityLevel, settings.ShowLog,
+            settings.Quiet, cancellationToken);
     }
 }

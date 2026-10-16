@@ -21,10 +21,10 @@ public sealed class CursorHooksFileTests : IDisposable
 
     private async Task<JsonObject> ReadAsync() => JsonNode.Parse(await File.ReadAllTextAsync(HooksPath))!.AsObject();
 
-    private async Task SeedAsync(string json)
+    private Task SeedAsync(string json)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(HooksPath)!);
-        await File.WriteAllTextAsync(HooksPath, json);
+        return File.WriteAllTextAsync(HooksPath, json);
     }
 
     private static IntegrationContext Uninstall(string boundary) =>

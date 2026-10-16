@@ -191,10 +191,10 @@ internal sealed partial class RtkHookCoexistence
         }
     }
 
-    private async Task WriteConfigAsync(string content, CancellationToken cancellationToken)
+    private Task WriteConfigAsync(string content, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_rtkConfigPath)!);
-        await File.WriteAllTextAsync(_rtkConfigPath, content, cancellationToken).ConfigureAwait(false);
+        return File.WriteAllTextAsync(_rtkConfigPath, content, cancellationToken);
     }
 
     private string AdviceNote() =>

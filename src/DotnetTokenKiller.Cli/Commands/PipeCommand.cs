@@ -31,7 +31,7 @@ internal sealed class PipeCommand(
     /// <see cref="CommandContext"/> plumbing so this is directly callable from in-process tests.</summary>
     /// <param name="settings">The parsed command settings.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    internal async Task<int> RunAsync(PipeCommandSettings settings, CancellationToken cancellationToken)
+    internal Task<int> RunAsync(PipeCommandSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -41,7 +41,7 @@ internal sealed class PipeCommand(
             // which reads as a hang rather than as a usage error.
             console.MarkupLine(
                 "[red]dtk pipe reads from standard input.[/] Pipe output into it, e.g. [bold]dotnet build | dtk pipe build[/].");
-            return 1;
+            return Task.FromResult(1);
         }
 
         if (!DotnetSubcommands.TryMatch(settings.Subcommand, out var match))
@@ -54,15 +54,14 @@ internal sealed class PipeCommand(
             // multi-token name like "list package" across lines.
             console.MarkupLine($"[red]No filter for:[/] {attempted.EscapeMarkup()}.");
             console.MarkupLine($"Available: {known.EscapeMarkup()}");
-            return 1;
+            return Task.FromResult(1);
         }
 
         // Keyed by the canonical name, the same key FilterKeys aliases, so pipe mode can never
         // address a filter that CLI routing cannot (or vice versa).
         var filter = services.GetRequiredKeyedService<IOutputFilter>(match.Name);
 
-        return await pipeFilter
-            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), cancellationToken)
-            .ConfigureAwait(false);
+        return pipeFilter
+            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), cancellationToken);
     }
 }

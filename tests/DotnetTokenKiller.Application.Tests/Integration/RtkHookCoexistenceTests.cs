@@ -12,10 +12,10 @@ public sealed class RtkHookCoexistenceTests : IDisposable
 
     private RtkHookCoexistence CreateSut() => new(UserClaudeDir, RtkConfigPath);
 
-    private static async Task WriteAsync(string path, string content)
+    private static Task WriteAsync(string path, string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, content);
+        return File.WriteAllTextAsync(path, content);
     }
 
     public void Dispose()

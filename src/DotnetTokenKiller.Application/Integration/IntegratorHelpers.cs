@@ -690,16 +690,16 @@ internal static class IntegratorHelpers
     /// <param name="path">Path to the settings file.</param>
     /// <param name="root">The settings to write.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    internal static async Task WriteSettingsJsonAsync(string path, JsonObject root, CancellationToken cancellationToken)
+    internal static Task WriteSettingsJsonAsync(string path, JsonObject root, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(
+        return File.WriteAllTextAsync(
             path,
             // WriteIndented emits '\r\n' on Windows; normalize so the written JSON is identical
             // everywhere, and add the single trailing '\n' ToJsonString never emits, matching
             // .editorconfig's insert_final_newline.
             root.ToJsonString(SettingsJsonOptions).ReplaceLineEndings("\n") + "\n",
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
     }
 
     /// <summary>

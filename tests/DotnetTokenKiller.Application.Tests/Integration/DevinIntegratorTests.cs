@@ -26,10 +26,10 @@ public sealed class DevinIntegratorTests : IDisposable
 
     private DevinIntegrator CreateSut() => new(Home);
 
-    private static async Task WriteAsync(string path, string content)
+    private static Task WriteAsync(string path, string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await File.WriteAllTextAsync(path, content);
+        return File.WriteAllTextAsync(path, content);
     }
 
     [Fact]
