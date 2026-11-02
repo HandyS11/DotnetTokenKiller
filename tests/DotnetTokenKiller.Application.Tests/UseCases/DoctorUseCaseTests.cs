@@ -14,17 +14,28 @@ public sealed class DoctorUseCaseTests : IDisposable
     private readonly DoctorUseCase _sut;
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-doctor-test-{Guid.NewGuid()}");
 
+    private static readonly string[] RewriteDotnetBuild = ["rewrite", "dotnet build"];
+
+    private const string RtkHookSettings = """
+        { "hooks": { "PreToolUse": [ { "matcher": "Bash",
+          "hooks": [ { "type": "command", "command": "rtk hook claude" } ] } ] } }
+        """;
+
     public DoctorUseCaseTests()
     {
         _sut = new DoctorUseCase(
             _runner,
             _configProvider,
             new HookHealthChecker(_runner),
-            [new GeminiCliIntegrator(new HomePaths(_tempDir))]);
+            [new GeminiCliIntegrator(new HomePaths(_tempDir))],
+            new RtkHookCoexistence(Path.Combine(_tempDir, "home", ".claude"), RtkConfigPath));
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
         _runner.RunCapturedAsync(null!, null!)
             .ReturnsForAnyArgs(new CommandResult("10.0.0", string.Empty, 0));
     }
+
+    private string RtkConfigPath =>
+        Path.Combine(_tempDir, "home", "Library", "Application Support", "rtk", "config.toml");
 
     public void Dispose()
     {
@@ -356,4 +367,69 @@ public sealed class DoctorUseCaseTests : IDisposable
         checks.Select(c => c.Name).Should().Contain(
             ["dotnet SDK", "config file", "tracking database", "tee directory", "hook integration"]);
     }
+
+    [Fact]
+    public async Task RunAsync_RtkHookRegisteredAndRtkStillRewritesDotnet_WarnsAndNamesTheFileToFix()
+    {
+        await RegisterRtkHookAsync();
+        RtkAnswersRewriteWith("rtk dotnet build", exitCode: 3);
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        var check = checks.Single(c => c.Name == "rtk coexistence");
+        check.Passed.Should().BeTrue("a warning never fails doctor");
+        check.IsWarning.Should().BeTrue();
+        check.Message.Should().Be(
+            "rtk also rewrites dotnet commands. Add \"dotnet\" to [hooks].exclude_commands in "
+            + $"{RtkConfigPath}, or run 'dtk init claude' again.");
+        await _runner.Received(1).RunCapturedAsync(
+            "rtk",
+            Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(RewriteDotnetBuild)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_RtkHookRegisteredAndRtkLeavesDotnetAlone_PassesWithoutAWarning()
+    {
+        await RegisterRtkHookAsync();
+        RtkAnswersRewriteWith(string.Empty, exitCode: 1);
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        var check = checks.Single(c => c.Name == "rtk coexistence");
+        check.Passed.Should().BeTrue();
+        check.IsWarning.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_NoRtkHookRegistered_AddsNoRtkCheckAndNeverRunsRtk()
+    {
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        checks.Select(c => c.Name).Should().NotContain("rtk coexistence");
+        await _runner.DidNotReceive().RunCapturedAsync("rtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_RtkHookRegisteredButRtkCannotBeRun_AddsNoRtkCheckAndDoesNotThrow()
+    {
+        await RegisterRtkHookAsync();
+        _runner.RunCapturedAsync("rtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new InvalidOperationException("rtk: not found")));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        checks.Select(c => c.Name).Should().NotContain("rtk coexistence");
+    }
+
+    private async Task RegisterRtkHookAsync()
+    {
+        var settings = Path.Combine(_tempDir, ".claude", "settings.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+        await File.WriteAllTextAsync(settings, RtkHookSettings);
+    }
+
+    private void RtkAnswersRewriteWith(string stdout, int exitCode) =>
+        _runner.RunCapturedAsync("rtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(stdout, string.Empty, exitCode));
 }

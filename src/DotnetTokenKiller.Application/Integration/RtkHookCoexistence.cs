@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using DotnetTokenKiller.Domain.Execution;
 using Tomlyn;
 using Tomlyn.Model;
 
@@ -22,11 +23,15 @@ internal sealed partial class RtkHookCoexistence
     private const string HooksKey = "hooks";
 
     private readonly string _userClaudeDir;
-    private readonly string _rtkConfigPath;
+    private readonly Func<CancellationToken, Task<string>> _resolveConfigPathAsync;
 
-    /// <summary>Creates an instance rooted at the real user Claude dir and rtk config path.</summary>
-    public RtkHookCoexistence()
-        : this(DefaultUserClaudeDir(), DefaultRtkConfigPath())
+    /// <summary>
+    /// Creates an instance rooted at the real user Claude dir, which asks rtk (or, without one, the platform default)
+    /// where its config file lives when that is first needed.
+    /// </summary>
+    /// <param name="runner">Runs <c>rtk config</c> to learn the path rtk reads.</param>
+    public RtkHookCoexistence(ICommandRunner runner)
+        : this(DefaultUserClaudeDir(), cancellationToken => RtkConfigLocator.ResolveAsync(runner, cancellationToken))
     {
     }
 
@@ -34,10 +39,26 @@ internal sealed partial class RtkHookCoexistence
     /// <param name="userClaudeDir">The user-level <c>~/.claude</c> directory to scan.</param>
     /// <param name="rtkConfigPath">The rtk <c>config.toml</c> path used by the reconcile step.</param>
     internal RtkHookCoexistence(string userClaudeDir, string rtkConfigPath)
+        : this(userClaudeDir, _ => Task.FromResult(rtkConfigPath))
+    {
+    }
+
+    /// <summary>Test seam: inject isolated paths, and the resolution of rtk's config path.</summary>
+    /// <param name="userClaudeDir">The user-level <c>~/.claude</c> directory to scan.</param>
+    /// <param name="resolveConfigPathAsync">Resolves the path of the config file rtk reads.</param>
+    internal RtkHookCoexistence(string userClaudeDir, Func<CancellationToken, Task<string>> resolveConfigPathAsync)
     {
         _userClaudeDir = userClaudeDir;
-        _rtkConfigPath = rtkConfigPath;
+        _resolveConfigPathAsync = resolveConfigPathAsync;
     }
+
+    /// <summary>
+    /// The path of the config file rtk reads, resolved when asked: it may run <c>rtk config</c>, so it is not
+    /// known at construction.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    internal Task<string> ResolveConfigPathAsync(CancellationToken cancellationToken) =>
+        _resolveConfigPathAsync(cancellationToken);
 
     /// <summary>
     /// True when any of the user or project Claude settings files registers a PreToolUse hook whose
@@ -108,19 +129,21 @@ internal sealed partial class RtkHookCoexistence
     /// <param name="cancellationToken">Token used to cancel the config read/write.</param>
     internal async Task<RtkReconcileOutcome> ReconcileRtkConfigAsync(CancellationToken cancellationToken)
     {
+        var configPath = await _resolveConfigPathAsync(cancellationToken).ConfigureAwait(false);
+
         try
         {
-            if (!File.Exists(_rtkConfigPath))
+            if (!File.Exists(configPath))
             {
-                await WriteConfigAsync("[hooks]\nexclude_commands = [\"dotnet\"]\n", cancellationToken)
+                await WriteConfigAsync(configPath, "[hooks]\nexclude_commands = [\"dotnet\"]\n", cancellationToken)
                     .ConfigureAwait(false);
-                return new RtkReconcileOutcome(_rtkConfigPath, null, [ExcludedNote]);
+                return new RtkReconcileOutcome(configPath, null, [ExcludedNote]);
             }
 
-            var text = await File.ReadAllTextAsync(_rtkConfigPath, cancellationToken).ConfigureAwait(false);
+            var text = await File.ReadAllTextAsync(configPath, cancellationToken).ConfigureAwait(false);
             if (!TomlSerializer.TryDeserialize(text, TomlTableContext.Default, out TomlTable? model))
             {
-                return new RtkReconcileOutcome(null, null, [AdviceNote()]);
+                return new RtkReconcileOutcome(null, null, [AdviceNote(configPath)]);
             }
 
             if (ConfigTextExcludesDotnet(text))
@@ -141,11 +164,11 @@ internal sealed partial class RtkHookCoexistence
             // report false success, or worse, write a file that clobbers unrelated content.
             if (!ConfigTextExcludesDotnet(updated))
             {
-                return new RtkReconcileOutcome(null, null, [AdviceNote()]);
+                return new RtkReconcileOutcome(null, null, [AdviceNote(configPath)]);
             }
 
-            await WriteConfigAsync(updated, cancellationToken).ConfigureAwait(false);
-            return new RtkReconcileOutcome(null, _rtkConfigPath, [ExcludedNote]);
+            await WriteConfigAsync(configPath, updated, cancellationToken).ConfigureAwait(false);
+            return new RtkReconcileOutcome(null, configPath, [ExcludedNote]);
         }
         catch (Exception ex)
             when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -154,7 +177,7 @@ internal sealed partial class RtkHookCoexistence
             // UnauthorizedAccessException) or an invalid config path — e.g. a malformed XDG_CONFIG_HOME
             // producing bad path characters (ArgumentException, NotSupportedException) — degrades to
             // an advisory note instead of throwing.
-            return new RtkReconcileOutcome(null, null, [AdviceNote()]);
+            return new RtkReconcileOutcome(null, null, [AdviceNote(configPath)]);
         }
     }
 
@@ -167,19 +190,24 @@ internal sealed partial class RtkHookCoexistence
     /// <param name="rtkHookDetected">
     /// Whether rtk's hook is registered for the harness, detected as the install detects it.
     /// </param>
-    internal void NoteRemainingExclusion(IntegrationContext context, bool rtkHookDetected)
+    /// <param name="cancellationToken">Token used to cancel the config read.</param>
+    internal async Task NoteRemainingExclusionAsync(
+        IntegrationContext context, bool rtkHookDetected, CancellationToken cancellationToken)
     {
         if (!rtkHookDetected || (context.Removed.Count == 0 && context.Updated.Count == 0))
         {
             return;
         }
 
+        var configPath = await _resolveConfigPathAsync(cancellationToken).ConfigureAwait(false);
+
         try
         {
-            if (File.Exists(_rtkConfigPath) && ConfigTextExcludesDotnet(File.ReadAllText(_rtkConfigPath)))
+            if (File.Exists(configPath)
+                && ConfigTextExcludesDotnet(await File.ReadAllTextAsync(configPath, cancellationToken).ConfigureAwait(false)))
             {
                 context.Notes.Add(
-                    $"rtk's config at {_rtkConfigPath} still excludes dotnet (an earlier 'dtk init' may have added it) "
+                    $"rtk's config at {configPath} still excludes dotnet (an earlier 'dtk init' may have added it) "
                     + "and was left as it is. Remove \"dotnet\" from [hooks].exclude_commands if rtk should handle "
                     + "dotnet commands again.");
             }
@@ -191,14 +219,14 @@ internal sealed partial class RtkHookCoexistence
         }
     }
 
-    private Task WriteConfigAsync(string content, CancellationToken cancellationToken)
+    private static Task WriteConfigAsync(string configPath, string content, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_rtkConfigPath)!);
-        return File.WriteAllTextAsync(_rtkConfigPath, content, cancellationToken);
+        Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+        return File.WriteAllTextAsync(configPath, content, cancellationToken);
     }
 
-    private string AdviceNote() =>
-        $"Could not update rtk's config at {_rtkConfigPath}. To let dtk own dotnet commands, add " +
+    private static string AdviceNote(string configPath) =>
+        $"Could not update rtk's config at {configPath}. To let dtk own dotnet commands, add " +
         "under [hooks]: exclude_commands = [\"dotnet\"].";
 
     /// <summary>
@@ -296,19 +324,6 @@ internal sealed partial class RtkHookCoexistence
 
     private static string DefaultUserClaudeDir() =>
         Path.Combine(Home(), ".claude");
-
-    private static string DefaultRtkConfigPath()
-    {
-        // Per the XDG Base Directory spec, XDG_CONFIG_HOME must be an absolute path; a relative (or
-        // empty) value is invalid and is ignored in favor of the ~/.config default. Honoring a
-        // relative value would resolve the write against the current working directory — surprising
-        // and unsafe for a global config.
-        var xdg = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        var configHome = string.IsNullOrEmpty(xdg) || !Path.IsPathRooted(xdg)
-            ? Path.Combine(Home(), ".config")
-            : xdg;
-        return Path.Combine(configHome, "rtk", "config.toml");
-    }
 
     [GeneratedRegex(@"(?:^|[\s/\\""'])rtk(?:\.exe)?\s+hook\b")]
     private static partial Regex RtkHookCommandRegex();

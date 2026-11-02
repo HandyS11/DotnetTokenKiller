@@ -15,8 +15,8 @@ namespace DotnetTokenKiller.Application.Integration;
 ///     hook left by an older dtk is migrated
 ///   </description></item>
 ///   <item><description>
-///     When an rtk PreToolUse hook is detected, merges <c>exclude_commands = ["dotnet"]</c> into
-///     <c>~/.config/rtk/config.toml</c> so dtk (not rtk) owns dotnet commands. Silent if already excluded.
+///     When an rtk PreToolUse hook is detected, merges <c>exclude_commands = ["dotnet"]</c> into the config file rtk
+///     reads (see <see cref="RtkConfigLocator"/>) so dtk (not rtk) owns dotnet commands. Silent if already excluded.
 ///   </description></item>
 /// </list>
 /// Declared <see langword="internal"/> (rather than <see langword="public"/>, its original
@@ -108,7 +108,11 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
         await UninstallHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath!, HookFiles(hook), context, cancellationToken)
             .ConfigureAwait(false);
 
-        rtk.NoteRemainingExclusion(context, rtk.IsRtkHookPresent(hookDirectory));
+        await rtk.NoteRemainingExclusionAsync(
+                context,
+                rtk.IsRtkHookPresent(hookDirectory),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         return context.ToResult();
     }

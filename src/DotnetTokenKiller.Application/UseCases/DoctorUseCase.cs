@@ -30,11 +30,13 @@ public sealed record DiagnosticCheck(string Name, bool Passed, string Message, b
 /// <param name="configProvider">The configuration provider.</param>
 /// <param name="hookHealth">Checks installed rewrite hooks.</param>
 /// <param name="integrators">All provider integrators; the hook-installing ones are inspected.</param>
+/// <param name="rtk">Detects an rtk hook and knows where rtk reads its config.</param>
 internal sealed class DoctorUseCase(
     ICommandRunner runner,
     IConfigProvider configProvider,
     HookHealthChecker hookHealth,
-    IEnumerable<IProviderIntegrator> integrators)
+    IEnumerable<IProviderIntegrator> integrators,
+    RtkHookCoexistence rtk)
 {
     /// <summary>
     /// Runs all diagnostic checks and returns the results.
@@ -61,7 +63,54 @@ internal sealed class DoctorUseCase(
             .RunAsync([.. integrators.OfType<IHookIntegrator>()], projectDirectory, cancellationToken)
             .ConfigureAwait(false));
 
+        if (await CheckRtkCoexistenceAsync(projectDirectory, cancellationToken).ConfigureAwait(false) is { } rtkCheck)
+        {
+            checks.Add(rtkCheck);
+        }
+
         return checks;
+    }
+
+    /// <summary>
+    /// When rtk's hook is registered, asks rtk whether it would still rewrite <c>dotnet build</c> — it does unless
+    /// <c>dotnet</c> is in its <c>[hooks].exclude_commands</c>, in which case both hooks rewrite the command. Doctor only
+    /// reads: it never edits rtk's config.
+    /// </summary>
+    /// <param name="projectDirectory">The directory to treat as the project root for the hook check.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The check, or <see langword="null"/> when no rtk hook is registered or rtk could not be asked (not installed, or
+    /// too slow to answer): there is then nothing to report, and the hook health checks above are unchanged.
+    /// </returns>
+    private async Task<DiagnosticCheck?> CheckRtkCoexistenceAsync(string projectDirectory, CancellationToken cancellationToken)
+    {
+        const string name = "rtk coexistence";
+
+        if (!rtk.IsRtkHookPresent(projectDirectory))
+        {
+            return null;
+        }
+
+        var rewrite = await RtkConfigLocator
+            .TryRunAsync(
+                runner, RtkConfigLocator.RtkCommand, ["rewrite", "dotnet build"], RtkConfigLocator.ProbeTimeout, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (rewrite is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(rewrite.StdOut))
+        {
+            return new DiagnosticCheck(name, true, "rtk leaves dotnet commands to dtk");
+        }
+
+        var configPath = await rtk.ResolveConfigPathAsync(cancellationToken).ConfigureAwait(false);
+        return DiagnosticCheck.Warning(
+            name,
+            $"rtk also rewrites dotnet commands. Add \"dotnet\" to [hooks].exclude_commands in {configPath}, "
+            + "or run 'dtk init claude' again.");
     }
 
     private async Task<DiagnosticCheck> CheckDotnetSdkAsync(CancellationToken cancellationToken)

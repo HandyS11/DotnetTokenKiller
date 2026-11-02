@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Domain.Configuration;
@@ -88,7 +89,7 @@ public sealed class DoctorCommandTests : IDisposable
             console.Profile.Width = 400; // avoid wrapping the long absolute paths in the output
             var configProvider = new NullPathsConfigProvider();
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), [], NoRtkHook());
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -116,7 +117,7 @@ public sealed class DoctorCommandTests : IDisposable
             console.Profile.Width = 400;
             var configProvider = new EmptyTeeDirectoryConfigProvider();
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), [], NoRtkHook());
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -146,7 +147,7 @@ public sealed class DoctorCommandTests : IDisposable
             console.Profile.Width = 400;
             var configProvider = new StubConfigProvider(_tempDir); // config points tee elsewhere
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), [], NoRtkHook());
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -171,7 +172,7 @@ public sealed class DoctorCommandTests : IDisposable
         console.Profile.Width = 400;
         var configProvider = new StubConfigProvider(_tempDir); // db = _tempDir/tracking.db, tee = _tempDir
         var runner = new StubCommandRunner(0);
-        var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
+        var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), [], NoRtkHook());
         var command = new DoctorCommand(useCase, configProvider, console);
 
         var exitCode = await command.RunAsync(CancellationToken.None);
@@ -227,7 +228,7 @@ public sealed class DoctorCommandTests : IDisposable
             // Config has null DbPath — so env var is the only way to resolve a valid path
             var configProvider = new NullPathsConfigProvider();
             var runner = new StubCommandRunner(0);
-            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
+            var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), [], NoRtkHook());
             var command = new DoctorCommand(useCase, configProvider, console);
 
             await command.RunAsync(CancellationToken.None);
@@ -281,12 +282,16 @@ public sealed class DoctorCommandTests : IDisposable
         check.IsWarning.Should().BeTrue();
     }
 
+    /// <summary>Looks for an rtk hook only under the temp dir, so the machine's own rtk install never changes the output.</summary>
+    private RtkHookCoexistence NoRtkHook() =>
+        new(Path.Combine(_tempDir, "claude"), Path.Combine(_tempDir, "rtk", "config.toml"));
+
     private (DoctorCommand command, TestConsole console) Create(int dotnetExitCode)
     {
         var console = new TestConsole();
         var configProvider = new StubConfigProvider(_tempDir);
         var runner = new StubCommandRunner(dotnetExitCode);
-        var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), []);
+        var useCase = new DoctorUseCase(runner, configProvider, new HookHealthChecker(runner), [], NoRtkHook());
         var command = new DoctorCommand(useCase, configProvider, console);
         return (command, console);
     }

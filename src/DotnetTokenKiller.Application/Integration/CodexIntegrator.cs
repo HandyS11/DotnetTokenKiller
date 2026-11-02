@@ -181,7 +181,11 @@ internal sealed class CodexIntegrator(RtkHookCoexistence rtk, HomePaths home)
             context.Notes.Add(PositionNote);
         }
 
-        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook, directory)));
+        await rtk.NoteRemainingExclusionAsync(
+                context,
+                RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook, directory)),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>Printed when an uninstall removed dtk's handler from a <c>hooks.json</c> that still holds others.</summary>
