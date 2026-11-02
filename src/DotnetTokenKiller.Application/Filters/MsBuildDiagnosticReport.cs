@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -23,6 +24,10 @@ internal sealed partial class MsBuildDiagnosticReport
 
     private const string ErrorLevel = "error";
     private const string WarningLevel = "warning";
+
+    /// <summary>The extensions of project files; a solution, which also ends a diagnostic's suffix, is not one.</summary>
+    private static readonly FrozenSet<string> ProjectFileExtensions =
+        new[] { ".csproj", ".fsproj", ".vbproj", ".proj" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly List<Diagnostic> _errors;
     private readonly List<Diagnostic> _warnings;
@@ -65,8 +70,8 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <summary>
     /// How many distinct projects reported an error, named by the project file without its extension
     /// from the diagnostic's trailing <c>[path/X.csproj]</c> suffix; a target framework or other
-    /// property after <c>::</c> is dropped, so one multi-targeted project counts once. Zero when no
-    /// error carries a project.
+    /// property after <c>::</c> is dropped, so one multi-targeted project counts once. A suffix that is
+    /// not a project file (a solution's) names none. Zero when no error carries a project.
     /// </summary>
     public int FailedProjectCount { get; }
 
@@ -377,12 +382,19 @@ internal sealed partial class MsBuildDiagnosticReport
         return separatorIndex < 0 ? project : project[..separatorIndex];
     }
 
-    /// <summary>Names a project by its file, without directory or extension; either path separator splits.</summary>
-    /// <param name="projectPath">The project path, empty when the diagnostic named none.</param>
+    /// <summary>
+    /// Names a project by its file, without directory or extension; either path separator splits. Only a
+    /// project file names a project: the suffix of a solution-level diagnostic is the solution
+    /// (<c>[/r/Sol.slnx]</c>), and that, like any other text, yields no name.
+    /// </summary>
+    /// <param name="projectPath">The text in the diagnostic's brackets, empty when it had none.</param>
+    /// <returns>The project's name, or an empty string when <paramref name="projectPath"/> is no project file.</returns>
     private static string ProjectName(string projectPath)
     {
         var fileName = projectPath[(projectPath.LastIndexOfAny(['/', '\\']) + 1)..];
-        return Path.GetFileNameWithoutExtension(fileName);
+        return ProjectFileExtensions.Contains(Path.GetExtension(fileName))
+            ? Path.GetFileNameWithoutExtension(fileName)
+            : string.Empty;
     }
 
     /// <summary>
@@ -482,10 +494,11 @@ internal sealed partial class MsBuildDiagnosticReport
     }
 
     /// <summary>
-    /// Adds <c>Top codes: CS1002 (2x), CS0103 (1x)</c> when it tells the reader something the lines above
-    /// do not: more than one code, and a tally of diagnostics larger than the lines shown, because
-    /// repeats were collapsed. A list of the codes already in front of the reader, or of a single
-    /// code, only repeats them.
+    /// Adds <c>Top codes: CS1002 (2x), CS0103 (1x)</c> when the build reported more diagnostics than are
+    /// listed (repeats collapsed, shapes not matched) and more than one code is listed: it then ranks the
+    /// listed diagnostics by code, which says which codes dominate a result too long to read line by line.
+    /// Its counts are of the lines listed, not of the diagnostics reported. With every diagnostic listed, or
+    /// with a single code, it only repeats what the lines show.
     /// </summary>
     /// <param name="sb">The rendered report.</param>
     /// <param name="diagnostics">The diagnostics of one level, one line each.</param>

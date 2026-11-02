@@ -199,6 +199,69 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
+    public void Apply_SolutionSuffixedErrorNextToOutputLines_AddsNoProject()
+    {
+        // `dotnet build Sol.slnx` suffixes a restore failure with the solution, not a project, and a
+        // solution is not one of the projects built: Lib is the only one this run names.
+        const string input = """
+                               Lib -> /r/Lib/bin/Debug/net10.0/Lib.dll
+                             /r/App/App.csproj : error NU1101: Unable to find package Foo. No packages exist with this id in source(s): nuget.org [/r/Sol.slnx]
+                             """;
+
+        var result = new DotnetBuildFilter("/r").Apply(input, exitCode: 1);
+
+        result.TrimEnd('\n').Split('\n')[^1]
+            .Should().Be("\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)");
+    }
+
+    [Fact]
+    public void Apply_SolutionSuffixedWarningsOfTwoBuiltProjects_CountTwoProjects()
+    {
+        const string input = """
+                               A -> /r/A/bin/Debug/net10.0/A.dll
+                               B -> /r/B/bin/Debug/net10.0/B.dll
+                             /r/A/A.csproj : warning NU1603: A depends on Foo (>= 1.0.0) but Foo 1.0.0 was not found. [/r/Sol.slnx]
+                             """;
+
+        var result = new DotnetBuildFilter("/r").Apply(input, exitCode: 0);
+
+        result.TrimEnd('\n').Split('\n')[^1]
+            .Should().Be("\u2713 dotnet build: 0 errors, 1 warning (2 projects)");
+    }
+
+    [Fact]
+    public void Apply_OnlySolutionSuffixedDiagnosticsAndNoOutputLine_ShowsNoProjectCount()
+    {
+        // Nothing names a project, so there is no count to state, and the context is the duration alone.
+        const string input = """
+                             /r/A/A.csproj : error NU1101: Unable to find package Foo. [/r/Sol.slnx]
+                             /r/B/B.csproj : error NU1101: Unable to find package Bar. [/r/Sol.slnx]
+                             Time Elapsed 00:00:01.00
+                             """;
+
+        var result = new DotnetBuildFilter("/r").Apply(input, exitCode: 1);
+
+        result.TrimEnd('\n').Split('\n')[^1]
+            .Should().Be("\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1.00s)");
+    }
+
+    [Fact]
+    public void Apply_OutputLineNamingADifferentAssembly_AndItsProjectsDiagnostic_CountOneProject()
+    {
+        // An <AssemblyName> override: the output line is "{project} -> …/{assembly}.dll", named after the
+        // project, so it and the diagnostic suffixed with X.csproj are the same project.
+        const string input = """
+                               X -> /r/X/bin/Debug/net10.0/Renamed.dll
+                             /r/X/Program.cs(1,1): warning CS0219: unused [/r/X/X.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/r").Apply(input, exitCode: 0);
+
+        result.TrimEnd('\n').Split('\n')[^1]
+            .Should().Be("\u2713 dotnet build: 0 errors, 1 warning (1 project)");
+    }
+
+    [Fact]
     public void Apply_ProjectWithOutputLineAndDiagnostics_CountsOnce()
     {
         const string input = """
@@ -284,8 +347,9 @@ public class DotnetBuildFilterTests
     [Fact]
     public void Apply_SeveralCodesAndMoreErrorsThanLines_PrintsTopCodes()
     {
-        // MSBuild reports every error once per target framework (6), the report shows each once (3): the
-        // code tally is then the only place the full weight of the failure shows.
+        // MSBuild reports every error once per target framework (6), the report lists each once (3). The
+        // codes are then ranked among the three listed: it shows which codes dominate, not the counts of
+        // the six MSBuild reported.
         const string input = """
                              /path/A.cs(1,1): error CS0001: one [/path/P.csproj::TargetFramework=net8.0]
                              /path/A.cs(2,1): error CS0001: two [/path/P.csproj::TargetFramework=net8.0]

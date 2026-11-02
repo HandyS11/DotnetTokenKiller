@@ -88,6 +88,48 @@ public class MsBuildDiagnosticReportTests
         report.FailedProjectCount.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData("/r/Sol.sln")]
+    [InlineData("/r/Sol.slnx")]
+    [InlineData("/r/Sol.slnf")]
+    [InlineData("C:\\r\\Sol.slnx")]
+    [InlineData("/r/notes.txt")]
+    [InlineData("net8.0")]
+    public void FailedProjectCount_SuffixThatIsNotAProjectFile_IsZero(string suffix)
+    {
+        // A solution-level restore error (NU1101 in a solution build) is suffixed with the solution, which
+        // is no project: counting "Sol" would put a phantom project in the status line.
+        var report = MsBuildDiagnosticReport.Parse(
+            $"/r/A/A.csproj : error NU1101: Unable to find package Foo. [{suffix}]\n", "/r");
+
+        report.FailedProjectCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("/r/A.csproj")]
+    [InlineData("/r/A.fsproj")]
+    [InlineData("/r/A.vbproj")]
+    [InlineData("/r/A.proj")]
+    [InlineData("/r/A.CSPROJ")]
+    [InlineData("/r/A.csproj::TargetFramework=net8.0")]
+    public void FailedProjectCount_ProjectFileSuffix_Counts(string suffix)
+    {
+        var report = MsBuildDiagnosticReport.Parse($"/r/X.cs(1,1): error CS0001: boom [{suffix}]\n", "/r");
+
+        report.FailedProjectCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void FailedProjectCount_SolutionAndProjectSuffixes_CountsOnlyTheProject()
+    {
+        const string output = """
+                              /r/A/A.csproj : error NU1101: Unable to find package Foo. [/r/Sol.slnx]
+                              /r/B/X.cs(1,1): error CS0001: boom [/r/B/B.csproj]
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, "/r").FailedProjectCount.Should().Be(1);
+    }
+
     [Fact]
     public void WarningCodes_WarningsFixture_MostFrequentCodeFirst()
     {

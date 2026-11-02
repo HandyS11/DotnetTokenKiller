@@ -107,7 +107,7 @@ Token reduction: **8 lines -> 3 lines**
 
 ## Many errors across multiple files
 
-The errors are grouped by file and ranked by frequency, so the file with the most problems is the first thing read. A `Top codes` line (the five most frequent codes) is added only when it tells the reader more than the lines do: more than one code, and more errors than lines shown, as when a project built for several target frameworks reports each error once per framework. Every error here has a line of its own, so there is none.
+The errors are grouped by file and ranked by frequency, so the file with the most problems is the first thing read. A `Top codes` line ranks the five most frequent codes among the errors listed, but only when the build reported more errors than it lists (as when a project built for several target frameworks reports each error once per framework) and more than one code is listed. Every error here has a line of its own, so there is none.
 
 **Raw** (`dotnet build samples/SampleApp.MultiError/SampleApp.MultiError.csproj`) — exit code 1
 
