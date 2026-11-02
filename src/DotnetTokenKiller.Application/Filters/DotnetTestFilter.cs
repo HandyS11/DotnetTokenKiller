@@ -45,34 +45,26 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // diagnostic-shaped line is never one.
         var buildReport = exitCode == 0
             ? null
-            : MsBuildDiagnosticReport.Parse(WithoutFailureBlocks(strippedOutput, lines, state), RootPath);
+            : MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
         return FormatOutput(state, exitCode, buildReport);
     }
 
     /// <summary>
-    /// The output without the lines each failed test's own block took (its message, stack trace and
-    /// captured output), so a test that quotes compiler output in its message, as a Roslyn-driven test
-    /// does, is never read as a compile error. A line that ends in MSBuild's <c>[project.csproj]</c>
-    /// suffix stays: the block of one project's failure runs to the next summary, and a diagnostic of a
-    /// project still compiling in parallel can land inside it.
+    /// Whether <paramref name="line"/> only looks like a compiler diagnostic: it has the
+    /// <c>file(line,col): error …</c> shape but is not closed by MSBuild's <c>[project.csproj]</c> suffix,
+    /// which every diagnostic of a <c>dotnet test</c> build carries. A test's own text has the shape
+    /// without the suffix, wherever the runner prints it: a failure message, xUnit's repeat of it behind
+    /// its <c>[xUnit.net hh:mm:ss.ff]</c> prefix, or the test app's standard output. Tool-level
+    /// diagnostics (<c>MSBUILD : error …</c>) have no file position and are not judged here.
     /// </summary>
-    /// <param name="strippedOutput">The whole output.</param>
-    /// <param name="lines">The output's lines.</param>
-    /// <param name="state">The parsed run, which knows where the failure blocks are.</param>
-    private static string WithoutFailureBlocks(string strippedOutput, string[] lines, ParseState state)
+    /// <remarks>
+    /// The cost: under the terminal logger (<c>--tl:on</c>) compile errors print without the suffix, so
+    /// they are not read and such a run falls back to the raw tail.
+    /// </remarks>
+    /// <param name="line">One line of output, without its carriage return.</param>
+    private static bool IsTestTextDiagnostic(string line)
     {
-        if (state.FailureBlocks.Count == 0)
-        {
-            return strippedOutput;
-        }
-
-        var inFailureBlock = new bool[lines.Length];
-        foreach (var (start, end) in state.FailureBlocks)
-        {
-            Array.Fill(inFailureBlock, true, start, end - start);
-        }
-
-        return string.Join('\n', lines.Where((line, i) => !inFailureBlock[i] || ProjectSuffixPattern().IsMatch(line)));
+        return FileAnchoredDiagnosticPattern().IsMatch(line) && !ProjectSuffixPattern().IsMatch(line);
     }
 
     private ParseState ParseLines(string[] lines)
@@ -111,24 +103,11 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         var failedHeaderMatch = FailedTestHeaderPattern().Match(line);
         if (failedHeaderMatch.Success)
         {
-            return RecordFailureBlock(state, i, ParseFailure(lines, i, failedHeaderMatch, state));
+            return ParseFailure(lines, i, failedHeaderMatch, state);
         }
 
         var mtpFailedMatch = MtpFailedTestPattern().Match(line);
-        return mtpFailedMatch.Success
-            ? RecordFailureBlock(state, i, ParseMtpFailure(lines, i, mtpFailedMatch, state))
-            : i + 1;
-    }
-
-    /// <summary>Notes that the lines from <paramref name="start"/> up to <paramref name="next"/> belong to one failed test.</summary>
-    /// <param name="state">The state accumulated so far.</param>
-    /// <param name="start">The index of the failure's header line.</param>
-    /// <param name="next">The index of the first line after the failure.</param>
-    /// <returns><paramref name="next"/>, so the parse can carry on from it.</returns>
-    private static int RecordFailureBlock(ParseState state, int start, int next)
-    {
-        state.FailureBlocks.Add((start, next));
-        return next;
+        return mtpFailedMatch.Success ? ParseMtpFailure(lines, i, mtpFailedMatch, state) : i + 1;
     }
 
     /// <summary>Records <paramref name="line"/> when it is one of the single-line shapes: a summary or a test count.</summary>
@@ -853,8 +832,13 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         RegexOptions.IgnoreCase)]
     private static partial Regex TerminalLoggerSummaryPattern();
 
+    // The position and level of a compiler diagnostic, "(7,32): error": the shape of "file(7,32): error CS0029: ...".
+    [GeneratedRegex(@"\(\d+,\d+\):\s+(?:error|warning)\s")]
+    private static partial Regex FileAnchoredDiagnosticPattern();
+
     // MSBuild closes every diagnostic with the project that raised it: "... [/path/A.csproj]", or
-    // "... [/path/A.csproj::TargetFramework=net8.0]" when a multi-targeted build re-reports it.
+    // "... [/path/A.csproj::TargetFramework=net8.0]" when a multi-targeted build re-reports it. Also
+    // .fsproj, .vbproj and .proj.
     [GeneratedRegex(@"\.[A-Za-z]*proj(?:::[^\]]*)?\]\s*$")]
     private static partial Regex ProjectSuffixPattern();
 
@@ -882,10 +866,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private sealed class ParseState
     {
         public List<FailureInfo> Failures { get; } = [];
-
-        /// <summary>The line ranges (start inclusive, end exclusive) the failed tests' blocks took, in order.</summary>
-        public List<(int Start, int End)> FailureBlocks { get; } = [];
-
         public int TotalPassed { get; set; }
         public int TotalFailed { get; set; }
         public int TotalSkipped { get; set; }

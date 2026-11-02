@@ -1183,6 +1183,10 @@ public class DotnetTestFilterTests
         _sut.Apply(input, exitCode: 0).Should().NotContain("Some.Indented.Line").And.NotContain("--list-tests");
     }
 
+    private const string QuotedDiagnostic = "Program.cs(3,5): error CS0103: The name 'x' does not exist in the current context";
+    private const string AssertEqualFailureMessage = "Assert.Equal() Failure: Values differ";
+    private const string MtpStdoutLine = "  Telemetry";
+
     private static string LastLine(string output) => output.TrimEnd('\n').Split('\n')[^1];
 
     // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects under
@@ -1507,8 +1511,8 @@ public class DotnetTestFilterTests
     public void Apply_FailureMessageNamingADiagnostic_IsNotACompileError()
     {
         // A failing test whose message quotes compiler output ("Program.cs(3,5): error CS0103: ...", as a
-        // Roslyn-driven test does) is a test failure: the lines inside a failure's own block never
-        // count as the build's diagnostics.
+        // Roslyn-driven test does) is a test failure: a diagnostic only counts when MSBuild closed it with
+        // its "[project.csproj]" suffix, and a quoted one has none.
         var fixture = LoadFixture("dotnet_test_failure_mentions_diagnostic.txt");
 
         var result = _sut.Apply(fixture, exitCode: 1);
@@ -1525,8 +1529,8 @@ public class DotnetTestFilterTests
     {
         // Projects build and run in parallel, so a project still compiling can print its diagnostic after
         // another project's failure began, before that project's summary. The real mixed run, with its
-        // first error line moved there, must still count all 34 errors: a diagnostic closed by its
-        // [project.csproj] suffix is never a test's own text.
+        // first error line moved there, must still count all 34 errors: position in the output does not
+        // matter, a diagnostic closed by its [project.csproj] suffix is MSBuild's.
         var lines = LoadFixture("dotnet_test_compile_errors_mixed.txt").Split('\n').ToList();
         var moved = lines.Single(l => l.Contains("ConversionTests.cs(7,32): error CS0029", StringComparison.Ordinal));
         lines.Remove(moved);
@@ -1540,14 +1544,48 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_FailureQuotedByTheDetailedLogger_IsNotACompileError()
+    {
+        // The normal and detailed console loggers repeat each failing message outside its block, behind
+        // xUnit's "[xUnit.net hh:mm:ss.ff]" prefix. The real fixture with the message swapped for a quoted
+        // diagnostic: no "[project.csproj]" suffix, so neither copy is MSBuild's.
+        var fixture = LoadFixture("dotnet_test_logger_detailed_fail.txt");
+        fixture.Should().Contain(AssertEqualFailureMessage);
+
+        var result = _sut.Apply(fixture.Replace(AssertEqualFailureMessage, QuotedDiagnostic, StringComparison.Ordinal),
+            exitCode: 1);
+
+        result.Should().NotContain("did not build");
+        result.Should().NotContain("build failed");
+        result.Should().NotContain("[xUnit.net");
+        LastLine(result).Should().MatchRegex(@"^dotnet test: 1 failed, 3 passed, 1 skipped \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_DiagnosticWrittenToStdoutByAnMtpRun_IsNotACompileError()
+    {
+        // Microsoft.Testing.Platform prints the test app's "Standard output:" outside every failure block.
+        // The real fixture with one of those lines swapped for a diagnostic-shaped one.
+        var fixture = LoadFixture("dotnet_test_mtp_failures.txt");
+        fixture.Should().Contain(MtpStdoutLine);
+
+        var result = _sut.Apply(fixture.Replace(MtpStdoutLine, $"  {QuotedDiagnostic}", StringComparison.Ordinal),
+            exitCode: 2);
+
+        result.Should().NotContain("did not build");
+        result.Should().NotContain("build failed");
+        LastLine(result).Should().MatchRegex(@"^dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
     public void Apply_CompileErrorsOnZeroExit_NeverReportABuildFailure()
     {
-        // The exit code stays the verdict: diagnostic-shaped lines in a run that exited 0 are not a failure.
+        // The exit code stays the verdict: diagnostic-shaped lines in a run that exited 0 are not a failure,
+        // and with no summary there is nothing else to report.
         var fixture = LoadFixture("dotnet_test_compile_errors.txt");
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().NotContain("did not build");
-        result.Should().NotContain("✗");
+        result.Should().BeEmpty();
     }
 }
