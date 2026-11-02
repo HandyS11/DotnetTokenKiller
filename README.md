@@ -299,7 +299,7 @@ DTK Token Savings (Global Scope)
 Total commands:    1059
 Without tool:      1.0M
 Used by tool:      92.9K
-Tokens saved:      911.2K (90.7%)
+Tokens saved:      912.2K (90.7%)
 Total exec time:   26m28s (avg 1.5s)
 Efficiency meter: ██████████████████████░░ 90.7%
 
@@ -311,7 +311,7 @@ By Command
 
  clean (ok)        3        241.9K            18    241.9K  100.0%  ██████░░░░
 
- format (ok)     103             0          1.0K     -1.0K    0.0%  ░░░░░░░░░░
+ format (ok)     103             0          1.0K         0    0.0%  ░░░░░░░░░░
 
  restore (ok)     89         12.3K          6.5K      5.8K   47.2%  █░░░░░░░░░
 

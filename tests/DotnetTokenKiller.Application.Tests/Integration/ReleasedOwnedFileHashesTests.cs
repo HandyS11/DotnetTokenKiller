@@ -50,15 +50,58 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
         {V080MarkdownRule}
         """;
 
+    /// <summary>The Windsurf rule, Devin rule and Aider instructions file dtk 0.9.0 wrote, byte for byte.</summary>
+    private const string V090MarkdownRule =
+        """
+        # DotnetTokenKiller (dtk)
+
+        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
+        `dtk` filters output to actionable signal only, reducing noise by 50-97%.
+
+        ## Usage
+
+        ```sh
+        dtk dotnet build MyProject.slnx
+        dtk dotnet test --filter "Category=Unit"
+        dtk dotnet restore
+        dtk dotnet clean
+        dtk dotnet format
+        dtk dotnet format --verify-no-changes
+        dtk dotnet list package --outdated
+        dtk dotnet publish -c Release
+        dtk dotnet pack
+        ```
+
+        - All arguments and flags are forwarded to `dotnet` unchanged.
+        - Exit codes are preserved — CI pipelines work correctly.
+        - Unknown subcommands (e.g. `run`, `watch`) pass through to `dotnet` unchanged.
+        """;
+
+    /// <summary>The Cursor rule dtk 0.9.0 wrote, byte for byte.</summary>
+    private const string V090CursorRule =
+        $"""
+        ---
+        description: Use dtk instead of dotnet for build, test, restore, clean, format, list package, publish, and pack commands
+        globs:
+          - "**/*.cs"
+          - "**/*.csproj"
+          - "**/*.slnx"
+          - "**/*.sln"
+        alwaysApply: false
+        ---
+
+        {V090MarkdownRule}
+        """;
+
     /// <summary>
     /// The hashes of the bodies this dtk writes. When a test pinning one fails, the text changed: if the old body has
     /// shipped in a release, append its hash (the pinned value) to the matching list in
     /// <see cref="IntegrationInstructions"/>, then pin the new one here.
     /// </summary>
-    private const string CurrentCursorRuleHash = "90fe9cc216b6d130483a2e6cb1cdd0c2f56e3e903aa9e4db8a7d90fb2ac50c2f";
+    private const string CurrentCursorRuleHash = "6e3e9608d4e7c2ec5405e0523fca0cda9dd77ababb17dcd4d367fdb7dd0353ce";
 
     /// <inheritdoc cref="CurrentCursorRuleHash"/>
-    private const string CurrentMarkdownRuleHash = "259680360aae93a3a7aecfd6b079e523175ab967886cf995d6f4446c4ae9be0d";
+    private const string CurrentMarkdownRuleHash = "39c8fe1f5d75de509aefadcfb015696b9a08df6e76d0d967413a99f36e86d28f";
 
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-released-hashes-{Guid.NewGuid()}");
 
@@ -78,6 +121,20 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     {
         IntegrationInstructions.ReleasedCursorRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V080CursorRule));
         IntegrationInstructions.ReleasedMarkdownRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V080MarkdownRule));
+    }
+
+    [Fact]
+    public void ReleasedHashes_IncludeTheV090Bodies()
+    {
+        // The hashes of the files a dtk 0.9.0 built from the v0.9.0 tag wrote, spelled out so a mistake in the bodies
+        // above cannot hide behind a list built from the same mistake.
+        UninstallHelpers.HashOwnedFile(V090CursorRule)
+            .Should().Be("90fe9cc216b6d130483a2e6cb1cdd0c2f56e3e903aa9e4db8a7d90fb2ac50c2f");
+        UninstallHelpers.HashOwnedFile(V090MarkdownRule)
+            .Should().Be("259680360aae93a3a7aecfd6b079e523175ab967886cf995d6f4446c4ae9be0d");
+
+        IntegrationInstructions.ReleasedCursorRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V090CursorRule));
+        IntegrationInstructions.ReleasedMarkdownRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V090MarkdownRule));
     }
 
     [Fact]
@@ -105,10 +162,12 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
                 "a changed Aider instructions file must append the previous body's hash to ReleasedMarkdownRuleHashes once it has shipped");
     }
 
-    [Fact]
-    public async Task Uninstall_CursorRuleWrittenByV080_IsRemoved()
+    [Theory]
+    [InlineData(V080CursorRule)]
+    [InlineData(V090CursorRule)]
+    public async Task Uninstall_CursorRuleWrittenByAReleasedDtk_IsRemoved(string released)
     {
-        var path = await WriteAsync(Path.Combine(ProjectDir, ".cursor", "rules", "dtk.mdc"), V080CursorRule);
+        var path = await WriteAsync(Path.Combine(ProjectDir, ".cursor", "rules", "dtk.mdc"), released);
 
         var result = await Cursor(ProjectDir).UninstallAsync(
             ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
@@ -117,10 +176,24 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
         File.Exists(path).Should().BeFalse();
     }
 
-    [Fact]
-    public async Task Uninstall_WindsurfRuleWrittenByV080_IsRemovedByDevin()
+    [Theory]
+    [InlineData(V080MarkdownRule)]
+    [InlineData(V090MarkdownRule)]
+    public async Task Uninstall_WindsurfRuleWrittenByAReleasedDtk_IsRemovedByDevin(string released)
     {
-        var path = await WriteAsync(Path.Combine(ProjectDir, ".windsurf", "rules", "dtk.md"), V080MarkdownRule);
+        var path = await WriteAsync(Path.Combine(ProjectDir, ".windsurf", "rules", "dtk.md"), released);
+
+        var result = await new DevinIntegrator(new HomePaths(Path.Combine(ProjectDir, "no-home"))).UninstallAsync(
+            ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
+
+        result.RemovedFiles.Should().Equal(path);
+        File.Exists(path).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Uninstall_DevinRuleWrittenByV090_IsRemoved()
+    {
+        var path = await WriteAsync(Path.Combine(ProjectDir, ".devin", "rules", "dtk.md"), V090MarkdownRule);
 
         var result = await new DevinIntegrator(new HomePaths(Path.Combine(ProjectDir, "no-home"))).UninstallAsync(
             ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
@@ -130,14 +203,16 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     }
 
     [Theory]
-    [InlineData(HookScope.Project)]
-    [InlineData(HookScope.Global)]
-    internal async Task Uninstall_AiderInstructionsWrittenByV080_AreRemoved(HookScope scope)
+    [InlineData(HookScope.Project, V080MarkdownRule)]
+    [InlineData(HookScope.Global, V080MarkdownRule)]
+    [InlineData(HookScope.Project, V090MarkdownRule)]
+    [InlineData(HookScope.Global, V090MarkdownRule)]
+    internal async Task Uninstall_AiderInstructionsWrittenByAReleasedDtk_AreRemoved(HookScope scope, string released)
     {
         var home = Home;
         var path = await WriteAsync(
             scope == HookScope.Global ? home.AiderInstructionsPath : Path.Combine(ProjectDir, ".aider-dtk-instructions.md"),
-            V080MarkdownRule.ReplaceLineEndings("\r\n"));
+            released.ReplaceLineEndings("\r\n"));
 
         var result = await new AiderIntegrator(home).UninstallAsync(ProjectDir, scope, new Dictionary<string, string>(), default);
 

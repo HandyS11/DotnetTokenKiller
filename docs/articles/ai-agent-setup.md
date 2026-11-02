@@ -6,6 +6,18 @@ Each supported agent gets a hook that rewrites `dotnet …` to `dtk dotnet …` 
 > The hooks run `dtk hook <provider>`, so the agent only needs `dtk` on its `PATH` — no Python, no `jq`,
 > and the same registration works from sh, bash, Git Bash and PowerShell.
 
+## What the agent is told
+
+The skill and instruction files `dtk init` writes carry the same short brief for every agent:
+
+- Use `dtk` for `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish` and `pack`; `dtk test`, `dtk build` and the like work without the `dotnet` word.
+- Every run ends with one status line, so read the whole output and do not pipe it into `tail` or `grep`.
+- `dtk log` prints the raw output of the latest run (`dtk log build` or `dtk log test` for one kind, `--list` to see what is kept); prefer it to `--vv`.
+- `dtk pipe <subcommand>` filters output the agent already has; `-q` prints the filtered output alone.
+- `DTK_RAW=1` (environment or prefix) gives plain `dotnet` output. Where a hook rewrites plain `dotnet …` commands, it leaves `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …` alone.
+
+The skill adds that test status lines carry the count and top codes of the build warnings of the projects compiled in that run; an up-to-date build compiles nothing and reports none.
+
 ## Installing globally
 
 Pass `--global` (`-g`) to install into your home directory instead of a project, so the integration applies across every project you touch:

@@ -67,14 +67,15 @@ internal static class SharedInstructionArtifacts
         |--------------|---------------------------------------------------|
         | `--show-log` | Print path to full unfiltered log after a run     |
         | `-v`         | Echo the resolved command line before running     |
-        | `--vv`       | Also dump raw dotnet output and elapsed time      |
+
+        `--vv` also dumps all the raw output; prefer `dtk log`.
 
         ## Key Behaviors
 
         - Paths are workspace-relative (`src/Foo.cs`, not absolute)
-        - Build errors grouped by file; warnings grouped by diagnostic code with frequency counts
+        - Errors and warnings are grouped by file
         - Works with xUnit, NUnit, MSTest, and Reqnroll
-        - Run `dtk dotnet clean` first for a full warning report (incremental builds skip unchanged files)
+        - Test status lines add the count and top codes of the build warnings of the projects compiled in that run; an up-to-date build compiles nothing and reports none
 
         ## Token Savings
 

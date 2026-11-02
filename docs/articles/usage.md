@@ -33,7 +33,7 @@ dtk dotnet build -q                  # quiet: filtered content only, no DTK meta
 
 On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths, each as `(line,col) CODE: message`; a build that only warns lists its warnings the same way. A file's diagnostics that share a code and a message read once, with each position, in line order, and a count (`(96,59) (99,59) (111,59) CS1503 ×3: message`; a line lists at most 20 positions and then counts the rest, `… +N more`, with the count and the file's heading keeping the full numbers), and a file that comes to a single line is printed on it, led by its name (`src/Foo.cs(8,10) CS1002: ; expected`), with no heading. Messages are printed whole, up to 400 characters for an error and 160 for a warning; links are removed with the "see …" that introduced them, and the `System.` and `Microsoft.` namespaces inside a quoted type name are dropped (`'System.Collections.Generic.IEnumerable<int>'` reads `'IEnumerable<int>'`; a quoted package, assembly, path or file name is left as written). A `Top codes:` line, ranking the codes among the diagnostics listed, follows only when the build reported more diagnostics than are listed (a project built for several target frameworks reports each diagnostic once per framework, and dtk shows it once) and more than one code is listed. The summary counts the projects involved, those that failed as well as those that built, by project file (a solution is not a project), and a multi-targeted project counts once.
 The summary is always the last line (`✓ dotnet build …`, or `✗ dotnet build failed (exit 1): 3 errors, 1 warning …`
-when the exit code is non-zero), so `| tail -1` carries the verdict.
+when the exit code is non-zero), so `| tail -1` carries the verdict. A coding agent should read the whole (short) output instead of piping it into `tail` or `grep`, which would drop the diagnostics above the status line or the status line itself.
 
 ### `dtk dotnet test`
 
@@ -220,8 +220,8 @@ dotnet build 2>&1 | dtk pipe build
 dotnet list package --outdated 2>&1 | dtk pipe list package
 ```
 
-`dtk pipe` exits with whatever `--exit-code` it was given, so a CI step wrapping a failed build
-still fails. Piped runs are tracked separately from runs dtk executed itself under a `Source`
+`dtk pipe` takes the same `-q`, `-v` and `--show-log` options as `dtk dotnet` and exits with whatever
+`--exit-code` it was given, so a CI step wrapping a failed build still fails. Piped runs are tracked separately from runs dtk executed itself under a `Source`
 column in `dtk gain --coverage`.
 
 ### `dtk init`
@@ -381,7 +381,7 @@ dtk completion powershell >> $PROFILE
 
 ## Verbosity
 
-Add `-v` / `--verbose` to any `dtk dotnet` (or `dtk pipe`) command to echo the resolved command line before running it. Add `--vv` instead to also dump the raw, unfiltered `dotnet` output and the elapsed time — useful when the filtered result looks wrong and you need to see what dtk actually saw:
+Add `-v` / `--verbose` to any `dtk dotnet` (or `dtk pipe`) command to echo the resolved command line before running it. Add `--vv` instead to also dump the raw, unfiltered `dotnet` output and the elapsed time — useful when the filtered result looks wrong and you need to see what dtk actually saw. It prints all of that output, so to read the raw output of a run you already made, prefer [`dtk log`](#dtk-log):
 
 ```sh
 dtk dotnet build --verbose
@@ -392,12 +392,13 @@ dtk dotnet test --vv
 
 ## Quiet Mode
 
-Add `-q` / `--quiet` to any `dtk dotnet` command to suppress DTK meta-output and forward only the filtered content. This is useful when piping output into other tools:
+Add `-q` / `--quiet` to any `dtk dotnet` (or `dtk pipe`) command to suppress DTK meta-output and forward only the filtered content. This is useful when writing output to a file or handing it to another tool:
 
 ```sh
-dtk dotnet build -q | grep "error"
 dtk dotnet test -q > test-results.txt
 ```
+
+The status line stays: every filtered run ends with one, so a `| grep` or `| tail` that does not keep the last line loses the verdict.
 
 In quiet mode, verbosity flags (`-v`/`--verbose`, `--vv`) and `--show-log` are ignored — only the filtered command output is written.
 
@@ -410,6 +411,19 @@ dtk dotnet run        # runs: dotnet run
 dtk dotnet watch      # runs: dotnet watch
 dtk dotnet msbuild    # runs: dotnet msbuild
 ```
+
+## Raw Output
+
+Set `DTK_RAW=1` to get `dotnet`'s own output, unfiltered: in the environment, or as a prefix to the command:
+
+```sh
+DTK_RAW=1 dtk dotnet test
+export DTK_RAW=1
+```
+
+dtk then runs `dotnet` as a passthrough (recorded like any other, and without dtk's own `-q`, `-v` and `--show-log`). Any non-empty value except `0` and `false` turns it on.
+
+An agent hook rewrites plain `dotnet build|test|…` to `dtk dotnet …`, and leaves alone a `dotnet` that the command asks for raw: `DTK_RAW=1 dotnet test`, `\dotnet test`, `command dotnet test` and `rtk proxy dotnet test`. See [AI Agent Setup](ai-agent-setup.md).
 
 ## Interrupting a run
 
