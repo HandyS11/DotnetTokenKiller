@@ -1696,7 +1696,7 @@ public class DotnetTestFilterTests
         result.Should().NotContain(" -> ");
         result.Should().NotContain("Determining projects");
         result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
-        result.Should().Contain("Top codes:");
+        result.Should().NotContain("Top codes", "every one of the 34 errors has a line of its own");
         result.Should().Contain("1 warning suppressed");
         result.Should().EndWith("\n✗ dotnet test: 1 project did not build (34 errors) · 1 build warning (CS0219)\n");
         LastLine(result).Should().Be("✗ dotnet test: 1 project did not build (34 errors) · 1 build warning (CS0219)");

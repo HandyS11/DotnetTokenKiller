@@ -1,0 +1,13 @@
+  Determining projects to restore...
+  Restored /test/project/root/src/MultiTarget/MultiTarget.csproj (in 146 ms).
+/test/project/root/src/MultiTarget/Greeter.cs(7,22): error CS0029: Cannot implicitly convert type 'string' to 'int' [/test/project/root/src/MultiTarget/MultiTarget.csproj::TargetFramework=net10.0]
+/test/project/root/src/MultiTarget/Greeter.cs(7,22): error CS0029: Cannot implicitly convert type 'string' to 'int' [/test/project/root/src/MultiTarget/MultiTarget.csproj::TargetFramework=net8.0]
+
+Build FAILED.
+
+/test/project/root/src/MultiTarget/Greeter.cs(7,22): error CS0029: Cannot implicitly convert type 'string' to 'int' [/test/project/root/src/MultiTarget/MultiTarget.csproj::TargetFramework=net10.0]
+/test/project/root/src/MultiTarget/Greeter.cs(7,22): error CS0029: Cannot implicitly convert type 'string' to 'int' [/test/project/root/src/MultiTarget/MultiTarget.csproj::TargetFramework=net8.0]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:01.13

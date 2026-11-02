@@ -32,7 +32,7 @@ internal sealed partial class MsBuildDiagnosticReport
     {
         _errors = [.. parsed.Diagnostics.Where(d => d.Level == ErrorLevel)];
         _warnings = [.. parsed.Diagnostics.Where(d => d.Level == WarningLevel)];
-        _context = BuildContext(parsed.ProjectCount, parsed.Elapsed);
+        _context = BuildContext(CountProjects(parsed), parsed.Elapsed);
         ErrorTotal = Math.Max(parsed.DeclaredErrors ?? 0, _errors.Count);
         WarningTotal = Math.Max(parsed.DeclaredWarnings ?? 0, _warnings.Count);
         FailedProjectCount = _errors
@@ -92,7 +92,7 @@ internal sealed partial class MsBuildDiagnosticReport
 
         var diagnostics = new List<Diagnostic>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var projectCount = 0;
+        var outputProjects = new HashSet<string>(StringComparer.Ordinal);
         var elapsed = string.Empty;
         int? declaredErrors = null;
         int? declaredWarnings = null;
@@ -106,10 +106,12 @@ internal sealed partial class MsBuildDiagnosticReport
                 continue;
             }
 
-            // Count project output lines (e.g., "  MyProject -> /path/to/bin/Debug/...")
-            if (ProjectOutputPattern().IsMatch(line))
+            // Note the project of an output line (e.g., "  MyProject -> /path/to/bin/Debug/..."). A project
+            // built for several target frameworks prints one per framework, under the same name.
+            var outputMatch = ProjectOutputPattern().Match(line);
+            if (outputMatch.Success)
             {
-                projectCount++;
+                outputProjects.Add(outputMatch.Groups["name"].Value);
                 continue;
             }
 
@@ -136,7 +138,7 @@ internal sealed partial class MsBuildDiagnosticReport
         }
 
         return new MsBuildDiagnosticReport(
-            new ParsedOutput(diagnostics, projectCount, elapsed, declaredErrors, declaredWarnings));
+            new ParsedOutput(diagnostics, outputProjects, elapsed, declaredErrors, declaredWarnings));
     }
 
     /// <summary>
@@ -182,8 +184,9 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>
     /// Renders the diagnostics alone, for a caller that supplies its own status line: the errors
-    /// grouped by file with their top codes and a note of the warnings left out, or, with no errors,
-    /// the warnings grouped by code. It carries no status line.
+    /// grouped by file, with a note of the warnings left out, or, with no errors, the warnings grouped
+    /// by file in the same layout. A list of top codes follows when it adds something. It carries no
+    /// status line.
     /// </summary>
     /// <returns>The body, or an empty string when no diagnostic was parsed.</returns>
     public string RenderDiagnostics()
@@ -195,14 +198,17 @@ internal sealed partial class MsBuildDiagnosticReport
 
     private void AppendDiagnostics(StringBuilder sb)
     {
+        // Errors and warnings are laid out the same way. A build with errors lists only those, so the
+        // warnings do not bury them; it says how many it left out.
         if (_errors.Count == 0)
         {
-            AppendGroupedByCode(sb, _warnings);
+            AppendGroupedByFile(sb, _warnings, WarningLevel);
+            AppendTopCodes(sb, _warnings, WarningTotal);
             return;
         }
 
-        AppendGroupedByFile(sb, _errors);
-        AppendTopCodes(sb, _errors);
+        AppendGroupedByFile(sb, _errors, ErrorLevel);
+        AppendTopCodes(sb, _errors, ErrorTotal);
         if (_warnings.Count > 0)
         {
             sb.AppendLine(CultureInfo.InvariantCulture,
@@ -401,6 +407,20 @@ internal sealed partial class MsBuildDiagnosticReport
         return code.Length == 0 ? NoCode : code;
     }
 
+    /// <summary>
+    /// How many projects the run involved: those with an output line (<c>X -&gt; …dll</c>) together with
+    /// those that reported a diagnostic, named by their project file. A build that failed prints no output
+    /// line for the project that failed, so its diagnostics are the only place that project appears; a
+    /// project in both counts once, as does one built for several target frameworks.
+    /// </summary>
+    /// <param name="parsed">The parsed run.</param>
+    private static int CountProjects(ParsedOutput parsed)
+    {
+        var projects = new HashSet<string>(parsed.OutputProjects, StringComparer.Ordinal);
+        projects.UnionWith(parsed.Diagnostics.Where(d => d.Project.Length > 0).Select(d => d.Project));
+        return projects.Count;
+    }
+
     private static string BuildContext(int projectCount, string elapsed)
     {
         if (projectCount == 0 && string.IsNullOrEmpty(elapsed))
@@ -435,30 +455,21 @@ internal sealed partial class MsBuildDiagnosticReport
                || NoiseBuildResultPattern().IsMatch(line);
     }
 
-    private static void AppendGroupedByCode(StringBuilder sb, List<Diagnostic> diags)
+    /// <summary>
+    /// Lays diagnostics out by file, the file with the most first: a heading <c>file (2 errors)</c> and, for
+    /// each diagnostic, <c>(line,col) CODE: message</c>. Errors and warnings both read this way.
+    /// </summary>
+    /// <param name="sb">The rendered report.</param>
+    /// <param name="diagnostics">The diagnostics of one level.</param>
+    /// <param name="noun">The singular noun in the heading ("error" or "warning").</param>
+    private static void AppendGroupedByFile(StringBuilder sb, List<Diagnostic> diagnostics, string noun)
     {
-        foreach (var group in diags.GroupBy(d => d.Code).OrderBy(g => g.Key))
-        {
-            var items = group.ToList();
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{CodeLabel(group.Key)} ({items.Count}x)");
-            foreach (var d in items)
-            {
-                // A diagnostic with no file has no line either; emitting the separators anyway
-                // renders ": —", which reads like a location the filter dropped.
-                var location = d.File.Length == 0 ? string.Empty : $"{d.File}:{d.Line} — ";
-                sb.AppendLine(CultureInfo.InvariantCulture, $"  {location}{d.Message}");
-            }
-        }
-    }
-
-    private static void AppendGroupedByFile(StringBuilder sb, List<Diagnostic> errors)
-    {
-        foreach (var group in errors.GroupBy(d => d.File).OrderByDescending(g => g.Count()))
+        foreach (var group in diagnostics.GroupBy(d => d.File).OrderByDescending(g => g.Count()))
         {
             var items = group.ToList();
             var file = group.Key.Length == 0 ? NoFile : group.Key;
             sb.AppendLine(CultureInfo.InvariantCulture,
-                $"{file} ({items.Count} error{(items.Count == 1 ? "" : "s")})");
+                $"{file} ({items.Count} {noun}{(items.Count == 1 ? "" : "s")})");
             foreach (var d in items)
             {
                 // Tool-level diagnostics (MSBUILD, CSC) carry neither position nor, sometimes, a
@@ -470,19 +481,33 @@ internal sealed partial class MsBuildDiagnosticReport
         }
     }
 
-    private static void AppendTopCodes(StringBuilder sb, List<Diagnostic> errors)
+    /// <summary>
+    /// Adds <c>Top codes: CS1002 (2x), CS0103 (1x)</c> when it tells the reader something the lines above
+    /// do not: more than one code, and a tally of diagnostics larger than the lines shown, because
+    /// repeats were collapsed. A list of the codes already in front of the reader, or of a single
+    /// code, only repeats them.
+    /// </summary>
+    /// <param name="sb">The rendered report.</param>
+    /// <param name="diagnostics">The diagnostics of one level, one line each.</param>
+    /// <param name="total">The tally of that level, which exceeds <paramref name="diagnostics"/> when lines were collapsed.</param>
+    private static void AppendTopCodes(StringBuilder sb, List<Diagnostic> diagnostics, int total)
     {
-        var topCodes = errors
+        if (total <= diagnostics.Count)
+        {
+            return;
+        }
+
+        var codes = diagnostics
             .GroupBy(d => d.Code)
             .OrderByDescending(g => g.Count())
-            .Take(5)
-            .Select(g => $"{CodeLabel(g.Key)} ({g.Count()}x)")
             .ToList();
-
-        if (topCodes.Count > 0)
+        if (codes.Count < 2)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"Top codes: {string.Join(", ", topCodes)}");
+            return;
         }
+
+        var topCodes = codes.Take(5).Select(g => $"{CodeLabel(g.Key)} ({g.Count()}x)");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Top codes: {string.Join(", ", topCodes)}");
     }
 
     // Matches: /path/file.cs(10,5): error CS0001: message [project.csproj]
@@ -502,8 +527,8 @@ internal sealed partial class MsBuildDiagnosticReport
         @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s*\[(?<project>.+?)\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
 
-    // Matches: "  MyProject -> /path/to/bin/MyProject.dll" (or .exe)
-    [GeneratedRegex(@"^\s+\S+ -> .+\.(dll|exe)\s*$")]
+    // Matches: "  MyProject -> /path/to/bin/MyProject.dll" (or .exe), capturing the project's name
+    [GeneratedRegex(@"^\s+(?<name>\S+) -> .+\.(dll|exe)\s*$")]
     private static partial Regex ProjectOutputPattern();
 
     // Matches "Time Elapsed HH:MM:SS.ff"
@@ -558,13 +583,13 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>Everything a single pass over the raw output yields.</summary>
     /// <param name="Diagnostics">The distinct diagnostics parsed, in the order encountered.</param>
-    /// <param name="ProjectCount">How many project output lines were seen.</param>
+    /// <param name="OutputProjects">The names of the projects that printed an output line, each once.</param>
     /// <param name="Elapsed">The formatted build duration, empty when absent.</param>
     /// <param name="DeclaredErrors">MSBuild's own error tally, null when the output carried none.</param>
     /// <param name="DeclaredWarnings">MSBuild's own warning tally, null when the output carried none.</param>
     private sealed record ParsedOutput(
         List<Diagnostic> Diagnostics,
-        int ProjectCount,
+        IReadOnlyCollection<string> OutputProjects,
         string Elapsed,
         int? DeclaredErrors,
         int? DeclaredWarnings);

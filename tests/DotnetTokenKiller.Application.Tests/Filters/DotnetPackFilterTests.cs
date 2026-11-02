@@ -26,7 +26,7 @@ public class DotnetPackFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().StartWith("CA1024 (1x)\n");
+        result.Should().StartWith("samples/SampleApp.Warnings/NullableWarnings.cs (17 warnings)\n");
         result.Should().EndWith(
             "  samples/SampleApp.Warnings/bin/Release/SampleApp.Warnings.0.5.0.nupkg\n"
             + "✓ dotnet pack: 0 errors, 34 warnings (1 project)\n");
@@ -43,8 +43,7 @@ public class DotnetPackFilterTests
         result.Should().Be(
             "samples/SampleApp.Broken/BrokenClass.cs (1 error)\n"
             + "  (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'\n"
-            + "Top codes: CS0029 (1x)\n"
-            + "✗ dotnet pack failed (exit 1): 1 error, 0 warnings\n");
+            + "✗ dotnet pack failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Theory]
@@ -88,8 +87,8 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "NU5104 (1x)\n"
-            + "  A stable release of a package should not have a prerelease dependency.\n"
+            "(no file) (1 warning)\n"
+            + "  NU5104: A stable release of a package should not have a prerelease dependency.\n"
             + "  Lib/bin/Release/Lib.1.0.0.nupkg\n"
             + "✓ dotnet pack: 0 errors, 1 warning (1 project)\n");
     }
@@ -106,7 +105,7 @@ public class DotnetPackFilterTests
 
         result.Should().NotContain(".nupkg");
         result.Should().StartWith("(no file) (1 error)\n");
-        result.Should().EndWith("✗ dotnet pack failed (exit 1): 1 error, 0 warnings\n");
+        result.Should().EndWith("✗ dotnet pack failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Fact]

@@ -98,17 +98,16 @@ Time Elapsed 00:00:01.08
 ```sh
 samples/SampleApp.Broken/BrokenClass.cs (1 error)
   (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'
-Top codes: CS0029 (1x)
-✗ dotnet build failed (exit 1): 1 error, 0 warnings (1.08s)
+✗ dotnet build failed (exit 1): 1 error, 0 warnings (1 project, 1.08s)
 ```
 
-Token reduction: **8 lines -> 4 lines**
+Token reduction: **8 lines -> 3 lines**
 
 ---
 
 ## Many errors across multiple files
 
-The errors are grouped by file and ranked by frequency, so the file with the most problems is the first thing read. `Top codes` lists the five most frequent codes.
+The errors are grouped by file and ranked by frequency, so the file with the most problems is the first thing read. A `Top codes` line (the five most frequent codes) is added only when it tells the reader more than the lines do: more than one code, and more errors than lines shown, as when a project built for several target frameworks reports each error once per framework. Every error here has a line of its own, so there is none.
 
 **Raw** (`dotnet build samples/SampleApp.MultiError/SampleApp.MultiError.csproj`) — exit code 1
 
@@ -198,17 +197,16 @@ samples/SampleApp.MultiError/UndefinedReferences.cs (3 errors)
   (9,27) CS0103: The name 'undeclaredVariable' does not exist in the current context
   (12,9) CS0103: The name 'MissingMethod' does not exist in the current context
   (6,17) S2325: Make 'DoWork' a static method.
-Top codes: RCS1181 (4x), S2325 (3x), CS0103 (2x), CS0029 (2x), CS0266 (2x)
-✗ dotnet build failed (exit 1): 22 errors, 0 warnings (0.94s)
+✗ dotnet build failed (exit 1): 22 errors, 0 warnings (1 project, 0.94s)
 ```
 
-Token reduction: **50 lines -> 29 lines**
+Token reduction: **50 lines -> 28 lines**
 
 ---
 
 ## Warnings
 
-Incremental builds skip re-emitting warnings, so `dotnet clean` must precede this run to capture them. Warnings are grouped by code rather than by file: the frequency counts surface the most common pattern first.
+Incremental builds skip re-emitting warnings, so `dotnet clean` must precede this run to capture them. Warnings are laid out exactly like errors: grouped by file, the file with the most first, each as `(line,col) CODE: message`.
 
 **Raw** (`dotnet build samples/SampleApp.Warnings/SampleApp.Warnings.csproj`)
 
@@ -296,62 +294,48 @@ Time Elapsed 00:00:01.12
 **dtk** (`dtk dotnet build samples/SampleApp.Warnings/SampleApp.Warnings.csproj`)
 
 ```sh
-CA1024 (1x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:7 — Use properties where appropriate (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1024)
-CS0162 (1x)
-  samples/SampleApp.Warnings/UnusedCode.cs:22 — Unreachable code detected
-CS0168 (1x)
-  samples/SampleApp.Warnings/UnusedCode.cs:9 — The variable 'x' is declared but never used
-CS0219 (1x)
-  samples/SampleApp.Warnings/UnusedCode.cs:12 — The variable 'y' is assigned but its value is never used
-CS0612 (1x)
-  samples/SampleApp.Warnings/ObsoleteUsage.cs:16 — 'ObsoleteUsage.LegacyMethod()' is obsolete
-CS0618 (1x)
-  samples/SampleApp.Warnings/ObsoleteUsage.cs:17 — 'ObsoleteUsage.OldApi()' is obsolete: 'Use NewApi() instead.'
-CS8600 (1x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:10 — Converting null literal or possible null value to non-nullable type.
-CS8602 (1x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:17 — Dereference of a possibly null reference.
-CS8603 (2x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:11 — Possible null reference return.
-  samples/SampleApp.Warnings/NullableWarnings.cs:24 — Possible null reference return.
-IDE0007 (1x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:10 — use 'var' instead of explicit type (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/ide0007)
-IDE0059 (2x)
-  samples/SampleApp.Warnings/Program.cs:5 — Unnecessary assignment of a value to 'unused' (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules...
-  samples/SampleApp.Warnings/UnusedCode.cs:12 — Unnecessary assignment of a value to 'y' (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/ide0...
-RCS1118 (3x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:23 — Mark local variable as const (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1118)
-  samples/SampleApp.Warnings/NullableWarnings.cs:9 — Mark local variable as const (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1118)
-  samples/SampleApp.Warnings/UnusedCode.cs:12 — Mark local variable as const (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1118)
-RCS1124 (3x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:9 — Inline local variable (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1124)
-  samples/SampleApp.Warnings/NullableWarnings.cs:23 — Inline local variable (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1124)
-  samples/SampleApp.Warnings/NullableWarnings.cs:10 — Inline local variable (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1124)
-RCS1181 (3x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:6 — Convert comment to documentation comment (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1181)
-  samples/SampleApp.Warnings/NullableWarnings.cs:14 — Convert comment to documentation comment (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1181)
-  samples/SampleApp.Warnings/NullableWarnings.cs:20 — Convert comment to documentation comment (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1181)
-S1123 (1x)
-  samples/SampleApp.Warnings/ObsoleteUsage.cs:6 — Add an explanation.
-S1133 (2x)
-  samples/SampleApp.Warnings/ObsoleteUsage.cs:6 — Do not forget to remove this deprecated code someday.
-  samples/SampleApp.Warnings/ObsoleteUsage.cs:9 — Do not forget to remove this deprecated code someday.
-S1481 (3x)
-  samples/SampleApp.Warnings/Program.cs:5 — Remove the unused local variable 'unused'.
-  samples/SampleApp.Warnings/UnusedCode.cs:9 — Remove the unused local variable 'x'.
-  samples/SampleApp.Warnings/UnusedCode.cs:12 — Remove the unused local variable 'y'.
-S2325 (6x)
-  samples/SampleApp.Warnings/NullableWarnings.cs:15 — Make 'GetLength' a static method.
-  samples/SampleApp.Warnings/ObsoleteUsage.cs:14 — Make 'CallDeprecated' a static method.
-  samples/SampleApp.Warnings/NullableWarnings.cs:21 — Make 'NeverNull' a static method.
-  samples/SampleApp.Warnings/NullableWarnings.cs:7 — Make 'GetValue' a static method.
-  samples/SampleApp.Warnings/UnusedCode.cs:17 — Make 'DeadCode' a static method.
-  samples/SampleApp.Warnings/UnusedCode.cs:6 — Make 'DoWork' a static method.
+samples/SampleApp.Warnings/NullableWarnings.cs (17 warnings)
+  (10,27) CS8600: Converting null literal or possible null value to non-nullable type.
+  (11,16) CS8603: Possible null reference return.
+  (17,16) CS8602: Dereference of a possibly null reference.
+  (24,16) CS8603: Possible null reference return.
+  (10,9) IDE0007: use 'var' instead of explicit type (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/ide0007)
+  (6,5) RCS1181: Convert comment to documentation comment (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1181)
+  (14,5) RCS1181: Convert comment to documentation comment (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1181)
+  (15,16) S2325: Make 'GetLength' a static method.
+  (9,9) RCS1124: Inline local variable (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1124)
+  (20,5) RCS1181: Convert comment to documentation comment (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1181)
+  (23,9) RCS1124: Inline local variable (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1124)
+  (10,9) RCS1124: Inline local variable (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1124)
+  (23,9) RCS1118: Mark local variable as const (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1118)
+  (9,9) RCS1118: Mark local variable as const (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1118)
+  (21,19) S2325: Make 'NeverNull' a static method.
+  (7,19) S2325: Make 'GetValue' a static method.
+  (7,19) CA1024: Use properties where appropriate (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1024)
+samples/SampleApp.Warnings/UnusedCode.cs (9 warnings)
+  (9,13) CS0168: The variable 'x' is declared but never used
+  (12,13) CS0219: The variable 'y' is assigned but its value is never used
+  (22,9) CS0162: Unreachable code detected
+  (12,9) RCS1118: Mark local variable as const (https://josefpihrt.github.io/docs/roslynator/analyzers/RCS1118)
+  (17,16) S2325: Make 'DeadCode' a static method.
+  (6,17) S2325: Make 'DoWork' a static method.
+  (12,13) IDE0059: Unnecessary assignment of a value to 'y' (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/ide0...
+  (9,13) S1481: Remove the unused local variable 'x'.
+  (12,13) S1481: Remove the unused local variable 'y'.
+samples/SampleApp.Warnings/ObsoleteUsage.cs (6 warnings)
+  (16,9) CS0612: 'ObsoleteUsage.LegacyMethod()' is obsolete
+  (17,9) CS0618: 'ObsoleteUsage.OldApi()' is obsolete: 'Use NewApi() instead.'
+  (6,6) S1133: Do not forget to remove this deprecated code someday.
+  (9,6) S1133: Do not forget to remove this deprecated code someday.
+  (6,6) S1123: Add an explanation.
+  (14,17) S2325: Make 'CallDeprecated' a static method.
+samples/SampleApp.Warnings/Program.cs (2 warnings)
+  (5,5) IDE0059: Unnecessary assignment of a value to 'unused' (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules...
+  (5,5) S1481: Remove the unused local variable 'unused'.
 ✓ dotnet build: 0 errors, 34 warnings (1 project, 1.12s)
 ```
 
-Token reduction: **75 lines -> 53 lines**
+Token reduction: **75 lines -> 39 lines**
 
 ---
 

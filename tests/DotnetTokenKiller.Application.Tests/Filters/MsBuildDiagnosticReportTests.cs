@@ -140,7 +140,6 @@ public class MsBuildDiagnosticReportTests
             + "  (12,18) CS0103: The name 'undeclared' does not exist in the current context\n"
             + "src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs (1 error)\n"
             + "  (8,10) CS1002: ; expected\n"
-            + "Top codes: CS1002 (2x), CS0103 (1x)\n"
             + "1 warning suppressed (use --vv to see)\n");
         body.Should().NotContain("dotnet build:").And.NotContain("---");
     }
@@ -150,7 +149,9 @@ public class MsBuildDiagnosticReportTests
     {
         var body = Parse("dotnet_build_warnings.txt").RenderDiagnostics();
 
-        body.Should().StartWith("CS0169 (1x)\n").And.Contain("CS0219 (2x)\n");
+        body.Should().StartWith("src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 warnings)\n")
+            .And.Contain("src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs (1 warning)\n")
+            .And.Contain("  (5,10) CS0169: The field '_unused' is never used\n");
         body.Should().NotContain("dotnet build:").And.NotContain("---");
         body.Should().NotContain("\r");
         body.Should().EndWith("\n");
@@ -173,7 +174,7 @@ public class MsBuildDiagnosticReportTests
     {
         var expectedVerdicts = new Dictionary<string, string>
         {
-            ["dotnet_build_errors.txt"] = "✗ dotnet build failed (exit 1): 3 errors, 1 warning (1.89s)\n",
+            ["dotnet_build_errors.txt"] = "✗ dotnet build failed (exit 1): 3 errors, 1 warning (2 projects, 1.89s)\n",
             ["dotnet_build_warnings.txt"] = "✗ dotnet build failed (exit 1): 0 errors, 3 warnings (2 projects, 2.67s)\n",
         };
 
@@ -217,7 +218,7 @@ public class MsBuildDiagnosticReportTests
 
         rendered.Should().NotContain("pkg.nupkg");
         rendered.Should().StartWith(report.RenderDiagnostics());
-        rendered.Should().EndWith("✗ dotnet pack failed (exit 3): 3 errors, 1 warning (1.89s)\n");
+        rendered.Should().EndWith("✗ dotnet pack failed (exit 3): 3 errors, 1 warning (2 projects, 1.89s)\n");
     }
 
     private static MsBuildDiagnosticReport Parse(string fixtureName) =>

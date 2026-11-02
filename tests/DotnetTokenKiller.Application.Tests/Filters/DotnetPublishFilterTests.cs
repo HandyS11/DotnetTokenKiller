@@ -26,8 +26,8 @@ public class DotnetPublishFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().StartWith("CA1024 (1x)\n");
-        result.Should().Contain("  samples/SampleApp.Warnings/NullableWarnings.cs:10 — Converting null literal");
+        result.Should().StartWith("samples/SampleApp.Warnings/NullableWarnings.cs (17 warnings)\n");
+        result.Should().Contain("\n  (10,27) CS8600: Converting null literal");
         result.Should().EndWith(
             "  SampleApp.Warnings -> samples/SampleApp.Warnings/bin/Release/net10.0/publish/\n"
             + "✓ dotnet publish: 0 errors, 34 warnings (1 project)\n");
@@ -44,8 +44,7 @@ public class DotnetPublishFilterTests
         result.Should().Be(
             "samples/SampleApp.Broken/BrokenClass.cs (1 error)\n"
             + "  (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'\n"
-            + "Top codes: CS0029 (1x)\n"
-            + "✗ dotnet publish failed (exit 1): 1 error, 0 warnings\n");
+            + "✗ dotnet publish failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Theory]
@@ -66,7 +65,8 @@ public class DotnetPublishFilterTests
     public void Apply_FailedRun_OmitsThePublishDirectoriesOfTheProjectsThatSucceeded()
     {
         // A failed publish's summary is a failed build's: listing the directories that did get
-        // published would read as a partial success the exit code does not grant.
+        // published would read as a partial success the exit code does not grant. Lib built and App did
+        // not, and both are among the projects the status line counts.
         const string input = """
                                Lib -> /repo/Lib/bin/Release/net10.0/Lib.dll
                                Lib -> /repo/Lib/bin/Release/net10.0/publish/
@@ -76,7 +76,7 @@ public class DotnetPublishFilterTests
         var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().NotContain("publish/");
-        result.Should().EndWith("✗ dotnet publish failed (exit 1): 1 error, 0 warnings (1 project)\n");
+        result.Should().EndWith("✗ dotnet publish failed (exit 1): 1 error, 0 warnings (2 projects)\n");
     }
 
     [Fact]

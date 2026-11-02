@@ -29,7 +29,7 @@ dtk dotnet build --no-restore
 dtk dotnet build -q                  # quiet: filtered content only, no DTK meta-output
 ```
 
-On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths and top error codes.
+On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths, each as `(line,col) CODE: message`; a build that only warns lists its warnings the same way. A `Top codes:` line follows only when it adds something: more than one code, and more diagnostics than lines shown (a project built for several target frameworks reports each diagnostic once per framework, and dtk shows it once). The summary counts the projects involved, those that failed as well as those that built, and a multi-targeted project counts once.
 The summary is always the last line (`✓ dotnet build …`, or `✗ dotnet build failed (exit 1): 3 errors, 1 warning …`
 when the exit code is non-zero), so `| tail -1` carries the verdict.
 
