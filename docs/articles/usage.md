@@ -309,7 +309,7 @@ dtk reset --all --force  # full cleanup without confirmation
 View or modify configuration without editing the JSON file directly:
 
 ```sh
-dtk config show                          # display all keys and current values
+dtk config show                          # display all keys and current values (plain `dtk config` does the same)
 dtk config set <key> <value>             # update a single value and save
 ```
 

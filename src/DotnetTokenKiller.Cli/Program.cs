@@ -33,6 +33,9 @@ var noColor = Environment.GetEnvironmentVariable("NO_COLOR") is not null;
 
 const string dotnetCmd = "dotnet";
 
+// Wide enough that no line dtk prints wraps; Spectre pads nothing out to it.
+const int redirectedOutputWidth = 4096;
+
 // Canonicalize `dotnet <sub>` casing (e.g. `DOTNET BUILD` -> `dotnet build`) so Spectre's
 // case-sensitive routing resolves it; unknown/passthrough invocations are left untouched.
 args = ArgumentPreprocessor.Normalize(args);
@@ -73,6 +76,14 @@ args = ArgumentPreprocessor.InsertSeparator(args);
 
 try
 {
+    // A pipe has no width, so Spectre assumes 80 columns and hard-wraps a long path or message mid-word in
+    // what a harness captures. A terminal keeps its real width. Commands get AnsiConsole.Console (the
+    // IAnsiConsole factory registered below is never invoked), so the width goes on that one.
+    if (Console.IsOutputRedirected)
+    {
+        AnsiConsole.Profile.Width = redirectedOutputWidth;
+    }
+
     var services = new ServiceCollection();
     services.AddInfrastructure();
     services.AddApplication();

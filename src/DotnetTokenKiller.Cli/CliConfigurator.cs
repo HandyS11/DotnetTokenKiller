@@ -116,6 +116,7 @@ internal static class CliConfigurator
         config.AddBranch(ConfigBranch, cfg =>
         {
             cfg.SetDescription("View or modify dtk configuration");
+            cfg.SetDefaultCommand<ConfigShowCommand>();
             cfg.AddCommand<ConfigShowCommand>("show")
                 .WithDescription("Display the current configuration")
                 .WithExample(ConfigBranch, "show");

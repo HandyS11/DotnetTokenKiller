@@ -126,6 +126,44 @@ public sealed class HookHealthCheckerTests : IDisposable
         checks.Select(c => c.Name).Should().Equal($"gemini hook ({ScopeLabel(scope)})", $"gemini hook probe ({ScopeLabel(scope)})");
     }
 
+    private ClaudeCodeIntegrator Claude => new(new RtkHookCoexistence(Home.ClaudeDir, Path.Combine(_tempDir, "rtk.toml")), Home);
+
+    [Fact]
+    public async Task RunAsync_ProjectDirectoryIsHome_ReportsEachClaudeCheckOnce()
+    {
+        // With the working directory at home, the project settings file and the global one are the same
+        // file; reporting it for both scopes lists every hook check twice.
+        await Claude.IntegrateGlobalAsync(force: false, default);
+
+        var checks = await _sut.RunAsync([Claude], Home.Home, default);
+
+        checks.Select(c => c.Name).Should().Equal("claude hook (project)", "claude hook probe (project)");
+        await _runner.Received(1).RunCapturedWithInputAsync(
+            Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_ProjectDirectoryIsHomeWithTrailingSeparator_StillReportsEachClaudeCheckOnce()
+    {
+        await Claude.IntegrateGlobalAsync(force: false, default);
+
+        var checks = await _sut.RunAsync([Claude], Home.Home + Path.DirectorySeparatorChar + ".", default);
+
+        checks.Select(c => c.Name).Should().Equal("claude hook (project)", "claude hook probe (project)");
+    }
+
+    [Fact]
+    public async Task RunAsync_ProjectAndGlobalFilesDiffer_ReportsBothScopes()
+    {
+        await Claude.IntegrateAsync(_tempDir, force: false, default);
+        await Claude.IntegrateGlobalAsync(force: false, default);
+
+        var checks = await _sut.RunAsync([Claude], _tempDir, default);
+
+        checks.Select(c => c.Name).Should().Equal(
+            "claude hook (project)", "claude hook probe (project)", "claude hook (global)", "claude hook probe (global)");
+    }
+
     [Fact]
     public async Task RunAsync_Probe_RunsTheDtkResolvedFromPathByItsAbsolutePath()
     {
