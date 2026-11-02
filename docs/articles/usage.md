@@ -17,6 +17,8 @@ dtk [OPTIONS] <COMMAND>
 
 ## Commands
 
+The `dotnet` word is optional for the filtered subcommands: `dtk test --filter "Category=Unit"` runs `dtk dotnet test --filter "Category=Unit"`, and `dtk build`, `dtk restore`, `dtk clean`, `dtk format`, `dtk list package`, `dtk publish` and `dtk pack` work the same way. They are not listed in `dtk --help` or in shell completion.
+
 ### `dtk dotnet build`
 
 Run `dotnet build` with filtered output. All positional arguments and flags are forwarded:

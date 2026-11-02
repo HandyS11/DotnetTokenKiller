@@ -429,12 +429,94 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("DOTNET RUN")]  // unknown subcommand -> passthrough, forwarded verbatim
     [InlineData("other build")] // not a dotnet invocation
     [InlineData("dotnet")]      // too short to be an invocation
+    // dtk's own verbs and other commands never get the `dotnet` prefix that `dtk test` does.
+    [InlineData("log build")]
+    [InlineData("log")]
+    [InlineData("reset")]
+    [InlineData("gain")]
+    [InlineData("gain --days 7")]
+    [InlineData("config show")]
+    [InlineData("doctor")]
+    [InlineData("init claude")]
+    [InlineData("integrate claude")]
+    [InlineData("pipe build")]
+    [InlineData("completion bash")]
+    [InlineData("cli version")]
+    [InlineData("hook claude")]
+    [InlineData("--help")]
+    [InlineData("--version")]
+    [InlineData("-v test")]
+    [InlineData("list reference")]
+    [InlineData("list")]
+    [InlineData("run")]
+    [InlineData("tests")]
     public void Normalize_LeavesNonCanonicalizableInvocationsUnchanged(string input)
     {
         ArgumentNullException.ThrowIfNull(input);
         var args = input.Split(' ');
 
         ArgumentPreprocessor.Normalize(args).Should().Equal(args);
+    }
+
+    // ── Shortcut: `dtk test` for `dtk dotnet test` ───────────────────────────
+
+    [Theory]
+    [InlineData("test --filter X", "dotnet test --filter X")]
+    [InlineData("build", "dotnet build")]
+    [InlineData("build MyApp.slnx --no-restore", "dotnet build MyApp.slnx --no-restore")]
+    [InlineData("restore", "dotnet restore")]
+    [InlineData("clean -q", "dotnet clean -q")]
+    [InlineData("format --verify-no-changes", "dotnet format --verify-no-changes")]
+    [InlineData("publish -c Release", "dotnet publish -c Release")]
+    [InlineData("pack -o out", "dotnet pack -o out")]
+    [InlineData("list package", "dotnet list package")]
+    [InlineData("list package --outdated", "dotnet list package --outdated")]
+    [InlineData("TEST --filter X", "dotnet test --filter X")]
+    [InlineData("List Package", "dotnet list package")]
+    public void Normalize_FilteredSubcommandWithoutDotnet_GetsTheDotnetPrefix(string input, string expected)
+    {
+        // An agent types `dtk test`; without the prefix Spectre answers "Unknown command 'test'. Did you mean
+        // 'reset'?", which suggests the command that wipes the tracking data.
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        ArgumentPreprocessor.Normalize(input.Split(' ')).Should().Equal(expected.Split(' '));
+    }
+
+    [Fact]
+    public void Normalize_FilteredSubcommandWithoutDotnet_DoesNotModifyTheCallersArray()
+    {
+        string[] args = ["test", "--filter", "X"];
+
+        _ = ArgumentPreprocessor.Normalize(args);
+
+        args.Should().Equal("test", "--filter", "X");
+    }
+
+    [Fact]
+    public void Normalize_ShortcutThenTheRestOfThePipeline_SeesAnOrdinaryDotnetInvocation()
+    {
+        var normalized = ArgumentPreprocessor.Normalize(["test", "--filter", "X", "-q"]);
+
+        ArgumentPreprocessor.IsPassthrough(normalized).Should().BeFalse();
+        ArgumentPreprocessor.InsertSeparator(normalized)
+            .Should().Equal("dotnet", "test", "-q", "--", "--filter", "X");
+    }
+
+    [Fact]
+    public void Normalize_ShortcutWithMachineReadableOutput_IsPassedThrough()
+    {
+        var normalized = ArgumentPreprocessor.Normalize(["list", "package", "--format", "json"]);
+
+        ArgumentPreprocessor.IsPassthrough(normalized).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Normalize_ShortcutUnderRawOutput_IsRequestedRaw()
+    {
+        var normalized = ArgumentPreprocessor.Normalize(["build"]);
+
+        ArgumentPreprocessor.IsRawRequested(normalized, "1").Should().BeTrue();
     }
 
     // ── Verbosity flag parsing ───────────────────────────────────────────────

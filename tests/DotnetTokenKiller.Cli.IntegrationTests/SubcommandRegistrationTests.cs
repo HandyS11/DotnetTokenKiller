@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain;
 using FluentAssertions;
 using Spectre.Console.Cli;
@@ -27,6 +28,29 @@ public sealed class SubcommandRegistrationTests
             "the dotnet branch must register every canonical subcommand, in canonical order, and nothing "
             + "else — a multi-token name such as 'list package' is registered as a nested branch, so it "
             + "only counts as registered once the command inside that branch exists too");
+    }
+
+    [Fact]
+    public void TopLevelCommands_NeverStartWithAFilteredSubcommand()
+    {
+        // `dtk test` is read as `dtk dotnet test` (ArgumentPreprocessor.Normalize). That is only safe while
+        // no dtk verb of its own shares a name with the first token of a filtered subcommand: `dtk list` or
+        // `dtk build` registered as a command would be shadowed by the prefix.
+        var topLevel = ParseCommandsSection(RunHelp("--help"))
+            .Append(CliConfigurator.IntegrateAlias)
+            .Append(HookCommands.Verb)
+            .Append("cli")
+            .ToList();
+        topLevel.Should().Contain(CliConfigurator.DotnetCommand, "the root help must list the commands read from");
+
+        var firstTokens = DotnetSubcommands.Ordered.Select(name => name.Split(' ')[0]);
+
+        firstTokens.Intersect(topLevel, StringComparer.OrdinalIgnoreCase).Should().BeEmpty(
+            "dtk's own verbs must never be prefixed with 'dotnet'");
+        foreach (var verb in topLevel)
+        {
+            ArgumentPreprocessor.Normalize([verb, "build"]).Should().Equal(verb, "build");
+        }
     }
 
     /// <summary>

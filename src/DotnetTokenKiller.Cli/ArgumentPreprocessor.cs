@@ -7,8 +7,10 @@ namespace DotnetTokenKiller.Cli;
 /// Preprocesses CLI arguments before they reach the Spectre.Console command app.
 /// </summary>
 /// <remarks>
-/// Handles three cases:
+/// Handles these cases:
 /// <list type="bullet">
+///   <item><description>Shortcut: <c>dtk test</c>, <c>dtk build</c>, <c>dtk list package</c> and the other filtered
+///         subcommands are read as <c>dtk dotnet …</c> (see <see cref="Normalize"/>).</description></item>
 ///   <item><description>Passthrough: <c>dotnet &lt;subcommand not handled by dtk&gt;</c> should bypass the app entirely,
 ///         as does a filtered one whose output is meant for another program (<c>list package --format json</c>,
 ///         <c>build -getProperty:Version</c>).</description></item>
@@ -63,11 +65,22 @@ internal static class ArgumentPreprocessor
     /// Canonicalizes the casing of a known <c>dotnet &lt;subcommand&gt;</c> invocation so
     /// Spectre.Console's case-sensitive routing matches (e.g. <c>dtk DOTNET BUILD</c> →
     /// <c>dotnet build</c>). Unknown/passthrough invocations are returned untouched, since
-    /// their subcommand is forwarded verbatim to <c>dotnet</c>.
+    /// their subcommand is forwarded verbatim to <c>dotnet</c>. A filtered subcommand typed without the
+    /// <c>dotnet</c> word (<c>dtk test --filter X</c>, <c>dtk list package</c>) gets it, so every later step sees an
+    /// ordinary <c>dotnet …</c> invocation; Spectre would otherwise answer "Unknown command 'test'. Did you mean
+    /// 'reset'?". No dtk verb shares a name with a filtered subcommand's first token (pinned by
+    /// <c>SubcommandRegistrationTests</c>), so none is ever prefixed.
     /// </summary>
     /// <param name="args">The raw CLI arguments.</param>
     internal static string[] Normalize(string[] args)
     {
+        if (args.Length >= 1 &&
+            !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
+            DotnetSubcommands.TryMatch(args, out _))
+        {
+            args = [DotnetCommand, .. args];
+        }
+
         if (args.Length < 2 ||
             !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) ||
             !DotnetSubcommands.TryMatch(args[1..], out var match))

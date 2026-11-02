@@ -39,6 +39,17 @@ public class DotnetBuildIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Build_WithoutTheDotnetWord_RunsTheFilteredBuild()
+    {
+        // An agent types `dtk build`; Spectre alone would answer "Unknown command 'build'. Did you mean
+        // 'reset'?", pointing at the command that wipes the tracking data.
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("build", SampleApp);
+
+        exitCode.Should().Be(0, output);
+        output.Should().Contain("✓ dotnet build").And.NotContain("Did you mean").And.NotContain("Unknown command");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleApp_Success_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleApp);
