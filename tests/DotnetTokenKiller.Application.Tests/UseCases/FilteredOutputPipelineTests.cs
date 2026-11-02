@@ -244,6 +244,20 @@ public class FilteredOutputPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_EmptyRawWithAStatusLineOut_RecordsZeroSavedTokens()
+    {
+        // The filter's own confirmation line costs more tokens than the empty raw output it replaces, so the
+        // unclamped difference is negative and gain would report a loss for a run that saved nothing.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet format (nothing to format)\n");
+
+        await _sut.ProcessAsync(Request(raw: "", command: "dotnet format"), NullTeeSession.Instance);
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.SavedTokens == 0 && Math.Abs(r.SavingsPercentage) < 0.001),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ProcessAsync_EmptyFilterOutputOnFailureWithWhitespaceRaw_WritesOnlyTheFailureLine()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");

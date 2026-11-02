@@ -355,12 +355,13 @@ public class FilteredRunUseCaseTests
     }
 
     [Fact]
-    public async Task RunAsync_RecordsNegativeSavedTokens_WhenFilterExpandsOutput()
+    public async Task RunAsync_ClampsSavedTokensAtZero_WhenFilterExpandsOutput()
     {
         // The stdout sink now sees the raw text through CountingTextWriter, which (like the real
         // pump) appends a trailing newline after the last line: tiktoken cl100k_base counts "1234\n"
         // as 3 tokens (not 2, as the newline-less literal alone would be); the filter returns
-        // "1234567890123456" (never written to a sink) at 6 tokens; saved = -3.
+        // "1234567890123456" (never written to a sink) at 6 tokens; the unclamped saving would be -3,
+        // recorded as 0 with a 0% savings percentage.
         var actualStdout = new StringBuilder();
         RunnerWrites("1234", "", actualStdout);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234567890123456");
@@ -371,8 +372,8 @@ public class FilteredRunUseCaseTests
             Arg.Is<CommandRecord>(r =>
                 r.InputTokens == 3 &&
                 r.OutputTokens == 6 &&
-                r.SavedTokens == -3 &&
-                r.SavingsPercentage < 0),
+                r.SavedTokens == 0 &&
+                Math.Abs(r.SavingsPercentage) < 0.001),
             Arg.Any<CancellationToken>());
     }
 

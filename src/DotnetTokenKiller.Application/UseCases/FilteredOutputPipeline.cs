@@ -307,7 +307,9 @@ public sealed class FilteredOutputPipeline(
                 ? await counter.TotalAsync().ConfigureAwait(false)
                 : TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
             var outputTokens = TokenEstimator.Estimate(filtered, config.Tracking.Tokenizer);
-            var savedTokens = inputTokens - outputTokens;
+            // Clamped: a filter whose own status line outweighs its input saved nothing, and a negative
+            // saving would be read as a loss. OutputTokens still records what the caller actually saw.
+            var savedTokens = Math.Max(0, inputTokens - outputTokens);
             var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;
 
             var record = new CommandRecord(
