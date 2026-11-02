@@ -20,9 +20,9 @@
       "exitCode": 1,
       "rawBytes": 5607,
       "rawTokens": 1174,
-      "filteredTokens": 188,
-      "savedTokens": 986,
-      "savingsPercent": 84
+      "filteredTokens": 183,
+      "savedTokens": 991,
+      "savingsPercent": 84.4
     },
     {
       "id": "build/multitarget-errors",

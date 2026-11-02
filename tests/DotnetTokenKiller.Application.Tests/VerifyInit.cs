@@ -9,6 +9,7 @@ public static class VerifyInit
     {
         UseProjectRelativeDirectory("Snapshots");
         VerifierSettings.IgnoreStackTrace();
+        VerifierSettings.UseUtf8NoBom();
         VerifierSettings.ScrubLinesWithReplace(line => line.Replace("\r\n", "\n", StringComparison.Ordinal));
     }
 }

@@ -26,6 +26,12 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <summary>A URL, up to the whitespace, closing bracket or quote that ends it.</summary>
     private const string UrlBody = @"https?://[^\s)\]'""<>]+";
 
+    /// <summary>The words that introduce a link ("See", "Please refer to"), which are of no use without it.</summary>
+    private const string LinkLeadIn = @"\b(?:please\s+)?(?:see|refer\s+to|visit)\b:?\s*";
+
+    /// <summary>What a link's sentence goes on to say ("for more information about the support policy.").</summary>
+    private const string LinkTail = @"(?:\s+for\s+(?:more\s+)?(?:information|details)\b(?:\s+(?:about|on|regarding)\s+[^.']*)?\.?)";
+
     /// <summary>Stands in for the diagnostic code on MSBuild output that carries none (Exec tasks).</summary>
     internal const string NoCode = "(no code)";
 
@@ -328,17 +334,18 @@ internal sealed partial class MsBuildDiagnosticReport
             return;
         }
 
+        var rawMessage = simpleDiagMatch.Groups["message"].Value.Trim();
         var simpleDiagnostic = new Diagnostic(
             string.Empty,
             string.Empty,
             string.Empty,
             simpleDiagMatch.Groups["level"].Value,
             simpleDiagMatch.Groups["code"].Value,
-            RenderMessage(simpleDiagMatch.Groups["message"].Value, simpleDiagMatch.Groups["level"].Value),
+            RenderMessage(rawMessage, simpleDiagMatch.Groups["level"].Value),
             ProjectName(DropProperties(simpleDiagMatch.Groups["project"].Value)));
 
-        // Keyed off the rendered message for the same reason as the file-anchored diagnostics.
-        if (seen.Add($"{simpleDiagnostic.Code}:{simpleDiagnostic.Message}"))
+        // Keyed off the message as printed for the same reason as the file-anchored diagnostics.
+        if (seen.Add($"{simpleDiagnostic.Code}:{rawMessage}"))
         {
             diagnostics.Add(simpleDiagnostic);
         }
@@ -361,22 +368,24 @@ internal sealed partial class MsBuildDiagnosticReport
         // instance) and must not be merged into a single entry that hides one project's failure.
         var projectPath = DropProperties(diagMatch.Groups["project"].Value);
 
+        var rawMessage = diagMatch.Groups["message"].Value.Trim();
         var diagnostic = new Diagnostic(
             TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), rootPath),
             diagMatch.Groups["line"].Value,
             diagMatch.Groups["col"].Value,
             diagMatch.Groups["level"].Value,
             diagMatch.Groups["code"].Value,
-            RenderMessage(diagMatch.Groups["message"].Value, diagMatch.Groups["level"].Value),
+            RenderMessage(rawMessage, diagMatch.Groups["level"].Value),
             ProjectName(projectPath));
 
-        // Key off what gets rendered, not the raw capture. Two diagnostics differing only past the
-        // truncation limit, or whose paths shorten to the same relative path, render as identical
-        // lines — keyed on the raw text both survive and the reader sees the same error twice. The
-        // message is in the key because the code is optional: without it, two unrelated codeless
-        // diagnostics reported at the same position would collapse into one.
+        // Key off the message as MSBuild printed it, not as it is rendered. What collapses here is one
+        // diagnostic reported again (once per target framework, or by a path that shortens to the same
+        // relative one); two diagnostics that only render alike (advisories differing by their link,
+        // messages differing past the cap) are two, and the report groups them with a count rather than
+        // losing one. The message is in the key because the code is optional: without it, two unrelated
+        // codeless diagnostics reported at the same position would collapse into one.
         if (seen.Add(
-                $"{projectPath}:{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{diagnostic.Message}"))
+                $"{projectPath}:{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{rawMessage}"))
         {
             diagnostics.Add(diagnostic);
         }
@@ -388,18 +397,20 @@ internal sealed partial class MsBuildDiagnosticReport
     /// The message as it is rendered: its URLs removed, the framework namespaces in its quoted names shortened,
     /// then cut at the cap of its level. The cap comes last, so a link or a namespace costs none of it.
     /// </summary>
-    /// <param name="message">The message as MSBuild printed it.</param>
+    /// <param name="message">The message as MSBuild printed it, trimmed.</param>
     /// <param name="level">Either <c>error</c> or <c>warning</c>.</param>
     private static string RenderMessage(string message, string level)
     {
-        var shortened = ShortenFrameworkNamespaces(StripUrls(message.Trim()));
+        var shortened = ShortenFrameworkNamespaces(StripUrls(message));
         return TextHelpers.Truncate(shortened, level == ErrorLevel ? ErrorMessageMaxLen : WarningMessageMaxLen);
     }
 
     /// <summary>
     /// Removes the URLs of a message, with the whitespace before each and the parentheses or brackets that held
     /// nothing else (<c>(https://aka.ms/dotnet-warnings/SYSLIB0014)</c>): a link is for a person with a browser,
-    /// and an agent reading the line cannot follow it. A URL that ended the message also takes the
+    /// and an agent reading the line cannot follow it. What introduced the link goes with it, so no
+    /// <c>See for more information.</c> or <c>(see)</c> is left behind: "See", "Please refer to" and "Visit" before
+    /// it, and a "for more information" sentence after. A URL that ended the message also takes the
     /// <c>,</c> or <c>:</c> that led into it.
     /// </summary>
     /// <param name="message">The message, trimmed.</param>
@@ -411,28 +422,71 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>
     /// Drops the <c>System.</c> and <c>Microsoft.</c> namespaces from the types a message names inside single
-    /// quotes: <c>'System.Collections.Generic.IEnumerable&lt;int&gt;'</c> reads <c>'IEnumerable&lt;int&gt;'</c>. A
-    /// namespace that is the user's own is kept, as is one outside quotes, and so is a quoted name that follows
-    /// the word "namespace": there <c>'System.Collections'</c> is a namespace, and what remains would name
-    /// another. A chain at the head of a member's signature keeps the member's type as well, since
-    /// <c>'System.Linq.Enumerable.Select&lt;…&gt;(…)'</c> ends in a member, not a type.
+    /// quotes: <c>'System.Collections.Generic.IEnumerable&lt;int&gt;'</c> reads <c>'IEnumerable&lt;int&gt;'</c>. Only a
+    /// quoted name that is a type expression is shortened; a text rule cannot tell a namespace from a type in a
+    /// dotted name, so the shortening is limited to where one is safe (see <see cref="IsTypeExpression"/>), and
+    /// never makes the names of one message alike: if two quoted names it tells apart would read the same
+    /// (CS0104's <c>'System.Threading.Timer'</c> and <c>'System.Timers.Timer'</c>), the message is left as written.
     /// </summary>
     /// <param name="message">The message, with its URLs removed.</param>
     private static string ShortenFrameworkNamespaces(string message)
     {
-        return QuotedSpanPattern().Replace(message, span =>
-            message.AsSpan(0, span.Index).EndsWith("namespace ", StringComparison.Ordinal)
-                ? span.Value
-                : FrameworkNameChainPattern().Replace(span.Value, chain => ShortenChain(chain, span.Value)));
+        var spans = QuotedSpanPattern().Matches(message);
+        var shortened = spans.Select(span => ShortenSpan(message, span)).ToList();
+        if (shortened.Distinct(StringComparer.Ordinal).Count()
+            != spans.Select(span => span.Value).Distinct(StringComparer.Ordinal).Count())
+        {
+            return message;
+        }
+
+        var next = 0;
+        return QuotedSpanPattern().Replace(message, _ => shortened[next++]);
     }
 
-    /// <summary>The part of a dotted <c>System.</c>/<c>Microsoft.</c> name that stays: its last segment, or its last two at a signature's head.</summary>
+    /// <summary>A quoted span with its framework namespaces dropped, or as it was when it is not a type expression.</summary>
+    /// <param name="message">The whole message.</param>
+    /// <param name="span">The quoted span in it, quotes included.</param>
+    private static string ShortenSpan(string message, Match span)
+    {
+        return IsTypeExpression(message, span)
+            ? FrameworkNameChainPattern().Replace(span.Value, chain => ShortenChain(chain, span.Value))
+            : span.Value;
+    }
+
+    /// <summary>
+    /// Whether a quoted span can be taken for a type. It cannot when it carries an assembly identity
+    /// (<c>'System.Runtime, Version=4.2.2.0, …'</c>), a path or a file (<c>'/repo/Microsoft.Foo.dll'</c>,
+    /// <c>'Microsoft.Foo.dll'</c>), or follows the word that says what it names: a package
+    /// (<c>Package 'System.Text.Json' 8.0.0</c>), an assembly or a namespace
+    /// (<c>the namespace 'System.Collections'</c>, where dropping "System." would name another).
+    /// </summary>
+    /// <param name="message">The whole message.</param>
+    /// <param name="span">The quoted span in it, quotes included.</param>
+    private static bool IsTypeExpression(string message, Match span)
+    {
+        var name = span.Value.AsSpan(1, span.Length - 2);
+        if (name.Contains(", Version=", StringComparison.Ordinal)
+            || name.IndexOfAny('/', '\\') >= 0
+            || name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !NamingWordPattern().IsMatch(message.AsSpan(0, span.Index));
+    }
+
+    /// <summary>
+    /// What stays of a dotted <c>System.</c>/<c>Microsoft.</c> name: its last segment. The head of a member's
+    /// signature (<c>'System.Linq.Enumerable.Select&lt;…&gt;(…)'</c>, <c>'System.Collections.Generic.List&lt;int&gt;.List(int)'</c>)
+    /// is left whole: it ends in a member, and which of its dots end the namespace is not for a text rule to say.
+    /// </summary>
     /// <param name="chain">The dotted name.</param>
     /// <param name="span">The quoted span the name is in, with its quotes.</param>
     private static string ShortenChain(Match chain, string span)
     {
         var atHeadOfSignature = chain.Index == 1 && span.Contains('(', StringComparison.Ordinal);
-        return string.Join('.', chain.Value.Split('.').TakeLast(atHeadOfSignature ? 2 : 1));
+        return atHeadOfSignature ? chain.Value : chain.Value[(chain.Value.LastIndexOf('.') + 1)..];
     }
 
     /// <summary>Drops the extra MSBuild properties (<c>::TargetFramework=net8.0</c>) from a <c>[project]</c> suffix.</summary>
@@ -562,7 +616,8 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>
     /// One rendered line for the diagnostics of a file that share a code and a message: where they are, each
-    /// position once, and what they say, with a count when there are several.
+    /// position once and in line and column order, whatever order the build reported them in, and what they
+    /// say, with a count when there are several.
     /// </summary>
     /// <param name="group">The diagnostics, in the order they were reported.</param>
     private static (string Positions, string Text) DescribeLine(IGrouping<(string Code, string Message), Diagnostic> group)
@@ -571,12 +626,22 @@ internal sealed partial class MsBuildDiagnosticReport
         // omitted rather than rendered as the empty "(,)" and ": " stubs. A diagnostic the same file reports
         // for two projects shares its position, which is printed once.
         var positions = string.Join(' ',
-            group.Where(d => d.Line.Length > 0).Select(d => $"({d.Line},{d.Col})").Distinct(StringComparer.Ordinal));
+            group.Where(d => d.Line.Length > 0)
+                .Select(d => (Line: Number(d.Line), Col: Number(d.Col), Text: $"({d.Line},{d.Col})"))
+                .OrderBy(p => p.Line)
+                .ThenBy(p => p.Col)
+                .Select(p => p.Text)
+                .Distinct(StringComparer.Ordinal));
         var count = group.Count();
         var times = count > 1 ? string.Create(CultureInfo.InvariantCulture, $"×{count}") : string.Empty;
         var label = string.Join(' ', new[] { group.Key.Code, times }.Where(part => part.Length > 0));
         return (positions, label.Length == 0 ? group.Key.Message : $"{label}: {group.Key.Message}");
     }
+
+    /// <summary>A line or column number to sort by; a digit string too long for an int sorts last.</summary>
+    /// <param name="digits">The digits the regex captured.</param>
+    private static int Number(string digits) =>
+        int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : int.MaxValue;
 
     /// <summary>
     /// Adds <c>Top codes: CS1002 (2x), CS0103 (1x)</c> when the build reported more diagnostics than are
@@ -625,10 +690,18 @@ internal sealed partial class MsBuildDiagnosticReport
         @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s*\[(?<project>.+?)\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
 
-    // A URL with the whitespace before it, and the parentheses or brackets that hold nothing else.
-    [GeneratedRegex(@"\s*(?:\(\s*" + UrlBody + @"\s*\)|\[\s*" + UrlBody + @"\s*\]|" + UrlBody + ")",
+    // A URL with the whitespace before it: inside parentheses that hold nothing else (or only the word that
+    // introduces it), inside brackets that hold nothing else, with its introduction and the sentence it
+    // starts ("See https://… for more information."), or bare.
+    [GeneratedRegex(
+        @"\s*(?:\(\s*(?:" + LinkLeadIn + ")?" + UrlBody + @"\s*\)|\[\s*" + UrlBody + @"\s*\]|" + LinkLeadIn
+        + UrlBody + LinkTail + "?|" + UrlBody + ")",
         RegexOptions.IgnoreCase)]
     private static partial Regex UrlPattern();
+
+    // The word before a quoted name that says what the name is: a package, an assembly or a namespace.
+    [GeneratedRegex(@"(?<!\w)(?:package|assembly|namespace)\s\z", RegexOptions.IgnoreCase)]
+    private static partial Regex NamingWordPattern();
 
     // A span between single quotes: where a compiler names a type, a member or a namespace.
     [GeneratedRegex("'[^']*'")]

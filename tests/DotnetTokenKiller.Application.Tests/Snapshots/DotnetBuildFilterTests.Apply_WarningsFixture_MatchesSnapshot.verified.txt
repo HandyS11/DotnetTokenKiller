@@ -1,4 +1,4 @@
-﻿src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 warnings)
+src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 warnings)
   (10,18) CS0219: The variable 'unused' is assigned but its value is never used
   (15,22) CS0219: The variable 'alsoUnused' is assigned but its value is never used
 src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(5,10) CS0169: The field '_unused' is never used

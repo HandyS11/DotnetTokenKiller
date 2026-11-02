@@ -1,4 +1,4 @@
-﻿src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 errors)
+src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 errors)
   (10,5) CS1002: ; expected
   (12,18) CS0103: The name 'undeclared' does not exist in the current context
 src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10) CS1002: ; expected

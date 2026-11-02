@@ -106,7 +106,7 @@ Token reduction: **8 lines -> 2 lines**
 
 ## Many errors across multiple files
 
-The errors are grouped by file and ranked by frequency, so the file with the most problems is the first thing read. A file's errors that share a code and a message read once, with each position and a count (`(9,5) (6,5) RCS1181 ×2: …`), and a file that comes to a single line is printed on it, led by the file name, with no heading. Each message is printed whole (errors are cut at 400 characters, warnings at 160), minus any link, and the `System.` and `Microsoft.` namespaces inside a quoted type name are dropped. A `Top codes` line ranks the five most frequent codes among the errors listed, but only when the build reported more errors than it lists (as when a project built for several target frameworks reports each error once per framework) and more than one code is listed. Every error here is listed, so there is none.
+The errors are grouped by file and ranked by frequency, so the file with the most problems is the first thing read. A file's errors that share a code and a message read once, with each position, in line order, and a count (`(6,5) (9,5) RCS1181 ×2: …`), and a file that comes to a single line is printed on it, led by the file name, with no heading. Each message is printed whole (errors are cut at 400 characters, warnings at 160), minus any link and the "see …" that introduced it, and the `System.` and `Microsoft.` namespaces inside a quoted type name are dropped (a quoted package, assembly, path or file name is left as written). A `Top codes` line ranks the five most frequent codes among the errors listed, but only when the build reported more errors than it lists (as when a project built for several target frameworks reports each error once per framework) and more than one code is listed. Every error here is listed, so there is none.
 
 **Raw** (`dotnet build samples/SampleApp.MultiError/SampleApp.MultiError.csproj`) — exit code 1
 
@@ -180,7 +180,7 @@ samples/SampleApp.MultiError/AccessErrors.cs (7 errors)
 samples/SampleApp.MultiError/TypeErrors.cs (4 errors)
   (7,32) CS0029: Cannot implicitly convert type 'string' to 'int'
   (10,37) CS0266: Cannot implicitly convert type 'double' to 'int'. An explicit conversion exists (are you missing a cast?)
-  (9,5) (6,5) RCS1181 ×2: Convert comment to documentation comment
+  (6,5) (9,5) RCS1181 ×2: Convert comment to documentation comment
 samples/SampleApp.MultiError/SignatureErrors.cs (4 errors)
   (9,9) CS1501: No overload for method 'Add' takes 3 arguments
   (12,13) CS1503: Argument 1: cannot convert from 'string' to 'int'
@@ -189,7 +189,7 @@ samples/SampleApp.MultiError/SignatureErrors.cs (4 errors)
 samples/SampleApp.MultiError/MissingTypes.cs (4 errors)
   (7,36) CS0029: Cannot implicitly convert type 'string' to 'bool'
   (10,39) CS0266: Cannot implicitly convert type 'long' to 'int'. An explicit conversion exists (are you missing a cast?)
-  (9,5) (6,5) RCS1181 ×2: Convert comment to documentation comment
+  (6,5) (9,5) RCS1181 ×2: Convert comment to documentation comment
 samples/SampleApp.MultiError/UndefinedReferences.cs (3 errors)
   (9,27) CS0103: The name 'undeclaredVariable' does not exist in the current context
   (12,9) CS0103: The name 'MissingMethod' does not exist in the current context
@@ -298,8 +298,8 @@ samples/SampleApp.Warnings/NullableWarnings.cs (17 warnings)
   (10,9) IDE0007: use 'var' instead of explicit type
   (6,5) (14,5) (20,5) RCS1181 ×3: Convert comment to documentation comment
   (15,16) S2325: Make 'GetLength' a static method.
-  (9,9) (23,9) (10,9) RCS1124 ×3: Inline local variable
-  (23,9) (9,9) RCS1118 ×2: Mark local variable as const
+  (9,9) (10,9) (23,9) RCS1124 ×3: Inline local variable
+  (9,9) (23,9) RCS1118 ×2: Mark local variable as const
   (21,19) S2325: Make 'NeverNull' a static method.
   (7,19) S2325: Make 'GetValue' a static method.
   (7,19) CA1024: Use properties where appropriate

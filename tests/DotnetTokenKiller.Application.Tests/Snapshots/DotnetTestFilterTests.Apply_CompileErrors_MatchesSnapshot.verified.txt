@@ -1,4 +1,4 @@
-﻿Broken.Tests/ConversionTests.cs (9 errors)
+Broken.Tests/ConversionTests.cs (9 errors)
   (7,32) (17,22) CS0029 ×2: Cannot implicitly convert type 'string' to 'int'
   (8,37) CS0266: Cannot implicitly convert type 'double' to 'int'. An explicit conversion exists (are you missing a cast?)
   (9,36) CS0029: Cannot implicitly convert type 'string' to 'bool'

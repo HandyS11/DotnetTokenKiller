@@ -1310,12 +1310,11 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_DiagnosticsDifferingOnlyBeyondTheTruncationLimit_AreRenderedOnce()
+    public void Apply_DiagnosticsDifferingOnlyBeyondTheCap_AreTwoDiagnosticsGroupedOnOneLine()
     {
-        // The dedupe key must be built from the values that get rendered, not the raw capture.
-        // Keyed on the raw message these two are distinct and both survive, and truncation then
-        // renders them as byte-identical lines: the reader sees the same error twice, and the
-        // "(N shown)" annotation claims both were distinct entries worth showing.
+        // The dedupe key is the message as MSBuild printed it, so these two survive as the two
+        // diagnostics they are; they render alike, so they are grouped, and the reader sees "×2" rather
+        // than one error that quietly stands for two. Nothing was collapsed, so no "(N shown)".
         var shared = new string('X', 400);
         var input = $"""
                      /path/A.cs(1,1): error CS0001: {shared}AAA [P.csproj]
@@ -1327,7 +1326,39 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            $"A.cs(1,1) CS0001: {shared}...\n\u2717 dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project)\n");
+            $"A.cs(1,1) CS0001 ×2: {shared}...\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_AdvisoriesDifferingOnlyByUrl_AreTwoWarningsGroupedOnOneLine()
+    {
+        // Two advisories against one package differ only by their link. Once the links are stripped they read
+        // alike, but they are two vulnerabilities: grouped with a count, not dropped as a repeat.
+        const string input = """
+                             /path/A.cs(1,1): warning NU1903: Package 'Foo' 1.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-1111 [P.csproj]
+                             /path/A.cs(1,1): warning NU1903: Package 'Foo' 1.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-2222 [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
+
+        result.Should().Be(
+            "A.cs(1,1) NU1903 ×2: Package 'Foo' 1.0.0 has a known high severity vulnerability\n"
+            + "\u2713 dotnet build: 0 errors, 2 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_SameAdvisoryRepeatedPerTargetFramework_StillCollapsesToOne()
+    {
+        // Identical as MSBuild printed them, link and all: the same diagnostic once per framework.
+        const string input = """
+                             /p/A.cs(1,1): warning NU1903: Package 'Foo' 1.0.0 has a vulnerability, https://github.com/advisories/GHSA-1111 [/p/P.csproj::TargetFramework=net8.0]
+                             /p/A.cs(1,1): warning NU1903: Package 'Foo' 1.0.0 has a vulnerability, https://github.com/advisories/GHSA-1111 [/p/P.csproj::TargetFramework=net10.0]
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 0);
+
+        result.Should().StartWith("A.cs(1,1) NU1903: Package 'Foo' 1.0.0 has a vulnerability\n");
+        result.Should().NotContain("×");
     }
 
     [Fact]
@@ -1544,6 +1575,23 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
+    public void Apply_GroupedPositions_AreSortedByLineThenColumnNumerically()
+    {
+        // Analyzers report out of order, and 23 sorts before 9 as text. The positions read the same whatever
+        // order the build printed them in.
+        const string input = """
+                             /path/A.cs(23,9): error CS0001: msg [P.csproj]
+                             /path/A.cs(9,9): error CS0001: msg [P.csproj]
+                             /path/A.cs(10,12): error CS0001: msg [P.csproj]
+                             /path/A.cs(10,3): error CS0001: msg [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs(9,9) (10,3) (10,12) (23,9) CS0001 ×4: msg\n");
+    }
+
+    [Fact]
     public void Apply_GroupedLines_KeepTheOrderTheyFirstAppeared()
     {
         const string input = """
@@ -1608,8 +1656,15 @@ public class DotnetBuildFilterTests
         "Known high severity vulnerability")]
     [InlineData("Obsolete. (https://aka.ms/dotnet-warnings/SYSLIB0014)", "Obsolete.")]
     [InlineData("Obsolete. [https://aka.ms/dotnet-warnings/SYSLIB0014]", "Obsolete.")]
-    [InlineData("Out of support. Refer to http://aka.ms/support for details.", "Out of support. Refer to for details.")]
-    [InlineData("Out of support (see https://aka.ms/support) soon.", "Out of support (see) soon.")]
+    [InlineData("Out of support. Refer to http://aka.ms/support for details.", "Out of support.")]
+    [InlineData("Out of support (see https://aka.ms/support) soon.", "Out of support soon.")]
+    [InlineData("Not to be used. See https://aka.ms/binaryformatter for more information.", "Not to be used.")]
+    [InlineData("Old API.  see   https://aka.ms/x   for   more   information.", "Old API.")]
+    [InlineData("Out of support. Please refer to https://aka.ms/dotnet-core-support for more information about the support policy. Upgrade.",
+        "Out of support. Upgrade.")]
+    [InlineData("Unsupported, see: https://aka.ms/x", "Unsupported")]
+    [InlineData("Unsupported (Visit https://aka.ms/x)", "Unsupported")]
+    [InlineData("Impossible to foresee https://aka.ms/x", "Impossible to foresee")]
     [InlineData("Two links https://a.example/x and HTTPS://b.example/y end.", "Two links and end.")]
     [InlineData("Keep (this) and [that].", "Keep (this) and [that].")]
     public void Apply_UrlInMessage_IsRemovedWithTheBracketsItEmptied(string message, string expected)
@@ -1628,7 +1683,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
-        result.Should().StartWith("(no file) NETSDK1138: Out of support. Please refer to\n");
+        result.Should().StartWith("(no file) NETSDK1138: Out of support.\n");
     }
 
     [Theory]
@@ -1676,16 +1731,99 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_FrameworkMemberInASignature_KeepsItsDeclaringType()
+    public void Apply_FrameworkMemberInASignature_KeepsItsQualifiedNameAndShortensItsParameters()
     {
-        // 'System.Linq.Enumerable.Select<…>(…)': Enumerable is the type that declares Select, not a namespace.
+        // The head of 'System.Linq.Enumerable.Select<…>(…)' names a member: which of its dots end the namespace
+        // is not for a text rule to say, so the head stays whole while the parameter types, which are types, shorten.
         const string input =
             "/path/A.cs(1,1): error CS0121: The call is ambiguous between 'System.Linq.Enumerable.Select<int, int>(System.Collections.Generic.IEnumerable<int>, System.Func<int, int>)' and 'MyApp.Q.Select<int, int>(System.Collections.Generic.IEnumerable<int>, System.Func<int, int>)' [P.csproj]";
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().StartWith(
-            "A.cs(1,1) CS0121: The call is ambiguous between 'Enumerable.Select<int, int>(IEnumerable<int>, Func<int, int>)' and 'MyApp.Q.Select<int, int>(IEnumerable<int>, Func<int, int>)'\n");
+            "A.cs(1,1) CS0121: The call is ambiguous between 'System.Linq.Enumerable.Select<int, int>(IEnumerable<int>, Func<int, int>)' and 'MyApp.Q.Select<int, int>(IEnumerable<int>, Func<int, int>)'\n");
+    }
+
+    [Fact]
+    public void Apply_GenericTypesMemberSignature_IsNotCutInTheMiddleOfItsQualifiedName()
+    {
+        // Keeping the last two segments of the head gave 'Generic.List<int>.List(int)'.
+        const string input =
+            "/path/A.cs(1,1): error CS0121: The call is ambiguous between 'System.Collections.Generic.List<int>.List(int)' and 'System.Collections.Generic.List<int>.List(System.Collections.Generic.IEnumerable<int>)' [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith(
+            "A.cs(1,1) CS0121: The call is ambiguous between 'System.Collections.Generic.List<int>.List(int)' and 'System.Collections.Generic.List<int>.List(IEnumerable<int>)'\n");
+    }
+
+    [Fact]
+    public void Apply_TwoDistinctTypesThatShortenAlike_KeepTheWholeMessageUnshortened()
+    {
+        // CS0104: shortening would say "between 'Timer' and 'Timer'", and make the three names one.
+        const string message =
+            "'Timer' is an ambiguous reference between 'System.Threading.Timer' and 'System.Timers.Timer'";
+        var input = $"/path/A.cs(1,1): error CS0104: {message} [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith($"A.cs(1,1) CS0104: {message}\n");
+    }
+
+    [Fact]
+    public void Apply_RepeatedTypeInOneMessage_StillShortens()
+    {
+        // Two spans that read alike because they ARE alike do not make a collision.
+        const string input =
+            "/path/A.cs(1,1): error CS1503: Cannot convert 'System.Collections.Generic.IEnumerable<int>' to 'System.Collections.Generic.IEnumerable<int>' [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs(1,1) CS1503: Cannot convert 'IEnumerable<int>' to 'IEnumerable<int>'\n");
+    }
+
+    [Fact]
+    public void Apply_DistinctTypesThatStayDistinct_AreShortenedInTheSameMessage()
+    {
+        const string input =
+            "/path/A.cs(1,1): error CS1503: Cannot convert 'System.Collections.Generic.List<int>' to 'System.Collections.Generic.IEnumerable<string>' [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs(1,1) CS1503: Cannot convert 'List<int>' to 'IEnumerable<string>'\n");
+    }
+
+    [Theory]
+    [InlineData("The type 'System.Object' is defined in an assembly that is not referenced. You must add a reference to assembly 'System.Runtime, Version=4.2.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a'.",
+        "The type 'Object' is defined in an assembly that is not referenced. You must add a reference to assembly 'System.Runtime, Version=4.2.2.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a'.")]
+    [InlineData("Assembly 'App, Version=1.0.0.0' uses 'System.Runtime, Version=4.2.2.0, Culture=neutral' which has a higher version than referenced assembly 'System.Runtime, Version=4.0.0.0'",
+        "Assembly 'App, Version=1.0.0.0' uses 'System.Runtime, Version=4.2.2.0, Culture=neutral' which has a higher version than referenced assembly 'System.Runtime, Version=4.0.0.0'")]
+    [InlineData("The type 'Foo' exists in both 'System.Runtime, Version=4.2.2.0' and 'Microsoft.Foo, Version=1.0.0.0'",
+        "The type 'Foo' exists in both 'System.Runtime, Version=4.2.2.0' and 'Microsoft.Foo, Version=1.0.0.0'")]
+    [InlineData("Package 'System.Text.Json' 8.0.0 has a known high severity vulnerability",
+        "Package 'System.Text.Json' 8.0.0 has a known high severity vulnerability")]
+    [InlineData("Package 'Microsoft.Windows.Compatibility 8.0.0' was restored using '.NETFramework,Version=v4.6.1' instead of the project target framework 'net8.0'.",
+        "Package 'Microsoft.Windows.Compatibility 8.0.0' was restored using '.NETFramework,Version=v4.6.1' instead of the project target framework 'net8.0'.")]
+    [InlineData("Unable to find package 'System.Text.Json' with version (>= 9.0.0)",
+        "Unable to find package 'System.Text.Json' with version (>= 9.0.0)")]
+    [InlineData("A reference to assembly 'System.Runtime' is missing",
+        "A reference to assembly 'System.Runtime' is missing")]
+    [InlineData("Metadata file '/repo/lib/Microsoft.Foo.dll' could not be found",
+        "Metadata file '/repo/lib/Microsoft.Foo.dll' could not be found")]
+    [InlineData("Metadata file 'C:\\libs\\Microsoft.Foo.dll' could not be found",
+        "Metadata file 'C:\\libs\\Microsoft.Foo.dll' could not be found")]
+    [InlineData("Metadata file 'Microsoft.Foo.dll' could not be found",
+        "Metadata file 'Microsoft.Foo.dll' could not be found")]
+    [InlineData("Cannot start 'System.Tools.Runner.exe'", "Cannot start 'System.Tools.Runner.exe'")]
+    public void Apply_QuotedNameThatIsNotATypeExpression_IsKept(string message, string expected)
+    {
+        // Real compiler and NuGet messages quote assemblies, packages, files and paths beside the types, and a
+        // dotted System./Microsoft. name there is not a type: 'System.Text.Json' read 'Json', 'Microsoft.Foo.dll' read 'dll'.
+        var input = $"/path/A.cs(1,1): error CS0012: {message} [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith($"A.cs(1,1) CS0012: {expected}\n");
     }
 
     [Fact]
