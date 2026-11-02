@@ -451,6 +451,101 @@ public class DotnetFormatFilterTests
     }
 
     [Fact]
+    public void Apply_InsertOfNothing_HasNoChangeToNameSoItsMessageStays()
+    {
+        const string input =
+            "/test/project/root/src/App.cs(3,5): error WHITESPACE: Fix whitespace formatting. Insert ''. " +
+            "[/test/project/root/src/App.csproj]";
+
+        var result = _sut.Apply(input, exitCode: 2);
+
+        result.Should().Be(
+            "src/App.cs: WHITESPACE (3:5): Fix whitespace formatting.\n✗ dotnet format: 1 violation in 1 file\n");
+    }
+
+    [Theory]
+    [InlineData(20, false)]
+    [InlineData(21, true)]
+    public void Apply_PositionsOfAGroup_AreCappedAtTwentyWithTheRestCounted(int violationCount, bool capped)
+    {
+        // Reported in reverse, so "the first twenty" must be the first twenty in line order, not in report order.
+        var input = string.Join("\n",
+            Enumerable.Range(1, violationCount).Reverse().Select(i =>
+                $"/test/project/root/src/App.cs({i},1): error WHITESPACE: Fix whitespace formatting. Insert '\\s'."));
+
+        var result = _sut.Apply(input, exitCode: 2);
+
+        var line = result.Split('\n')[0];
+        var shown = string.Join(", ", Enumerable.Range(1, 20).Select(i => $"{i}:1 insert 1 space"));
+        line.Should().Be(capped
+            ? $"src/App.cs: WHITESPACE ×{violationCount} ({shown} … +{violationCount - 20} more)"
+            : $"src/App.cs: WHITESPACE ×{violationCount} ({shown})");
+        result.Should().EndWith($"✗ dotnet format: {violationCount} violations in 1 file\n");
+    }
+
+    [Fact]
+    public void Apply_FiveThousandViolationsOverTwentyFiles_StaysSmall()
+    {
+        // The first --verify-no-changes on an unformatted repository: 250 positions in each of 20 files.
+        var input = string.Join("\n",
+            Enumerable.Range(1, 20).SelectMany(file => Enumerable.Range(1, 250).Select(i =>
+                $"/test/project/root/src/File{file:D2}.cs({i},{(i % 7) + 1}): error WHITESPACE: " +
+                "Fix whitespace formatting. Replace 1 characters with '\\n\\s\\s\\s\\s'. " +
+                "[/test/project/root/src/App.csproj]")));
+
+        var result = _sut.Apply(input, exitCode: 2);
+
+        var lines = result.TrimEnd('\n').Split('\n');
+        lines.Should().HaveCount(21);
+        lines[^1].Should().Be("✗ dotnet format: 5000 violations in 20 files");
+        lines[0].Should().Contain("WHITESPACE ×250 (").And.EndWith(" … +230 more)");
+        result.Length.Should().BeLessThan(12_000);
+    }
+
+    [Theory]
+    [InlineData(40)]
+    [InlineData(41)]
+    public void Apply_GroupLines_AreCappedAtFortyWithTheRestCounted(int fileCount)
+    {
+        var input = string.Join("\n",
+            Enumerable.Range(1, fileCount).Select(i =>
+                $"/test/project/root/src/File{i:D2}.cs(1,1): error WHITESPACE: Fix whitespace formatting. Insert '\\n'."));
+
+        var lines = _sut.Apply(input, exitCode: 2).TrimEnd('\n').Split('\n');
+
+        var status = $"✗ dotnet format: {fileCount} violations in {fileCount} files";
+        if (fileCount == 40)
+        {
+            lines.Should().HaveCount(41);
+            lines[^1].Should().Be(status);
+            lines.Should().NotContain(line => line.StartsWith('…'));
+        }
+        else
+        {
+            lines.Should().HaveCount(42);
+            lines[39].Should().Be("src/File40.cs: WHITESPACE (1:1 insert newline)");
+            lines[40].Should().Be("… 1 more group in 1 file (dtk log)");
+            lines[41].Should().Be(status);
+        }
+    }
+
+    [Fact]
+    public void Apply_HiddenGroups_AreCountedWithTheFilesTheyBelongTo()
+    {
+        // 45 codes in one file (shown first, being the largest) and 1 in another: 6 groups hide, in 2 files.
+        var codes = Enumerable.Range(1, 45).Select(i =>
+            $"/test/project/root/src/Big.cs({i},1): warning IDE{i:D4}: Message {i}\n");
+        var input = string.Concat(codes) +
+                    "/test/project/root/src/Small.cs(1,1): warning IDE0001: Message 1\n";
+
+        var lines = _sut.Apply(input, exitCode: 2).TrimEnd('\n').Split('\n');
+
+        lines.Should().HaveCount(42);
+        lines[40].Should().Be("… 6 more groups in 2 files (dtk log)");
+        lines[41].Should().Be("✗ dotnet format: 46 violations in 2 files");
+    }
+
+    [Fact]
     public void Apply_BracketsInsideTheMessage_SurviveWhileTheProjectSuffixGoes()
     {
         const string input =
@@ -509,6 +604,14 @@ public class DotnetFormatFilterTests
     [InlineData("\\n\\s\\s;", "newline + 2 spaces + ';'")]
     [InlineData("\\r", "'\\r'")]
     [InlineData("", "")]
+    [InlineData("\\", "'\\'")]
+    [InlineData("\\\\", "'\\\\'")]
+    [InlineData("\\\\s", "'\\' + 1 space")]
+    [InlineData("'", "'''")]
+    [InlineData("\\n'", "newline + '''")]
+    [InlineData("é😀", "'é😀'")]
+    [InlineData("\\néx😀\\s", "newline + 'éx😀' + 1 space")]
+    [InlineData("\\n\\r\\n\\t\\s", "2 newlines + tab + 1 space")]
     public void SummarizeReplacement_NamesWhatTheEscapedTextIs(string escaped, string expected)
     {
         DotnetFormatFilter.SummarizeReplacement(escaped).Should().Be(expected);

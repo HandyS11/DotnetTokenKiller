@@ -5,6 +5,9 @@ namespace DotnetTokenKiller.Application.Helpers;
 /// <summary>String formatting utilities.</summary>
 public static class TextHelpers
 {
+    /// <summary>How many positions a grouped diagnostic line lists before it counts the rest.</summary>
+    internal const int MaxPositionsPerLine = 20;
+
     /// <summary>Truncates text to the given length, appending "..." if truncated.</summary>
     /// <param name="text">The text to truncate.</param>
     /// <param name="maxLen">Maximum allowed length before truncation.</param>
@@ -50,4 +53,28 @@ public static class TextHelpers
             return Path.GetFileName(absolutePath);
         }
     }
+
+    /// <summary>
+    /// Joins the positions of one grouped diagnostic line, listing <see cref="MaxPositionsPerLine"/> at most: a
+    /// line that names thousands of positions (a repository-wide whitespace fix, one error repeated everywhere)
+    /// costs more than it tells. What the line leaves out is counted, <c> … +N more</c>, after the last one listed;
+    /// the count of diagnostics on the line is the caller's, and stays whole.
+    /// </summary>
+    /// <param name="positions">The positions, already in the order to list them.</param>
+    /// <param name="separator">What goes between two positions.</param>
+    /// <returns>The joined positions, or an empty string for none.</returns>
+    internal static string JoinCapped(IReadOnlyList<string> positions, string separator)
+    {
+        ArgumentNullException.ThrowIfNull(positions);
+
+        var listed = string.Join(separator, positions.Take(MaxPositionsPerLine));
+        return positions.Count <= MaxPositionsPerLine
+            ? listed
+            : string.Create(CultureInfo.InvariantCulture, $"{listed} … +{positions.Count - MaxPositionsPerLine} more");
+    }
+
+    /// <summary>A line or column number to sort by; a digit string too long for an int sorts last.</summary>
+    /// <param name="digits">The digits a pattern captured.</param>
+    internal static int ParseNumberOrMax(string digits) =>
+        int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : int.MaxValue;
 }

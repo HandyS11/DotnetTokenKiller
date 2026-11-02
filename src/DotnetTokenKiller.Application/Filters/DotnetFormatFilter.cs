@@ -15,12 +15,17 @@ namespace DotnetTokenKiller.Application.Filters;
 /// <para>
 /// A <c>--verify-no-changes</c> run that finds violations is laid out by file and code, with the verdict
 /// last: <c>file: CODE ×n (line:col replacement, …)</c> for each, then
-/// <c>✗ dotnet format: 21 violations in 4 files</c>. Grouping bounds the size, so nothing is cut off.
+/// <c>✗ dotnet format: 21 violations in 4 files</c>. A line lists at most
+/// <see cref="TextHelpers.MaxPositionsPerLine"/> positions and the report at most 40 lines, so a first run over an
+/// unformatted repository stays readable; what is left out is counted, and the verdict counts everything.
 /// </para>
 /// </remarks>
 /// <param name="rootPath">Optional root path used to shorten file paths in violation messages.</param>
 public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutputFilter
 {
+    /// <summary>How many group lines the report lists before it counts the groups it leaves out.</summary>
+    private const int MaxGroupLines = 40;
+
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the format output.</summary>
@@ -113,7 +118,9 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
     /// <summary>
     /// Lays the violations out by file, the file with the most first and ties in ordinal order, so the same
     /// violations always read the same whatever order the tool reported them in. Each file lists one line per code
-    /// (see <see cref="DescribeGroup"/>), the code with the most violations first; the status line is last.
+    /// (see <see cref="DescribeGroup"/>), the code with the most violations first. The first
+    /// <see cref="MaxGroupLines"/> lines are listed; a line then counts the groups left out and the files they are
+    /// in. The status line is last and counts every violation and file, listed or not.
     /// </summary>
     /// <param name="violations">The distinct violations, at least one.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the verdict's glyph.</param>
@@ -125,17 +132,25 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key, StringComparer.Ordinal)
             .ToList();
-        foreach (var file in files)
-        {
-            var groups = file
+        var groups = files
+            .SelectMany(file => file
                 .GroupBy(v => (v.Code, v.Head))
                 .OrderByDescending(g => g.Count())
                 .ThenBy(g => g.Key.Code, StringComparer.Ordinal)
-                .ThenBy(g => g.Key.Head, StringComparer.Ordinal);
-            foreach (var group in groups)
-            {
-                sb.AppendLine(DescribeGroup(file.Key, group));
-            }
+                .ThenBy(g => g.Key.Head, StringComparer.Ordinal)
+                .Select(group => (File: file.Key, Group: group)))
+            .ToList();
+        foreach (var (file, group) in groups.Take(MaxGroupLines))
+        {
+            sb.AppendLine(DescribeGroup(file, group));
+        }
+
+        if (groups.Count > MaxGroupLines)
+        {
+            var hidden = groups.Skip(MaxGroupLines).ToList();
+            var hiddenFiles = hidden.Select(h => h.File).Distinct(StringComparer.Ordinal).Count();
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                $"… {Counted(hidden.Count, "more group")} in {Counted(hiddenFiles, "file")} (dtk log)");
         }
 
         // A warning glyph rather than a cross for a zero exit code: the run did not fail, but violations were found.
@@ -150,7 +165,8 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
     /// <summary>
     /// One line for the violations of a file that share a code: <c>file: CODE ×3 (21:45 newline + 4 spaces, …)</c>.
     /// The positions are in line and column order, compared as numbers, each followed by what to change there when
-    /// the tool said. Violations that carry no change (<c>IMPORTS: Fix imports ordering.</c>) have only their
+    /// the tool said; the first <see cref="TextHelpers.MaxPositionsPerLine"/> are listed and the rest counted
+    /// (<c> … +5 more</c>), while <c>×n</c> counts them all. Violations that carry no change (<c>IMPORTS: Fix imports ordering.</c>) have only their
     /// message to tell them apart, so it follows the positions once:
     /// <c>file: IDE0005 ×2 (1:1, 2:1): Using directive is unnecessary.</c>
     /// Where a change is given the message is only the tool's boilerplate for the code
@@ -160,9 +176,13 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
     /// <param name="group">The file's violations that share a code and a message head, at least one.</param>
     private static string DescribeGroup(string file, IGrouping<(string Code, string Head), Violation> group)
     {
-        var ordered = group.OrderBy(v => Number(v.Line)).ThenBy(v => Number(v.Col)).ToList();
-        var positions = string.Join(", ",
-            ordered.Select(v => v.Change is null ? $"{v.Line}:{v.Col}" : $"{v.Line}:{v.Col} {v.Change}"));
+        var ordered = group
+            .OrderBy(v => TextHelpers.ParseNumberOrMax(v.Line))
+            .ThenBy(v => TextHelpers.ParseNumberOrMax(v.Col))
+            .ToList();
+        var positions = TextHelpers.JoinCapped(
+            ordered.ConvertAll(v => v.Change is null ? $"{v.Line}:{v.Col}" : $"{v.Line}:{v.Col} {v.Change}"),
+            ", ");
         var times = ordered.Count > 1
             ? string.Create(CultureInfo.InvariantCulture, $" ×{ordered.Count}")
             : string.Empty;
@@ -171,11 +191,6 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
             : $": {group.Key.Head}";
         return $"{file}: {group.Key.Code}{times} ({positions}){message}";
     }
-
-    /// <summary>A line or column number to sort by; a digit string too long for an int sorts last.</summary>
-    /// <param name="digits">The digits the regex captured.</param>
-    private static int Number(string digits) =>
-        int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : int.MaxValue;
 
     /// <summary>A count with its noun, singular for one: <c>1 file</c>, <c>4 files</c>.</summary>
     /// <param name="count">How many.</param>

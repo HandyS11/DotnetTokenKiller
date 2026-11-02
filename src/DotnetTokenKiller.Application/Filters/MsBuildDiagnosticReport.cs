@@ -625,8 +625,9 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>
     /// One rendered line for the diagnostics of a file that share a code and a message: where they are, each
-    /// position once and in line and column order, whatever order the build reported them in, and what they
-    /// say, with a count when there are several.
+    /// position once and in line and column order, whatever order the build reported them in (the first
+    /// <see cref="TextHelpers.MaxPositionsPerLine"/> of them, the rest counted), and what they say, with the count
+    /// of all of them when there are several.
     /// </summary>
     /// <param name="group">The diagnostics, in the order they were reported.</param>
     private static (string Positions, string Text) DescribeLine(IGrouping<(string Code, string Message), Diagnostic> group)
@@ -634,23 +635,22 @@ internal sealed partial class MsBuildDiagnosticReport
         // Tool-level diagnostics (MSBUILD, CSC) carry neither position nor, sometimes, a code; both are
         // omitted rather than rendered as the empty "(,)" and ": " stubs. A diagnostic the same file reports
         // for two projects shares its position, which is printed once.
-        var positions = string.Join(' ',
-            group.Where(d => d.Line.Length > 0)
-                .Select(d => (Line: Number(d.Line), Col: Number(d.Col), Text: $"({d.Line},{d.Col})"))
-                .OrderBy(p => p.Line)
-                .ThenBy(p => p.Col)
-                .Select(p => p.Text)
-                .Distinct(StringComparer.Ordinal));
+        var positions = TextHelpers.JoinCapped(
+            [
+                .. group.Where(d => d.Line.Length > 0)
+                    .Select(d => (Line: TextHelpers.ParseNumberOrMax(d.Line), Col: TextHelpers.ParseNumberOrMax(d.Col),
+                        Text: $"({d.Line},{d.Col})"))
+                    .OrderBy(p => p.Line)
+                    .ThenBy(p => p.Col)
+                    .Select(p => p.Text)
+                    .Distinct(StringComparer.Ordinal),
+            ],
+            " ");
         var count = group.Count();
         var times = count > 1 ? string.Create(CultureInfo.InvariantCulture, $"×{count}") : string.Empty;
         var label = string.Join(' ', new[] { group.Key.Code, times }.Where(part => part.Length > 0));
         return (positions, label.Length == 0 ? group.Key.Message : $"{label}: {group.Key.Message}");
     }
-
-    /// <summary>A line or column number to sort by; a digit string too long for an int sorts last.</summary>
-    /// <param name="digits">The digits the regex captured.</param>
-    private static int Number(string digits) =>
-        int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : int.MaxValue;
 
     /// <summary>
     /// Adds <c>Top codes: CS1002 (2x), CS0103 (1x)</c> when the build reported more diagnostics than are

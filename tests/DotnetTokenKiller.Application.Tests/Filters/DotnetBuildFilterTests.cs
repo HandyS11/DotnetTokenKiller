@@ -1113,6 +1113,41 @@ public class DotnetBuildFilterTests
         result.Should().Be("A.cs(1,1) (2,1) CS0001 ×2: msg\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
     }
 
+    [Theory]
+    [InlineData(20, false)]
+    [InlineData(21, true)]
+    public void Apply_PositionsOfAGroupedLine_AreCappedAtTwentyWithTheRestCounted(int errorCount, bool capped)
+    {
+        // Reported in reverse, so "the first twenty" are the first twenty in line order.
+        var input = string.Join("\n",
+            Enumerable.Range(1, errorCount).Reverse().Select(i => $"/path/A.cs({i},1): error CS0001: msg [P.csproj]"));
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        var shown = string.Join(' ', Enumerable.Range(1, 20).Select(i => $"({i},1)"));
+        var more = capped ? $" … +{errorCount - 20} more" : string.Empty;
+        result.Should().Be(
+            $"A.cs{shown}{more} CS0001 ×{errorCount}: msg\n"
+            + $"✗ dotnet build failed (exit 1): {errorCount} errors, 0 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_ThreeThousandIdenticalErrors_ListTwentyPositionsAndKeepTheFullCounts()
+    {
+        var input = string.Join("\n",
+            Enumerable.Range(1, 3000).Select(i => $"/path/A.cs({i},5): error CS0103: The name 'x' does not exist [P.csproj]")
+                .Append("/path/A.cs(1,1): error CS0001: other [P.csproj]"));
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        var lines = result.TrimEnd('\n').Split('\n');
+        lines[0].Should().Be("A.cs (3001 errors)");
+        lines[1].Should().StartWith("  (1,5) (2,5) (3,5)").And.EndWith(" … +2980 more CS0103 ×3000: The name 'x' does not exist");
+        lines[2].Should().Be("  (1,1) CS0001: other");
+        lines[^1].Should().Be("✗ dotnet build failed (exit 1): 3001 errors, 0 warnings (1 project)");
+        result.Length.Should().BeLessThan(1_000);
+    }
+
     [Fact]
     public void Apply_DiagnosticsDifferingOnlyByColumn_BothKept()
     {
