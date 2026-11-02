@@ -1,0 +1,26 @@
+Running tests from /test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64)
+failed XV3.TimeoutTests.FailsWithPlainMessage (9ms)
+  from /test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64)
+  plain message from the test
+    at XV3.TimeoutTests.FailsWithPlainMessage() in /test/project/root/XV3/Tests.cs:14
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed (canceled) XV3.TimeoutTests.Hangs (203ms)
+  from /test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: Test execution timed out after 200 milliseconds
+    --- End of stack trace from previous location ---
+  Standard output
+    captured-line-one
+    captured-line-two
+    
+  Error output
+/test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64) failed with 2 error(s) (539ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 3
+  failed: 2
+  succeeded: 1
+  skipped: 0
+  duration: 714ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

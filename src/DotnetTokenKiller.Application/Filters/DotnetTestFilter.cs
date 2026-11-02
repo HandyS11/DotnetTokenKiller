@@ -313,10 +313,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // MSTest prints the message, then "from <assembly> (<tfm>|<arch>)", then the message again
         // above the stack trace: everything after the "from" line is read for frames only. xUnit v3
         // prints "from" first and the message once after it, so a "from" line that precedes any
-        // message line leaves the message open until the first stack frame.
+        // message line leaves the message open until the first stack frame, a "--- End of … ---"
+        // marker or the test's captured "Standard output"/"Error output" (a timed-out test has no frame).
         var msgLines = new List<string>();
         var sourceRef = string.Empty;
         var messageEnded = false;
+        var messageFollowsFrom = false;
         while (i < lines.Length)
         {
             var current = lines[i].TrimEnd('\r');
@@ -336,13 +338,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
             if (MtpFromAssemblyPattern().IsMatch(current))
             {
-                messageEnded = msgLines.Count > 0;
+                messageFollowsFrom = msgLines.Count == 0;
+                messageEnded = !messageFollowsFrom;
             }
-            else if (StackFrameLinePattern().IsMatch(current))
+            else if (messageFollowsFrom && (StackFrameLinePattern().IsMatch(current)
+                                            || MtpMessageEndPattern().IsMatch(current)))
             {
                 messageEnded = true;
             }
-            else if (!messageEnded && !string.IsNullOrWhiteSpace(current))
+            else if (!messageEnded && !StackFrameLinePattern().IsMatch(current)
+                                   && !string.IsNullOrWhiteSpace(current))
             {
                 msgLines.Add(current.Trim());
             }
@@ -967,6 +972,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     // MTP: the "from <assembly> (<tfm>|<arch>)" line between a failure's message and its stack trace.
     [GeneratedRegex(@"^\s+from\s.+\.(?:dll|exe)(?:\s\([^)]*\))?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex MtpFromAssemblyPattern();
+
+    // MTP, xUnit v3: what ends a failure message that follows the "from" line besides a stack frame: the
+    // "--- End of stack trace from previous location ---" marker and the "Standard output"/"Error output"
+    // section headers of the test's captured output.
+    [GeneratedRegex(@"^\s+(?:--- End of .+ ---|(?:Standard|Error) output)\s*$")]
+    private static partial Regex MtpMessageEndPattern();
 
     // MTP: "Running tests from /path/Tests.dll (net10.0|x64)", one per test assembly run.
     [GeneratedRegex(@"^Running tests from\s")]

@@ -165,8 +165,10 @@ grace period (`RunCancellation.LeaveInterruptToChild`), since the child owns the
 longer to shut down, or never exit.
 
 `DotnetTestFilterTests`' `dotnet_test_mtp_*` fixtures are real `dotnet test` output, not hand-written: a .NET 10 SDK
-run of an MSTest 4.0.2 project under Microsoft.Testing.Platform (`"test": {"runner": "Microsoft.Testing.Platform"}`
-in `global.json`), with the machine path replaced by `/test/project/root`.
+run of an MSTest 4.0.2 project (the `dotnet_test_mtp_xunit3_*` ones: an xunit.v3.mtp-v2 4.0.2 project) under
+Microsoft.Testing.Platform (`"test": {"runner": "Microsoft.Testing.Platform"}` in `global.json`), with the machine path
+replaced by `/test/project/root`. The two shapes differ: MSTest prints the message before the `from <assembly>` line,
+xUnit v3 after it.
 
 ## Git Hooks
 

@@ -1229,7 +1229,7 @@ public class DotnetTestFilterTests
 
     private static string LastLine(string output) => output.TrimEnd('\n').Split('\n')[^1];
 
-    // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects (the xunit3 one:
+    // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects (the xunit3 ones:
     // xunit.v3.mtp-v2 4.0.2) under Microsoft.Testing.Platform ("test": {"runner": "Microsoft.Testing.Platform"}
     // in global.json), with the machine path replaced by /test/project/root.
 
@@ -1288,6 +1288,61 @@ public class DotnetTestFilterTests
             dotnet test: 3 failed, 1 passed (1 project, 0.51s)
 
             """);
+    }
+
+    [Fact]
+    public void Apply_XunitV3TimeoutUnderMtp_EndsTheMessageBeforeTheTraceMarkerAndCapturedOutput()
+    {
+        // Real xunit.v3.mtp-v2 4.0.2 run. A [Fact(Timeout = 200)] test that hangs fails with no stack frame
+        // at all: MTP prints the message, "--- End of stack trace from previous location ---", then the test's
+        // captured "Standard output" and "Error output" sections inside the same failure block. None of that
+        // is the message, and with no frame there is no source reference.
+        var fixture = LoadFixture("dotnet_test_mtp_xunit3_timeout.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        result.Should().Be(
+            """
+            FAILURES (2):
+              XV3.TimeoutTests.FailsWithPlainMessage [9ms]
+                plain message from the test
+                at XV3/Tests.cs:line 14
+              (canceled) XV3.TimeoutTests.Hangs [203ms]
+                Xunit.MicrosoftTestingPlatform.XunitException: Test execution timed out after 200 milliseconds
+            dotnet test: 2 failed, 1 passed (1 project, 0.71s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_MtpMessageWithAFrameBeforeTheFromLine_KeepsEveryMessageLine()
+    {
+        // MSTest's shape (the message is already collected when "from" arrives) is read exactly as before:
+        // a frame-shaped line inside the message block is skipped, it does not end the message. Only a
+        // "from" line that precedes any message (xUnit v3) lets a stack frame end it.
+        const string input = """
+                             Running tests from /r/T/bin/Debug/net10.0/T.dll (net10.0|x64)
+                             failed Some.Test (3ms)
+                               Line one of the message
+                                 at Some.Helper() in /r/T/Helper.cs:5
+                               Line two of the message
+                               from /r/T/bin/Debug/net10.0/T.dll (net10.0|x64)
+                               Line one of the message
+                                 at Some.Helper() in /r/T/Helper.cs:5
+                             /r/T/bin/Debug/net10.0/T.dll (net10.0|x64) failed with 1 error(s) (20ms)
+                             Exit code: 2
+
+                             Test run summary: Failed!
+                               total: 1
+                               failed: 1
+                               succeeded: 0
+                               skipped: 0
+                               duration: 40ms
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 2);
+
+        MessageLine(result).Should().Be("Line one of the message Line two of the message");
     }
 
     [Fact]

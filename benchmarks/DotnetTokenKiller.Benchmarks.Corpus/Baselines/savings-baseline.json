@@ -443,6 +443,17 @@
       "savingsPercent": 63.9
     },
     {
+      "id": "test/mtp-xunit3-timeout",
+      "fixture": "dotnet_test_mtp_xunit3_timeout.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 1163,
+      "rawTokens": 333,
+      "filteredTokens": 97,
+      "savedTokens": 236,
+      "savingsPercent": 70.9
+    },
+    {
       "id": "test/mtp-zero",
       "fixture": "dotnet_test_mtp_zero.txt",
       "filterKey": "test",

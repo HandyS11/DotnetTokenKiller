@@ -60,6 +60,7 @@ public static class SavingsScenarios
         new("test/mtp-failures", "dotnet_test_mtp_failures.txt", FilterKeys.Test, 2),
         new("test/mtp-multiproject", "dotnet_test_mtp_multiproject.txt", FilterKeys.Test, 2),
         new("test/mtp-xunit3-failures", "dotnet_test_mtp_xunit3_failures.txt", FilterKeys.Test, 2),
+        new("test/mtp-xunit3-timeout", "dotnet_test_mtp_xunit3_timeout.txt", FilterKeys.Test, 2),
         new("test/mtp-zero", "dotnet_test_mtp_zero.txt", FilterKeys.Test, 8),
         new("test/multiproject-partial", "dotnet_test_multiproject_partial_match.txt", FilterKeys.Test, 0),
         new("test/multiproject-skipped", "dotnet_test_multiproject_skipped.txt", FilterKeys.Test, 0),
