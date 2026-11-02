@@ -80,7 +80,20 @@ dtk dotnet format --verify-no-changes
 dtk dotnet format -q
 ```
 
-When nothing needs formatting, the raw command produces no output at all. dtk synthesises a `✓ dotnet format (nothing to format)` confirmation so AI agents receive an explicit positive signal. When `--verify-no-changes` finds violations, the file paths and violation types are shown with workspace-relative paths.
+When nothing needs formatting, the raw command produces no output at all. dtk synthesises a `✓ dotnet format (nothing to format)` confirmation so AI agents receive an explicit positive signal. When `--verify-no-changes` finds violations, they are grouped by file and code, one line each, with workspace-relative paths, and the last line is the verdict:
+
+```text
+Fmt/F.cs: WHITESPACE ×10 (5:28 insert 1 space, 7:17 insert 1 space, 7:18 insert 1 space, 11:9 delete 2 chars, 11:28 insert 1 space, 11:29 insert 1 space, 11:31 insert 1 space, 11:33 insert 1 space, 11:34 insert 1 space, 12:18 delete 1 char)
+Fmt/A.cs: WHITESPACE ×5 (2:1 insert newline, 2:15 newline, 3:21 newline + 4 spaces, 9:7 insert 2 spaces, 11:1 4 spaces)
+Fmt/B.cs: WHITESPACE ×2 (8:25 newline + 8 spaces, 10:40 newline + 12 spaces)
+Fmt/B.cs: IDE0005 (1:1): Using directive is unnecessary.
+Fmt/B.cs: IDE0161 (3:11): Convert to file-scoped namespace
+Fmt/B.cs: IMPORTS (1:1): Fix imports ordering.
+Fmt/NoFinal.cs: FINALNEWLINE (6:2 insert newline)
+✗ dotnet format: 21 violations in 4 files
+```
+
+Each position is `line:col`, in line and column order, and `×n` appears only for a group of more than one. A whitespace violation says what to change there: the text the tool puts in (`newline + 4 spaces`, `4 spaces`), or `insert …` and `delete n chars`. A violation with no change to name (`IMPORTS`, `CHARSET`, an analyzer's diagnostic) has its message once, after the positions; the same code with different messages in one file keeps a line for each message. The `[project.csproj]` suffix is dropped, a diagnostic the tool reports twice counts once, and nothing is cut off: the files with the most violations come first, ties in name order. The verdict reads `⚠` instead of `✗` when the exit code is zero.
 
 ### `dtk dotnet list package`
 

@@ -1,0 +1,27 @@
+Formatting code files in workspace '/test/project/root/Fmt/Fmt.csproj'.
+/test/project/root/Fmt/A.cs(2,1): error WHITESPACE: Fix whitespace formatting. Insert '\n'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/A.cs(2,15): error WHITESPACE: Fix whitespace formatting. Replace 1 characters with '\n'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/A.cs(3,21): error WHITESPACE: Fix whitespace formatting. Replace 1 characters with '\n\s\s\s\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/A.cs(9,7): error WHITESPACE: Fix whitespace formatting. Insert '\s\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/A.cs(11,1): error WHITESPACE: Fix whitespace formatting. Replace 1 characters with '\s\s\s\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/B.cs(8,25): error WHITESPACE: Fix whitespace formatting. Replace 1 characters with '\n\s\s\s\s\s\s\s\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/B.cs(10,40): error WHITESPACE: Fix whitespace formatting. Replace 1 characters with '\n\s\s\s\s\s\s\s\s\s\s\s\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(5,28): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(7,17): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(7,18): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(11,9): error WHITESPACE: Fix whitespace formatting. Delete 2 characters. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(11,28): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(11,29): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(11,31): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(11,33): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(11,34): error WHITESPACE: Fix whitespace formatting. Insert '\s'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/F.cs(12,18): error WHITESPACE: Fix whitespace formatting. Delete 1 characters. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/NoFinal.cs(6,2): error FINALNEWLINE: Fix final newline. Insert '\n'. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/B.cs(1,1): error IMPORTS: Fix imports ordering. [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/B.cs(3,11): warning IDE0161: Convert to file-scoped namespace [/test/project/root/Fmt/Fmt.csproj]
+/test/project/root/Fmt/B.cs(1,1): warning IDE0005: Using directive is unnecessary. [/test/project/root/Fmt/Fmt.csproj]
+Formatted code file '/test/project/root/Fmt/A.cs'.
+Formatted code file '/test/project/root/Fmt/B.cs'.
+Formatted code file '/test/project/root/Fmt/F.cs'.
+Formatted code file '/test/project/root/Fmt/NoFinal.cs'.
+Format complete in 4220ms.

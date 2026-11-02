@@ -36,4 +36,4 @@ Line counts below are the ones rendered on each page, counting non-blank raw lin
 | test, 3 failures (MSTest) | 27 lines | 11 lines |
 | test, 2 failures (Reqnroll) | 64 lines | 8 lines |
 | restore, missing package | 3 lines | 2 lines |
-| format, 33 violations | 33 lines | 12 lines |
+| format, 33 violations | 33 lines | 24 lines |

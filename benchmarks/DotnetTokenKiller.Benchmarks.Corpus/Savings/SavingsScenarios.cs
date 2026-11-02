@@ -29,6 +29,7 @@ public static class SavingsScenarios
         new("format/files", "dotnet_format_files_raw.txt", FilterKeys.Format, 0),
         new("format/verbose-nothing", "dotnet_format_verbose_nothing_raw.txt", FilterKeys.Format, 0),
         new("format/violations", "dotnet_format_violations_raw.txt", FilterKeys.Format, 1),
+        new("format/whitespace-many", "dotnet_format_whitespace_many.txt", FilterKeys.Format, 2),
         new("list-package/all", "dotnet_list_package_raw.txt", FilterKeys.ListPackage, 0),
         new("list-package/deprecated", "dotnet_list_package_deprecated_raw.txt", FilterKeys.ListPackage, 0),
         new("list-package/outdated", "dotnet_list_package_outdated_raw.txt", FilterKeys.ListPackage, 0),

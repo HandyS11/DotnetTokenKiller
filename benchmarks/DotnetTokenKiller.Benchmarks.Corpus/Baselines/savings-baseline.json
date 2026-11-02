@@ -97,9 +97,20 @@
       "exitCode": 1,
       "rawBytes": 289,
       "rawTokens": 72,
-      "filteredTokens": 70,
-      "savedTokens": 2,
-      "savingsPercent": 2.8
+      "filteredTokens": 74,
+      "savedTokens": -2,
+      "savingsPercent": -2.8
+    },
+    {
+      "id": "format/whitespace-many",
+      "fixture": "dotnet_format_whitespace_many.txt",
+      "filterKey": "format",
+      "exitCode": 2,
+      "rawBytes": 3149,
+      "rawTokens": 872,
+      "filteredTokens": 293,
+      "savedTokens": 579,
+      "savingsPercent": 66.4
     },
     {
       "id": "list-package/all",

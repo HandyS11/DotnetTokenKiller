@@ -78,7 +78,7 @@ context consumed.
 - **Build filtering** — strips MSBuild noise, keeps only errors, warnings, and a compact summary (~78% savings)
 - **Test filtering** — removes adapter banners, license warnings, and reflection stack frames (~84% savings)
 - **Restore/Clean filtering** — condenses output to essentials (~47–98% savings)
-- **Format filtering** — shows only violations with workspace-relative paths
+- **Format filtering** — groups violations by file and code, with workspace-relative paths and the verdict on the last line
 - **`list package` filtering** — collapses per-TFM duplication across plain, `--outdated`,
   `--deprecated`, and `--vulnerable` (~80.9% savings)
 - **Publish/Pack filtering** — the build's error/warning summary, plus the publish directories or

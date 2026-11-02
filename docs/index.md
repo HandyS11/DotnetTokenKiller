@@ -77,7 +77,7 @@ dotnet test: <span class="dtk-fail">1 failed</span>, <span class="dtk-kept">3 pa
 <div class="dtk-filter"><h3>build</h3><p>Drops MSBuild headers and progress lines. Groups the remaining errors and warnings by file, with workspace-relative paths and a count of the most common codes.</p></div>
 <div class="dtk-filter"><h3>test</h3><p>Removes xUnit, NUnit, MSTest, and Reqnroll adapter banners, licence notices, and reflection stack frames. Passing tests collapse to a count; failures keep their message and source line.</p></div>
 <div class="dtk-filter"><h3>restore &amp; clean</h3><p>Condenses per-project restore and clean chatter to one line, or to the errors when something goes wrong.</p></div>
-<div class="dtk-filter"><h3>format</h3><p>Prints only the violations, one per line, with paths relative to the workspace instead of absolute.</p></div>
+<div class="dtk-filter"><h3>format</h3><p>Groups the violations by file and code, one line each, with paths relative to the workspace instead of absolute.</p></div>
 <div class="dtk-filter"><h3>list package</h3><p>Collapses the per-framework duplication that <code>--outdated</code>, <code>--deprecated</code>, and <code>--vulnerable</code> produce.</p></div>
 <div class="dtk-filter"><h3>pipe</h3><p>Runs the same filters over output dtk did not produce &mdash; a CI log, or a <code>dotnet</code> call that slipped past the hook.</p></div>
 </div>
