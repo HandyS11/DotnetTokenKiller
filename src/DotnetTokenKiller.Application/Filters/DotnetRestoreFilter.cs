@@ -157,7 +157,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
 
         if (state.Errors.Count > 0)
         {
-            return FormatErrors(state.Errors);
+            return FormatErrors(state.Errors, exitCode);
         }
 
         var totalProjects = state.RestoredCount + state.UpToDateCount;
@@ -176,11 +176,12 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         return $"✓ dotnet restore ({totalProjects} project{(totalProjects == 1 ? "" : "s")}, {elapsed})\n";
     }
 
-    private static string FormatErrors(List<NuGetError> errors)
+    /// <summary>The errors, one line each, then the status line: the last line is always the verdict.</summary>
+    /// <param name="errors">The parsed errors, at least one.</param>
+    /// <param name="exitCode">The process exit code; the sole source of truth for the verdict's glyph.</param>
+    private static string FormatErrors(List<NuGetError> errors, int exitCode)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet restore: {errors.Count} error{(errors.Count == 1 ? "" : "s")}");
         foreach (var e in errors)
         {
             if (string.IsNullOrEmpty(e.Project))
@@ -192,6 +193,11 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  {e.Code}: {e.Message} ({e.Project})");
             }
         }
+
+        // A warning glyph rather than a cross for a zero exit code: the run did not fail, but errors were printed.
+        var glyph = exitCode == 0 ? '⚠' : '✗';
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"{glyph} dotnet restore: {errors.Count} error{(errors.Count == 1 ? "" : "s")}");
 
         // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
         // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.

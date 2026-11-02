@@ -12,7 +12,7 @@ How `dtk` filters `dotnet restore` output.
 
 ## Missing package
 
-The absolute project path on the error line becomes workspace-relative and moves to the end, so the error code and message lead.
+The absolute project path on the error line becomes workspace-relative and moves to the end, so the error code and message lead, and the status line comes last.
 
 **Raw** (`dotnet restore samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj`) — exit code 1
 
@@ -25,8 +25,8 @@ The absolute project path on the error line becomes workspace-relative and moves
 **dtk** (`dtk dotnet restore samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj`)
 
 ```sh
-dotnet restore: 1 error
   NU1101: Unable to find package DotnetTokenKiller.DoesNotExist. No packages exist with this id in source(s): nuget.org (samples/SampleApp.BadPackage/SampleApp.BadPackage.csproj)
+✗ dotnet restore: 1 error
 ```
 
 Token reduction: **3 lines -> 2 lines**

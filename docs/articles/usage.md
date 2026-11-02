@@ -57,7 +57,8 @@ dtk dotnet restore src/MyProject/MyProject.csproj
 dtk dotnet restore -q
 ```
 
-Restore errors include the error code, message, and workspace-relative project path.
+Restore errors include the error code, message, and workspace-relative project path, one line each, followed by the
+status line `✗ dotnet restore: 2 errors`.
 
 ### `dtk dotnet clean`
 
@@ -68,6 +69,9 @@ dtk dotnet clean
 dtk dotnet clean --configuration Release
 dtk dotnet clean -q
 ```
+
+A successful clean prints `✓ dotnet clean`. A failed one lists its first five error lines, then `... and N more errors`
+when there are more, and ends with the status line `✗ dotnet clean: 7 errors`, which counts every error.
 
 ### `dtk dotnet format`
 
@@ -110,11 +114,14 @@ The plain variant collapses packages shared by every project into one `all proje
 lists only each project's remaining additions. The `--outdated`, `--deprecated`, and `--vulnerable`
 variants group findings by package across projects instead of repeating them per project, and a
 clean audit run (no findings) collapses to a single `✓` line. Output is capped at 30 package groups,
-with an explicit truncation line if there are more.
+with an explicit truncation line if there are more. The summary is always the last line:
+`✓ dotnet list package (8 projects, 21 packages)` for the plain variant and
+`⚠ dotnet list package --outdated: 1 package with updates (all 8 projects)` when an audit variant finds something
+(`✗` instead on the rare non-zero exit).
 
 If the output arrives in a shape dtk does not recognise — `--format json`, a localised SDK, or a
-future column layout — dtk prints it unfiltered behind a
-`⚠ dotnet list package: unrecognized output, passed through unfiltered` line rather than guessing.
+future column layout — dtk prints it unfiltered, followed by the
+`⚠ dotnet list package: unrecognized output, passed through unfiltered` line, rather than guessing.
 `dotnet list package` always exits 0, even when it reports vulnerable packages, so this is the only
 signal available: a clean `✓` from dtk always means dtk read the tables, never that it failed to.
 

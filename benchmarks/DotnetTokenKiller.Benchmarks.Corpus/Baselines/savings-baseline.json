@@ -130,9 +130,9 @@
       "exitCode": 0,
       "rawBytes": 1787,
       "rawTokens": 486,
-      "filteredTokens": 74,
-      "savedTokens": 412,
-      "savingsPercent": 84.8
+      "filteredTokens": 77,
+      "savedTokens": 409,
+      "savingsPercent": 84.2
     },
     {
       "id": "list-package/outdated",
@@ -141,9 +141,9 @@
       "exitCode": 0,
       "rawBytes": 2233,
       "rawTokens": 652,
-      "filteredTokens": 48,
-      "savedTokens": 604,
-      "savingsPercent": 92.6
+      "filteredTokens": 51,
+      "savedTokens": 601,
+      "savingsPercent": 92.2
     },
     {
       "id": "list-package/vulnerable",
@@ -152,9 +152,9 @@
       "exitCode": 0,
       "rawBytes": 600,
       "rawTokens": 162,
-      "filteredTokens": 81,
-      "savedTokens": 81,
-      "savingsPercent": 50
+      "filteredTokens": 84,
+      "savedTokens": 78,
+      "savingsPercent": 48.1
     },
     {
       "id": "pack/failure",

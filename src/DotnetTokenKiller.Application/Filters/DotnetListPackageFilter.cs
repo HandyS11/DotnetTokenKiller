@@ -63,10 +63,10 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
     /// <param name="exitCode">The process exit code.</param>
     /// <returns>
     /// On a failed run, <see cref="string.Empty"/> — the exit code is non-zero, so
-    /// <c>FilteredRunUseCase</c>'s raw-tail fallback fires, prefixes an explicit failure verdict, and
-    /// records the run as <c>RawTailFallback</c>. On a successful run, the raw output behind a
-    /// <c>⚠</c> marker, because that fallback is gated on a non-zero exit code and this command never
-    /// produces one.
+    /// <c>FilteredRunUseCase</c>'s raw-tail fallback fires, appends an explicit failure verdict, and
+    /// records the run as <c>RawTailFallback</c>. On a successful run, the whole raw output followed by a
+    /// <c>⚠</c> status line (the status line is last, like every filter's): returning empty there would show
+    /// only the last 40 lines, which cuts a document such as <c>--format json</c> in the middle.
     /// </returns>
     /// <remarks>
     /// <c>dotnet list package</c> exits 0 even when it reports deprecated or vulnerable packages
@@ -87,7 +87,7 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         }
 
         var text = stripped.ReplaceLineEndings("\n").TrimEnd('\n');
-        return $"⚠ dotnet list package: unrecognized output, passed through unfiltered\n{text}\n";
+        return $"{text}\n⚠ dotnet list package: unrecognized output, passed through unfiltered\n";
     }
 
     private static ParseState Parse(string[] lines)
@@ -248,10 +248,6 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         var distinct = byProject.Values.SelectMany(v => v).Distinct(StringComparer.Ordinal).Count();
 
         var sb = new StringBuilder();
-        var glyph = exitCode == 0 ? "✓ " : string.Empty;
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"{glyph}dotnet list package ({state.Projects.Count} project{Plural(state.Projects.Count)}, {distinct} package{Plural(distinct)})");
-
         var groups = 0;
         var omitted = 0;
 
@@ -281,6 +277,11 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         }
 
         AppendTruncation(sb, omitted);
+
+        // The status line is last, so `| tail -1` carries the verdict: a zero exit code is a success, any other a cross.
+        var glyph = exitCode == 0 ? '✓' : '✗';
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"{glyph} dotnet list package ({state.Projects.Count} project{Plural(state.Projects.Count)}, {distinct} package{Plural(distinct)})");
         return sb.ToString().ReplaceLineEndings("\n");
     }
 
@@ -329,9 +330,6 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
             : $"{affected} of {projects} projects";
 
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet list package {flag}: {groups.Count} {(groups.Count == 1 ? noun.Singular : noun.Plural)} ({scope})");
-
         var omitted = 0;
         for (var i = 0; i < groups.Count; i++)
         {
@@ -349,6 +347,12 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         }
 
         AppendTruncation(sb, omitted);
+
+        // The status line is last, so `| tail -1` carries the verdict. The command exits 0 whatever it finds, so
+        // findings on a zero exit are a warning: something to look at, not a failure.
+        var glyph = exitCode == 0 ? '⚠' : '✗';
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"{glyph} dotnet list package {flag}: {groups.Count} {(groups.Count == 1 ? noun.Singular : noun.Plural)} ({scope})");
         return sb.ToString().ReplaceLineEndings("\n");
     }
 
