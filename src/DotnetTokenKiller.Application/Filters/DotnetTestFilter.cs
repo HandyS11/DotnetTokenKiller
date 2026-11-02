@@ -6,8 +6,11 @@ using DotnetTokenKiller.Domain.Filters;
 
 namespace DotnetTokenKiller.Application.Filters;
 
-/// <summary>Condenses dotnet test output to a concise pass/fail summary.</summary>
-/// <param name="rootPath">Optional root path used to shorten file paths in stack traces.</param>
+/// <summary>
+/// Condenses dotnet test output to a concise pass/fail summary. A test project that fails to compile
+/// gets the grouped diagnostics <c>dotnet build</c> prints for it, ahead of the other projects' results.
+/// </summary>
+/// <param name="rootPath">Optional root path used to shorten file paths in stack traces and diagnostics.</param>
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputFilter
 {
     private const int MaxFailures = 15;
@@ -36,7 +39,40 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         var lines = strippedOutput.Split('\n');
         var state = ParseLines(lines);
-        return FormatOutput(state, exitCode);
+
+        // A test project that fails to compile prints the same diagnostics `dotnet build` does, so they
+        // are read the same way. Only a failed run can have a build failure: on a zero exit a
+        // diagnostic-shaped line is never one.
+        var buildReport = exitCode == 0
+            ? null
+            : MsBuildDiagnosticReport.Parse(WithoutFailureBlocks(strippedOutput, lines, state), RootPath);
+        return FormatOutput(state, exitCode, buildReport);
+    }
+
+    /// <summary>
+    /// The output without the lines each failed test's own block took (its message, stack trace and
+    /// captured output), so a test that quotes compiler output in its message, as a Roslyn-driven test
+    /// does, is never read as a compile error. A line that ends in MSBuild's <c>[project.csproj]</c>
+    /// suffix stays: the block of one project's failure runs to the next summary, and a diagnostic of a
+    /// project still compiling in parallel can land inside it.
+    /// </summary>
+    /// <param name="strippedOutput">The whole output.</param>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="state">The parsed run, which knows where the failure blocks are.</param>
+    private static string WithoutFailureBlocks(string strippedOutput, string[] lines, ParseState state)
+    {
+        if (state.FailureBlocks.Count == 0)
+        {
+            return strippedOutput;
+        }
+
+        var inFailureBlock = new bool[lines.Length];
+        foreach (var (start, end) in state.FailureBlocks)
+        {
+            Array.Fill(inFailureBlock, true, start, end - start);
+        }
+
+        return string.Join('\n', lines.Where((line, i) => !inFailureBlock[i] || ProjectSuffixPattern().IsMatch(line)));
     }
 
     private ParseState ParseLines(string[] lines)
@@ -75,11 +111,24 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         var failedHeaderMatch = FailedTestHeaderPattern().Match(line);
         if (failedHeaderMatch.Success)
         {
-            return ParseFailure(lines, i, failedHeaderMatch, state);
+            return RecordFailureBlock(state, i, ParseFailure(lines, i, failedHeaderMatch, state));
         }
 
         var mtpFailedMatch = MtpFailedTestPattern().Match(line);
-        return mtpFailedMatch.Success ? ParseMtpFailure(lines, i, mtpFailedMatch, state) : i + 1;
+        return mtpFailedMatch.Success
+            ? RecordFailureBlock(state, i, ParseMtpFailure(lines, i, mtpFailedMatch, state))
+            : i + 1;
+    }
+
+    /// <summary>Notes that the lines from <paramref name="start"/> up to <paramref name="next"/> belong to one failed test.</summary>
+    /// <param name="state">The state accumulated so far.</param>
+    /// <param name="start">The index of the failure's header line.</param>
+    /// <param name="next">The index of the first line after the failure.</param>
+    /// <returns><paramref name="next"/>, so the parse can carry on from it.</returns>
+    private static int RecordFailureBlock(ParseState state, int start, int next)
+    {
+        state.FailureBlocks.Add((start, next));
+        return next;
     }
 
     /// <summary>Records <paramref name="line"/> when it is one of the single-line shapes: a summary or a test count.</summary>
@@ -478,9 +527,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.ProjectCount = Math.Max(1, state.ProjectCount);
     }
 
-    private static string FormatOutput(ParseState state, int exitCode)
+    private static string FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport? buildReport)
     {
         var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
+
+        // A project that did not compile never ran its tests, and says why in the same diagnostics a
+        // build prints; that comes first, with whatever the other projects' tests reported after it.
+        if (buildReport is { ErrorTotal: > 0 })
+        {
+            return FormatBuildFailure(state, buildReport, elapsed);
+        }
 
         // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
         // headers alone (crashed host) — always renders its failures, so it can never silently
@@ -568,13 +624,82 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             : "⚠ dotnet test: 0 tests found\n";
     }
 
-    private static string FormatFailures(ParseState state, string elapsed)
+    /// <summary>
+    /// The report of a build that failed: the diagnostics a <c>dotnet build</c> would print, then the
+    /// failed tests of the projects that did build, if any, and the status line, last.
+    /// </summary>
+    /// <param name="state">The parsed run.</param>
+    /// <param name="report">The build's diagnostics, with at least one error.</param>
+    /// <param name="elapsed">The test run's duration.</param>
+    private static string FormatBuildFailure(ParseState state, MsBuildDiagnosticReport report, string elapsed)
+    {
+        var diagnostics = report.RenderDiagnostics();
+        var buildFailure = DescribeBuildFailure(report);
+        if (state.ProjectCount > 0 || state.TotalFailed > 0 || state.Failures.Count > 0)
+        {
+            return diagnostics + FormatFailures(state, elapsed, buildFailure);
+        }
+
+        return $"{diagnostics}\u2717 dotnet test: {buildFailure}\n";
+    }
+
+    /// <summary>What did not build, as the status line says it: <c>1 project did not build (34 errors)</c>.</summary>
+    /// <param name="report">The build's diagnostics, with at least one error.</param>
+    private static string DescribeBuildFailure(MsBuildDiagnosticReport report)
+    {
+        var errors = $"{report.ErrorTotal} error{(report.ErrorTotal == 1 ? "" : "s")}";
+
+        // An error that names no project (a tool-level one) leaves nothing to count, and "0 projects did
+        // not build" would read as a contradiction.
+        if (report.FailedProjectCount == 0)
+        {
+            return $"build failed ({errors})";
+        }
+
+        return $"{report.FailedProjectCount} project{(report.FailedProjectCount == 1 ? "" : "s")} did not build ({errors})";
+    }
+
+    /// <summary>
+    /// The failed tests, then the status line. When <paramref name="buildFailure"/> is given, the run
+    /// also had a project that did not build: it joins the counts on the status line, and a run in which
+    /// no test failed has no failures block.
+    /// </summary>
+    /// <param name="state">The parsed run.</param>
+    /// <param name="elapsed">The test run's duration.</param>
+    /// <param name="buildFailure">What did not build, or <see langword="null"/> when everything did.</param>
+    private static string FormatFailures(ParseState state, string elapsed, string? buildFailure = null)
     {
         // When a summary is present, its failed count is authoritative; when the host crashed before
         // printing one, fall back to the number of failure headers we actually parsed.
         var failedCount = Math.Max(state.TotalFailed, state.Failures.Count);
 
         var sb = new StringBuilder();
+        if (failedCount > 0)
+        {
+            AppendFailureBlock(sb, state, failedCount);
+        }
+
+        // Only show the "(N projects, elapsed)" context when a summary was actually parsed. Without
+        // one (crashed host), ProjectCount and elapsed are both 0, and "(0 projects, 0.00s)" reads
+        // as a real — but bogus — measurement.
+        var context = string.Empty;
+        if (state.ProjectCount > 0)
+        {
+            var projectWord = state.ProjectCount == 1 ? "project" : "projects";
+            context = $" ({state.ProjectCount} {projectWord}, {elapsed})";
+        }
+
+        var buildSuffix = buildFailure is null ? string.Empty : $" \u00b7 {buildFailure}";
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{buildSuffix}{context}");
+
+        // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
+        // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.
+        return sb.ToString().ReplaceLineEndings("\n");
+    }
+
+    private static void AppendFailureBlock(StringBuilder sb, ParseState state, int failedCount)
+    {
         sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({failedCount}):");
 
         foreach (var f in state.Failures.Take(MaxFailures))
@@ -591,23 +716,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"+{state.Failures.Count - MaxFailures} more failures");
         }
-
-        // Only show the "(N projects, elapsed)" context when a summary was actually parsed. Without
-        // one (crashed host), ProjectCount and elapsed are both 0, and "(0 projects, 0.00s)" reads
-        // as a real — but bogus — measurement.
-        var context = string.Empty;
-        if (state.ProjectCount > 0)
-        {
-            var projectWord = state.ProjectCount == 1 ? "project" : "projects";
-            context = $" ({state.ProjectCount} {projectWord}, {elapsed})";
-        }
-
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{context}");
-
-        // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
-        // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.
-        return sb.ToString().ReplaceLineEndings("\n");
     }
 
     private static string CompactMessage(List<string> lines)
@@ -745,6 +853,11 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         RegexOptions.IgnoreCase)]
     private static partial Regex TerminalLoggerSummaryPattern();
 
+    // MSBuild closes every diagnostic with the project that raised it: "... [/path/A.csproj]", or
+    // "... [/path/A.csproj::TargetFramework=net8.0]" when a multi-targeted build re-reports it.
+    [GeneratedRegex(@"\.[A-Za-z]*proj(?:::[^\]]*)?\]\s*$")]
+    private static partial Regex ProjectSuffixPattern();
+
     // Stack frame with CS file: "   at Class.Method() in /path/to/File.cs:line 42" (VSTest) or
     // "    at Class.Method() in /path/to/File.cs:42" (MTP).
     [GeneratedRegex(@"in (?<file>.+\.cs):(?:line )?(?<line>\d+)")]
@@ -769,6 +882,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private sealed class ParseState
     {
         public List<FailureInfo> Failures { get; } = [];
+
+        /// <summary>The line ranges (start inclusive, end exclusive) the failed tests' blocks took, in order.</summary>
+        public List<(int Start, int End)> FailureBlocks { get; } = [];
+
         public int TotalPassed { get; set; }
         public int TotalFailed { get; set; }
         public int TotalSkipped { get; set; }

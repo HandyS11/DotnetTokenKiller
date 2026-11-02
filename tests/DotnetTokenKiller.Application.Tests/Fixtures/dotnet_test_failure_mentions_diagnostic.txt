@@ -1,0 +1,17 @@
+  Determining projects to restore...
+  Restored /test/project/root/Snippet.Tests/Snippet.Tests.csproj (in 212 ms).
+  Snippet.Tests -> /test/project/root/Snippet.Tests/bin/Debug/net10.0/Snippet.Tests.dll
+Test run for /test/project/root/Snippet.Tests/bin/Debug/net10.0/Snippet.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+  Failed Snippet.Tests.SnippetTests.Compiles_AnInvalidSnippet [2 ms]
+  Error Message:
+   Compilation failed:
+Program.cs(3,5): error CS0103: The name 'x' does not exist in the current context
+Program.cs(4,1): warning CS0168: The variable 'y' is declared but never used
+  Stack Trace:
+     at Snippet.Tests.SnippetTests.Compiles_AnInvalidSnippet() in /test/project/root/Snippet.Tests/SnippetTests.cs:line 12
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+Failed!  - Failed:     1, Passed:     2, Skipped:     0, Total:     3, Duration: 23 ms - Snippet.Tests.dll (net10.0)
+[xUnit.net 00:00:00.15]     Snippet.Tests.SnippetTests.Compiles_AnInvalidSnippet [FAIL]

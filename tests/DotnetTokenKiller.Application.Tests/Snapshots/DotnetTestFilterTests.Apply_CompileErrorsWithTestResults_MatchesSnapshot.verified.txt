@@ -1,0 +1,46 @@
+Broken.Tests/ConversionTests.cs (9 errors)
+  (7,32) CS0029: Cannot implicitly convert type 'string' to 'int'
+  (8,37) CS0266: Cannot implicitly convert type 'double' to 'int'. An explicit conversion exists (are you missing a cast?)
+  (9,36) CS0029: Cannot implicitly convert type 'string' to 'bool'
+  (10,39) CS0266: Cannot implicitly convert type 'long' to 'int'. An explicit conversion exists (are you missing a cast?)
+  (11,36) CS0029: Cannot implicitly convert type 'int' to 'string'
+  (12,36) CS0029: Cannot implicitly convert type 'string' to 'double'
+  (17,22) CS0029: Cannot implicitly convert type 'string' to 'int'
+  (18,21) CS0029: Cannot implicitly convert type 'int' to 'bool'
+  (19,23) CS0029: Cannot implicitly convert type 'double' to 'string'
+Broken.Tests/SignatureTests.cs (8 errors)
+  (10,25) CS1501: No overload for method 'Add' takes 3 arguments
+  (11,29) CS1503: Argument 1: cannot convert from 'string' to 'int'
+  (12,25) CS1501: No overload for method 'Add' takes 4 arguments
+  (13,29) CS1503: Argument 1: cannot convert from 'bool' to 'int'
+  (20,25) CS0103: The name 'undeclaredVariable' does not exist in the current context
+  (21,9) CS0103: The name 'MissingMethod' does not exist in the current context
+  (22,25) CS0103: The name 'anotherUndeclared' does not exist in the current context
+  (23,9) CS0103: The name 'Missing' does not exist in the current context
+Broken.Tests/ExtraTests.cs (8 errors)
+  (10,25) CS0103: The name 'Helper' does not exist in the current context
+  (11,25) CS0103: The name 'Helper' does not exist in the current context
+  (12,25) CS0103: The name 'Helper' does not exist in the current context
+  (13,25) CS0103: The name 'Helper' does not exist in the current context
+  (20,39) CS1061: 'SecretHolder' does not contain a definition for 'Reveal' and no accessible extension method 'Reveal' accepting a first ...
+  (21,39) CS1061: 'SecretHolder' does not contain a definition for 'Expose' and no accessible extension method 'Expose' accepting a first ...
+  (22,39) CS1061: 'SecretHolder' does not contain a definition for 'Leak' and no accessible extension method 'Leak' accepting a first argu...
+  (23,39) CS1061: 'SecretHolder' does not contain a definition for 'Peek' and no accessible extension method 'Peek' accepting a first argu...
+Broken.Tests/AccessTests.cs (6 errors)
+  (11,39) CS0122: 'SecretHolder._value' is inaccessible due to its protection level
+  (12,39) CS0122: 'SecretHolder._other' is inaccessible due to its protection level
+  (13,39) CS0122: 'SecretHolder._third' is inaccessible due to its protection level
+  (20,39) CS0122: 'SecretHolder._value' is inaccessible due to its protection level
+  (21,39) CS0122: 'SecretHolder._other' is inaccessible due to its protection level
+  (22,39) CS0122: 'SecretHolder._third' is inaccessible due to its protection level
+Broken.Tests/CalculatorTests.cs (3 errors)
+  (10,30) CS0246: The type or namespace name 'Calculator' could not be found (are you missing a using directive or an assembly reference?)
+  (19,30) CS0246: The type or namespace name 'Calculator' could not be found (are you missing a using directive or an assembly reference?)
+  (28,30) CS0246: The type or namespace name 'Calculator' could not be found (are you missing a using directive or an assembly reference?)
+Top codes: CS0103 (8x), CS0029 (7x), CS0122 (6x), CS1061 (4x), CS0246 (3x)
+1 warning suppressed (use --vv to see)
+FAILURES (1):
+  Gamma.Tests.GammaTests.Divides [5 ms]
+    Expected: 3, Actual:   2
+    at Gamma.Tests/GammaTests.cs:line 14
+dotnet test: 1 failed, 2 passed · 1 project did not build (34 errors) (1 project, 0.03s)

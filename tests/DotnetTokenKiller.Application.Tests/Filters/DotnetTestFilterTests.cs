@@ -1418,4 +1418,136 @@ public class DotnetTestFilterTests
 
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Apply_CompileErrors_RendersGroupedErrorsAndTotal()
+    {
+        // A test project that does not compile (the TDD red step): `dotnet test` prints the compiler's
+        // diagnostics and restore noise, no test summary, and no "Build FAILED." tally.
+        var fixture = LoadFixture("dotnet_test_compile_errors.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().NotContain("/test/project/root");
+        result.Should().NotContain(" -> ");
+        result.Should().NotContain("Determining projects");
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        result.Should().Contain("Top codes:");
+        result.Should().Contain("1 warning suppressed");
+        result.Should().EndWith("\n✗ dotnet test: 1 project did not build (34 errors)\n");
+        LastLine(result).Should().Be("✗ dotnet test: 1 project did not build (34 errors)");
+    }
+
+    [Fact]
+    public Task Apply_CompileErrors_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_compile_errors.txt");
+        var result = _sut.Apply(fixture, exitCode: 1);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_CompileErrorsWithTestResults_ShowsBoth()
+    {
+        // One project of the solution does not compile, another runs and has a failing test.
+        var fixture = LoadFixture("dotnet_test_compile_errors_mixed.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().NotContain("/test/project/root");
+        result.Should().NotContain(" -> ");
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        result.Should().Contain("FAILURES (1):");
+        result.Should().Contain("Gamma.Tests.GammaTests.Divides");
+        result.IndexOf("(9 errors)", StringComparison.Ordinal)
+            .Should().BeLessThan(result.IndexOf("FAILURES (1):", StringComparison.Ordinal),
+                "the compile errors come first, then the failing tests");
+        LastLine(result).Should().MatchRegex(
+            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public Task Apply_CompileErrorsWithTestResults_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_compile_errors_mixed.txt");
+        var result = _sut.Apply(fixture, exitCode: 1);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_CompileErrorsBesideAPassingProject_HasNoFailuresBlock()
+    {
+        // The common red step in a solution: the other test projects pass. Nothing failed, so there is
+        // no "FAILURES (0):" block, but the status still counts the passed tests next to the build failure.
+        var fixture = LoadFixture("dotnet_test_compile_errors_mixed_passing.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        result.Should().NotContain("FAILURES");
+        LastLine(result).Should().MatchRegex(
+            @"^dotnet test: 0 failed, 3 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_ErrorWithoutAProject_SaysBuildFailedNotZeroProjects()
+    {
+        // `dotnet test nothere.csproj`: MSBuild's own "MSB1009" names no project, so there is no project
+        // to count and the status must not claim "0 projects did not build".
+        var fixture = LoadFixture("dotnet_test_missing_project.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("MSB1009: Project file does not exist.");
+        result.Should().NotContain("0 project");
+        LastLine(result).Should().Be("✗ dotnet test: build failed (1 error)");
+    }
+
+    [Fact]
+    public void Apply_FailureMessageNamingADiagnostic_IsNotACompileError()
+    {
+        // A failing test whose message quotes compiler output ("Program.cs(3,5): error CS0103: ...", as a
+        // Roslyn-driven test does) is a test failure: the lines inside a failure's own block never
+        // count as the build's diagnostics.
+        var fixture = LoadFixture("dotnet_test_failure_mentions_diagnostic.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("FAILURES (1):");
+        result.Should().Contain("error CS0103");
+        result.Should().NotContain("did not build");
+        result.Should().NotContain("build failed");
+        LastLine(result).Should().MatchRegex(@"^dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_CompileErrorLandingInsideAFailureBlock_IsStillCounted()
+    {
+        // Projects build and run in parallel, so a project still compiling can print its diagnostic after
+        // another project's failure began, before that project's summary. The real mixed run, with its
+        // first error line moved there, must still count all 34 errors: a diagnostic closed by its
+        // [project.csproj] suffix is never a test's own text.
+        var lines = LoadFixture("dotnet_test_compile_errors_mixed.txt").Split('\n').ToList();
+        var moved = lines.Single(l => l.Contains("ConversionTests.cs(7,32): error CS0029", StringComparison.Ordinal));
+        lines.Remove(moved);
+        lines.Insert(lines.FindIndex(l => l.StartsWith("Failed!  - ", StringComparison.Ordinal)), moved);
+
+        var result = _sut.Apply(string.Join('\n', lines), exitCode: 1);
+
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        LastLine(result).Should().MatchRegex(
+            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_CompileErrorsOnZeroExit_NeverReportABuildFailure()
+    {
+        // The exit code stays the verdict: diagnostic-shaped lines in a run that exited 0 are not a failure.
+        var fixture = LoadFixture("dotnet_test_compile_errors.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().NotContain("did not build");
+        result.Should().NotContain("✗");
+    }
 }

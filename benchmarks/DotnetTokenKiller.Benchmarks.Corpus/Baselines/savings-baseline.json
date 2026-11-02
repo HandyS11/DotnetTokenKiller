@@ -212,6 +212,50 @@
       "savingsPercent": 91.3
     },
     {
+      "id": "test/compile-errors",
+      "fixture": "dotnet_test_compile_errors.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 7440,
+      "rawTokens": 1809,
+      "filteredTokens": 1028,
+      "savedTokens": 781,
+      "savingsPercent": 43.2
+    },
+    {
+      "id": "test/compile-errors-mixed",
+      "fixture": "dotnet_test_compile_errors_mixed.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 8369,
+      "rawTokens": 2069,
+      "filteredTokens": 1091,
+      "savedTokens": 978,
+      "savingsPercent": 47.3
+    },
+    {
+      "id": "test/compile-errors-mixed-passing",
+      "fixture": "dotnet_test_compile_errors_mixed_passing.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 7865,
+      "rawTokens": 1941,
+      "filteredTokens": 1044,
+      "savedTokens": 897,
+      "savingsPercent": 46.2
+    },
+    {
+      "id": "test/failure-mentions-diagnostic",
+      "fixture": "dotnet_test_failure_mentions_diagnostic.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1169,
+      "rawTokens": 321,
+      "filteredTokens": 113,
+      "savedTokens": 208,
+      "savingsPercent": 64.8
+    },
+    {
       "id": "test/failures",
       "fixture": "dotnet_test_failures.txt",
       "filterKey": "test",
@@ -331,6 +375,17 @@
       "filteredTokens": 23,
       "savedTokens": 877,
       "savingsPercent": 97.4
+    },
+    {
+      "id": "test/missing-project",
+      "fixture": "dotnet_test_missing_project.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 77,
+      "rawTokens": 22,
+      "filteredTokens": 42,
+      "savedTokens": -20,
+      "savingsPercent": -90.9
     },
     {
       "id": "test/mtp-all-pass",
