@@ -2,5 +2,5 @@ Program.cs (5 errors)
   (27,15) (28,15) (29,15) CS1503 ×3: Argument 1: cannot convert from 'Dictionary<string, List<KeyValuePair<string, IReadOnlyList<long>>>>' to 'Dictionary<string, List<KeyValuePair<string, IReadOnlyList<int>>>>'
   (30,9) CS0121: The call is ambiguous between the following methods or properties: 'LongMessages.Program.Handle(IEnumerable<string>, ICollection<string>)' and 'LongMessages.Program.Handle(ICollection<string>, IEnumerable<string>)'
   (32,29) SYSLIB0011: 'BinaryFormatter' is obsolete: 'BinaryFormatter serialization is obsolete and should not be used.'
-2 warnings suppressed (use --vv to see)
+2 warnings not shown (dtk log)
 ✗ dotnet build failed (exit 1): 5 errors, 2 warnings (1 project, 0.83s)

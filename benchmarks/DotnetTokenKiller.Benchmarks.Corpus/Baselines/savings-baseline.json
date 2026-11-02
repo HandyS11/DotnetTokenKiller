@@ -9,9 +9,9 @@
       "exitCode": 1,
       "rawBytes": 2603,
       "rawTokens": 710,
-      "filteredTokens": 128,
-      "savedTokens": 582,
-      "savingsPercent": 82
+      "filteredTokens": 127,
+      "savedTokens": 583,
+      "savingsPercent": 82.1
     },
     {
       "id": "build/long-messages",
@@ -20,9 +20,9 @@
       "exitCode": 1,
       "rawBytes": 5607,
       "rawTokens": 1174,
-      "filteredTokens": 183,
-      "savedTokens": 991,
-      "savingsPercent": 84.4
+      "filteredTokens": 182,
+      "savedTokens": 992,
+      "savingsPercent": 84.5
     },
     {
       "id": "build/multitarget-errors",
@@ -251,9 +251,9 @@
       "exitCode": 1,
       "rawBytes": 7440,
       "rawTokens": 1809,
-      "filteredTokens": 902,
-      "savedTokens": 907,
-      "savingsPercent": 50.1
+      "filteredTokens": 901,
+      "savedTokens": 908,
+      "savingsPercent": 50.2
     },
     {
       "id": "test/compile-errors-mixed",
@@ -262,9 +262,9 @@
       "exitCode": 1,
       "rawBytes": 8369,
       "rawTokens": 2069,
-      "filteredTokens": 972,
-      "savedTokens": 1097,
-      "savingsPercent": 53
+      "filteredTokens": 971,
+      "savedTokens": 1098,
+      "savingsPercent": 53.1
     },
     {
       "id": "test/compile-errors-mixed-passing",
@@ -273,9 +273,9 @@
       "exitCode": 1,
       "rawBytes": 7865,
       "rawTokens": 1941,
-      "filteredTokens": 918,
-      "savedTokens": 1023,
-      "savingsPercent": 52.7
+      "filteredTokens": 917,
+      "savedTokens": 1024,
+      "savingsPercent": 52.8
     },
     {
       "id": "test/duration-under-1ms",

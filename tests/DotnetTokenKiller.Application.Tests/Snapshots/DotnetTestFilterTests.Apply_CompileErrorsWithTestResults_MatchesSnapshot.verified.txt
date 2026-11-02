@@ -27,7 +27,7 @@ Broken.Tests/AccessTests.cs (6 errors)
   (12,39) (21,39) CS0122 ×2: 'SecretHolder._other' is inaccessible due to its protection level
   (13,39) (22,39) CS0122 ×2: 'SecretHolder._third' is inaccessible due to its protection level
 Broken.Tests/CalculatorTests.cs(10,30) (19,30) (28,30) CS0246 ×3: The type or namespace name 'Calculator' could not be found (are you missing a using directive or an assembly reference?)
-1 warning suppressed (use --vv to see)
+1 warning not shown (dtk log)
 FAILURES (1):
   Gamma.Tests.GammaTests.Divides [5 ms]
     Assert.Equal() Failure: Values differ — Expected: 3, Actual: 2

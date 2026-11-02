@@ -494,7 +494,27 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "File.cs(1,1) CS0001: error message\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
+            "File.cs(1,1) CS0001: error message\n1 warning not shown (dtk log)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_ErrorsWithSixWarnings_SaysHowManyAreNotShownAndPointsAtDtkLog()
+    {
+        // MSBuild declares six warnings of which three are parsed. The line counts the six, with no
+        // "(3 shown)" beside it, and names the saved log rather than --vv's raw dump.
+        const string input = """
+                             /path/A.cs(1,1): error CS0001: boom [/path/P.csproj]
+                             /path/B.cs(1,1): warning CS0002: one [/path/P.csproj]
+                             /path/B.cs(2,1): warning CS0003: two [/path/P.csproj]
+                             /path/B.cs(3,1): warning CS0004: three [/path/P.csproj]
+                                 1 Error(s)
+                                 6 Warning(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Split('\n').Should().Contain("6 warnings not shown (dtk log)");
+        result.Should().NotContain("--vv");
     }
 
     [Fact]
@@ -522,7 +542,7 @@ public class DotnetBuildFilterTests
     [Fact]
     public void Apply_MultipleWarningsWithErrors_UsesPlural()
     {
-        // Covers (warnings.Count == 1 ? "" : "s") false branch at line 147 — plural "warnings suppressed"
+        // Covers (warnings.Count == 1 ? "" : "s") false branch at line 147 — plural "warnings not shown"
         const string input = """
                              /path/File.cs(1,1): error CS0001: error message [Project.csproj]
                              /path/File.cs(2,1): warning CS0002: warning one [Project.csproj]
@@ -532,7 +552,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "File.cs(1,1) CS0001: error message\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
+            "File.cs(1,1) CS0001: error message\n2 warnings not shown (dtk log)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
     }
 
     [Fact]
@@ -812,7 +832,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "a.cs(1,1) CS001: e\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
+            "a.cs(1,1) CS001: e\n1 warning not shown (dtk log)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -1089,7 +1109,7 @@ public class DotnetBuildFilterTests
     public void Apply_ErrorWithTwoWarnings_VerdictLineUsesPluralWarnings()
     {
         // Exact assertion pins the plural "s" suffix on the warning count in the *verdict line*
-        // (a different ternary from the "N warnings suppressed" line below it).
+        // (a different ternary from the "N warnings not shown" line below it).
         const string input = """
                              /path/A.cs(1,1): error CS0001: err [P.csproj]
                              /path/B.cs(2,1): warning CS0002: w1 [P.csproj]
@@ -1098,7 +1118,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("A.cs(1,1) CS0001: err\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
+        result.Should().Be("A.cs(1,1) CS0001: err\n2 warnings not shown (dtk log)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
     }
 
     [Fact]
@@ -1477,7 +1497,7 @@ public class DotnetBuildFilterTests
         result.Should().Be(
             "B.cs (2 errors)\n  (1,1) CS0002: second\n  (2,1) CS0003: third\n"
             + "A.cs(3,7) CS0001: first\n"
-            + "1 warning suppressed (use --vv to see)\n"
+            + "1 warning not shown (dtk log)\n"
             + "\u2717 dotnet build failed (exit 1): 3 errors, 1 warning (1 project)\n");
     }
 

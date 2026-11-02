@@ -181,7 +181,7 @@ public class MsBuildDiagnosticReportTests
             + "  (10,5) CS1002: ; expected\n"
             + "  (12,18) CS0103: The name 'undeclared' does not exist in the current context\n"
             + "src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10) CS1002: ; expected\n"
-            + "1 warning suppressed (use --vv to see)\n");
+            + "1 warning not shown (dtk log)\n");
         body.Should().NotContain("dotnet build:").And.NotContain("---");
     }
 

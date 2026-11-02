@@ -233,7 +233,7 @@ internal sealed partial class MsBuildDiagnosticReport
         if (_warnings.Count > 0)
         {
             sb.AppendLine(CultureInfo.InvariantCulture,
-                $"{Tally(WarningTotal, _warnings.Count, WarningLevel)} suppressed (use --vv to see)");
+                $"{CountLabel(WarningTotal, WarningLevel)} not shown (dtk log)");
         }
     }
 
@@ -523,9 +523,14 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <param name="noun">The singular noun to render ("error" or "warning").</param>
     private static string Tally(int total, int shown, string noun)
     {
-        var label = $"{total} {noun}{(total == 1 ? "" : "s")}";
+        var label = CountLabel(total, noun);
         return total == shown ? label : $"{label} ({shown} shown)";
     }
+
+    /// <summary>Renders a diagnostic count with its noun, singular for one: "1 warning", "6 warnings".</summary>
+    /// <param name="total">The count the build reported.</param>
+    /// <param name="noun">The singular noun to render ("error" or "warning").</param>
+    private static string CountLabel(int total, string noun) => $"{total} {noun}{(total == 1 ? "" : "s")}";
 
     /// <summary>Renders a diagnostic code, standing in for codeless MSBuild output.</summary>
     /// <param name="code">The parsed code, empty when the diagnostic carried none.</param>
