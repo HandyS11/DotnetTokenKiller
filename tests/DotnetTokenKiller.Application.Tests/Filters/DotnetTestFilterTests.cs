@@ -1785,6 +1785,102 @@ public class DotnetTestFilterTests
             "Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.");
     }
 
+    [Fact]
+    public void Apply_ReqnrollPendingStep_ShowsStepText()
+    {
+        // Real xUnit + Reqnroll 2.4.1 output: the failure message is only "Test pending: No matching step
+        // definition found for one or more steps." followed by the generated binding snippet, and the steps
+        // themselves are printed in "Standard Output Messages:", each followed by "-> No matching step
+        // definition found for the step.". The snippet used to be all the report showed, cut off.
+        var fixture = LoadFixture("dotnet_test_reqnroll_pending.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("\n    No matching step definition: When the two numbers are exponentiated\n");
+        result.Should().NotContain("[Binding]");
+        result.Should().NotContain("using System");
+    }
+
+    [Fact]
+    public void Apply_ReqnrollSeveralPendingSteps_JoinsThemInScenarioOrder()
+    {
+        var fixture = LoadFixture("dotnet_test_reqnroll_pending.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain(
+            "\n    No matching step definition: When the numbers are frobnicated; And the frobnication is verified\n");
+    }
+
+    [Fact]
+    public void Apply_ReqnrollPendingStep_LeavesTheOtherFailuresAlone()
+    {
+        var fixture = LoadFixture("dotnet_test_reqnroll_pending.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("Assert.Equal() Failure: Strings differ at pos 0 — Expected: \"xyz\", Actual: \"cba\"\n");
+        result.Should().Contain("System.DivideByZeroException : Attempted to divide by zero.\n");
+        result.Should().Contain("dotnet test: 4 failed, 5 passed");
+    }
+
+    [Fact]
+    public void Apply_ReqnrollPendingStepWithArguments_ShowsTheStepLineNotTheArgument()
+    {
+        // Reqnroll prints a table or doc string argument under its step, indented by three spaces and
+        // introduced by a "--- … step argument ---" line, ahead of the "->" result line.
+        const string input = """
+                               Failed Pending.Table [3 ms]
+                               Error Message:
+                                Reqnroll.xUnit.ReqnrollPlugin.XUnitPendingStepException : Test pending: No matching step definition found for one or more steps.
+                             using System;
+                             using Reqnroll;
+
+                             namespace MyNamespace
+                             {
+                                 [Binding]
+                                 public class StepDefinitions
+                                 {
+                                 }
+                             }
+
+                               Stack Trace:
+                                  at Reqnroll.xUnit.ReqnrollPlugin.XUnitRuntimeProvider.TestPending(String message)
+                               Standard Output Messages:
+                              Given the first number is 50
+                              -> done: CalculatorSteps.GivenTheFirstNumberIs(50) (0.0s)
+                              When the following users exist
+                                --- table step argument ---
+                                | name | age |
+                                | bob  | 4   |
+                              -> No matching step definition found for the step. Use the following code to create one:
+                                      [When("the following users exist")]
+                                      public void WhenTheFollowingUsersExist(DataTable dataTable)
+                                      {
+                                          _scenarioContext.Pending();
+                                      }
+
+                              Then the payload is
+                                --- multiline step argument ---
+                                {"a": 1}
+                              -> No matching step definition found for the step. Use the following code to create one:
+                                      [Then("the payload is")]
+                                      public void ThenThePayloadIs(string multilineText)
+                                      {
+                                          _scenarioContext.Pending();
+                                      }
+
+
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 3 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Contain(
+            "\n    No matching step definition: When the following users exist; Then the payload is\n");
+    }
+
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>
     /// <param name="output">The filtered output.</param>
     private static string MessageLine(string output) =>

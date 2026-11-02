@@ -65,6 +65,7 @@ public static class SavingsScenarios
         new("test/multiproject-zero", "dotnet_test_multiproject_zero.txt", FilterKeys.Test, 0),
         new("test/nested-exception", "dotnet_test_nested_exception.txt", FilterKeys.Test, 1),
         new("test/no-test-available", "dotnet_test_no_test_available.txt", FilterKeys.Test, 0),
+        new("test/reqnroll-pending", "dotnet_test_reqnroll_pending.txt", FilterKeys.Test, 1),
         new("test/skipped-only", "dotnet_test_skipped_only.txt", FilterKeys.Test, 0),
         new("test/zero", "dotnet_test_zero.txt", FilterKeys.Test, 0),
     ];

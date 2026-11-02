@@ -498,6 +498,17 @@
       "savingsPercent": 90.7
     },
     {
+      "id": "test/reqnroll-pending",
+      "fixture": "dotnet_test_reqnroll_pending.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 8391,
+      "rawTokens": 1920,
+      "filteredTokens": 171,
+      "savedTokens": 1749,
+      "savingsPercent": 91.1
+    },
+    {
       "id": "test/skipped-only",
       "fixture": "dotnet_test_skipped_only.txt",
       "filterKey": "test",

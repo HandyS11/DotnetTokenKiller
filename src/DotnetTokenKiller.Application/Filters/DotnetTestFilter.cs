@@ -19,6 +19,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// <summary>Cap on the innermost exception of a nested message, so that it survives a long outer one.</summary>
     private const int InnerExceptionMaxLen = 200;
 
+    /// <summary>What a failure reads when Reqnroll found no binding for a step, followed by the steps.</summary>
+    private const string ReqnrollPendingPrefix = "No matching step definition: ";
+
     /// <summary>Microsoft.Testing.Platform's exit code for a run in which zero tests ran.</summary>
     private const int MtpZeroTestsExitCode = 8;
 
@@ -289,10 +292,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             i++;
         }
 
+        var detailStart = i;
         var (sourceRef, afterStack) = FindSourceRef(lines, i);
         i = afterStack;
 
-        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef));
+        var message = ReqnrollPendingMessage(msgLines, lines, detailStart, afterStack) ?? CompactMessage(msgLines);
+        state.Failures.Add(new FailureInfo(testName, duration, message, sourceRef));
         return i;
     }
 
@@ -365,6 +370,53 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         }
 
         return (msgLines, i);
+    }
+
+    /// <summary>
+    /// Reads the failure of a Reqnroll scenario with undefined steps. Its message is only "Test pending: No
+    /// matching step definition found for one or more steps." followed by the generated binding snippet, which
+    /// says nothing about which steps are missing; the steps are in the failure's standard output, each
+    /// followed by a "-> No matching step definition found for the step." line.
+    /// </summary>
+    /// <param name="msgLines">The trimmed, non-empty lines of the failure's message.</param>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="from">The index of the first line after the message.</param>
+    /// <param name="to">The index of the first line after the failure.</param>
+    /// <returns>The message to report, or <see langword="null"/> when this is no such failure or no step was read.</returns>
+    private static string? ReqnrollPendingMessage(List<string> msgLines, string[] lines, int from, int to)
+    {
+        if (!msgLines.Exists(l => ReqnrollPendingMessagePattern().IsMatch(l)))
+        {
+            return null;
+        }
+
+        var steps = new List<string>();
+        string? step = null;
+        var inStandardOutput = false;
+        for (var i = from; i < to; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (!inStandardOutput)
+            {
+                inStandardOutput = StandardOutputLabelPattern().IsMatch(line);
+                continue;
+            }
+
+            var stepMatch = ReqnrollStepLinePattern().Match(line);
+            if (stepMatch.Success)
+            {
+                step = stepMatch.Groups["step"].Value.TrimEnd();
+            }
+            else if (step is not null && ReqnrollUndefinedStepResultPattern().IsMatch(line))
+            {
+                steps.Add(step);
+                step = null;
+            }
+        }
+
+        return steps.Count == 0
+            ? null
+            : TextHelpers.Truncate(ReqnrollPendingPrefix + string.Join("; ", steps), MessageMaxLen);
     }
 
     private (string SourceRef, int NextIndex) FindSourceRef(string[] lines, int i)
@@ -968,6 +1020,27 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     // "  Stack Trace:"
     [GeneratedRegex(@"^\s+Stack Trace:\s*$")]
     private static partial Regex StackTraceLabelPattern();
+
+    // "  Standard Output Messages:", the section of a failure that holds the test's own output.
+    [GeneratedRegex(@"^\s+Standard Output Messages:\s*$")]
+    private static partial Regex StandardOutputLabelPattern();
+
+    // Reqnroll's failure message for a scenario with steps that no binding matches, behind the exception type:
+    // "Reqnroll.xUnit.ReqnrollPlugin.XUnitPendingStepException : Test pending: No matching step definition found
+    // for one or more steps."
+    [GeneratedRegex(@"\bNo matching step definition found for one or more steps\b")]
+    private static partial Regex ReqnrollPendingMessagePattern();
+
+    // A step in Reqnroll's trace of the scenario, as written in the feature, with the keyword: " When the numbers
+    // are added". One space of indent; its table or doc string argument has three, and its result line " -> …"
+    // starts with the arrow.
+    [GeneratedRegex(@"^ (?<step>(?!->)\S.*)$")]
+    private static partial Regex ReqnrollStepLinePattern();
+
+    // The result line of a step no binding matches: " -> No matching step definition found for the step. Use the
+    // following code to create one:".
+    [GeneratedRegex(@"^\s*->\s+No matching step definition found for the step\b")]
+    private static partial Regex ReqnrollUndefinedStepResultPattern();
 
     // xUnit's pointer above the Expected/Actual pair of a collection or string diff: "↓ (pos 9)". The arrow
     // below the pair ("↑ (pos 9)") repeats it and is not read.
