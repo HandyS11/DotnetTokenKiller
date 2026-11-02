@@ -61,6 +61,8 @@ public static class SavingsScenarios
         new("test/mtp-zero", "dotnet_test_mtp_zero.txt", FilterKeys.Test, 8),
         new("test/multiproject-partial", "dotnet_test_multiproject_partial_match.txt", FilterKeys.Test, 0),
         new("test/multiproject-skipped", "dotnet_test_multiproject_skipped.txt", FilterKeys.Test, 0),
+        new("test/multiproject-zero", "dotnet_test_multiproject_zero.txt", FilterKeys.Test, 0),
+        new("test/no-test-available", "dotnet_test_no_test_available.txt", FilterKeys.Test, 0),
         new("test/skipped-only", "dotnet_test_skipped_only.txt", FilterKeys.Test, 0),
         new("test/zero", "dotnet_test_zero.txt", FilterKeys.Test, 0),
     ];

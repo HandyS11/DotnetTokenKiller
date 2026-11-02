@@ -67,10 +67,51 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_ZeroTestsFixture_ReturnsZeroTestsMessage()
+    public void Apply_ZeroFixture_NamesFilterAndAssembly()
     {
         var fixture = LoadFixture("dotnet_test_zero.txt");
-        _sut.Apply(fixture, exitCode: 0).Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+        _sut.Apply(fixture, exitCode: 0).Should().Be(
+            "⚠ dotnet test: no test matched filter FullyQualifiedName~NonExistentTest (DotnetTokenKiller.Domain.Tests.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_MultiProjectZeroFixture_NamesFilterAndEveryAssemblyInOrder()
+    {
+        // Real two-project run: both assemblies print the same filter, B.Tests ran first.
+        var fixture = LoadFixture("dotnet_test_multiproject_zero.txt");
+        _sut.Apply(fixture, exitCode: 0).Should().Be(
+            "⚠ dotnet test: no test matched filter FullyQualifiedName~NonExistentTest (B.Tests.dll, A.Tests.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_NoTestAvailableFixture_NamesAssemblyWithoutFilter()
+    {
+        // A test project without a registered adapter: VSTest says "No test is available in <dll>.", and no
+        // filter was given, so there is none to name.
+        var fixture = LoadFixture("dotnet_test_no_test_available.txt");
+        _sut.Apply(fixture, exitCode: 0).Should().Be("⚠ dotnet test: no test found (C.NoAdapter.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_NoTestMatchesDifferingFiltersAndRepeatedAssembly_UsesFirstFilterAndEachAssemblyOnce()
+    {
+        const string input = """
+                             No test matches the given testcase filter `Name~First` in /r/A.Tests/bin/Debug/net10.0/A.Tests.dll
+                             No test matches the given testcase filter `Name~Second` in /r/B.Tests/bin/Debug/net10.0/B.Tests.dll
+                             No test matches the given testcase filter `Name~Second` in /r/A.Tests/bin/Debug/net10.0/A.Tests.dll
+
+                             """;
+
+        _sut.Apply(input, exitCode: 0).Should().Be("⚠ dotnet test: no test matched filter Name~First (A.Tests.dll, B.Tests.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_NoTestMatchesWindowsPathWithSpaces_NamesTheFileOnly()
+    {
+        const string input =
+            "No test matches the given testcase filter `Category=Slow & Name~X` in C:\\My Repo\\tests\\My Tests\\bin\\Debug\\net10.0\\My Tests.dll\r\n";
+
+        _sut.Apply(input, exitCode: 0).Should().Be("⚠ dotnet test: no test matched filter Category=Slow & Name~X (My Tests.dll)\n");
     }
 
     [Fact]
@@ -1229,7 +1270,7 @@ public class DotnetTestFilterTests
         // code a "nothing matched" warning rather than a blank report.
         var fixture = LoadFixture("dotnet_test_mtp_zero.txt");
 
-        _sut.Apply(fixture, exitCode: 8).Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+        _sut.Apply(fixture, exitCode: 8).Should().Be("⚠ dotnet test: no test found (Alpha.Tests.dll)\n");
     }
 
     [Theory]
@@ -1382,7 +1423,7 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_NoTestsLineOnly_ReportsZeroWithNoAssemblyMatched()
+    public void Apply_NoTestsLineOnly_NamesFilterAndAssembly()
     {
         // Kills the mutant that drops `state.ZeroTestsFound` from the disjunction: with no summary at
         // all, ProjectCount is 0, so only ZeroTestsFound can produce the verdict.
@@ -1391,7 +1432,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+        result.Should().Be("⚠ dotnet test: no test matched filter X (A.Tests.dll)\n");
     }
 
     [Fact]

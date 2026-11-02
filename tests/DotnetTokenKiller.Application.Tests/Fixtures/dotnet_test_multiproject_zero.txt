@@ -1,0 +1,13 @@
+  Determining projects to restore...
+  Restored /test/project/root/A.Tests/A.Tests.csproj (in 491 ms).
+  Restored /test/project/root/B.Tests/B.Tests.csproj (in 491 ms).
+  B.Tests -> /test/project/root/B.Tests/bin/Debug/net10.0/B.Tests.dll
+Test run for /test/project/root/B.Tests/bin/Debug/net10.0/B.Tests.dll (.NETCoreApp,Version=v10.0)
+  A.Tests -> /test/project/root/A.Tests/bin/Debug/net10.0/A.Tests.dll
+Test run for /test/project/root/A.Tests/bin/Debug/net10.0/A.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+A total of 1 test files matched the specified pattern.
+No test matches the given testcase filter `FullyQualifiedName~NonExistentTest` in /test/project/root/B.Tests/bin/Debug/net10.0/B.Tests.dll
+No test matches the given testcase filter `FullyQualifiedName~NonExistentTest` in /test/project/root/A.Tests/bin/Debug/net10.0/A.Tests.dll
+
+

@@ -427,9 +427,9 @@
       "exitCode": 8,
       "rawBytes": 502,
       "rawTokens": 172,
-      "filteredTokens": 16,
-      "savedTokens": 156,
-      "savingsPercent": 90.7
+      "filteredTokens": 15,
+      "savedTokens": 157,
+      "savingsPercent": 91.3
     },
     {
       "id": "test/multiproject-partial",
@@ -454,6 +454,28 @@
       "savingsPercent": 93.9
     },
     {
+      "id": "test/multiproject-zero",
+      "fixture": "dotnet_test_multiproject_zero.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 895,
+      "rawTokens": 239,
+      "filteredTokens": 27,
+      "savedTokens": 212,
+      "savingsPercent": 88.7
+    },
+    {
+      "id": "test/no-test-available",
+      "fixture": "dotnet_test_no_test_available.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 711,
+      "rawTokens": 172,
+      "filteredTokens": 16,
+      "savedTokens": 156,
+      "savingsPercent": 90.7
+    },
+    {
       "id": "test/skipped-only",
       "fixture": "dotnet_test_skipped_only.txt",
       "filterKey": "test",
@@ -471,9 +493,9 @@
       "exitCode": 0,
       "rawBytes": 834,
       "rawTokens": 216,
-      "filteredTokens": 16,
-      "savedTokens": 200,
-      "savingsPercent": 92.6
+      "filteredTokens": 28,
+      "savedTokens": 188,
+      "savingsPercent": 87
     }
   ]
 }

@@ -136,13 +136,44 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return true;
         }
 
-        if (NoTestsPattern().IsMatch(line) || MtpAssemblyZeroTestsPattern().IsMatch(line))
+        var noTestsMatch = NoTestsPattern().Match(line);
+        if (!noTestsMatch.Success)
         {
-            state.ZeroTestsFound = true;
+            noTestsMatch = MtpAssemblyZeroTestsPattern().Match(line);
+        }
+
+        if (noTestsMatch.Success)
+        {
+            RecordNoTests(noTestsMatch, state);
             return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Records an assembly that matched or ran no test, with what the line says about it: the filter
+    /// expression (VSTest's "No test matches" line) and the assembly's file name. A run keeps the first
+    /// filter it sees and each assembly once, in order of appearance.
+    /// </summary>
+    /// <param name="match">A match of <see cref="NoTestsPattern"/> or <see cref="MtpAssemblyZeroTestsPattern"/>.</param>
+    /// <param name="state">The state accumulated so far.</param>
+    private static void RecordNoTests(Match match, ParseState state)
+    {
+        state.ZeroTestsFound = true;
+
+        if (match.Groups["filter"] is { Success: true } filter)
+        {
+            state.ZeroTestsFilter ??= filter.Value;
+        }
+
+        if (match.Groups["sources"] is not { Success: true } sources)
+        {
+            return;
+        }
+
+        var names = SourceFileNamePattern().Matches(sources.Value).Select(m => m.Value.Trim());
+        state.ZeroTestsAssemblies.AddRange(names.Except(state.ZeroTestsAssemblies));
     }
 
     /// <summary>
@@ -599,8 +630,28 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         }
 
         return state.ZeroTestsFound
-            ? "⚠ dotnet test: 0 tests found (no assembly matched)\n"
+            ? $"⚠ dotnet test: {DescribeNoTests(state)}\n"
             : "⚠ dotnet test: 0 tests found\n";
+    }
+
+    /// <summary>
+    /// What the zero-tests warning says for a run whose output named a "no test" line: the filter that
+    /// matched nothing, or that no test was found, plus the assemblies, whichever of them the output gave.
+    /// </summary>
+    /// <param name="state">The parsed run, with <see cref="ParseState.ZeroTestsFound"/> set.</param>
+    private static string DescribeNoTests(ParseState state)
+    {
+        var assemblies = state.ZeroTestsAssemblies.Count > 0
+            ? $" ({string.Join(", ", state.ZeroTestsAssemblies)})"
+            : string.Empty;
+        if (state.ZeroTestsFilter is { } filter)
+        {
+            return $"no test matched filter {filter}{assemblies}";
+        }
+
+        return assemblies.Length > 0
+            ? $"no test found{assemblies}"
+            : "0 tests found (no assembly matched)";
     }
 
     /// <summary>
@@ -807,8 +858,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     [GeneratedRegex(@"^Running tests from\s")]
     private static partial Regex MtpRunningTestsPattern();
 
-    // MTP: an assembly that ran nothing, "/path/Tests.dll (net10.0|x64) Zero tests ran (160ms)".
-    [GeneratedRegex(@"\.(?:dll|exe)\s\([^)]*\)\s+Zero tests ran\b", RegexOptions.IgnoreCase)]
+    // MTP: an assembly that ran nothing, "/path/Tests.dll (net10.0|x64) Zero tests ran (160ms)". The
+    // sources group holds the file name, which may hold spaces; starting only at the line start or after
+    // a separator keeps the scan linear on a long line.
+    [GeneratedRegex(@"(?:^|[/\\])(?<sources>[^/\\]+\.(?:dll|exe))\s\([^)]*\)\s+Zero tests ran\b", RegexOptions.IgnoreCase)]
     private static partial Regex MtpAssemblyZeroTestsPattern();
 
     // MTP run summary header: "Test run summary: Passed!", "Failed!" or "Zero tests ran". Its fields
@@ -859,9 +912,18 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     [GeneratedRegex(@"^\s+Stack Trace:\s*$")]
     private static partial Regex StackTraceLabelPattern();
 
-    // Zero tests: "No test matches the given testcase filter" or "No test is available"
-    [GeneratedRegex("No test matches the given testcase filter|No test is available", RegexOptions.IgnoreCase)]
+    // Zero tests: VSTest's "No test matches the given testcase filter `<expression>` in <assemblies>" or
+    // "No test is available in <assemblies>. Make sure that test discoverer & executors are registered…".
+    // The filter and sources groups are optional: the bare phrases still count as a zero-tests line.
+    [GeneratedRegex(
+        @"No test matches the given testcase filter(?:\s+`(?<filter>.+)`\s+in\s+(?<sources>.+))?|No test is available(?:\s+in\s+(?<sources>.+?)(?:\.\s+Make sure|\.?$))?",
+        RegexOptions.IgnoreCase)]
     private static partial Regex NoTestsPattern();
+
+    // An assembly's file name in the paths a VSTest line names, "/dir/A.Tests.dll" or "C:\dir\A.Tests.dll":
+    // what follows the last path separator, up to the extension (a comma ends one path in a list).
+    [GeneratedRegex(@"[^/\\,]+\.(?:dll|exe)", RegexOptions.IgnoreCase)]
+    private static partial Regex SourceFileNamePattern();
 
     private sealed class ParseState
     {
@@ -872,6 +934,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         public int ProjectCount { get; set; }
         public double TotalDurationMs { get; set; }
         public bool ZeroTestsFound { get; set; }
+
+        /// <summary>The first filter expression a "No test matches" line quoted, or <see langword="null"/>.</summary>
+        public string? ZeroTestsFilter { get; set; }
+
+        /// <summary>The file names of the assemblies that matched or ran no test, distinct, in order of appearance.</summary>
+        public List<string> ZeroTestsAssemblies { get; } = [];
 
         /// <summary>Test assemblies an MTP run announced with "Running tests from".</summary>
         public int MtpAssembliesRun { get; set; }
