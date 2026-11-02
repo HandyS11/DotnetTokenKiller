@@ -41,6 +41,6 @@ Top codes: CS0103 (8x), CS0029 (7x), CS0122 (6x), CS1061 (4x), CS0246 (3x)
 1 warning suppressed (use --vv to see)
 FAILURES (1):
   Gamma.Tests.GammaTests.Divides [5 ms]
-    Expected: 3, Actual:   2
+    Assert.Equal() Failure: Values differ — Expected: 3, Actual: 2
     at Gamma.Tests/GammaTests.cs:line 14
 dotnet test: 1 failed, 2 passed · 1 project did not build (34 errors) (1 project, 0.03s)

@@ -191,16 +191,16 @@ FAILURES (12):
     System.ArgumentOutOfRangeException : Index was out of range. Must be non-negative and less than the size of the collection. (Parameter 'index')
     at samples/SampleApp.Tests.MultiFailure/ExceptionTests.cs:line 30
   SampleApp.Tests.MultiFailure.DataDrivenFailures.Square_Matches_Expected(input: 10, expected: 99, shouldPass: True) [1 ms]
-    Expected: 99, Actual:   100
+    Assert.Equal() Failure: Values differ — Expected: 99, Actual: 100
     at samples/SampleApp.Tests.MultiFailure/DataDrivenFailures.cs:line 17
   SampleApp.Tests.MultiFailure.DataDrivenFailures.Square_Matches_Expected(input: 5, expected: 24, shouldPass: True) [< 1 ms]
-    Expected: 24, Actual:   25
+    Assert.Equal() Failure: Values differ — Expected: 24, Actual: 25
     at samples/SampleApp.Tests.MultiFailure/DataDrivenFailures.cs:line 17
   SampleApp.Tests.MultiFailure.ExceptionTests.Throws_ArgumentNull [< 1 ms]
     System.ArgumentNullException : Simulated null argument (Parameter 'param')
     at samples/SampleApp.Tests.MultiFailure/ExceptionTests.cs:line 17
   SampleApp.Tests.MultiFailure.DataDrivenFailures.String_Length_Matches(input: "", expected: 1) [< 1 ms]
-    Expected: 1, Actual:   0
+    Assert.Equal() Failure: Values differ — Expected: 1, Actual: 0
     at samples/SampleApp.Tests.MultiFailure/DataDrivenFailures.cs:line 27
   SampleApp.Tests.MultiFailure.AssertionFailures.Equality_Mismatch [34 ms]
     Expected actual to be 99 because we want to show a numeric mismatch, but found 42 (difference of -57).
@@ -433,7 +433,7 @@ FAILURES (2):
     System.DivideByZeroException : Attempted to divide by zero.
     at samples/SampleApp.Tests.Reqnroll/StepDefinitions/CalculatorSteps.cs:line 32
   Intentionally wrong expectation [33 ms]
-    Expected: "xyz", Actual:   "cba"
+    Assert.Equal() Failure: Strings differ at pos 0 — Expected: "xyz", Actual: "cba"
     at samples/SampleApp.Tests.Reqnroll/StepDefinitions/StringSteps.cs:line 32
 dotnet test: 2 failed, 5 passed (1 project, 0.07s)
 ```

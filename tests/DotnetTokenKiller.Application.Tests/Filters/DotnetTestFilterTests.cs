@@ -771,8 +771,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("Expected: 42");
-        result.Should().Contain("Actual:   99");
+        result.Should().Contain("Expected: 42, Actual: 99");
     }
 
     [Fact]
@@ -915,7 +914,7 @@ public class DotnetTestFilterTests
             """
             FAILURES (1):
               MyTests.T1 [12ms]
-                Expected: 1, Actual: 2
+                Assert.Equal() Failure — Expected: 1, Actual: 2
                 at ../../../path/to/Test.cs:line 42
             dotnet test: 1 failed, 1 passed (1 project, 2.30s)
 
@@ -1629,4 +1628,165 @@ public class DotnetTestFilterTests
 
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Apply_NestedException_KeepsInnermostCause()
+    {
+        // xUnit's VSTest adapter prints "Outer : message" and, on the next line, "---- Inner : message". The
+        // outer message of the real fixture is over 300 characters, so cutting the joined text at the
+        // budget used to drop the inner exception, which is usually the real cause.
+        var fixture = LoadFixture("dotnet_test_nested_exception.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("---- System.ArgumentException : THE-INNER-CAUSE");
+        result.Should().Contain("System.InvalidOperationException : An error occurred while saving");
+        MessageLine(result).Length.Should().BeLessThanOrEqualTo(303);
+    }
+
+    [Fact]
+    public void Apply_NestedExceptionWithALongInnerMessage_CapsTheInnerAtTwoHundred()
+    {
+        var inner = string.Concat(Enumerable.Repeat("0123456789", 40));
+        var input = $"""
+                       Failed MyTests.Nested [1 ms]
+                       Error Message:
+                        System.InvalidOperationException : {new string('o', 500)}
+                     ---- System.ArgumentException : {inner}
+                       Stack Trace:
+                          at MyTests.Nested() in /path/Test.cs:line 1
+
+                     Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                     """;
+
+        var message = MessageLine(_sut.Apply(input, exitCode: 1));
+
+        const string marker = "---- System.ArgumentException : ";
+        message.Should().EndWith($"{marker}{inner[..(200 - marker.Length)]}...");
+        message.Should().StartWith("System.InvalidOperationException : oooo");
+        message.Should().Contain("... ---- ");
+        message.Length.Should().BeLessThanOrEqualTo(303);
+    }
+
+    [Fact]
+    public void Apply_ThreeLevelsOfNesting_KeepsTheDeepestSegment()
+    {
+        // xUnit adds four dashes per level ("----", "--------"), as printed for a real three-level chain.
+        var input = $"""
+                       Failed MyTests.Deep [1 ms]
+                       Error Message:
+                        System.InvalidOperationException : {new string('o', 400)}
+                     ---- System.ArgumentException : middle
+                     -------- System.TimeoutException : THE-DEEPEST-CAUSE
+                       Stack Trace:
+                          at MyTests.Deep() in /path/Test.cs:line 1
+
+                     Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                     """;
+
+        var message = MessageLine(_sut.Apply(input, exitCode: 1));
+
+        message.Should().EndWith("... -------- System.TimeoutException : THE-DEEPEST-CAUSE");
+        message.Should().NotContain("middle");
+    }
+
+    [Fact]
+    public void Apply_NestedExceptionThatFits_IsKeptWhole()
+    {
+        const string input = """
+                               Failed MyTests.Nested [1 ms]
+                               Error Message:
+                                System.InvalidOperationException : outer
+                             ---- System.ArgumentException : inner
+                               Stack Trace:
+                                  at MyTests.Nested() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        MessageLine(result).Should().Be("System.InvalidOperationException : outer ---- System.ArgumentException : inner");
+    }
+
+    [Fact]
+    public void Apply_CollectionDiff_KeepsHeaderAndPosition()
+    {
+        // The real xUnit 2.9.3 failure: header, a "↓ (pos 0)" pointer above Expected/Actual (padded to
+        // line up) and a "↑ (pos 0)" pointer below them.
+        var fixture = LoadFixture("dotnet_test_assert_diffs.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain(
+            "    Assert.Equal() Failure: Collections differ at pos 0 — Expected: [1, 2, 3], Actual: [9, 2, 3]\n");
+    }
+
+    [Fact]
+    public void Apply_StringDiff_KeepsPosition()
+    {
+        var fixture = LoadFixture("dotnet_test_assert_diffs.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain(
+            "    Assert.Equal() Failure: Strings differ at pos 9 — Expected: \"hello world\", Actual: \"hello wordl\"\n");
+    }
+
+    [Fact]
+    public void Apply_ValuesDiffWithoutAPointer_KeepsTheHeader()
+    {
+        const string input = """
+                               Failed MyTests.Values [1 ms]
+                               Error Message:
+                                Assert.Equal() Failure: Values differ
+                             Expected: 42
+                             Actual:   38
+                               Stack Trace:
+                                  at MyTests.Values() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        MessageLine(result).Should().Be("Assert.Equal() Failure: Values differ — Expected: 42, Actual: 38");
+    }
+
+    [Fact]
+    public void Apply_ExpectedAndActualWithSpacesInsideTheValues_OnlyCollapsesThePadding()
+    {
+        const string input = """
+                               Failed MyTests.Padded [1 ms]
+                               Error Message:
+                                Expected: "a  b"
+                             Actual:   "a   c"
+                               Stack Trace:
+                                  at MyTests.Padded() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        MessageLine(result).Should().Be("Expected: \"a  b\", Actual: \"a   c\"");
+    }
+
+    [Fact]
+    public void Apply_MtpMessageOnOneLine_IsKeptAsPrinted()
+    {
+        // MSTest under Microsoft.Testing.Platform puts "Expected:<…>. Actual:<…>." inside one line that
+        // starts with "Assert." – no line starts with "Expected:", so it is joined, not rebuilt.
+        var fixture = LoadFixture("dotnet_test_mtp_failures.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        MessageLine(result).Should().Be(
+            "Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.");
+    }
+
+    /// <summary>The first failure's message line of the filtered output, without its indent.</summary>
+    /// <param name="output">The filtered output.</param>
+    private static string MessageLine(string output) =>
+        output.Split('\n').SkipWhile(l => !l.StartsWith("FAILURES", StringComparison.Ordinal)).ElementAt(2).Trim();
 }

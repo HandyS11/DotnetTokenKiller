@@ -14,7 +14,10 @@ namespace DotnetTokenKiller.Application.Filters;
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputFilter
 {
     private const int MaxFailures = 15;
-    private const int MessageMaxLen = 200;
+    private const int MessageMaxLen = 300;
+
+    /// <summary>Cap on the innermost exception of a nested message, so that it survives a long outer one.</summary>
+    private const int InnerExceptionMaxLen = 200;
 
     /// <summary>Microsoft.Testing.Platform's exit code for a run in which zero tests ran.</summary>
     private const int MtpZeroTestsExitCode = 8;
@@ -748,6 +751,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         }
     }
 
+    /// <summary>
+    /// Joins a failure's message lines into the one line the report prints. An xUnit assertion with an
+    /// <c>Expected:</c>/<c>Actual:</c> pair keeps its <c>Assert.…</c> header and its <c>↓ (pos N)</c> pointer; a
+    /// nested exception keeps its innermost <c>---- Type : message</c> segment, the usual real cause, whole.
+    /// </summary>
+    /// <param name="lines">The trimmed, non-empty lines of the message.</param>
     private static string CompactMessage(List<string> lines)
     {
         if (lines.Count == 0)
@@ -755,15 +764,63 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return string.Empty;
         }
 
-        // xUnit Assert.Equal multi-line: "Expected: ..." and "Actual: ..." on separate lines
         var expectedLine = lines.Find(l => l.StartsWith("Expected:", StringComparison.OrdinalIgnoreCase));
         var actualLine = lines.Find(l => l.StartsWith("Actual:", StringComparison.OrdinalIgnoreCase));
         if (expectedLine != null && actualLine != null)
         {
-            return TextHelpers.Truncate($"{expectedLine}, {actualLine}", MessageMaxLen);
+            return CompactAssertion(lines, expectedLine, actualLine);
         }
 
-        return TextHelpers.Truncate(string.Join(" ", lines), MessageMaxLen);
+        return CompactNested(lines);
+    }
+
+    /// <summary>
+    /// Renders <c>{header} at pos N — Expected: …, Actual: …</c>. The header is the first line when it starts
+    /// with <c>Assert.</c>; the position comes from xUnit's <c>↓ (pos N)</c> line and is only kept with a header.
+    /// The padding xUnit puts after <c>Actual:</c> to line the values up is collapsed to one space.
+    /// </summary>
+    /// <param name="lines">The message lines.</param>
+    /// <param name="expectedLine">The line starting with <c>Expected:</c>.</param>
+    /// <param name="actualLine">The line starting with <c>Actual:</c>.</param>
+    private static string CompactAssertion(List<string> lines, string expectedLine, string actualLine)
+    {
+        var pair = $"{CollapsePadding(expectedLine)}, {CollapsePadding(actualLine)}";
+        if (!lines[0].StartsWith("Assert.", StringComparison.Ordinal))
+        {
+            return TextHelpers.Truncate(pair, MessageMaxLen);
+        }
+
+        var pointer = lines.Select(l => AssertionPositionPattern().Match(l)).FirstOrDefault(m => m.Success);
+        var position = pointer is null ? string.Empty : $" at pos {pointer.Groups["pos"].Value}";
+        return TextHelpers.Truncate($"{lines[0]}{position} — {pair}", MessageMaxLen);
+    }
+
+    private static string CollapsePadding(string labelledLine) =>
+        LabelPaddingPattern().Replace(labelledLine, "${label}: ");
+
+    /// <summary>
+    /// Joins the lines with spaces. A message longer than the budget that nests exceptions (xUnit's
+    /// <c>---- Type : message</c> lines) keeps its last such segment whole, capped at
+    /// <see cref="InnerExceptionMaxLen"/>, and truncates what comes before it to the rest of the budget.
+    /// </summary>
+    /// <param name="lines">The message lines.</param>
+    private static string CompactNested(List<string> lines)
+    {
+        var joined = string.Join(" ", lines);
+        if (joined.Length <= MessageMaxLen)
+        {
+            return joined;
+        }
+
+        var innerIndex = lines.FindLastIndex(l => InnerExceptionLinePattern().IsMatch(l));
+        if (innerIndex <= 0)
+        {
+            return TextHelpers.Truncate(joined, MessageMaxLen);
+        }
+
+        var inner = TextHelpers.Truncate(string.Join(" ", lines.Skip(innerIndex)), InnerExceptionMaxLen);
+        var outer = TextHelpers.Truncate(string.Join(" ", lines.Take(innerIndex)), MessageMaxLen - inner.Length - 1);
+        return $"{outer} {inner}";
     }
 
     private static double NormalizeDurationToMs(double value, string unit)
@@ -911,6 +968,19 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     // "  Stack Trace:"
     [GeneratedRegex(@"^\s+Stack Trace:\s*$")]
     private static partial Regex StackTraceLabelPattern();
+
+    // xUnit's pointer above the Expected/Actual pair of a collection or string diff: "↓ (pos 9)". The arrow
+    // below the pair ("↑ (pos 9)") repeats it and is not read.
+    [GeneratedRegex(@"^\u2193\s*\(pos (?<pos>\d+)\)$")]
+    private static partial Regex AssertionPositionPattern();
+
+    // The padding xUnit puts after "Actual:" so that its value lines up with Expected's.
+    [GeneratedRegex(@"^(?<label>Expected|Actual):[ \t]+", RegexOptions.IgnoreCase)]
+    private static partial Regex LabelPaddingPattern();
+
+    // xUnit's nested exception: "---- Inner : message", with four more dashes per level of nesting.
+    [GeneratedRegex(@"^-{4,} \S")]
+    private static partial Regex InnerExceptionLinePattern();
 
     // Zero tests: VSTest's "No test matches the given testcase filter `<expression>` in <assemblies>" or
     // "No test is available in <assemblies>. Make sure that test discoverer & executors are registered…".

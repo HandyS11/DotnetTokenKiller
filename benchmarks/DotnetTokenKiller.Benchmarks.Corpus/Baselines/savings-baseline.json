@@ -212,6 +212,17 @@
       "savingsPercent": 91.3
     },
     {
+      "id": "test/assert-diffs",
+      "fixture": "dotnet_test_assert_diffs.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1482,
+      "rawTokens": 413,
+      "filteredTokens": 141,
+      "savedTokens": 272,
+      "savingsPercent": 65.9
+    },
+    {
       "id": "test/compile-errors",
       "fixture": "dotnet_test_compile_errors.txt",
       "filterKey": "test",
@@ -229,9 +240,9 @@
       "exitCode": 1,
       "rawBytes": 8369,
       "rawTokens": 2069,
-      "filteredTokens": 1091,
-      "savedTokens": 978,
-      "savingsPercent": 47.3
+      "filteredTokens": 1098,
+      "savedTokens": 971,
+      "savingsPercent": 46.9
     },
     {
       "id": "test/compile-errors-mixed-passing",
@@ -262,9 +273,9 @@
       "exitCode": 1,
       "rawBytes": 3156,
       "rawTokens": 808,
-      "filteredTokens": 181,
-      "savedTokens": 627,
-      "savingsPercent": 77.6
+      "filteredTokens": 188,
+      "savedTokens": 620,
+      "savingsPercent": 76.7
     },
     {
       "id": "test/list-tests",
@@ -306,9 +317,9 @@
       "exitCode": 1,
       "rawBytes": 2199,
       "rawTokens": 660,
-      "filteredTokens": 71,
-      "savedTokens": 589,
-      "savingsPercent": 89.2
+      "filteredTokens": 78,
+      "savedTokens": 582,
+      "savingsPercent": 88.2
     },
     {
       "id": "test/logger-detailed-fail-interleaved",
@@ -317,9 +328,9 @@
       "exitCode": 1,
       "rawBytes": 2199,
       "rawTokens": 660,
-      "filteredTokens": 71,
-      "savedTokens": 589,
-      "savingsPercent": 89.2
+      "filteredTokens": 78,
+      "savedTokens": 582,
+      "savingsPercent": 88.2
     },
     {
       "id": "test/logger-detailed-fail-multiproject",
@@ -328,9 +339,9 @@
       "exitCode": 1,
       "rawBytes": 3039,
       "rawTokens": 944,
-      "filteredTokens": 71,
-      "savedTokens": 873,
-      "savingsPercent": 92.5
+      "filteredTokens": 78,
+      "savedTokens": 866,
+      "savingsPercent": 91.7
     },
     {
       "id": "test/logger-detailed-pass",
@@ -463,6 +474,17 @@
       "filteredTokens": 27,
       "savedTokens": 212,
       "savingsPercent": 88.7
+    },
+    {
+      "id": "test/nested-exception",
+      "fixture": "dotnet_test_nested_exception.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1350,
+      "rawTokens": 342,
+      "filteredTokens": 112,
+      "savedTokens": 230,
+      "savingsPercent": 67.3
     },
     {
       "id": "test/no-test-available",
