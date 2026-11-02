@@ -31,10 +31,15 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// The sanitised subcommand slug in this log's file name (its kind, as <c>dtk log build</c> selects
 /// it). Empty disables pruning.
 /// </param>
+/// <param name="ProjectPath">
+/// The working directory in this log's header. Only older logs of the same project are pruned,
+/// because <c>dtk log</c> is scoped to it. Empty disables pruning.
+/// </param>
 public sealed record TeeSessionPolicy(
     long MaxBodyBytes,
     long MinBodyBytes,
     bool KeepOnlyOnFailure,
     string TeeDir = "",
     int MaxFiles = 0,
-    string Slug = "");
+    string Slug = "",
+    string ProjectPath = "");

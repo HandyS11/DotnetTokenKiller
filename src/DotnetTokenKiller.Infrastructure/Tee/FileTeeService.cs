@@ -110,7 +110,8 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
                         KeepOnlyOnFailure: teeConfig.Mode == TeeMode.Failures,
                         TeeDir: teeDir,
                         MaxFiles: teeConfig.MaxFiles,
-                        Slug: slug));
+                        Slug: slug,
+                        ProjectPath: provisional.ProjectPath));
             }
             catch
             {
@@ -169,12 +170,17 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
     /// Maximum number of tee files to retain; non-positive disables rotation entirely (deleting
     /// every file would not be a sane interpretation of "no limit").
     /// </param>
+    /// <param name="keptFilePath">
+    /// The log just kept, which counts toward <paramref name="maxFiles"/> but is never deleted: runs
+    /// finish out of start order, so it can be the oldest by name, and rotating it away right after it
+    /// pruned its kind's passing log would leave <c>dtk log</c> showing an older run as the latest.
+    /// </param>
     /// <remarks>
     /// Called from <see cref="FileTeeSession.FinalizeAsync"/> after a log is confirmed kept — never
     /// from <see cref="BeginAsync"/> — so the log being rotated in is already on disk and counted
     /// among <paramref name="teeDir"/>'s files; no slot needs to be reserved for it.
     /// </remarks>
-    internal static void RotateFiles(string teeDir, int maxFiles)
+    internal static void RotateFiles(string teeDir, int maxFiles, string? keptFilePath)
     {
         if (maxFiles <= 0)
         {
@@ -189,9 +195,12 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
         // Only rotate expected tee artifacts (log files) to avoid deleting unrelated files.
         var files = Directory.GetFiles(teeDir, "*.log").Order().ToList();
         var excess = files.Count - maxFiles;
-        for (var i = 0; i < excess; i++)
+        var keptName = keptFilePath is null ? null : Path.GetFileName(keptFilePath);
+        foreach (var file in files
+                     .Where(f => !string.Equals(Path.GetFileName(f), keptName, StringComparison.Ordinal))
+                     .Take(Math.Max(0, excess)))
         {
-            File.Delete(files[i]);
+            File.Delete(file);
         }
     }
 
@@ -202,6 +211,10 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
     /// </summary>
     /// <param name="teeDir">The tee directory.</param>
     /// <param name="slug">The kept log's sanitised slug, as in its file name.</param>
+    /// <param name="projectPath">
+    /// The kept log's working directory, as given to its header. Passed in rather than read back, so a
+    /// header longer than pruning reads (a long <c>--filter</c>) still prunes.
+    /// </param>
     /// <param name="keptFilePath">The log just kept. It, and every log not older than it, is never touched.</param>
     /// <param name="minBodyBytes">Older logs whose bodies are smaller than this are dropped.</param>
     /// <param name="dropPassing">Whether older logs with exit code 0 are dropped whatever their size.</param>
@@ -223,11 +236,10 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
     /// </para>
     /// </remarks>
     internal static void PruneSuperseded(
-        string teeDir, string slug, string keptFilePath, long minBodyBytes, bool dropPassing)
+        string teeDir, string slug, string projectPath, string keptFilePath, long minBodyBytes, bool dropPassing)
     {
-        if (string.IsNullOrEmpty(slug) || string.IsNullOrEmpty(teeDir) ||
-            !TeeLogFileName.TryParse(Path.GetFileName(keptFilePath), out var keptStart, out _) ||
-            !TryReadLogFacts(keptFilePath, minBodyBytes: 0, out var kept))
+        if (string.IsNullOrEmpty(slug) || string.IsNullOrEmpty(projectPath) || string.IsNullOrEmpty(teeDir) ||
+            !TeeLogFileName.TryParse(Path.GetFileName(keptFilePath), out var keptStart, out _))
         {
             return;
         }
@@ -236,7 +248,7 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
         {
             try
             {
-                if (IsSupersededBy(path, kept.Header.ProjectPath))
+                if (IsSuperseded(path))
                 {
                     File.Delete(path);
                 }
@@ -248,7 +260,7 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
             }
         }
 
-        bool IsSupersededBy(string path, string projectPath)
+        bool IsSuperseded(string path)
         {
             if (!TeeLogFileName.TryParse(Path.GetFileName(path), out var start, out var candidateSlug) ||
                 start >= keptStart ||
@@ -274,20 +286,40 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
     /// <returns><see langword="false"/> when the file holds no complete, parseable header.</returns>
     private static bool TryReadLogFacts(string path, long minBodyBytes, out LogFacts facts)
     {
-        facts = default;
-
         // ReadWrite: another process may still hold its log open for writing (required on Windows,
         // see BeginAsync). Delete: this brief read must not stop another process's prune or rotation.
         using var stream = new FileStream(
             path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        var length = stream.Length;
-        var buffer = new byte[(int)Math.Min(HeadBytes, length)];
+        return TryReadLogFacts(stream, minBodyBytes, out facts);
+    }
+
+    /// <summary>Reads a log's facts from an open, seekable stream positioned at its start.</summary>
+    /// <param name="stream">The open log.</param>
+    /// <param name="minBodyBytes">The size floor.</param>
+    /// <param name="facts">The header and the size verdict, when the header parsed.</param>
+    /// <returns><see langword="false"/> when the stream holds no complete, parseable header.</returns>
+    internal static bool TryReadLogFacts(Stream stream, long minBodyBytes, out LogFacts facts)
+    {
+        facts = default;
+        var buffer = new byte[HeadBytes];
         var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
         var head = Encoding.UTF8.GetString(buffer, 0, read);
         if (!TeeLogHeader.TryParse(head, out var header))
         {
             return false;
         }
+
+        if (header.Status != TeeLogStatus.Complete)
+        {
+            // Still growing, and never pruned: its size is not measured.
+            facts = new LogFacts(header, IsUndersized: false);
+            return true;
+        }
+
+        // Only now, after the header read complete: FinalizeAsync flushes the whole body before it
+        // marks the header complete, and the writer is latched, so the length is final. Sampled
+        // before the head, it could be a running body's, measuring a finished failure undersized.
+        var length = stream.Length;
 
         // The header itself decoded intact (TryParse needed its delimiter), so its UTF-8 length is
         // exact even when the buffer cut a multi-byte rune in the body after it.
@@ -304,7 +336,7 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
     /// <param name="bodyOffset">The body's byte offset.</param>
     /// <param name="bodyBytes">The body's byte length.</param>
     /// <returns><see langword="true"/> when the log was truncated at its byte cap.</returns>
-    private static bool EndsWithTruncationMarker(FileStream stream, long bodyOffset, long bodyBytes)
+    private static bool EndsWithTruncationMarker(Stream stream, long bodyOffset, long bodyBytes)
     {
         // The marker is well under TailBytes long, so a tail this size always holds the line feed
         // before it; a rune cut at the tail's start garbles only an earlier line.
@@ -327,5 +359,5 @@ public sealed class FileTeeService(IConfigProvider configProvider, string? teeDi
     /// <summary>What pruning needs to know about one log.</summary>
     /// <param name="Header">The parsed header.</param>
     /// <param name="IsUndersized">Whether the body is under the size floor and was not truncated.</param>
-    private readonly record struct LogFacts(TeeLogHeader Header, bool IsUndersized);
+    internal readonly record struct LogFacts(TeeLogHeader Header, bool IsUndersized);
 }

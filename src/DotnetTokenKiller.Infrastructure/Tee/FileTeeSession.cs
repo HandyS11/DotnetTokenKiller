@@ -104,7 +104,8 @@ public sealed class FileTeeSession(
             try
             {
                 FileTeeService.PruneSuperseded(
-                    policy.TeeDir, policy.Slug, filePath, policy.MinBodyBytes, policy.KeepOnlyOnFailure);
+                    policy.TeeDir, policy.Slug, policy.ProjectPath, filePath, policy.MinBodyBytes,
+                    policy.KeepOnlyOnFailure);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -118,7 +119,7 @@ public sealed class FileTeeSession(
         {
             try
             {
-                FileTeeService.RotateFiles(policy.TeeDir, policy.MaxFiles);
+                FileTeeService.RotateFiles(policy.TeeDir, policy.MaxFiles, filePath);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

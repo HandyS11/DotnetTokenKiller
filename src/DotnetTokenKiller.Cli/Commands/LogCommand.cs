@@ -187,14 +187,14 @@ internal sealed class LogCommand(
         {
             console.MarkupLine(
                 "[bold]tee.mode[/] is [bold]Failures[/]: the latest run of each kind is saved, and "
-                + "older runs only when they failed with 500 characters of output or more. Use "
+                + "older runs only when they failed with 500 bytes of output or more. Use "
                 + "[bold]dtk config set tee.mode Always[/] to keep older passing runs too.");
         }
         else
         {
             console.MarkupLine(
-                "The latest run of each kind is saved, and older runs only with 500 characters of "
-                + "output or more.");
+                "The latest run of each kind is saved, and older runs only with 500 bytes of output "
+                + "or more.");
         }
 
         if (selection.LegacyExcluded > 0)

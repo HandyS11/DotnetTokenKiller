@@ -121,7 +121,8 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Flush();
 
         var session = new FileTeeSession(stream, path, offset, Encoding.UTF8.GetByteCount(region),
-            new TeeSessionPolicy(maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles, slug));
+            new TeeSessionPolicy(
+                maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles, slug, header.ProjectPath));
         return (session, path);
     }
 
@@ -231,6 +232,25 @@ public sealed class FileTeeSessionTests : IDisposable
 
         File.Exists(older).Should().BeFalse();
         File.Exists(path).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_PassingRun_ReplacesOlderPassingLog_WhenItsOwnHeaderIsOver4KB()
+    {
+        // A long --filter makes a header longer than the 4 KB pruning reads of each log. The kept
+        // log's own project must not depend on reading its header back, or such a run would never
+        // replace the passing slot and `dtk log` could still show the older run beside it.
+        var older = SeedLog(RunStart.AddMinutes(-5), "test", 0, LargeBody);
+        var longCommand = "dotnet test --filter " + string.Join('|', Enumerable.Range(0, 400).Select(i => $"Name~Test{i}"));
+        Encoding.UTF8.GetByteCount(longCommand).Should().BeGreaterThan(4096);
+        var (session, path) = CreateSut(
+            keepOnlyOnFailure: true, header: RunningHeader() with { CommandLine = longCommand }, slug: "test");
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().Contain(path);
+        File.Exists(older).Should().BeFalse();
     }
 
     [Fact]
@@ -394,6 +414,27 @@ public sealed class FileTeeSessionTests : IDisposable
 
         hint.Should().Contain(path);
         Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(maxFiles).And.Contain(path);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_NeverRotatesAwayTheLogItJustKept()
+    {
+        // Runs finish out of start order: logs that started later can already be on disk, so the log
+        // just kept can be the oldest by name. Rotating it away, right after it pruned its passing
+        // predecessor, would leave `dtk log build` showing an older failure as the latest build.
+        var predecessor = SeedLog(RunStart.AddMinutes(-10), "build", 0, LargeBody);
+        var olderFailure = SeedLog(RunStart.AddMinutes(-20), "build", 1, LargeBody);
+        SeedLog(RunStart.AddMinutes(1), "test", 1, LargeBody);
+        var newest = SeedLog(RunStart.AddMinutes(2), "test", 1, LargeBody);
+        var (session, path) = CreateSut(keepOnlyOnFailure: true, maxFiles: 2);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().Contain(path);
+        File.Exists(predecessor).Should().BeFalse();
+        File.Exists(olderFailure).Should().BeFalse();
+        Directory.GetFiles(_tempDir, "*.log").Should().BeEquivalentTo(path, newest);
     }
 
     [Fact]

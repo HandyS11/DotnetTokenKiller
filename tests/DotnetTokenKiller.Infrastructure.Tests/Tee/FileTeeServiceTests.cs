@@ -52,7 +52,7 @@ public sealed class FileTeeServiceTests : IDisposable
         var nonExistentDir = Path.Combine(Path.GetTempPath(), $"dtk-tee-nonexistent-{Guid.NewGuid()}");
         Directory.Exists(nonExistentDir).Should().BeFalse();
 
-        var act = () => method.Invoke(null, [nonExistentDir, 5]);
+        var act = () => method.Invoke(null, [nonExistentDir, 5, null]);
         act.Should().NotThrow();
     }
 
@@ -286,6 +286,22 @@ public sealed class FileTeeServiceTests : IDisposable
         hint.Should().NotBeNull();
         Directory.GetFiles(_tempDir, "*.log").Select(Path.GetFileName)
             .Should().HaveCount(3).And.Contain([older, newer]);
+    }
+
+    [Fact]
+    public void TryReadLogFacts_MeasuresTheBody_OnlyOnceTheHeaderReadsComplete()
+    {
+        // Race: another process finalizes its log between this one's reads. A length sampled before
+        // the head was read is still the short running body's, while the head then reads complete
+        // and failed, so a failing log above the floor would be measured undersized and deleted.
+        var text = FailedLogText(2020);
+        var headerBytes = Encoding.UTF8.GetByteCount(text) - Encoding.UTF8.GetByteCount(TeeLogHeader.StripHeader(text));
+        using var stream = new FinalizedOnFirstReadStream(Encoding.UTF8.GetBytes(text), staleLength: headerBytes + 10);
+
+        FileTeeService.TryReadLogFacts(stream, minBodyBytes: 500, out var facts).Should().BeTrue();
+
+        facts.Header.ExitCode.Should().Be(1);
+        facts.IsUndersized.Should().BeFalse();
     }
 
     [Fact]
@@ -538,6 +554,59 @@ public sealed class FileTeeServiceTests : IDisposable
         public Task DeleteAsync(CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// A log that another process finalizes the moment this one first reads it: its length reads as
+    /// the short body written so far until then, and as the finished log's afterwards.
+    /// </summary>
+    /// <param name="content">The finished log's bytes.</param>
+    /// <param name="staleLength">The length reported before the first read.</param>
+    private sealed class FinalizedOnFirstReadStream(byte[] content, long staleLength) : Stream
+    {
+        private readonly MemoryStream _inner = new(content, writable: false);
+        private bool _read;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => true;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _read ? _inner.Length : staleLength;
+
+        public override long Position
+        {
+            get => _inner.Position;
+            set => _inner.Position = value;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            _read = true;
+            return _inner.Read(buffer, offset, count);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+
+        public override void Flush()
+        {
+            // Read-only: nothing to flush.
+        }
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
     }
 }
