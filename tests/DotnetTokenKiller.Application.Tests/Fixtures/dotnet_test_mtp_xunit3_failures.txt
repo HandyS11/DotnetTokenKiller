@@ -1,0 +1,40 @@
+Running tests from /test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64)
+failed XV3.DiffTests.FailCollections (20ms)
+  from /test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64)
+  Assert.Equal() Failure: Collections differ
+             ↓ (pos 0)
+  Expected: [1, 2, 3]
+  Actual:   [9, 2, 3]
+             ↑ (pos 0)
+    at XV3.DiffTests.FailCollections() in /test/project/root/XV3/Tests.cs:29
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed XV3.NestedTests.FailNestedException (11ms)
+  from /test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidOperationException : An error occurred while saving the entity changes while processing the order pipeline for customer 12345 in region eu-west; see the inner exception for details about the operation that was attempted, the retry policy that was applied, and the transaction that was rolled back before the failure surfaced to the caller of the repository
+  ---- System.ArgumentException : THE-INNER-CAUSE
+    at XV3.NestedTests.FailNestedException() in /test/project/root/XV3/Tests.cs:14
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+    ----- Inner Stack Trace -----
+    at XV3.NestedTests.FailNestedException() in /test/project/root/XV3/Tests.cs:10
+failed XV3.DiffTests.FailStrings (2ms)
+  from /test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64)
+  Assert.Equal() Failure: Strings differ
+                      ↓ (pos 9)
+  Expected: "hello world"
+  Actual:   "hello wordl"
+                      ↑ (pos 9)
+    at XV3.DiffTests.FailStrings() in /test/project/root/XV3/Tests.cs:32
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/test/project/root/XV3/bin/Debug/net10.0/XV3.dll (net10.0|x64) failed with 3 error(s) (334ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 4
+  failed: 3
+  succeeded: 1
+  skipped: 0
+  duration: 513ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

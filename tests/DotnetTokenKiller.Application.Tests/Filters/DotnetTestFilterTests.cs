@@ -1229,9 +1229,9 @@ public class DotnetTestFilterTests
 
     private static string LastLine(string output) => output.TrimEnd('\n').Split('\n')[^1];
 
-    // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects under
-    // Microsoft.Testing.Platform ("test": {"runner": "Microsoft.Testing.Platform"} in global.json),
-    // with the machine path replaced by /test/project/root.
+    // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects (the xunit3 one:
+    // xunit.v3.mtp-v2 4.0.2) under Microsoft.Testing.Platform ("test": {"runner": "Microsoft.Testing.Platform"}
+    // in global.json), with the machine path replaced by /test/project/root.
 
     [Fact]
     public void Apply_MtpAllPassFixture_ReportsPassedAndSkipped()
@@ -1258,6 +1258,34 @@ public class DotnetTestFilterTests
                 Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
                 at Beta.Tests/Test1.cs:line 14
             dotnet test: 1 failed, 2 passed (1 project, 0.33s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_XunitV3UnderMtp_KeepsTheFailureMessage()
+    {
+        // Real xunit.v3.mtp-v2 4.0.2 run. Unlike MSTest, xUnit v3 prints "from <assembly>" BEFORE the message
+        // and prints the message once: the report used to show a blank line for every failure. The nested
+        // exception's message carries xUnit's own wrapper type, kept as printed; its "----- Inner Stack Trace
+        // -----" line belongs to the stack trace, not the message.
+        var fixture = LoadFixture("dotnet_test_mtp_xunit3_failures.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        result.Should().Be(
+            """
+            FAILURES (3):
+              XV3.DiffTests.FailCollections [20ms]
+                Assert.Equal() Failure: Collections differ at pos 0 — Expected: [1, 2, 3], Actual: [9, 2, 3]
+                at XV3/Tests.cs:line 29
+              XV3.NestedTests.FailNestedException [11ms]
+                Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidOperationException : An error occurred while saving the entity changes while processing the order pipeline for customer 12345 in region eu-west; see the inner exception for details about the ... ---- System.ArgumentException : THE-INNER-CAUSE
+                at XV3/Tests.cs:line 14
+              XV3.DiffTests.FailStrings [2ms]
+                Assert.Equal() Failure: Strings differ at pos 9 — Expected: "hello world", Actual: "hello wordl"
+                at XV3/Tests.cs:line 32
+            dotnet test: 3 failed, 1 passed (1 project, 0.51s)
 
             """);
     }

@@ -310,8 +310,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // MTP has no "Error Message:"/"Stack Trace:" labels — collect the indented continuation
         // lines that follow the failure header until the next failure line, a summary, or a
         // non-indented line, pulling a source reference out of the first user stack frame we see.
-        // MTP prints the message, then "from <assembly> (<tfm>|<arch>)", then the message again
-        // above the stack trace: everything after the "from" line is read for frames only.
+        // MSTest prints the message, then "from <assembly> (<tfm>|<arch>)", then the message again
+        // above the stack trace: everything after the "from" line is read for frames only. xUnit v3
+        // prints "from" first and the message once after it, so a "from" line that precedes any
+        // message line leaves the message open until the first stack frame.
         var msgLines = new List<string>();
         var sourceRef = string.Empty;
         var messageEnded = false;
@@ -334,10 +336,13 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
             if (MtpFromAssemblyPattern().IsMatch(current))
             {
+                messageEnded = msgLines.Count > 0;
+            }
+            else if (StackFrameLinePattern().IsMatch(current))
+            {
                 messageEnded = true;
             }
-            else if (!messageEnded && !StackFrameLinePattern().IsMatch(current)
-                                   && !string.IsNullOrWhiteSpace(current))
+            else if (!messageEnded && !string.IsNullOrWhiteSpace(current))
             {
                 msgLines.Add(current.Trim());
             }

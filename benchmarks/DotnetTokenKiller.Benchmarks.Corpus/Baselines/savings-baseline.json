@@ -432,6 +432,17 @@
       "savingsPercent": 86.8
     },
     {
+      "id": "test/mtp-xunit3-failures",
+      "fixture": "dotnet_test_mtp_xunit3_failures.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2418,
+      "rawTokens": 638,
+      "filteredTokens": 230,
+      "savedTokens": 408,
+      "savingsPercent": 63.9
+    },
+    {
       "id": "test/mtp-zero",
       "fixture": "dotnet_test_mtp_zero.txt",
       "filterKey": "test",
