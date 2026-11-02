@@ -1,0 +1,54 @@
+]9;4;3;\Restore complete (0.5s)
+  Beta.Tests [36;1mnet10.0[m [32;1msucceeded[m (0.1s) → ]8;;file:///test/project/root/Beta.Tests/bin/Debug/net10.0\Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll]8;;\
+A total of 1 test files matched the specified pattern.
+  Alpha.Tests [36;1mnet10.0[m [32;1msucceeded[m (0.2s) → ]8;;file:///test/project/root/Alpha.Tests/bin/Debug/net10.0\Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll]8;;\
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v4.0.1+0f7d528729 (64-bit .NET 10.0.14)
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v4.0.1+0f7d528729 (64-bit .NET 10.0.14)
+[xUnit.net 00:00:00.08]   Discovering: Beta.Tests
+[xUnit.net 00:00:00.08]   Discovering: Beta.Tests
+[xUnit.net 00:00:00.12]   Discovered:  Beta.Tests
+[xUnit.net 00:00:00.12]   Discovered:  Beta.Tests
+[xUnit.net 00:00:00.14]   Starting:    Beta.Tests
+[xUnit.net 00:00:00.14]   Starting:    Beta.Tests
+[xUnit.net 00:00:00.18]   Finished:    Beta.Tests
+[xUnit.net 00:00:00.18]   Finished:    Beta.Tests
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v4.0.1+0f7d528729 (64-bit .NET 10.0.14)
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v4.0.1+0f7d528729 (64-bit .NET 10.0.14)
+  Passed Beta.Tests.BetaTests.Concatenates [2 ms]
+  Passed Beta.Tests.BetaTests.IsPositive(value: 1) [< 1 ms]
+  Passed Beta.Tests.BetaTests.IsPositive(value: 2) [< 1 ms]
+
+Test Run Successful.
+Total tests: 3
+     Passed: 3
+ Total time: 0.5210 Seconds
+[xUnit.net 00:00:00.07]   Discovering: Alpha.Tests
+[xUnit.net 00:00:00.07]   Discovering: Alpha.Tests
+  Beta.Tests test [36;1mnet10.0[m [32;1msucceeded[m (0.7s)
+[xUnit.net 00:00:00.10]   Discovered:  Alpha.Tests
+[xUnit.net 00:00:00.10]   Discovered:  Alpha.Tests
+[xUnit.net 00:00:00.12]   Starting:    Alpha.Tests
+[xUnit.net 00:00:00.12]   Starting:    Alpha.Tests
+[xUnit.net 00:00:00.14]     Alpha.Tests.AlphaTests.Persists [SKIP]
+[xUnit.net 00:00:00.14]     Alpha.Tests.AlphaTests.Persists [SKIP]
+[xUnit.net 00:00:00.14]       Needs a database
+[xUnit.net 00:00:00.14]       Needs a database
+[xUnit.net 00:00:00.15]   Finished:    Alpha.Tests
+[xUnit.net 00:00:00.15]   Finished:    Alpha.Tests
+  Skipped Alpha.Tests.AlphaTests.Persists [1 ms]
+  Passed Alpha.Tests.AlphaTests.Multiplies [4 ms]
+  Passed Alpha.Tests.AlphaTests.Adds [< 1 ms]
+  Passed Alpha.Tests.AlphaTests.Subtracts [< 1 ms]
+  Passed Alpha.Tests.AlphaTests.Divides [< 1 ms]
+
+Test Run Successful.
+Total tests: 5
+     Passed: 4
+    Skipped: 1
+ Total time: 0.4966 Seconds
+  Alpha.Tests test [36;1mnet10.0[m [32;1msucceeded[m (0.6s)
+
+Test summary: total: 8, failed: 0, [32;1msucceeded: 7[m, skipped: 1, duration: 0.8s
+Build [32;1msucceeded[m in 1.5s
+]9;4;0;\

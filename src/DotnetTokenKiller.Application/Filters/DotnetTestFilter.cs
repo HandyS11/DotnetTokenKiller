@@ -48,6 +48,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             i = ParseLine(lines, i, state);
         }
 
+        ResolveTotals(state);
         return state;
     }
 
@@ -60,7 +61,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     {
         var line = lines[i].TrimEnd('\r');
 
-        if (TryParseSingleLine(line, state))
+        if (TryParseSingleLine(line, state) || TryParseConsoleLoggerLine(line, state) || TryParseListLine(line, state))
         {
             return i + 1;
         }
@@ -114,6 +115,95 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Records <paramref name="line"/> when it belongs to the normal/detailed console logger's run summary:
+    /// <c>Test Run Successful.</c> (or <c>Failed.</c>) and, below it, <c>Passed:</c>, <c>Failed:</c>,
+    /// <c>Skipped:</c> and <c>Total time:</c>. That logger prints no "Passed!" line, so the block is the
+    /// assembly's only summary. Each line is read on its own, not as one contiguous block, because the
+    /// block does not arrive intact: parallel projects interleave their output line by line, and VSTest
+    /// writes <c>Test Run Failed.</c> to stderr, which dtk's capture appends after stdout, so a failed
+    /// run's header comes after its counts. The counts are kept apart and only used once a header was seen.
+    /// </summary>
+    /// <param name="line">The line, without its carriage return.</param>
+    /// <param name="state">The state accumulated so far.</param>
+    /// <returns>Whether the line was recognised.</returns>
+    private static bool TryParseConsoleLoggerLine(string line, ParseState state)
+    {
+        if (TestRunBlockHeaderPattern().IsMatch(line))
+        {
+            state.TestRunBlocks++;
+            state.ProjectCount++;
+            return true;
+        }
+
+        var countMatch = TestRunCountPattern().Match(line);
+        if (countMatch.Success)
+        {
+            AccumulateTestRunCount(countMatch, state);
+            return true;
+        }
+
+        var timeMatch = TestRunTotalTimePattern().Match(line);
+        if (!timeMatch.Success)
+        {
+            return false;
+        }
+
+        state.ConsoleLogger.DurationMs += TotalTimeToMs(
+            double.Parse(timeMatch.Groups["value"].Value, CultureInfo.InvariantCulture),
+            timeMatch.Groups["unit"].Value);
+        return true;
+    }
+
+    private static void AccumulateTestRunCount(Match countMatch, ParseState state)
+    {
+        var count = int.Parse(countMatch.Groups["count"].Value, CultureInfo.InvariantCulture);
+        switch (countMatch.Groups["key"].Value)
+        {
+            case "Passed":
+                state.ConsoleLogger.Passed += count;
+                break;
+            case "Failed":
+                state.ConsoleLogger.Failed += count;
+                break;
+            default:
+                state.ConsoleLogger.Skipped += count;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Records <paramref name="line"/> when it is part of a <c>--list-tests</c> listing: the
+    /// <c>The following Tests are available:</c> header (one per project) or an indented test name. Parallel
+    /// projects print their headers first and their names afterwards, with other lines in between, so a
+    /// name is recognised by its indent anywhere after the first header, not only directly below one.
+    /// </summary>
+    /// <param name="line">The line, without its carriage return.</param>
+    /// <param name="state">The state accumulated so far.</param>
+    /// <returns>Whether the line was recognised.</returns>
+    private static bool TryParseListLine(string line, ParseState state)
+    {
+        if (TestListHeaderPattern().IsMatch(line))
+        {
+            state.ListedProjects++;
+            return true;
+        }
+
+        if (state.ListedProjects == 0)
+        {
+            return false;
+        }
+
+        var nameMatch = ListedTestNamePattern().Match(line);
+        if (!nameMatch.Success)
+        {
+            return false;
+        }
+
+        state.ListedTests.Add(nameMatch.Groups["name"].Value);
+        return true;
     }
 
     private int ParseFailure(string[] lines, int i, Match failedHeaderMatch, ParseState state)
@@ -198,9 +288,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         while (i < lines.Length)
         {
             var current = lines[i].TrimEnd('\r');
-            if (StackTraceLabelPattern().IsMatch(current)
-                || FailedTestHeaderPattern().IsMatch(current)
-                || SummaryPattern().IsMatch(current))
+            if (StackTraceLabelPattern().IsMatch(current) || EndsVsTestFailure(current))
             {
                 break;
             }
@@ -223,7 +311,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         while (i < lines.Length)
         {
             var current = lines[i].TrimEnd('\r');
-            if (FailedTestHeaderPattern().IsMatch(current) || SummaryPattern().IsMatch(current))
+            if (EndsVsTestFailure(current))
             {
                 break;
             }
@@ -237,6 +325,23 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         }
 
         return (sourceRef, i);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="line"/> starts something other than the failure being read: the next
+    /// test's result line, or a summary. The minimal logger's failure is always followed by its
+    /// "Failed!" line; the normal and detailed loggers follow it with more results, or with the
+    /// "Test Run" block, which a failure parser reading on to the end of the output would swallow. The
+    /// block's own first line ("Total tests:") ends it too, because a failed run's header is not above it.
+    /// </summary>
+    /// <param name="line">One line of output, without its carriage return.</param>
+    private static bool EndsVsTestFailure(string line)
+    {
+        return FailedTestHeaderPattern().IsMatch(line)
+               || PassedOrSkippedTestHeaderPattern().IsMatch(line)
+               || SummaryPattern().IsMatch(line)
+               || TestRunBlockHeaderPattern().IsMatch(line)
+               || TestRunTotalTestsPattern().IsMatch(line);
     }
 
     /// <summary>
@@ -324,18 +429,53 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
     private static void AccumulateTerminalLoggerSummary(Match summaryMatch, ParseState state)
     {
-        state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
-        state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
-        state.TotalSkipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
+        var terminal = state.Terminal ??= new RunTotals();
+        terminal.Failed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
+        terminal.Passed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
+        terminal.Skipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
         var durationGroup = summaryMatch.Groups[DurationGroup];
         if (durationGroup.Success)
         {
-            state.TotalDurationMs += NormalizeDurationToMs(
+            terminal.DurationMs += NormalizeDurationToMs(
                 double.Parse(durationGroup.Value, CultureInfo.InvariantCulture),
                 summaryMatch.Groups["unit"].Value);
         }
+    }
 
-        state.ProjectCount++;
+    /// <summary>
+    /// Settles the run's totals once every line has been read. The console logger's counts are added
+    /// only when a "Test Run" header was seen, so a stray "Passed: 3" in a test's own output never counts.
+    /// The terminal logger's whole-run totals then stand for the run: its "Test summary:" counts every
+    /// assembly, so it describes the same tests as the per-assembly summaries that can appear beside it
+    /// (VSTest's "Passed!" line under an explicit console logger, its "Test Run" block under the normal
+    /// or detailed one), and adding both counts each test twice. The project count stays the number of
+    /// per-assembly summaries seen, and is at least one.
+    /// </summary>
+    /// <param name="state">The parsed run.</param>
+    private static void ResolveTotals(ParseState state)
+    {
+        if (state.TestRunBlocks > 0)
+        {
+            state.TotalPassed += state.ConsoleLogger.Passed;
+            state.TotalFailed += state.ConsoleLogger.Failed;
+            state.TotalSkipped += state.ConsoleLogger.Skipped;
+            state.TotalDurationMs += state.ConsoleLogger.DurationMs;
+        }
+
+        if (state.Terminal is not { } terminal)
+        {
+            return;
+        }
+
+        state.TotalPassed = terminal.Passed;
+        state.TotalFailed = terminal.Failed;
+        state.TotalSkipped = terminal.Skipped;
+        if (terminal.DurationMs > 0)
+        {
+            state.TotalDurationMs = terminal.DurationMs;
+        }
+
+        state.ProjectCount = Math.Max(1, state.ProjectCount);
     }
 
     private static string FormatOutput(ParseState state, int exitCode)
@@ -350,6 +490,13 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
             return FormatFailures(state, elapsed);
+        }
+
+        // A listing that found names wins even beside a "No test matches" line: that one is another
+        // project's, and says nothing about the names that were listed.
+        if (exitCode == 0 && state.ListedTests.Count > 0)
+        {
+            return FormatTestList(state);
         }
 
         if (FormatZeroTests(state, exitCode) is { } zeroTests)
@@ -377,6 +524,21 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             : string.Empty;
         return
             $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})\n";
+    }
+
+    /// <summary>The names a <c>--list-tests</c> run listed, one per line in listed order, then its status line.</summary>
+    /// <param name="state">The parsed run.</param>
+    private static string FormatTestList(ParseState state)
+    {
+        var sb = new StringBuilder();
+        foreach (var name in state.ListedTests)
+        {
+            sb.Append(name).Append('\n');
+        }
+
+        return sb.Append(CultureInfo.InvariantCulture,
+                $"\u2713 dotnet test --list-tests: {state.ListedTests.Count} tests ({state.ListedProjects} project{(state.ListedProjects == 1 ? "" : "s")})\n")
+            .ToString();
     }
 
     /// <summary>The "0 tests found" verdict, or <see langword="null"/> when the run is not one.</summary>
@@ -478,6 +640,20 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         };
     }
 
+    /// <summary>Converts the console logger's <c>Total time: 0.4813 Seconds</c> to milliseconds.</summary>
+    /// <param name="value">The number.</param>
+    /// <param name="unit">The logger's unit word: Seconds, Minutes, Hours or Days.</param>
+    private static double TotalTimeToMs(double value, string unit)
+    {
+        return unit switch
+        {
+            "Seconds" => value * 1_000,
+            "Minutes" => value * 60_000,
+            "Hours" => value * 3_600_000,
+            _ => value * 86_400_000
+        };
+    }
+
     // Summary: "Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 89 ms - File.dll"
     // VSTest opens it with "Skipped!" when every test of the project was skipped.
     // Duration may be a single unit ("89 ms") or multi-part ("1 m 2 s", "1 h 3 m 4 s").
@@ -485,6 +661,40 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         @"(?:Passed|Failed|Skipped)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+ (?:ms|s|m|h)(?: [\d.]+ (?:ms|s|m|h))*)",
         RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
+
+    // The normal and detailed console loggers print no "Passed!" line. Their run summary is
+    //   Test Run Successful.        (or "Test Run Failed.")
+    //   Total tests: 5
+    //        Passed: 4
+    //        Failed: 1              (only when there are failures)
+    //       Skipped: 1              (only when there are skips)
+    //    Total time: 0.4813 Seconds
+    // "Total tests" is not read: the three counts below it already sum to it.
+    [GeneratedRegex(@"^Test Run (?:Successful|Failed)\.\s*$")]
+    private static partial Regex TestRunBlockHeaderPattern();
+
+    [GeneratedRegex("^Total tests:")]
+    private static partial Regex TestRunTotalTestsPattern();
+
+    [GeneratedRegex(@"^\s+(?<key>Passed|Failed|Skipped):\s+(?<count>\d+)\s*$")]
+    private static partial Regex TestRunCountPattern();
+
+    // The logger picks one unit by magnitude; Seconds is the only one a normal run reaches.
+    [GeneratedRegex(@"^\s*Total time:\s+(?<value>\d+(?:\.\d+)?)\s+(?<unit>Days|Hours|Minutes|Seconds)\s*$")]
+    private static partial Regex TestRunTotalTimePattern();
+
+    // "  Passed Namespace.Class.Method [4 ms]" or "  Skipped Namespace.Class.Method [1 ms]": a finished
+    // test's result line under the normal and detailed console loggers (the same duration shapes as a failure's).
+    [GeneratedRegex(@"^\s+(?:Passed|Skipped)\s+.+?\s+\[(?:< )?[\d.]+ (?:ms|s|m(?: \d+ s)?)\]\s*$")]
+    private static partial Regex PassedOrSkippedTestHeaderPattern();
+
+    // `--list-tests`: "The following Tests are available:" once per project, then each test's name indented
+    // by four spaces. Parallel projects print all their headers before any name.
+    [GeneratedRegex(@"^The following Tests are available:\s*$")]
+    private static partial Regex TestListHeaderPattern();
+
+    [GeneratedRegex(@"^ {4}(?<name>\S.*?)\s*$")]
+    private static partial Regex ListedTestNamePattern();
 
     // A single "<number> <unit>" pair within a possibly multi-part duration string: VSTest spaces
     // the unit ("1 m 2 s"), MTP does not ("1m 02s 500ms").
@@ -571,6 +781,29 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         /// <summary>The MTP run summary's verdict was "Zero tests ran".</summary>
         public bool MtpZeroTestsVerdict { get; set; }
+
+        /// <summary>Console-logger "Test Run Successful."/"Test Run Failed." blocks seen.</summary>
+        public int TestRunBlocks { get; set; }
+
+        /// <summary>"The following Tests are available:" headers seen, one per project of a <c>--list-tests</c> run.</summary>
+        public int ListedProjects { get; set; }
+
+        /// <summary>The test names a <c>--list-tests</c> run listed, in listed order.</summary>
+        public List<string> ListedTests { get; } = [];
+
+        /// <summary>The counts the console logger's "Test Run" block lines gave; used only if a header was seen.</summary>
+        public RunTotals ConsoleLogger { get; } = new();
+
+        /// <summary>The terminal logger's whole-run totals, or <see langword="null"/> when it printed none.</summary>
+        public RunTotals? Terminal { get; set; }
+    }
+
+    private sealed class RunTotals
+    {
+        public int Passed { get; set; }
+        public int Failed { get; set; }
+        public int Skipped { get; set; }
+        public double DurationMs { get; set; }
     }
 
     private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);

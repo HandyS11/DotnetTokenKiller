@@ -1,0 +1,16 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Beta.Tests -> /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll
+Test run for /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (.NETCoreApp,Version=v10.0)
+  Alpha.Tests -> /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll
+Test run for /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (.NETCoreApp,Version=v10.0)
+The following Tests are available:
+The following Tests are available:
+    Beta.Tests.BetaTests.Concatenates
+    Beta.Tests.BetaTests.IsPositive(value: 1)
+    Beta.Tests.BetaTests.IsPositive(value: 2)
+    Alpha.Tests.AlphaTests.Adds
+    Alpha.Tests.AlphaTests.Subtracts
+    Alpha.Tests.AlphaTests.Multiplies
+    Alpha.Tests.AlphaTests.Divides
+    Alpha.Tests.AlphaTests.Persists

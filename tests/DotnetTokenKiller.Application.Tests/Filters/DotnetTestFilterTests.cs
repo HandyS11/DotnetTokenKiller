@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -1035,6 +1036,134 @@ public class DotnetTestFilterTests
 
         result.Should().MatchRegex(@"^✓ dotnet test: 3 passed, 2 skipped \(2 projects, [^)]+\)\n$");
     }
+
+    // The dotnet_test_logger_* and dotnet_test_list_tests* fixtures are real .NET 10.0.403 SDK runs of two
+    // scratch xUnit 2.9.3 projects (Alpha: 4 passing, 1 skipped, and a fifth test that fails when
+    // ALPHA_FAIL is set; Beta: 1 fact and a 2-row theory) under `--logger "console;verbosity=…"` or
+    // `--list-tests`, with the machine path replaced by /test/project/root. Each is the child's stdout
+    // followed by its stderr, which is the text dtk's own capture hands the filter: VSTest writes its
+    // "Test Run Failed." header and the failing test's xUnit line to stderr, so a failed run's header
+    // arrives after the counts it introduces. The one `_interleaved` fixture is the same failing run
+    // with both streams merged in arrival order (`2>&1`, what `dtk pipe` reads).
+
+    [Theory]
+    [InlineData("dotnet_test_logger_normal_pass.txt")]
+    [InlineData("dotnet_test_logger_detailed_pass.txt")]
+    public void Apply_ConsoleLoggerPass_ReportsCounts(string fixture)
+    {
+        // Under the normal and detailed console loggers VSTest prints no "Passed!" line at all: the run's
+        // result is the "Test Run Successful." block, so the counts must come from there, once.
+        var result = _sut.Apply(LoadFixture(fixture), exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 4 passed, 1 skipped \(1 project, [^)]+\)\n$");
+    }
+
+    [Fact]
+    public void Apply_DetailedLoggerFail_ReportsTrueCounts()
+    {
+        // The failing test's stack trace is the last thing before the "Test Run Failed." block, so the
+        // failure parser must stop there instead of swallowing the block (which used to lose the counts).
+        var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail.txt"), exitCode: 1);
+
+        result.Should().StartWith("FAILURES (1):\n  Alpha.Tests.AlphaTests.Divides [");
+        LastLine(result).Should().StartWith("dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
+    }
+
+    [Fact]
+    public void Apply_DetailedLoggerFailInArrivalOrder_ReportsTrueCounts()
+    {
+        // The same run with stdout and stderr merged in arrival order: the header comes before its counts.
+        var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail_interleaved.txt"), exitCode: 1);
+
+        result.Should().StartWith("FAILURES (1):\n  Alpha.Tests.AlphaTests.Divides [");
+        LastLine(result).Should().StartWith("dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
+    }
+
+    [Fact]
+    public void Apply_DetailedLoggerFailInTwoProjects_CountsEachProjectOnce()
+    {
+        // Parallel projects interleave their output: Beta's passing block lands between Alpha's xUnit
+        // lines and Alpha's own result lines, and Alpha's counts precede its "Test Run Failed." header.
+        var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail_multiproject.txt"), exitCode: 1);
+
+        result.Should().Contain("Alpha.Tests.AlphaTests.Divides [");
+        LastLine(result).Should().StartWith("dotnet test: 1 failed, 6 passed, 1 skipped (2 projects, ");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_logger_normal_terminal_logger.txt")]
+    [InlineData("dotnet_test_logger_minimal_terminal_logger.txt")]
+    public void Apply_TerminalLoggerAlongsideAssemblySummaries_CountsEachTestOnce(string fixture)
+    {
+        // `--tl:on` with an explicit console logger prints each assembly's own summary (a "Test Run"
+        // block, or a "Passed!" line) *and* the terminal logger's whole-run "Test summary:". They
+        // describe the same 8 tests, so the whole-run totals stand in for the per-assembly ones. These
+        // fixtures keep their escape sequences: the pipeline strips them before the filter.
+        var result = _sut.Apply(AnsiStrip.Strip(LoadFixture(fixture)), exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 7 passed, 1 skipped \(2 projects, [^)]+\)\n$");
+    }
+
+    [Fact]
+    public void Apply_ListTests_PrintsNamesThenCount()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_list_tests.txt"), exitCode: 0);
+
+        result.Should().Be(
+            """
+            Beta.Tests.BetaTests.Concatenates
+            Beta.Tests.BetaTests.IsPositive(value: 1)
+            Beta.Tests.BetaTests.IsPositive(value: 2)
+            Alpha.Tests.AlphaTests.Adds
+            Alpha.Tests.AlphaTests.Subtracts
+            Alpha.Tests.AlphaTests.Multiplies
+            Alpha.Tests.AlphaTests.Divides
+            Alpha.Tests.AlphaTests.Persists
+            ✓ dotnet test --list-tests: 8 tests (2 projects)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_ListTestsWhereOneProjectMatchesNothing_StillListsTheOthersNames()
+    {
+        // Alpha's "No test matches the given testcase filter" line must not turn the listing of Beta's
+        // three tests into a "0 tests found" warning.
+        var result = _sut.Apply(LoadFixture("dotnet_test_list_tests_filtered.txt"), exitCode: 0);
+
+        result.Should().Be(
+            """
+            Beta.Tests.BetaTests.Concatenates
+            Beta.Tests.BetaTests.IsPositive(value: 1)
+            Beta.Tests.BetaTests.IsPositive(value: 2)
+            ✓ dotnet test --list-tests: 3 tests (2 projects)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_ConsoleLoggerCountLinesWithoutRunHeader_AreNotCounted()
+    {
+        // A test's own output can print a line shaped like a count; without a "Test Run …" header above
+        // or below it, it is not a run summary and must not be added to the real one.
+        const string input =
+            "     Passed: 3\n" +
+            "Passed!  - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 10 ms - T.dll\n";
+
+        _sut.Apply(input, exitCode: 0).Should().StartWith("✓ dotnet test: 2 passed (1 project, ");
+    }
+
+    [Fact]
+    public void Apply_IndentedLineWithoutListHeader_IsNotAListedTest()
+    {
+        const string input =
+            "    Some.Indented.Line\n" +
+            "Passed!  - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 10 ms - T.dll\n";
+
+        _sut.Apply(input, exitCode: 0).Should().NotContain("Some.Indented.Line").And.NotContain("--list-tests");
+    }
+
+    private static string LastLine(string output) => output.TrimEnd('\n').Split('\n')[^1];
 
     // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects under
     // Microsoft.Testing.Platform ("test": {"runner": "Microsoft.Testing.Platform"} in global.json),
