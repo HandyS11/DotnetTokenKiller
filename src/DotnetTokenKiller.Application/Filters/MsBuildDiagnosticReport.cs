@@ -29,6 +29,28 @@ internal sealed partial class MsBuildDiagnosticReport
     private readonly List<Diagnostic> _warnings;
     private readonly string _context;
 
+    private MsBuildDiagnosticReport(ParsedOutput parsed)
+    {
+        _errors = [.. parsed.Diagnostics.Where(d => d.Level == ErrorLevel)];
+        _warnings = [.. parsed.Diagnostics.Where(d => d.Level == WarningLevel)];
+        _context = BuildContext(parsed.ProjectCount, parsed.Elapsed);
+        ErrorTotal = Math.Max(parsed.DeclaredErrors ?? 0, _errors.Count);
+        WarningTotal = Math.Max(parsed.DeclaredWarnings ?? 0, _warnings.Count);
+        FailedProjectCount = _errors
+            .Where(d => d.Project.Length > 0)
+            .Select(d => d.Project)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+        WarningCodes =
+        [
+            .. _warnings
+                .GroupBy(d => CodeLabel(d.Code))
+                .Select(g => (Code: g.Key, Count: g.Count()))
+                .OrderByDescending(c => c.Count)
+                .ThenBy(c => c.Code, StringComparer.Ordinal)
+        ];
+    }
+
     /// <summary>
     /// The larger of MSBuild's own "N Error(s)" tally and the errors parsed. The tally is the
     /// authority on how many diagnostics the build raised: it counts ones this report deliberately
@@ -36,19 +58,25 @@ internal sealed partial class MsBuildDiagnosticReport
     /// matched, so taking the larger stops the header from quietly reporting fewer problems than
     /// the build actually found.
     /// </summary>
-    private readonly int _errorTotal;
+    public int ErrorTotal { get; }
 
     /// <summary>The larger of MSBuild's own "N Warning(s)" tally and the warnings parsed.</summary>
-    private readonly int _warningTotal;
+    public int WarningTotal { get; }
 
-    private MsBuildDiagnosticReport(ParsedOutput parsed)
-    {
-        _errors = [.. parsed.Diagnostics.Where(d => d.Level == ErrorLevel)];
-        _warnings = [.. parsed.Diagnostics.Where(d => d.Level == WarningLevel)];
-        _context = BuildContext(parsed.ProjectCount, parsed.Elapsed);
-        _errorTotal = Math.Max(parsed.DeclaredErrors ?? 0, _errors.Count);
-        _warningTotal = Math.Max(parsed.DeclaredWarnings ?? 0, _warnings.Count);
-    }
+    /// <summary>
+    /// How many distinct projects reported an error, named by the project file without its extension
+    /// from the diagnostic's trailing <c>[path/X.csproj]</c> suffix; a target framework or other
+    /// property after <c>::</c> is dropped, so one multi-targeted project counts once. Zero when no
+    /// error carries a project.
+    /// </summary>
+    public int FailedProjectCount { get; }
+
+    /// <summary>
+    /// The parsed warnings' codes with how many of each, the most frequent first and equal counts in
+    /// ordinal code order. A warning that carries no code is listed as <c>(no code)</c>, as the
+    /// rendered report does, so the counts add up to the warnings parsed.
+    /// </summary>
+    public IReadOnlyList<(string Code, int Count)> WarningCodes { get; }
 
     /// <summary>Parses the output of an MSBuild-driven run in a single pass.</summary>
     /// <param name="strippedOutput">The run's output, with ANSI escape sequences already stripped.</param>
@@ -114,7 +142,7 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>
     /// Renders the summary: a clean tick when there is nothing to report, otherwise the header and
-    /// the errors grouped by file (or, with no errors, the warnings grouped by code).
+    /// the diagnostics body (see <see cref="RenderDiagnostics"/>).
     /// </summary>
     /// <param name="command">The command named in the summary, e.g. <c>dotnet build</c>.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
@@ -135,7 +163,7 @@ internal sealed partial class MsBuildDiagnosticReport
             // Nothing parsed (crashed process, localized SDK, garbled output). A clean tick is only
             // honest when MSBuild's summary agrees there was nothing to report; otherwise degrade to
             // blank so FilteredRunUseCase's raw-tail fallback surfaces the output we failed to read.
-            if (exitCode != 0 || _errorTotal != 0 || _warningTotal != 0)
+            if (exitCode != 0 || ErrorTotal != 0 || WarningTotal != 0)
             {
                 return string.Empty;
             }
@@ -154,26 +182,42 @@ internal sealed partial class MsBuildDiagnosticReport
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"{command}: {Tally(_errorTotal, _errors.Count, ErrorLevel)}, {Tally(_warningTotal, _warnings.Count, WarningLevel)}{_context}");
+            $"{command}: {Tally(ErrorTotal, _errors.Count, ErrorLevel)}, {Tally(WarningTotal, _warnings.Count, WarningLevel)}{_context}");
         AppendOutputs(sb, shownOutputs);
         sb.AppendLine(Separator);
+        AppendDiagnostics(sb);
 
+        return Normalize(sb);
+    }
+
+    /// <summary>
+    /// Renders the diagnostics alone, for a caller that supplies its own status line: the errors
+    /// grouped by file with their top codes and a note of the warnings left out, or, with no errors,
+    /// the warnings grouped by code. It carries neither the header nor the separator.
+    /// </summary>
+    /// <returns>The body, or an empty string when no diagnostic was parsed.</returns>
+    public string RenderDiagnostics()
+    {
+        var sb = new StringBuilder();
+        AppendDiagnostics(sb);
+        return Normalize(sb);
+    }
+
+    private void AppendDiagnostics(StringBuilder sb)
+    {
         if (_errors.Count == 0)
         {
             AppendGroupedByCode(sb, _warnings);
-        }
-        else
-        {
-            AppendGroupedByFile(sb, _errors);
-            AppendTopCodes(sb, _errors);
-            if (_warnings.Count > 0)
-            {
-                sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"{Tally(_warningTotal, _warnings.Count, WarningLevel)} suppressed (use --vv to see)");
-            }
+            return;
         }
 
-        return Normalize(sb);
+        AppendGroupedByFile(sb, _errors);
+        AppendTopCodes(sb, _errors);
+        if (_warnings.Count > 0)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                $"{Tally(WarningTotal, _warnings.Count, WarningLevel)} suppressed (use --vv to see)");
+        }
     }
 
     /// <summary>Converts an MSBuild "Time Elapsed" line to seconds, e.g. <c>2.34s</c>.</summary>
@@ -254,7 +298,8 @@ internal sealed partial class MsBuildDiagnosticReport
             string.Empty,
             simpleDiagMatch.Groups["level"].Value,
             simpleDiagMatch.Groups["code"].Value,
-            TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen));
+            TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen),
+            ProjectName(DropProperties(simpleDiagMatch.Groups["project"].Value)));
 
         // Keyed off the rendered message for the same reason as the file-anchored diagnostics.
         if (seen.Add($"{simpleDiagnostic.Code}:{simpleDiagnostic.Message}"))
@@ -272,23 +317,22 @@ internal sealed partial class MsBuildDiagnosticReport
             return false;
         }
 
-        var diagnostic = new Diagnostic(
-            TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), rootPath),
-            diagMatch.Groups["line"].Value,
-            diagMatch.Groups["col"].Value,
-            diagMatch.Groups["level"].Value,
-            diagMatch.Groups["code"].Value,
-            TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen));
-
         // The trailing "[project]" suffix can carry extra MSBuild properties after "::", most
         // commonly the TFM a multi-targeted build re-reports the same diagnostic for (e.g.
         // "/p/A.csproj::TargetFramework=net8.0"). Drop that part for the key so those repeats still
         // collapse, but keep the project path itself: two different projects can report an identical
         // file/line/code/message (a linked GlobalUsings.cs shared via <Compile Include>, for
         // instance) and must not be merged into a single entry that hides one project's failure.
-        var project = diagMatch.Groups["project"].Value;
-        var tfmSeparatorIndex = project.IndexOf("::", StringComparison.Ordinal);
-        var projectPath = tfmSeparatorIndex < 0 ? project : project[..tfmSeparatorIndex];
+        var projectPath = DropProperties(diagMatch.Groups["project"].Value);
+
+        var diagnostic = new Diagnostic(
+            TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), rootPath),
+            diagMatch.Groups["line"].Value,
+            diagMatch.Groups["col"].Value,
+            diagMatch.Groups["level"].Value,
+            diagMatch.Groups["code"].Value,
+            TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen),
+            ProjectName(projectPath));
 
         // Key off what gets rendered, not the raw capture. Two diagnostics differing only past the
         // truncation limit, or whose paths shorten to the same relative path, render as identical
@@ -302,6 +346,22 @@ internal sealed partial class MsBuildDiagnosticReport
         }
 
         return true;
+    }
+
+    /// <summary>Drops the extra MSBuild properties (<c>::TargetFramework=net8.0</c>) from a <c>[project]</c> suffix.</summary>
+    /// <param name="project">The text inside the diagnostic's trailing brackets, empty when it has none.</param>
+    private static string DropProperties(string project)
+    {
+        var separatorIndex = project.IndexOf("::", StringComparison.Ordinal);
+        return separatorIndex < 0 ? project : project[..separatorIndex];
+    }
+
+    /// <summary>Names a project by its file, without directory or extension; either path separator splits.</summary>
+    /// <param name="projectPath">The project path, empty when the diagnostic named none.</param>
+    private static string ProjectName(string projectPath)
+    {
+        var fileName = projectPath[(projectPath.LastIndexOfAny(['/', '\\']) + 1)..];
+        return Path.GetFileNameWithoutExtension(fileName);
     }
 
     /// <summary>
@@ -424,7 +484,7 @@ internal sealed partial class MsBuildDiagnosticReport
     // The code is optional: Exec tasks emit "EXEC : warning : could not lock config file", and
     // requiring a code dropped those from the listing and the count alike.
     [GeneratedRegex(
-        @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s*\[.+?\])?\s*$")]
+        @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s*\[(?<project>.+?)\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
 
     // Matches: "  MyProject -> /path/to/bin/MyProject.dll" (or .exe)
@@ -464,7 +524,22 @@ internal sealed partial class MsBuildDiagnosticReport
     [GeneratedRegex(@"^\s+(?<count>\d+) (?<kind>Warning|Error)\(s\)\s*$")]
     private static partial Regex DeclaredCountPattern();
 
-    private sealed record Diagnostic(string File, string Line, string Col, string Level, string Code, string Message);
+    /// <summary>One diagnostic as it is rendered, plus the project that reported it.</summary>
+    /// <param name="File">The source file, shortened against the root; empty for tool- and project-level diagnostics.</param>
+    /// <param name="Line">The line, empty when the diagnostic has no position.</param>
+    /// <param name="Col">The column, empty when the diagnostic has no position.</param>
+    /// <param name="Level">Either <c>error</c> or <c>warning</c>.</param>
+    /// <param name="Code">The diagnostic code, empty when it carried none.</param>
+    /// <param name="Message">The message, truncated to the rendered length.</param>
+    /// <param name="Project">The project's file name without extension, empty when the diagnostic named none.</param>
+    private sealed record Diagnostic(
+        string File,
+        string Line,
+        string Col,
+        string Level,
+        string Code,
+        string Message,
+        string Project);
 
     /// <summary>Everything a single pass over the raw output yields.</summary>
     /// <param name="Diagnostics">The distinct diagnostics parsed, in the order encountered.</param>

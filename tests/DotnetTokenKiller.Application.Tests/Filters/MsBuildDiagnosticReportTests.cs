@@ -1,0 +1,196 @@
+using DotnetTokenKiller.Application.Filters;
+using FluentAssertions;
+
+namespace DotnetTokenKiller.Application.Tests.Filters;
+
+public class MsBuildDiagnosticReportTests
+{
+    private const string Root = "/test/project/root";
+
+    [Fact]
+    public void Totals_ErrorsFixture_ReadMsBuildsTally()
+    {
+        var report = Parse("dotnet_build_errors.txt");
+
+        report.ErrorTotal.Should().Be(3);
+        report.WarningTotal.Should().Be(1);
+    }
+
+    [Fact]
+    public void Totals_WarningsFixture_ReadMsBuildsTally()
+    {
+        var report = Parse("dotnet_build_warnings.txt");
+
+        report.ErrorTotal.Should().Be(0);
+        report.WarningTotal.Should().Be(3);
+    }
+
+    [Fact]
+    public void Totals_DeclaredTallyExceedsParsed_TakeTheLarger()
+    {
+        var report = MsBuildDiagnosticReport.Parse(
+            "/p/A.cs(1,1): error CS0001: boom [/p/A.csproj]\n    5 Error(s)\n    2 Warning(s)\n", Root);
+
+        report.ErrorTotal.Should().Be(5);
+        report.WarningTotal.Should().Be(2);
+    }
+
+    [Fact]
+    public void FailedProjectCount_ErrorsFixture_CountsTheOneProjectThatFailed()
+    {
+        var report = Parse("dotnet_build_errors.txt");
+
+        // Three errors, all in DotnetTokenKiller.Application.csproj; the warning in Domain.csproj is not a failure.
+        report.FailedProjectCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void FailedProjectCount_WarningsFixture_IsZero()
+    {
+        Parse("dotnet_build_warnings.txt").FailedProjectCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void FailedProjectCount_SameProjectPerTargetFramework_CountsOnce()
+    {
+        const string output = """
+                              /p/A.cs(1,1): error CS0001: boom [/p/A.csproj::TargetFramework=net8.0]
+                              /p/B.cs(2,2): error CS0002: bang [/p/A.csproj::TargetFramework=net9.0]
+                              /p/C.cs(3,3): error CS0003: crash [/p/C.csproj]
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).FailedProjectCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void FailedProjectCount_ErrorWithoutProjectSuffix_IsZero()
+    {
+        var report = MsBuildDiagnosticReport.Parse("/p/A.cs(1,1): error CS0001: boom\n", Root);
+
+        report.FailedProjectCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void FailedProjectCount_ProjectLevelErrorWithSuffix_Counts()
+    {
+        var report = MsBuildDiagnosticReport.Parse(
+            "CSC : error CS8785: generator failed [/p/Gen.csproj::TargetFramework=net8.0]\n", Root);
+
+        report.FailedProjectCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void FailedProjectCount_WindowsPathSuffix_UsesTheFileName()
+    {
+        var report = MsBuildDiagnosticReport.Parse(
+            "C:\\p\\A.cs(1,1): error CS0001: boom [C:\\p\\src\\A.csproj]\n", "C:\\p");
+
+        report.FailedProjectCount.Should().Be(1);
+    }
+
+    [Fact]
+    public void WarningCodes_WarningsFixture_MostFrequentCodeFirst()
+    {
+        var report = Parse("dotnet_build_warnings.txt");
+
+        report.WarningCodes.Should().Equal(("CS0219", 2), ("CS0169", 1));
+    }
+
+    [Fact]
+    public void WarningCodes_EqualCounts_OrderedByCodeOrdinal()
+    {
+        const string output = """
+                              /p/A.cs(1,1): warning CS0219: a [/p/A.csproj]
+                              /p/A.cs(2,1): warning CS0169: b [/p/A.csproj]
+                              /p/A.cs(3,1): warning CS8602: c [/p/A.csproj]
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).WarningCodes
+            .Should().Equal(("CS0169", 1), ("CS0219", 1), ("CS8602", 1));
+    }
+
+    [Fact]
+    public void WarningCodes_CodelessWarning_IsLabelledLikeTheRenderedReport()
+    {
+        var report = MsBuildDiagnosticReport.Parse("EXEC : warning : could not lock config file\n", Root);
+
+        report.WarningCodes.Should().Equal(("(no code)", 1));
+    }
+
+    [Fact]
+    public void WarningCodes_ErrorsFixture_CountsWarningsNotErrors()
+    {
+        Parse("dotnet_build_errors.txt").WarningCodes.Should().Equal(("CS0169", 1));
+    }
+
+    [Fact]
+    public void WarningCodes_NoWarnings_IsEmpty()
+    {
+        Parse("dotnet_build_success.txt").WarningCodes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RenderDiagnostics_ErrorsFixture_IsTheBodyWithoutStatusLineOrSeparator()
+    {
+        var body = Parse("dotnet_build_errors.txt").RenderDiagnostics();
+
+        body.Should().Be(
+            "src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 errors)\n"
+            + "  (10,5) CS1002: ; expected\n"
+            + "  (12,18) CS0103: The name 'undeclared' does not exist in the current context\n"
+            + "src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs (1 error)\n"
+            + "  (8,10) CS1002: ; expected\n"
+            + "Top codes: CS1002 (2x), CS0103 (1x)\n"
+            + "1 warning suppressed (use --vv to see)\n");
+        body.Should().NotContain("dotnet build:").And.NotContain("---");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_WarningsFixture_ListsWarningsWhenThereAreNoErrors()
+    {
+        var body = Parse("dotnet_build_warnings.txt").RenderDiagnostics();
+
+        body.Should().StartWith("CS0169 (1x)\n").And.Contain("CS0219 (2x)\n");
+        body.Should().NotContain("dotnet build:").And.NotContain("---");
+        body.Should().NotContain("\r");
+        body.Should().EndWith("\n");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_CleanBuild_IsEmpty()
+    {
+        Parse("dotnet_build_success.txt").RenderDiagnostics().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RenderDiagnostics_NothingParsed_IsEmpty()
+    {
+        MsBuildDiagnosticReport.Parse("garbled output\n", Root).RenderDiagnostics().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Render_BodyIsExactlyWhatRenderDiagnosticsReturns()
+    {
+        foreach (var name in new[] { "dotnet_build_errors.txt", "dotnet_build_warnings.txt" })
+        {
+            var report = Parse(name);
+
+            var rendered = report.Render("dotnet build", 1, []);
+
+            rendered.Should().EndWith("---\n" + report.RenderDiagnostics());
+        }
+    }
+
+    private static MsBuildDiagnosticReport Parse(string fixtureName) =>
+        MsBuildDiagnosticReport.Parse(LoadFixture(fixtureName), Root);
+
+    private static string LoadFixture(string resourceName)
+    {
+        var assembly = typeof(MsBuildDiagnosticReportTests).Assembly;
+        var fullName = assembly.GetManifestResourceNames()
+            .First(n => n.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
+        using var stream = assembly.GetManifestResourceStream(fullName)!;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+}
