@@ -53,12 +53,12 @@ public class DotnetBuildIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Build_SampleAppBroken_Failure_OutputStartsWith1Error()
+    public async Task Build_SampleAppBroken_Failure_OutputEndsWith1ErrorVerdict()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
 
         exitCode.Should().NotBe(0);
-        output.Trim().Should().StartWith("dotnet build: 1 error");
+        output.Trim().Split('\n')[^1].Should().StartWith("✗ dotnet build failed (exit 1): 1 error");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -85,7 +85,7 @@ public class DotnetBuildIntegrationTests
         exitCode.Should().Be(1, "dotnet build's own exit code for a compile error");
         output.Should().Contain("error CS");
         output.Should().Contain(Path.Combine(SampleAppBroken, "BrokenClass.cs"));
-        output.Should().NotStartWith("dotnet build: 1 error", "the run is not filtered");
+        output.Should().NotContain("dotnet build failed", "the run is not filtered");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -112,12 +112,12 @@ public class DotnetBuildIntegrationTests
     // ── SampleApp.MultiError ────────────────────────────────────────────
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Build_SampleAppMultiError_Failure_OutputStartsWithMultipleErrors()
+    public async Task Build_SampleAppMultiError_Failure_OutputEndsWithMultipleErrorsVerdict()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppMultiError);
 
         exitCode.Should().NotBe(0);
-        output.Should().MatchRegex(@"^dotnet build: \d+ errors");
+        output.Trim().Split('\n')[^1].Should().MatchRegex(@"^✗ dotnet build failed \(exit 1\): \d+ errors");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -183,7 +183,7 @@ public class DotnetBuildIntegrationTests
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
-        output.Should().MatchRegex(@"dotnet build: 0 errors, \d+ warnings");
+        output.Trim().Split('\n')[^1].Should().MatchRegex(@"^✓ dotnet build: 0 errors, \d+ warnings");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

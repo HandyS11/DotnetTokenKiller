@@ -30,6 +30,8 @@ dtk dotnet build -q                  # quiet: filtered content only, no DTK meta
 ```
 
 On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths and top error codes.
+The summary is always the last line (`✓ dotnet build …`, or `✗ dotnet build failed (exit 1): 3 errors, 1 warning …`
+when the exit code is non-zero), so `| tail -1` carries the verdict.
 
 ### `dtk dotnet test`
 
@@ -137,15 +139,15 @@ dtk dotnet publish src/MyApp/MyApp.csproj -c Release
 dtk dotnet publish -r linux-x64 --self-contained
 ```
 
-Diagnostics are summarised exactly as for `dtk dotnet build`. On success the summary line is followed by each
-project's publish directory, with a workspace-relative path:
+Diagnostics are summarised exactly as for `dtk dotnet build`. On success each project's publish directory, with a
+workspace-relative path, sits directly above the summary line, which stays last:
 
 ```text
-✓ dotnet publish (2 projects)
   MyApp -> src/MyApp/bin/Release/net10.0/publish/
+✓ dotnet publish (2 projects)
 ```
 
-On failure the output is the build's error layout, and no publish directory is listed.
+On failure the output is the build's error layout ending in the `✗` summary line, and no publish directory is listed.
 
 ### `dtk dotnet pack`
 
@@ -158,16 +160,16 @@ dtk dotnet pack -c Release -p:Version=1.2.3
 ```
 
 Diagnostics, including NuGet's `NU5xxx` pack warnings, are summarised exactly as for `dtk dotnet build`. On
-success the summary line is followed by every package created (`.nupkg` and `.snupkg`), with a
-workspace-relative path:
+success every package created (`.nupkg` and `.snupkg`), with a workspace-relative path, sits directly above the
+summary line, which stays last:
 
 ```text
-✓ dotnet pack (1 project)
   artifacts/MyLib.1.2.3.nupkg
   artifacts/MyLib.1.2.3.snupkg
+✓ dotnet pack (1 project)
 ```
 
-On failure the output is the build's error layout, and no package is listed.
+On failure the output is the build's error layout ending in the `✗` summary line, and no package is listed.
 
 `dtk dotnet publish --interactive` and `dtk dotnet pack --interactive` are not filtered: they run with the
 terminal attached, as they did before dtk filtered these commands, so a credential provider can prompt for a

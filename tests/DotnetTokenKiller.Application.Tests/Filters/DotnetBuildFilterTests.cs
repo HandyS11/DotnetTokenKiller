@@ -66,6 +66,74 @@ public class DotnetBuildFilterTests
         savings.Should().BeGreaterThanOrEqualTo(70.0, "build errors filter should achieve ≥70% savings");
     }
 
+    [Fact]
+    public void Apply_ErrorsFixture_EndsWithTheOneVerdictLine()
+    {
+        var fixture = LoadFixture("dotnet_build_errors.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        // `| tail -1` must carry the verdict, and the verdict is stated once: the header that used
+        // to open the report is gone, so exactly one line names the command.
+        result.TrimEnd('\n').Split('\n')[^1]
+            .Should().Be("✗ dotnet build failed (exit 1): 3 errors, 1 warning (1.89s)");
+        result.Split('\n').Count(line => line.Contains("dotnet build", StringComparison.Ordinal)).Should().Be(1);
+        result.Should().NotContain("---");
+    }
+
+    [Fact]
+    public void Apply_WarningsFixture_EndsWithTheSuccessVerdictLine()
+    {
+        var fixture = LoadFixture("dotnet_build_warnings.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.TrimEnd('\n').Split('\n')[^1]
+            .Should().Be("✓ dotnet build: 0 errors, 3 warnings (2 projects, 2.67s)");
+        result.Split('\n').Count(line => line.Contains("dotnet build", StringComparison.Ordinal)).Should().Be(1);
+    }
+
+    [Fact]
+    public void Apply_NonZeroExitWarningsOnly_StatesTheVerdictOnceAndLast()
+    {
+        const string input =
+            "/repo/App.cs(3,9): warning CS0219: The variable 'x' is assigned but its value is never used [/repo/A.csproj]";
+
+        var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 2);
+
+        var lines = result.TrimEnd('\n').Split('\n');
+        lines[^1].Should().Be("✗ dotnet build failed (exit 2): 0 errors, 1 warning");
+        lines.Count(line => line.Contains('✗', StringComparison.Ordinal)).Should().Be(1);
+        lines.Count(line => line.Contains("dotnet build", StringComparison.Ordinal)).Should().Be(1);
+    }
+
+    [Fact]
+    public void Apply_WarningsWithProjectAndElapsed_PutsTheContextOnTheVerdictLine()
+    {
+        const string input = """
+                             /repo/App.cs(3,9): warning CS0219: unused [/repo/A.csproj]
+                               A -> /repo/A/bin/Debug/net10.0/A.dll
+                             Time Elapsed 00:00:02.00
+                             """;
+
+        var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
+
+        result.Should().Be(
+            "CS0219 (1x)\n  App.cs:3 \u2014 unused\n\u2713 dotnet build: 0 errors, 1 warning (1 project, 2.00s)\n");
+    }
+
+    [Fact]
+    public void Apply_ZeroExitWithParsedErrors_KeepsTheExitCodeVerdict()
+    {
+        // The exit code is the sole source of truth for the verdict: errors parsed from a run dotnet
+        // itself called successful still show in the tally, but do not turn the line into a failure.
+        const string input = "/repo/X.cs(1,1): error CS0001: boom [/repo/A.csproj]";
+
+        var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
+
+        result.TrimEnd('\n').Split('\n')[^1].Should().Be("✓ dotnet build: 1 error, 0 warnings");
+    }
+
     [Theory]
     [InlineData("MSBuild version 17.0")]
     [InlineData("Determining projects to restore...")]
@@ -116,7 +184,7 @@ public class DotnetBuildFilterTests
         // and renders without a position. Emitting the empty slots produced a nameless heading and a
         // "(,)" stub that read like a location the filter had lost.
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
+            "(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -135,7 +203,7 @@ public class DotnetBuildFilterTests
 
         // Exact: proves the unmatched line contributes nothing and the duplicate is dropped.
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n");
+            "(no file) (1 error)\n  MSB1001: Unknown switch.\nTop codes: MSB1001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -146,7 +214,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nCS0001 (1x)\n  File.cs:1 \u2014 a warning message\n");
+        result.Should().Be("CS0001 (1x)\n  File.cs:1 \u2014 a warning message\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -159,7 +227,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 1 warning\n---\nFile.cs (1 error)\n  (1,1) CS0001: error message\nTop codes: CS0001 (1x)\n1 warning suppressed (use --vv to see)\n");
+            "File.cs (1 error)\n  (1,1) CS0001: error message\nTop codes: CS0001 (1x)\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning\n");
     }
 
     [Fact]
@@ -197,7 +265,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 2 warnings\n---\nFile.cs (1 error)\n  (1,1) CS0001: error message\nTop codes: CS0001 (1x)\n2 warnings suppressed (use --vv to see)\n");
+            "File.cs (1 error)\n  (1,1) CS0001: error message\nTop codes: CS0001 (1x)\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings\n");
     }
 
     [Fact]
@@ -217,7 +285,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\nFile.cs (1 error)\n  (1,1) CS0001: error msg\nTop codes: CS0001 (1x)\n");
+            "File.cs (1 error)\n  (1,1) CS0001: error msg\nTop codes: CS0001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -228,7 +296,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\nOnly.cs (1 error)\n  (7,3) CS1002: ; expected\nTop codes: CS1002 (1x)\n");
+            "Only.cs (1 error)\n  (7,3) CS1002: ; expected\nTop codes: CS1002 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -242,7 +310,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 2 errors, 0 warnings\n---\nA.cs (1 error)\n  (1,1) CS0001: err1\nB.cs (1 error)\n  (2,1) CS0002: err2\nTop codes: CS0001 (1x), CS0002 (1x)\n");
+            "A.cs (1 error)\n  (1,1) CS0001: err1\nB.cs (1 error)\n  (2,1) CS0002: err2\nTop codes: CS0001 (1x), CS0002 (1x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -256,7 +324,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "dotnet build: 0 errors, 2 warnings\n---\nCS0168 (2x)\n  File.cs:10 \u2014 The variable is declared but never used\n  File.cs:20 \u2014 Another unused variable\n");
+            "CS0168 (2x)\n  File.cs:10 \u2014 The variable is declared but never used\n  File.cs:20 \u2014 Another unused variable\n\u2713 dotnet build: 0 errors, 2 warnings\n");
     }
 
     [Fact]
@@ -270,7 +338,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 2 errors, 0 warnings\n---\nFile.cs (2 errors)\n  (1,1) CS0001: first error\n  (2,1) CS0002: second error\nTop codes: CS0001 (1x), CS0002 (1x)\n");
+            "File.cs (2 errors)\n  (1,1) CS0001: first error\n  (2,1) CS0002: second error\nTop codes: CS0001 (1x), CS0002 (1x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -281,7 +349,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\nFile.cs (1 error)\n  (1,1) CS0001: error msg\nTop codes: CS0001 (1x)\n");
+            "File.cs (1 error)\n  (1,1) CS0001: error msg\nTop codes: CS0001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -391,7 +459,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\nFile.cs (1 error)\n  (1,1) CS0001: same error\nTop codes: CS0001 (1x)\n");
+            "File.cs (1 error)\n  (1,1) CS0001: same error\nTop codes: CS0001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -403,7 +471,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1003: Specify either a project or solution file.\nTop codes: MSB1003 (1x)\n");
+            "(no file) (1 error)\n  MSB1003: Specify either a project or solution file.\nTop codes: MSB1003 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -426,7 +494,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nCS0168 (1x)\n  File.cs:1 \u2014 unused var\n");
+        result.Should().Be("CS0168 (1x)\n  File.cs:1 \u2014 unused var\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -437,7 +505,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\nFile.cs (1 error)\n  (1,1) CS0001: msg\nTop codes: CS0001 (1x)\n");
+            "File.cs (1 error)\n  (1,1) CS0001: msg\nTop codes: CS0001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -450,7 +518,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
-        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nMSB4011 (1x)\n  This is a warning.\n");
+        result.Should().Be("MSB4011 (1x)\n  This is a warning.\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -464,7 +532,7 @@ public class DotnetBuildFilterTests
 
         // Verify the grouped-by-code format includes file:line and em-dash separator
         result.Should().Be(
-            "dotnet build: 0 errors, 1 warning\n---\nCS0168 (1x)\n  Foo.cs:42 \u2014 The variable 'x' is declared but never used\n");
+            "CS0168 (1x)\n  Foo.cs:42 \u2014 The variable 'x' is declared but never used\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -475,7 +543,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nCS0168 (1x)\n  File.cs:1 \u2014 unused\n");
+        result.Should().Be("CS0168 (1x)\n  File.cs:1 \u2014 unused\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -487,7 +555,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 1 warning\n---\na.cs (1 error)\n  (1,1) CS001: e\nTop codes: CS001 (1x)\n1 warning suppressed (use --vv to see)\n");
+            "a.cs (1 error)\n  (1,1) CS001: e\nTop codes: CS001 (1x)\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning\n");
     }
 
     [Fact]
@@ -539,7 +607,7 @@ public class DotnetBuildFilterTests
 
         // Both have different messages but same code — should both appear since key includes message
         result.Should().Be(
-            "dotnet build: 2 errors, 0 warnings\n---\n(no file) (2 errors)\n  MSB1001: First.\n  MSB1001: Second.\nTop codes: MSB1001 (2x)\n");
+            "(no file) (2 errors)\n  MSB1001: First.\n  MSB1001: Second.\nTop codes: MSB1001 (2x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -566,7 +634,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "dotnet build: 0 errors, 2 warnings\n---\nCS0168 (1x)\n  A.cs:1 \u2014 unused var\nCS0219 (1x)\n  B.cs:2 \u2014 unused value\n");
+            "CS0168 (1x)\n  A.cs:1 \u2014 unused var\nCS0219 (1x)\n  B.cs:2 \u2014 unused value\n\u2713 dotnet build: 0 errors, 2 warnings\n");
     }
 
     [Fact]
@@ -578,7 +646,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("dotnet build: 0 errors, 1 warning\n---\nCS0168 (1x)\n  A.cs:1 \u2014 unused\n");
+        result.Should().Be("CS0168 (1x)\n  A.cs:1 \u2014 unused\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -591,7 +659,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB1001: Something went wrong.\nTop codes: MSB1001 (1x)\n");
+            "(no file) (1 error)\n  MSB1001: Something went wrong.\nTop codes: MSB1001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -604,7 +672,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "dotnet build: 1 error, 0 warnings\n---\n(no file) (1 error)\n  MSB3021: Unable to copy file.\nTop codes: MSB3021 (1x)\n");
+            "(no file) (1 error)\n  MSB3021: Unable to copy file.\nTop codes: MSB3021 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -636,15 +704,16 @@ public class DotnetBuildFilterTests
     public void Apply_NonZeroExitWarningsOnly_ContainsFailureMarkerAndWarningCode()
     {
         // Failed build (non-zero exit) where only warnings were parsed (no errors matched the
-        // regex): rendering "0 errors, N warnings" with no failure marker reads like a near-success
-        // for a run that FAILED. A "✗" line must be prepended so the verdict stays exit-code-derived.
+        // regex): a "0 errors, N warnings" verdict with no failure marker reads like a near-success
+        // for a run that FAILED. The one final line carries the "✗" and the exit code, so the
+        // verdict stays exit-code-derived and is never stated twice.
         const string input =
             "/repo/App.cs(3,9): warning CS0219: The variable 'x' is assigned but its value is never used [/repo/A.csproj]";
 
         var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "✗ dotnet build failed (exit 1)\ndotnet build: 0 errors, 1 warning\n---\nCS0219 (1x)\n  App.cs:3 \u2014 The variable 'x' is assigned but its value is never used\n");
+            "CS0219 (1x)\n  App.cs:3 \u2014 The variable 'x' is assigned but its value is never used\n✗ dotnet build failed (exit 1): 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -657,7 +726,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "dotnet build: 0 errors, 1 warning\n---\nCS0219 (1x)\n  App.cs:3 \u2014 The variable 'x' is assigned but its value is never used\n");
+            "CS0219 (1x)\n  App.cs:3 \u2014 The variable 'x' is assigned but its value is never used\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -700,7 +769,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\n(no file) (2 errors)\n  MSB1001: Unknown switch.\n  MSB1002: Unknown switch.\nTop codes: MSB1001 (1x), MSB1002 (1x)\n");
+        result.Should().Be("(no file) (2 errors)\n  MSB1001: Unknown switch.\n  MSB1002: Unknown switch.\nTop codes: MSB1001 (1x), MSB1002 (1x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -714,7 +783,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\nA.cs (1 error)\n  (1,1) CS0001: msg\nB.cs (1 error)\n  (1,1) CS0001: msg\nTop codes: CS0001 (2x)\n");
+        result.Should().Be("A.cs (1 error)\n  (1,1) CS0001: msg\nB.cs (1 error)\n  (1,1) CS0001: msg\nTop codes: CS0001 (2x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -728,7 +797,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\nA.cs (2 errors)\n  (1,1) CS0001: msg\n  (2,1) CS0001: msg\nTop codes: CS0001 (2x)\n");
+        result.Should().Be("A.cs (2 errors)\n  (1,1) CS0001: msg\n  (2,1) CS0001: msg\nTop codes: CS0001 (2x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -742,7 +811,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\nA.cs (2 errors)\n  (1,1) CS0001: msg\n  (1,2) CS0001: msg\nTop codes: CS0001 (2x)\n");
+        result.Should().Be("A.cs (2 errors)\n  (1,1) CS0001: msg\n  (1,2) CS0001: msg\nTop codes: CS0001 (2x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -756,7 +825,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 2 errors, 0 warnings\n---\nA.cs (2 errors)\n  (1,1) CS0001: msg\n  (1,1) CS0002: msg\nTop codes: CS0001 (1x), CS0002 (1x)\n");
+        result.Should().Be("A.cs (2 errors)\n  (1,1) CS0001: msg\n  (1,1) CS0002: msg\nTop codes: CS0001 (1x), CS0002 (1x)\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings\n");
     }
 
     [Fact]
@@ -772,7 +841,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("dotnet build: 1 error, 2 warnings\n---\nA.cs (1 error)\n  (1,1) CS0001: err\nTop codes: CS0001 (1x)\n2 warnings suppressed (use --vv to see)\n");
+        result.Should().Be("A.cs (1 error)\n  (1,1) CS0001: err\nTop codes: CS0001 (1x)\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings\n");
     }
 
     [Fact]
@@ -839,7 +908,8 @@ public class DotnetBuildFilterTests
 
         result.Should().Contain("CS0168");
         result.Should().Contain("1 warning");
-        result.Should().NotStartWith("✓ dotnet build");
+        result.Should().NotBe("✓ dotnet build\n");
+        result.Should().EndWith("✓ dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -887,7 +957,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet build: 2 errors (1 shown), 0 warnings");
+        result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings\n");
         result.Should().Contain("Bad.cs (1 error)");
     }
 
@@ -907,7 +977,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet build: 2 errors, 0 warnings");
+        result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors, 0 warnings\n");
         result.Should().NotContain("shown");
         result.Should().Contain("GlobalUsings.cs (2 errors)");
     }
@@ -927,7 +997,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet build: 2 errors (1 shown), 0 warnings");
+        result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings\n");
         result.Should().Contain("Bad.cs (1 error)");
     }
 
@@ -944,7 +1014,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet build: 1 error, 0 warnings");
+        result.Should().EndWith("✗ dotnet build failed (exit 1): 1 error, 0 warnings\n");
         result.Should().NotContain("shown");
     }
 
@@ -961,7 +1031,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet build: 1 error, 0 warnings");
+        result.Should().EndWith("✗ dotnet build failed (exit 1): 1 error, 0 warnings\n");
         result.Should().NotContain("99999999999");
     }
 
@@ -1000,7 +1070,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            $"dotnet build: 2 errors (1 shown), 0 warnings\n---\nA.cs (1 error)\n  (1,1) CS0001: {shared}...\nTop codes: CS0001 (1x)\n");
+            $"A.cs (1 error)\n  (1,1) CS0001: {shared}...\nTop codes: CS0001 (1x)\n\u2717 dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings\n");
     }
 
     private static string LoadFixture(string resourceName)

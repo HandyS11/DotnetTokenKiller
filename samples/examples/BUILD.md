@@ -96,14 +96,13 @@ Time Elapsed 00:00:01.08
 **dtk** (`dtk dotnet build samples/SampleApp.Broken/SampleApp.Broken.csproj`)
 
 ```sh
-dotnet build: 1 error, 0 warnings (1.08s)
----
 samples/SampleApp.Broken/BrokenClass.cs (1 error)
   (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'
 Top codes: CS0029 (1x)
+✗ dotnet build failed (exit 1): 1 error, 0 warnings (1.08s)
 ```
 
-Token reduction: **8 lines -> 5 lines**
+Token reduction: **8 lines -> 4 lines**
 
 ---
 
@@ -172,8 +171,6 @@ Time Elapsed 00:00:00.94
 **dtk** (`dtk dotnet build samples/SampleApp.MultiError/SampleApp.MultiError.csproj`)
 
 ```sh
-dotnet build: 22 errors, 0 warnings (0.94s)
----
 samples/SampleApp.MultiError/AccessErrors.cs (7 errors)
   (10,34) CS0122: 'SecretHolder._value' is inaccessible due to its protection level
   (17,29) CS0414: The field 'SecretHolder._value' is assigned but its value is never used
@@ -202,9 +199,10 @@ samples/SampleApp.MultiError/UndefinedReferences.cs (3 errors)
   (12,9) CS0103: The name 'MissingMethod' does not exist in the current context
   (6,17) S2325: Make 'DoWork' a static method.
 Top codes: RCS1181 (4x), S2325 (3x), CS0103 (2x), CS0029 (2x), CS0266 (2x)
+✗ dotnet build failed (exit 1): 22 errors, 0 warnings (0.94s)
 ```
 
-Token reduction: **50 lines -> 30 lines**
+Token reduction: **50 lines -> 29 lines**
 
 ---
 
@@ -298,8 +296,6 @@ Time Elapsed 00:00:01.12
 **dtk** (`dtk dotnet build samples/SampleApp.Warnings/SampleApp.Warnings.csproj`)
 
 ```sh
-dotnet build: 0 errors, 34 warnings (1 project, 1.12s)
----
 CA1024 (1x)
   samples/SampleApp.Warnings/NullableWarnings.cs:7 — Use properties where appropriate (https://learn.microsoft.com/dotnet/fundamentals/code-analysis/quality-rules/ca1024)
 CS0162 (1x)
@@ -352,9 +348,10 @@ S2325 (6x)
   samples/SampleApp.Warnings/NullableWarnings.cs:7 — Make 'GetValue' a static method.
   samples/SampleApp.Warnings/UnusedCode.cs:17 — Make 'DeadCode' a static method.
   samples/SampleApp.Warnings/UnusedCode.cs:6 — Make 'DoWork' a static method.
+✓ dotnet build: 0 errors, 34 warnings (1 project, 1.12s)
 ```
 
-Token reduction: **75 lines -> 54 lines**
+Token reduction: **75 lines -> 53 lines**
 
 ---
 

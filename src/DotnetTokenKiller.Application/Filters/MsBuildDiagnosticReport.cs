@@ -13,7 +13,6 @@ namespace DotnetTokenKiller.Application.Filters;
 /// </summary>
 internal sealed partial class MsBuildDiagnosticReport
 {
-    private const string Separator = "---";
     private const int MessageMaxLen = 120;
 
     /// <summary>Stands in for the diagnostic code on MSBuild output that carries none (Exec tasks).</summary>
@@ -55,7 +54,7 @@ internal sealed partial class MsBuildDiagnosticReport
     /// The larger of MSBuild's own "N Error(s)" tally and the errors parsed. The tally is the
     /// authority on how many diagnostics the build raised: it counts ones this report deliberately
     /// collapses (the same error reported once per target framework) and ones the regexes never
-    /// matched, so taking the larger stops the header from quietly reporting fewer problems than
+    /// matched, so taking the larger stops the status line from quietly reporting fewer problems than
     /// the build actually found.
     /// </summary>
     public int ErrorTotal { get; }
@@ -141,16 +140,17 @@ internal sealed partial class MsBuildDiagnosticReport
     }
 
     /// <summary>
-    /// Renders the summary: a clean tick when there is nothing to report, otherwise the header and
-    /// the diagnostics body (see <see cref="RenderDiagnostics"/>).
+    /// Renders the report with its verdict last, so <c>| tail -1</c> always carries it: the
+    /// diagnostics body (see <see cref="RenderDiagnostics"/>), the lines naming what a successful run
+    /// produced, then one status line. With nothing to report that line is a clean tick on its own.
     /// </summary>
-    /// <param name="command">The command named in the summary, e.g. <c>dotnet build</c>.</param>
+    /// <param name="command">The command named in the status line, e.g. <c>dotnet build</c>.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
     /// <param name="outputs">
-    /// Lines naming what a successful run produced, rendered directly under the header. Ignored when
-    /// <paramref name="exitCode"/> is non-zero: a failed run's summary is the same as a failed build's.
+    /// Lines naming what a successful run produced, rendered directly above the status line. Ignored
+    /// when <paramref name="exitCode"/> is non-zero: a failed run's report is the same as a failed build's.
     /// </param>
-    /// <returns>The summary, or an empty string when the output could not be read.</returns>
+    /// <returns>The report, or an empty string when the output could not be read.</returns>
     public string Render(string command, int exitCode, IReadOnlyList<string> outputs)
     {
         ArgumentNullException.ThrowIfNull(outputs);
@@ -168,24 +168,14 @@ internal sealed partial class MsBuildDiagnosticReport
                 return string.Empty;
             }
 
-            sb.AppendLine(CultureInfo.InvariantCulture, $"✓ {command}{_context}");
             AppendOutputs(sb, shownOutputs);
+            sb.AppendLine(CultureInfo.InvariantCulture, $"✓ {command}{_context}");
             return Normalize(sb);
         }
 
-        // Non-zero exit with only warnings parsed (no error line matched the regex): a bare
-        // "0 errors, N warnings" header would read like a near-success for a run that FAILED.
-        // Prepend an explicit failure marker so the rendered verdict stays exit-code-derived.
-        if (_errors.Count == 0 && exitCode != 0)
-        {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})");
-        }
-
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"{command}: {Tally(ErrorTotal, _errors.Count, ErrorLevel)}, {Tally(WarningTotal, _warnings.Count, WarningLevel)}{_context}");
-        AppendOutputs(sb, shownOutputs);
-        sb.AppendLine(Separator);
         AppendDiagnostics(sb);
+        AppendOutputs(sb, shownOutputs);
+        sb.AppendLine(StatusLine(command, exitCode));
 
         return Normalize(sb);
     }
@@ -193,7 +183,7 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <summary>
     /// Renders the diagnostics alone, for a caller that supplies its own status line: the errors
     /// grouped by file with their top codes and a note of the warnings left out, or, with no errors,
-    /// the warnings grouped by code. It carries neither the header nor the separator.
+    /// the warnings grouped by code. It carries no status line.
     /// </summary>
     /// <returns>The body, or an empty string when no diagnostic was parsed.</returns>
     public string RenderDiagnostics()
@@ -218,6 +208,22 @@ internal sealed partial class MsBuildDiagnosticReport
             sb.AppendLine(CultureInfo.InvariantCulture,
                 $"{Tally(WarningTotal, _warnings.Count, WarningLevel)} suppressed (use --vv to see)");
         }
+    }
+
+    /// <summary>
+    /// The single status line a report with diagnostics ends with. A non-zero exit names itself, so a
+    /// failed run whose errors were never matched (warnings only) still reads as the failure it is
+    /// rather than as "0 errors"; the verdict is stated here once, never beside a second verdict line.
+    /// </summary>
+    /// <param name="command">The command named in the line.</param>
+    /// <param name="exitCode">The process exit code; the sole source of truth for the verdict.</param>
+    private string StatusLine(string command, int exitCode)
+    {
+        var tally =
+            $"{Tally(ErrorTotal, _errors.Count, ErrorLevel)}, {Tally(WarningTotal, _warnings.Count, WarningLevel)}";
+        return exitCode == 0
+            ? $"✓ {command}: {tally}{_context}"
+            : $"✗ {command} failed (exit {exitCode.ToString(CultureInfo.InvariantCulture)}): {tally}{_context}";
     }
 
     /// <summary>
@@ -371,10 +377,10 @@ internal sealed partial class MsBuildDiagnosticReport
     /// Renders a diagnostic count, annotating it with "(N shown)" when this report can display
     /// fewer entries than the build reported — duplicates collapsed across target frameworks or
     /// projects, or shapes the regexes did not match. Without the annotation that shortfall is
-    /// invisible and the header reads as an authoritative, complete count.
+    /// invisible and the status line reads as an authoritative, complete count.
     /// </summary>
     /// <param name="total">The count the build reported.</param>
-    /// <param name="shown">The number of distinct entries rendered below the header.</param>
+    /// <param name="shown">The number of distinct entries rendered above the status line.</param>
     /// <param name="noun">The singular noun to render ("error" or "warning").</param>
     private static string Tally(int total, int shown, string noun)
     {

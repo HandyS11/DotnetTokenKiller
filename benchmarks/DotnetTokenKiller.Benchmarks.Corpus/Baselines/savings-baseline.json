@@ -9,9 +9,9 @@
       "exitCode": 1,
       "rawBytes": 2603,
       "rawTokens": 710,
-      "filteredTokens": 140,
-      "savedTokens": 570,
-      "savingsPercent": 80.3
+      "filteredTokens": 146,
+      "savedTokens": 564,
+      "savingsPercent": 79.4
     },
     {
       "id": "build/success",
@@ -31,9 +31,9 @@
       "exitCode": 0,
       "rawBytes": 2007,
       "rawTokens": 550,
-      "filteredTokens": 140,
-      "savedTokens": 410,
-      "savingsPercent": 74.5
+      "filteredTokens": 141,
+      "savedTokens": 409,
+      "savingsPercent": 74.4
     },
     {
       "id": "clean/raw",
@@ -130,9 +130,9 @@
       "exitCode": 1,
       "rawBytes": 253,
       "rawTokens": 68,
-      "filteredTokens": 58,
-      "savedTokens": 10,
-      "savingsPercent": 14.7
+      "filteredTokens": 64,
+      "savedTokens": 4,
+      "savingsPercent": 5.9
     },
     {
       "id": "pack/success",
@@ -152,8 +152,8 @@
       "exitCode": 0,
       "rawBytes": 7530,
       "rawTokens": 2113,
-      "filteredTokens": 1196,
-      "savedTokens": 917,
+      "filteredTokens": 1197,
+      "savedTokens": 916,
       "savingsPercent": 43.4
     },
     {
@@ -163,9 +163,9 @@
       "exitCode": 1,
       "rawBytes": 289,
       "rawTokens": 83,
-      "filteredTokens": 58,
-      "savedTokens": 25,
-      "savingsPercent": 30.1
+      "filteredTokens": 64,
+      "savedTokens": 19,
+      "savingsPercent": 22.9
     },
     {
       "id": "publish/success",
@@ -185,9 +185,9 @@
       "exitCode": 0,
       "rawBytes": 7343,
       "rawTokens": 2063,
-      "filteredTokens": 1193,
-      "savedTokens": 870,
-      "savingsPercent": 42.2
+      "filteredTokens": 1194,
+      "savedTokens": 869,
+      "savingsPercent": 42.1
     },
     {
       "id": "restore/raw",

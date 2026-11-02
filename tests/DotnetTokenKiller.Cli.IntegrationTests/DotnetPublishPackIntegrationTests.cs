@@ -21,7 +21,7 @@ public class DotnetPublishPackIntegrationTests
 
         exitCode.Should().Be(0);
         var lines = output.Trim().Split('\n');
-        lines[0].Should().StartWith("✓ dotnet publish");
+        lines[^1].Should().StartWith("✓ dotnet publish");
         lines.Should().Contain(line => line.Contains("SampleApp -> ", StringComparison.Ordinal)
                                        && line.TrimEnd().EndsWith("publish/", StringComparison.Ordinal));
     }
@@ -32,7 +32,8 @@ public class DotnetPublishPackIntegrationTests
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "publish", SampleAppBroken);
 
         exitCode.Should().NotBe(0);
-        output.Should().Contain("dotnet publish: 1 error").And.Contain("CS0029");
+        output.Should().Contain("CS0029");
+        output.Trim().Split('\n')[^1].Should().StartWith("✗ dotnet publish failed (exit 1): 1 error");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -46,7 +47,7 @@ public class DotnetPublishPackIntegrationTests
 
             exitCode.Should().Be(0);
             var lines = output.Trim().Split('\n');
-            lines[0].Should().StartWith("✓ dotnet pack");
+            lines[^1].Should().StartWith("✓ dotnet pack");
             lines.Should().Contain(line => line.TrimEnd().EndsWith(".nupkg", StringComparison.Ordinal));
             output.Should().NotContain("missing a readme");
         }

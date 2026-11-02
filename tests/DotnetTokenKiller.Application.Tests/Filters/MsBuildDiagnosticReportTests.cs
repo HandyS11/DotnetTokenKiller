@@ -177,8 +177,41 @@ public class MsBuildDiagnosticReportTests
 
             var rendered = report.Render("dotnet build", 1, []);
 
-            rendered.Should().EndWith("---\n" + report.RenderDiagnostics());
+            rendered.Should().StartWith(report.RenderDiagnostics());
         }
+    }
+
+    [Fact]
+    public void Render_Outputs_SitDirectlyAboveTheVerdictLine()
+    {
+        var report = Parse("dotnet_build_warnings.txt");
+
+        var rendered = report.Render("dotnet publish", 0, ["App -> bin/publish/"]);
+
+        rendered.Should().StartWith(report.RenderDiagnostics());
+        rendered.Should().EndWith(
+            "  App -> bin/publish/\n✓ dotnet publish: 0 errors, 3 warnings (2 projects, 2.67s)\n");
+    }
+
+    [Fact]
+    public void Render_CleanRun_OutputsThenTheTickAsTheOnlyVerdict()
+    {
+        var report = Parse("dotnet_build_success.txt");
+
+        report.Render("dotnet publish", 0, ["App -> bin/publish/"])
+            .Should().Be("  App -> bin/publish/\n✓ dotnet publish (6 projects, 2.34s)\n");
+    }
+
+    [Fact]
+    public void Render_FailedRun_DropsOutputsAndEndsWithTheFailureVerdict()
+    {
+        var report = Parse("dotnet_build_errors.txt");
+
+        var rendered = report.Render("dotnet pack", 3, ["pkg.nupkg"]);
+
+        rendered.Should().NotContain("pkg.nupkg");
+        rendered.Should().StartWith(report.RenderDiagnostics());
+        rendered.Should().EndWith("✗ dotnet pack failed (exit 3): 3 errors, 1 warning (1.89s)\n");
     }
 
     private static MsBuildDiagnosticReport Parse(string fixtureName) =>

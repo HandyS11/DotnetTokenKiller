@@ -19,7 +19,7 @@ if [ "${1:-}" = "--in-container" ]; then
     status=0
     /tools/dtk pipe build --exit-code 1 < /repo/tests/DotnetTokenKiller.Application.Tests/Fixtures/dotnet_build_errors.txt > "$state/pipe.txt" || status=$?
     cat "$state/pipe.txt"
-    if [ "$status" -ne 1 ] || ! grep -q '^dotnet build: 3 errors' "$state/pipe.txt"; then
+    if [ "$status" -ne 1 ] || ! tail -n 1 "$state/pipe.txt" | grep -q 'dotnet build failed (exit 1): 3 errors'; then
         echo "::error::dtk pipe build exited $status without the build summary"
         exit 1
     fi
