@@ -537,7 +537,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         }
 
         return sb.Append(CultureInfo.InvariantCulture,
-                $"\u2713 dotnet test --list-tests: {state.ListedTests.Count} tests ({state.ListedProjects} project{(state.ListedProjects == 1 ? "" : "s")})\n")
+                $"\u2713 dotnet test --list-tests: {state.ListedTests.Count} test{(state.ListedTests.Count == 1 ? "" : "s")} ({state.ListedProjects} project{(state.ListedProjects == 1 ? "" : "s")})\n")
             .ToString();
     }
 

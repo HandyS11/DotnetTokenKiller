@@ -1125,6 +1125,14 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_ListTestsWithOneTest_UsesTheSingularForm()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_list_tests_single.txt"), exitCode: 0);
+
+        result.Should().Be("Beta.Tests.BetaTests.Concatenates\n✓ dotnet test --list-tests: 1 test (1 project)\n");
+    }
+
+    [Fact]
     public void Apply_ListTestsWhereOneProjectMatchesNothing_StillListsTheOthersNames()
     {
         // Alpha's "No test matches the given testcase filter" line must not turn the listing of Beta's
@@ -1139,6 +1147,18 @@ public class DotnetTestFilterTests
             ✓ dotnet test --list-tests: 3 tests (2 projects)
 
             """);
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_logger_normal_pass.txt")]
+    [InlineData("dotnet_test_logger_detailed_pass.txt")]
+    public void Apply_ConsoleLoggerPass_ReadsTheTotalTime(string fixture)
+    {
+        // "Total time: 0.4794 Seconds" is the only duration the block carries. Not parsing it would leave the
+        // status line at "0.00s"; the digits are not asserted because their format has its own tests.
+        var result = _sut.Apply(LoadFixture(fixture), exitCode: 0);
+
+        result.Should().StartWith("✓ dotnet test: 4 passed").And.NotContain("0.00s");
     }
 
     [Fact]

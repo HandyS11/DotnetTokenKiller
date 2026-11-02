@@ -13,6 +13,7 @@ using NSubstitute.ExceptionExtensions;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
+[Collection(NoColorEnvironment.Name)]
 public class FilteredRunUseCaseTests
 {
     private static readonly string[] BuildArgs = ["build"];

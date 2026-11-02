@@ -12,6 +12,7 @@ using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
 
+[Collection(NoColorEnvironment.Name)]
 public class FilteredOutputPipelineTests
 {
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();

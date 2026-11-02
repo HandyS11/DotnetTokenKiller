@@ -245,6 +245,17 @@
       "savingsPercent": 76.4
     },
     {
+      "id": "test/list-tests-single",
+      "fixture": "dotnet_test_list_tests_single.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 336,
+      "rawTokens": 88,
+      "filteredTokens": 25,
+      "savedTokens": 63,
+      "savingsPercent": 71.6
+    },
+    {
       "id": "test/logger-detailed-fail",
       "fixture": "dotnet_test_logger_detailed_fail.txt",
       "filterKey": "test",
