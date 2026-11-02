@@ -237,6 +237,76 @@ public sealed class ArgumentPreprocessorTests
         result.Should().Equal("dotnet", "test", "--quiet", "--", "--filter", "Category=Unit");
     }
 
+    // ── Verbosity values ─────────────────────────────────────────────────────
+    // `-v <level>` is dotnet's own verbosity option; dtk's bare `-v` stays its verbose flag.
+
+    [Theory]
+    [InlineData("q")]
+    [InlineData("quiet")]
+    [InlineData("m")]
+    [InlineData("minimal")]
+    [InlineData("n")]
+    [InlineData("normal")]
+    [InlineData("d")]
+    [InlineData("detailed")]
+    [InlineData("diag")]
+    [InlineData("diagnostic")]
+    [InlineData("Q")]
+    public void InsertSeparator_VerbosityValueAfterV_StaysWithDotnet(string level)
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(["dotnet", "test", "-v", level]);
+
+        result.Should().Equal("dotnet", "test", "--", "-v", level);
+    }
+
+    [Fact]
+    public void InsertSeparator_BareV_IsStillDtkVerbose()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(
+            ["dotnet", "test", "-v", "--filter", "X"]);
+
+        result.Should().Equal("dotnet", "test", "-v", "--", "--filter", "X");
+    }
+
+    [Fact]
+    public void InsertSeparator_VerbosityValueAfterV_WithOtherDtkFlag_KeepsDtkFlagFirst()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(
+            ["dotnet", "build", "--show-log", "-v", "q", "MyProject.slnx"]);
+
+        result.Should().Equal("dotnet", "build", "--show-log", "--", "-v", "q", "MyProject.slnx");
+    }
+
+    [Fact]
+    public void InsertSeparator_VerbosityValueAfterV_AfterUserSeparator_IsForwardedVerbatim()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(
+            ["dotnet", "test", "--", "-v", "q"]);
+
+        result.Should().Equal("dotnet", "test", "--", "--", "-v", "q");
+    }
+
+    [Theory]
+    [InlineData("q")]
+    [InlineData("QUIET")]
+    [InlineData("Minimal")]
+    [InlineData("diagnostic")]
+    public void IsVerbosityValue_KnownLevel_IsTrueCaseInsensitively(string token)
+    {
+        ArgumentPreprocessor.IsVerbosityValue(token).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("--filter")]
+    [InlineData("MyProject.slnx")]
+    [InlineData("v")]
+    [InlineData("quietly")]
+    [InlineData("--quiet")]
+    public void IsVerbosityValue_OtherToken_IsFalse(string token)
+    {
+        ArgumentPreprocessor.IsVerbosityValue(token).Should().BeFalse();
+    }
+
     // ── Help routing ─────────────────────────────────────────────────────────
     // --help/-h must reach Spectre (dtk's own help), never be forwarded to dotnet.
 

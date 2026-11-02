@@ -31,6 +31,22 @@ internal static class ArgumentPreprocessor
             "--help"
         };
 
+    /// <summary>The values dotnet accepts for <c>-v</c>/<c>--verbosity</c>.</summary>
+    private static readonly HashSet<string> VerbosityValues =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "q",
+            "quiet",
+            "m",
+            "minimal",
+            "n",
+            "normal",
+            "d",
+            "detailed",
+            "diag",
+            "diagnostic"
+        };
+
     /// <summary>
     /// Canonicalizes the casing of a known <c>dotnet &lt;subcommand&gt;</c> invocation so
     /// Spectre.Console's case-sensitive routing matches (e.g. <c>dtk DOTNET BUILD</c> →
@@ -82,12 +98,36 @@ internal static class ArgumentPreprocessor
     }
 
     /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="token"/> is a verbosity level dotnet accepts
+    /// (<c>q</c>, <c>m</c>, <c>n</c>, <c>d</c>, <c>diag</c> and their long names), ignoring case.
+    /// </summary>
+    /// <param name="token">A single raw CLI token.</param>
+    internal static bool IsVerbosityValue(string token)
+    {
+        return VerbosityValues.Contains(token);
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <c>args[index]</c> is <c>-v</c> and the token after it is a dotnet
+    /// verbosity level. A bare <c>-v</c> (followed by anything else, or nothing) is dtk's verbose flag.
+    /// </summary>
+    /// <param name="args">The raw CLI arguments.</param>
+    /// <param name="index">The index of the token to test.</param>
+    private static bool IsDotnetVerbosityFlag(string[] args, int index)
+    {
+        return string.Equals(args[index], "-v", StringComparison.Ordinal) &&
+               index + 1 < args.Length &&
+               IsVerbosityValue(args[index + 1]);
+    }
+
+    /// <summary>
     /// Inserts <c>--</c> before dotnet-specific args so Spectre.Console forwards them
     /// as <c>Remaining.Raw</c> without treating them as its own options.
     /// DTK flags (<c>-v</c>, <c>--verbose</c>, <c>--vv</c>, <c>--show-log</c>, <c>-q</c>, <c>--quiet</c>)
-    /// are partitioned ahead of the inserted <c>--</c>. A user's own <c>--</c> and everything after it
-    /// is forwarded verbatim: Spectre consumes only the first (inserted) separator, so the user's
-    /// separator survives into <c>Remaining.Raw</c> (e.g. <c>dotnet test -- RunConfiguration.X=1</c>).
+    /// are partitioned ahead of the inserted <c>--</c>, except a <c>-v</c> followed by a dotnet verbosity level
+    /// (see <see cref="IsVerbosityValue"/>), which is dotnet's option and stays after it. A user's own <c>--</c>
+    /// and everything after it is forwarded verbatim: Spectre consumes only the first (inserted) separator, so the
+    /// user's separator survives into <c>Remaining.Raw</c> (e.g. <c>dotnet test -- RunConfiguration.X=1</c>).
     /// Returns the same array unchanged when no modification is needed.
     /// </summary>
     /// <param name="args">The raw CLI arguments.</param>
@@ -118,7 +158,9 @@ internal static class ArgumentPreprocessor
                 sawUserSeparator = true;
             }
 
-            if (!sawUserSeparator && DtkOptions.Contains(args[i]))
+            // A "-v" that names a dotnet verbosity level is dotnet's option: it joins dotnet's side here, and the
+            // level follows it on the next iteration (a level is never a dtk option, so it lands there too).
+            if (!sawUserSeparator && DtkOptions.Contains(args[i]) && !IsDotnetVerbosityFlag(args, i))
             {
                 dtkFlags.Add(args[i]);
             }
