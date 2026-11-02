@@ -73,8 +73,8 @@ public class DotnetBuildFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 1);
 
-        // `| tail -1` must carry the verdict, and the verdict is stated once: the header that used
-        // to open the report is gone, so exactly one line names the command.
+        // `| tail -1` must carry the verdict, and the verdict is stated once: exactly one line
+        // names the command.
         result.TrimEnd('\n').Split('\n')[^1]
             .Should().Be("✗ dotnet build failed (exit 1): 3 errors, 1 warning (1.89s)");
         result.Split('\n').Count(line => line.Contains("dotnet build", StringComparison.Ordinal)).Should().Be(1);
@@ -123,15 +123,16 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_ZeroExitWithParsedErrors_KeepsTheExitCodeVerdict()
+    public void Apply_ZeroExitWithParsedErrors_WarnsInsteadOfTicking()
     {
-        // The exit code is the sole source of truth for the verdict: errors parsed from a run dotnet
-        // itself called successful still show in the tally, but do not turn the line into a failure.
+        // The exit code stays the verdict, so this is not a failure; but a green tick beside an error
+        // count would mislead anyone who reads only the last line, so the glyph is a warning.
         const string input = "/repo/X.cs(1,1): error CS0001: boom [/repo/A.csproj]";
 
         var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
 
-        result.TrimEnd('\n').Split('\n')[^1].Should().Be("✓ dotnet build: 1 error, 0 warnings");
+        result.TrimEnd('\n').Split('\n')[^1].Should().Be("⚠ dotnet build: 1 error, 0 warnings");
+        result.Should().NotContain("✓").And.NotContain("✗");
     }
 
     [Theory]
@@ -488,7 +489,7 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_WarningOnlyOutput_ContainsWarningCountAndSeparator()
+    public void Apply_WarningOnlyOutput_EndsWithTheWarningCountVerdict()
     {
         const string input = "/path/File.cs(1,1): warning CS0168: unused var [P.csproj]";
 
@@ -498,12 +499,13 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_ErrorOutput_ContainsSeparator()
+    public void Apply_ErrorOutput_EndsWithTheFailureVerdictAndHasNoSeparator()
     {
         const string input = "/path/File.cs(1,1): error CS0001: msg [P.csproj]";
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
+        result.Should().NotContain("---");
         result.Should().Be(
             "File.cs (1 error)\n  (1,1) CS0001: msg\nTop codes: CS0001 (1x)\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
@@ -536,9 +538,9 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_WarningsOnly_HeaderContainsDotnetBuild()
+    public void Apply_WarningsOnly_VerdictLineNamesDotnetBuild()
     {
-        // Kills string mutation on "dotnet build:" prefix in warnings-only header (line 134)
+        // Kills string mutation on the "dotnet build:" prefix of the warnings-only verdict line
         const string input = "/path/File.cs(1,1): warning CS0168: unused [P.csproj]";
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
@@ -547,9 +549,9 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_ErrorsAndWarnings_HeaderContainsDotnetBuild()
+    public void Apply_ErrorsAndWarnings_VerdictLineNamesDotnetBuild()
     {
-        // Kills string mutation on "dotnet build:" prefix in errors header (line 141)
+        // Kills string mutation on the "dotnet build failed" prefix of the errors verdict line
         const string input = "/path/a.cs(1,1): error CS001: e [P.csproj]\n/path/b.cs(1,1): warning CS002: w [P.csproj]";
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
@@ -691,7 +693,7 @@ public class DotnetBuildFilterTests
     public void Apply_NonZeroExitWithNoParsedDiagnostics_ReturnsEmpty()
     {
         // Crashed process / unparseable output: 0 errors and 0 warnings were parsed, but the exit
-        // code is non-zero. Returning a "0 errors, 0 warnings" header here would look like a clean
+        // code is non-zero. Returning a "0 errors, 0 warnings" verdict here would look like a clean
         // success and would prevent FilteredRunUseCase's raw-tail fallback from ever firing.
         const string input = "Segmentation fault (core dumped)";
 
@@ -829,9 +831,9 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_ErrorWithTwoWarnings_HeaderUsesPluralWarnings()
+    public void Apply_ErrorWithTwoWarnings_VerdictLineUsesPluralWarnings()
     {
-        // Exact assertion pins the plural "s" suffix on the warning count in the *header*
+        // Exact assertion pins the plural "s" suffix on the warning count in the *verdict line*
         // (a different ternary from the "N warnings suppressed" line below it).
         const string input = """
                              /path/A.cs(1,1): error CS0001: err [P.csproj]
@@ -862,7 +864,7 @@ public class DotnetBuildFilterTests
         // The MSBuild-version noise pattern is an unanchored substring match, so a diagnostic whose
         // message mentions it is deliberately swallowed. This is the only observable proof that the
         // pattern participates in IsNoiseLine at all: an unrecognised line is silently skipped too,
-        // so a plain header line cannot distinguish "matched as noise" from "matched nothing".
+        // so a plain status line cannot distinguish "matched as noise" from "matched nothing".
         const string input = "/repo/App.cs(1,1): error CS0001: MSBuild version mismatch [/repo/A.csproj]";
 
         var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
@@ -930,7 +932,7 @@ public class DotnetBuildFilterTests
     public void Apply_CodelessErrorAlongsideCodedError_CountsBoth()
     {
         // The dangerous shape: the codeless error is dropped while the coded one still renders, so
-        // the header states a confident "1 error" and the dropped failure never reaches the reader.
+        // the verdict line states a confident "1 error" and the dropped failure never reaches the reader.
         const string input = """
                              EXEC : error : the command exited with code 255 [/p/a.csproj]
                              /p/X.cs(1,1): error CS0029: bad [/p/a.csproj]
@@ -946,7 +948,7 @@ public class DotnetBuildFilterTests
     public void Apply_DiagnosticRepeatedPerTargetFramework_ReportsMsbuildTotalAndShownCount()
     {
         // A multi-targeted project reports each diagnostic once per TFM and MSBuild counts them all.
-        // Collapsing them keeps the output small, but the header must not silently claim there was
+        // Collapsing them keeps the output small, but the verdict line must not silently claim there was
         // only one: it reports MSBuild's total and annotates how many distinct entries are shown.
         const string input = """
                              /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net8.0]
@@ -1005,7 +1007,7 @@ public class DotnetBuildFilterTests
     public void Apply_MsbuildSummaryAgreesWithParsedCount_OmitsShownAnnotation()
     {
         // The annotation is a discrepancy signal, not decoration: when nothing was collapsed or
-        // missed it must stay out of the header.
+        // missed it must stay out of the verdict line.
         const string input = """
                              /p/A.cs(1,1): error CS0001: msg [/p/a.csproj]
                                  0 Warning(s)

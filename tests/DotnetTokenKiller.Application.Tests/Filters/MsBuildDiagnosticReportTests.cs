@@ -169,15 +169,21 @@ public class MsBuildDiagnosticReportTests
     }
 
     [Fact]
-    public void Render_BodyIsExactlyWhatRenderDiagnosticsReturns()
+    public void Render_IsExactlyTheBodyRenderDiagnosticsReturnsPlusTheVerdictLine()
     {
-        foreach (var name in new[] { "dotnet_build_errors.txt", "dotnet_build_warnings.txt" })
+        var expectedVerdicts = new Dictionary<string, string>
+        {
+            ["dotnet_build_errors.txt"] = "✗ dotnet build failed (exit 1): 3 errors, 1 warning (1.89s)\n",
+            ["dotnet_build_warnings.txt"] = "✗ dotnet build failed (exit 1): 0 errors, 3 warnings (2 projects, 2.67s)\n",
+        };
+
+        foreach (var (name, verdict) in expectedVerdicts)
         {
             var report = Parse(name);
 
             var rendered = report.Render("dotnet build", 1, []);
 
-            rendered.Should().StartWith(report.RenderDiagnostics());
+            rendered.Should().Be(report.RenderDiagnostics() + verdict);
         }
     }
 

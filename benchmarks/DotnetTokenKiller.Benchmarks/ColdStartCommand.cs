@@ -55,7 +55,9 @@ internal static class ColdStartCommand
     /// <summary>What a scenario's child prints, the code it exits with, and the line dtk must then print.</summary>
     /// <param name="Text">The child's stdout.</param>
     /// <param name="ExitCode">The child's exit code, which dtk must reproduce.</param>
-    /// <param name="SummaryLine">The build filter's last non-empty line, its status line, for <paramref name="Text"/>.</param>
+    /// <param name="SummaryLine">
+    /// The build filter's last non-empty line, its status line, for <paramref name="Text"/>.
+    /// </param>
     private sealed record ChildOutput(string Text, int ExitCode, string SummaryLine)
     {
         /// <summary>

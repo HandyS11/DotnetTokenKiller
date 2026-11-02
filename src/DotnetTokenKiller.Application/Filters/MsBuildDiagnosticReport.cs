@@ -214,6 +214,8 @@ internal sealed partial class MsBuildDiagnosticReport
     /// The single status line a report with diagnostics ends with. A non-zero exit names itself, so a
     /// failed run whose errors were never matched (warnings only) still reads as the failure it is
     /// rather than as "0 errors"; the verdict is stated here once, never beside a second verdict line.
+    /// An exit code of zero stays the verdict even when errors were counted, but such a line carries a
+    /// warning glyph rather than a tick, which would sit misleadingly beside the error count.
     /// </summary>
     /// <param name="command">The command named in the line.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the verdict.</param>
@@ -221,9 +223,13 @@ internal sealed partial class MsBuildDiagnosticReport
     {
         var tally =
             $"{Tally(ErrorTotal, _errors.Count, ErrorLevel)}, {Tally(WarningTotal, _warnings.Count, WarningLevel)}";
-        return exitCode == 0
-            ? $"✓ {command}: {tally}{_context}"
-            : $"✗ {command} failed (exit {exitCode.ToString(CultureInfo.InvariantCulture)}): {tally}{_context}";
+        if (exitCode != 0)
+        {
+            return $"✗ {command} failed (exit {exitCode.ToString(CultureInfo.InvariantCulture)}): {tally}{_context}";
+        }
+
+        var glyph = ErrorTotal > 0 ? '⚠' : '✓';
+        return $"{glyph} {command}: {tally}{_context}";
     }
 
     /// <summary>
