@@ -42,10 +42,11 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             state.RestoredCount++;
             // Track the slowest single restore, not the sum: restores run in parallel, so summing
             // the per-project times wildly overstates the actual wall-clock elapsed.
-            var ms = ParseDurationToMs(restoredMatch.Groups["dur"].Value);
+            var (ms, exact) = ParseDuration(restoredMatch.Groups["dur"].Value);
             if (ms > state.MaxDurationMs)
             {
                 state.MaxDurationMs = ms;
+                state.MaxDurationExact = exact;
             }
 
             return;
@@ -110,12 +111,17 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             proj));
     }
 
-    private static double ParseDurationToMs(string duration)
+    /// <summary>
+    /// Reads NuGet's duration text. It is exact when given in milliseconds or in seconds with a decimal
+    /// point; a whole "2 sec" or a minute count may be truncated, so it is not shown with decimals.
+    /// </summary>
+    /// <param name="duration">The text between "in" and the closing parenthesis.</param>
+    private static (double Milliseconds, bool Exact) ParseDuration(string duration)
     {
         var match = DurationPattern().Match(duration.Trim());
         if (!match.Success)
         {
-            return 0;
+            return (0, false);
         }
 
         if (match.Groups["min"].Success)
@@ -124,15 +130,16 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             var seconds = match.Groups["minsec"].Success
                 ? double.Parse(match.Groups["minsec"].Value, CultureInfo.InvariantCulture)
                 : 0;
-            return (minutes * 60_000) + (seconds * 1_000);
+            return ((minutes * 60_000) + (seconds * 1_000), false);
         }
 
         if (match.Groups["sec"].Success)
         {
-            return double.Parse(match.Groups["sec"].Value, CultureInfo.InvariantCulture) * 1_000;
+            var text = match.Groups["sec"].Value;
+            return (double.Parse(text, CultureInfo.InvariantCulture) * 1_000, text.Contains('.', StringComparison.Ordinal));
         }
 
-        return double.Parse(match.Groups["ms"].Value, CultureInfo.InvariantCulture);
+        return (double.Parse(match.Groups["ms"].Value, CultureInfo.InvariantCulture), true);
     }
 
     private static string FormatOutput(ParseState state, int exitCode)
@@ -162,7 +169,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             return string.Empty;
         }
 
-        var elapsed = $"{state.MaxDurationMs / 1000.0:F2}s";
+        var elapsed = DurationFormat.Format(state.MaxDurationMs, state.MaxDurationExact);
         return $"✓ dotnet restore ({totalProjects} project{(totalProjects == 1 ? "" : "s")}, {elapsed})\n";
     }
 
@@ -226,6 +233,9 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         public int UpToDateCount { get; set; }
         public bool AllUpToDate { get; set; }
         public double MaxDurationMs { get; set; }
+
+        /// <summary>Whether <see cref="MaxDurationMs"/> was printed below the second; see <c>ParseDuration</c>.</summary>
+        public bool MaxDurationExact { get; set; }
     }
 
     private sealed record NuGetError(string Code, string Message, string Project);

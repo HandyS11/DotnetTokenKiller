@@ -24,8 +24,8 @@ public static class TextHelpers
     {
         return count switch
         {
-            >= 1_000_000 => $"{count / 1_000_000.0:F1}M",
-            >= 1_000 => $"{count / 1_000.0:F1}K",
+            >= 1_000_000 => (count / 1_000_000.0).ToString("F1", CultureInfo.InvariantCulture) + "M",
+            >= 1_000 => (count / 1_000.0).ToString("F1", CultureInfo.InvariantCulture) + "K",
             _ => count.ToString(CultureInfo.InvariantCulture)
         };
     }

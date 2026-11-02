@@ -324,3 +324,7 @@ Enforced via `.editorconfig` and build-time analyzers (Roslynator, SonarAnalyzer
 - Private fields: `_camelCase`; async methods must end in `Async`
 - Interfaces: `IPascalCase`; type parameters: `TPascalCase`
 - Line endings: LF only; no trailing whitespace; no BOM; 4-space indent for `.cs`, 2-space for XML/JSON/YAML
+- Every number a filter prints uses `CultureInfo.InvariantCulture` (a French locale must not turn `0.34s` into
+  `0,34s`). Durations go through `DurationFormat.Format(ms, exact)`: pass `exact` only when the source gave the figure
+  below the second (milliseconds, a decimal point, `Time Elapsed 00:00:02.34`); VSTest's whole-unit `Duration: 1 s`
+  is not, and renders as `1s`, never `1.00s`. A total over several sources is exact only if every part was.

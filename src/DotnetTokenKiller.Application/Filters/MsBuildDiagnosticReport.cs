@@ -220,7 +220,10 @@ internal sealed partial class MsBuildDiagnosticReport
         }
     }
 
-    /// <summary>Converts an MSBuild "Time Elapsed" line to seconds, e.g. <c>2.34s</c>.</summary>
+    /// <summary>
+    /// Converts an MSBuild "Time Elapsed" line to a compact duration, e.g. <c>2.34s</c> or <c>1m03s</c>.
+    /// The line gives hundredths of a second, so the figure is exact.
+    /// </summary>
     /// <param name="timeElapsedLine">The "Time Elapsed HH:MM:SS.ff" text.</param>
     /// <returns>The formatted duration, or an empty string when no duration can be read.</returns>
     internal static string FormatElapsed(string timeElapsedLine)
@@ -233,7 +236,7 @@ internal sealed partial class MsBuildDiagnosticReport
 
         if (TimeSpan.TryParse(match.Value, CultureInfo.InvariantCulture, out var ts))
         {
-            return $"{ts.TotalSeconds:F2}s";
+            return DurationFormat.Format(ts.TotalMilliseconds, exact: true);
         }
 
         return string.Empty;

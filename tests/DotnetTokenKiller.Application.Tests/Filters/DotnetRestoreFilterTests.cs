@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Tests.Helpers;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -73,6 +74,29 @@ public class DotnetRestoreFilterTests
     }
 
     [Fact]
+    public void Apply_FrenchCulture_RendersTheDurationWithADecimalPoint()
+    {
+        // "0,02s" cost a French-locale user about 670 summaries: the number followed the system culture.
+        using var _ = new CultureScope("fr-FR");
+
+        var result = _sut.Apply("Restored /path/Proj.csproj (in 20 ms).", exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (1 project, 0.02s)\n");
+    }
+
+    [Theory]
+    [InlineData("1.5 sec", "1.50s")]
+    [InlineData("2 sec", "2s")]
+    [InlineData("1 min 5 sec", "1m05s")]
+    public void Apply_DurationInSeconds_KeepsThePrecisionTheLineGives(string duration, string expected)
+    {
+        // A whole-second reading may be truncated, so it is not shown with decimals it never had.
+        var result = _sut.Apply($"Restored /path/Proj.csproj (in {duration}).", exitCode: 0);
+
+        result.Should().Be($"✓ dotnet restore (1 project, {expected})\n");
+    }
+
+    [Fact]
     public void Apply_FSharpProject_IsDetected()
     {
         const string input = "  Restored /path/Proj.fsproj (in 50 ms).";
@@ -90,7 +114,7 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet restore (1 project, 90.00s)\n");
+        result.Should().Be("✓ dotnet restore (1 project, 1m30s)\n");
     }
 
     [Fact]
@@ -101,7 +125,7 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet restore (1 project, 120.00s)\n");
+        result.Should().Be("✓ dotnet restore (1 project, 2m00s)\n");
     }
 
     [Fact]

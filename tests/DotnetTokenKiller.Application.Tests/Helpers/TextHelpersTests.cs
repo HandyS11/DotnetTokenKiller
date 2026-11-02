@@ -28,6 +28,16 @@ public class TextHelpersTests
         TextHelpers.FormatTokens(count).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData(1200, "1.2K")]
+    [InlineData(3_500_000, "3.5M")]
+    public void FormatTokens_FrenchCulture_NeverUsesADecimalComma(int count, string expected)
+    {
+        using var _ = new CultureScope("fr-FR");
+
+        TextHelpers.FormatTokens(count).Should().Be(expected);
+    }
+
     [Fact]
     public void ShortenPath_AbsolutePath_ReturnsRelativeWithForwardSlashes()
     {

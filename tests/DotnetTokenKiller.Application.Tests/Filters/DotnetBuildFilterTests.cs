@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Tests.Helpers;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
@@ -295,6 +296,17 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
         result.Should().Be("\u2713 dotnet build (1 project, 3.50s)\n");
+    }
+
+    [Fact]
+    public void Apply_FrenchCulture_RendersTheElapsedTimeWithADecimalPoint()
+    {
+        // "0,02s" cost a French-locale user about 670 summaries: the number followed the system culture.
+        using var _ = new CultureScope("fr-FR");
+
+        var result = new DotnetBuildFilter().Apply("Time Elapsed 00:00:00.02", exitCode: 0);
+
+        result.Should().Be("\u2713 dotnet build (0.02s)\n");
     }
 
     [Fact]
@@ -652,12 +664,13 @@ public class DotnetBuildFilterTests
     public void Apply_MultiPartTimeElapsed_IncludesMinutesAndSeconds()
     {
         // "Time Elapsed hh:mm:ss.ff" is a full TimeSpan, so minutes and seconds are already summed:
-        // 00:01:02.50 → 62.50s. Locks this in alongside the test filter's multi-part duration fix.
+        // 00:01:02.50 → 1m03s (a minute and more are shown in whole seconds). Locks this in alongside the
+        // test filter's multi-part duration fix.
         const string input = "Time Elapsed 00:01:02.50";
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
-        result.Should().Be("\u2713 dotnet build (62.50s)\n");
+        result.Should().Be("\u2713 dotnet build (1m03s)\n");
     }
 
     [Theory]

@@ -109,7 +109,7 @@ public sealed partial class DotnetFormatFilter(string? rootPath = null) : IOutpu
 
             if (double.TryParse(match.Groups["ms"].Value, CultureInfo.InvariantCulture, out var ms))
             {
-                return $"{ms / 1000.0:F2}s";
+                return DurationFormat.Format(ms, exact: true);
             }
         }
 

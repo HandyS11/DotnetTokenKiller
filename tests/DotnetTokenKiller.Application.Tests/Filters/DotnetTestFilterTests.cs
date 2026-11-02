@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Tests.Helpers;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
@@ -178,7 +179,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 60.00s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 1m00s)\n");
     }
 
     [Fact]
@@ -188,7 +189,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 3600.00s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 1h00m00s)\n");
     }
 
     [Fact]
@@ -209,6 +210,82 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be("✓ dotnet test: 4 passed (1 project, 0.10s)\n");
+    }
+
+    [Fact]
+    public void Apply_FrenchCulture_RendersTheDurationWithADecimalPoint()
+    {
+        // "0,02s" cost a French-locale user about 670 summaries: the number followed the system culture.
+        using var _ = new CultureScope("fr-FR");
+        const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 20 ms - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.02s)\n");
+    }
+
+    [Theory]
+    [InlineData("Duration: 89 ms", "0.09s")]
+    [InlineData("Duration: 2.5 s", "2.50s")]
+    [InlineData("Duration: 1 s", "1s")]
+    [InlineData("Duration: 12 s", "12s")]
+    [InlineData("Duration: 1 m", "1m00s")]
+    [InlineData("Duration: 1 m 40 s", "1m40s")]
+    [InlineData("Duration: 1 h 2 m 3 s", "1h02m03s")]
+    public void Apply_VsTestSummaryDuration_KeepsThePrecisionTheSummaryGives(string duration, string expected)
+    {
+        // VSTest prints whole units (`Duration: 1 s`, `1 m 40 s`), so "1.00s" or "100.00s" would claim
+        // a precision the summary never had.
+        var input = $"Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, {duration} - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 1 passed (1 project, {expected})\n");
+    }
+
+    [Theory]
+    [InlineData("1 s", "250 ms", "1s")]
+    [InlineData("250 ms", "1 s", "1s")]
+    [InlineData("250 ms", "1.5 s", "1.75s")]
+    [InlineData("1000 ms", "250 ms", "1.25s")]
+    public void Apply_SummedAssemblyDurations_AreExactOnlyWhenEveryOneWas(string first, string second, string expected)
+    {
+        var input = $"""
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: {first} - A.Tests.dll
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: {second} - B.Tests.dll
+                     """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 2 passed (2 projects, {expected})\n");
+    }
+
+    [Theory]
+    [InlineData("duration: 2.3s", "2.30s")]
+    [InlineData("duration: 343ms", "0.34s")]
+    [InlineData("duration: 2s", "2s")]
+    public void Apply_TerminalLoggerSummaryDuration_KeepsThePrecisionTheSummaryGives(string duration, string expected)
+    {
+        var input = $"Test summary: total: 3, failed: 0, succeeded: 3, skipped: 0, {duration}";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 3 passed (1 project, {expected})\n");
+    }
+
+    [Fact]
+    public void Apply_ConsoleLoggerTotalTime_IsExact()
+    {
+        const string input = """
+                             Test Run Successful.
+                             Total tests: 2
+                                  Passed: 2
+                              Total time: 0.4814 Seconds
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 2 passed (1 project, 0.48s)\n");
     }
 
     [Fact]
@@ -537,7 +614,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("2.00s");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 2s)\n");
     }
 
     [Fact]
@@ -545,11 +622,11 @@ public class DotnetTestFilterTests
     {
         // Kills arithmetic mutation: value * 60_000 → value / 60_000 (line 236)
         const string input =
-            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m - Tests.dll";
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 3 m - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("60.00s");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 3m00s)\n");
     }
 
     [Fact]
@@ -557,11 +634,11 @@ public class DotnetTestFilterTests
     {
         // Kills arithmetic mutation: value * 3_600_000 → value / 3_600_000 (line 237)
         const string input =
-            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 h - Tests.dll";
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 2 h - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("3600.00s");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 2h00m00s)\n");
     }
 
     [Fact]
@@ -865,7 +942,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m 2 s - Tests.dll";
         var result = _sut.Apply(input, exitCode: 0);
-        result.Should().Contain("62.00s").And.NotContain("60.00s");
+        result.Should().Contain("1m02s").And.NotContain("1m00s");
     }
 
     [Fact]
@@ -1036,7 +1113,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \ndotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1.00s)\n");
+            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \ndotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1s)\n");
     }
 
     [Fact]
@@ -1420,7 +1497,7 @@ public class DotnetTestFilterTests
     [Theory]
     [InlineData("320ms", "0.32s")]
     [InlineData("4s 250ms", "4.25s")]
-    [InlineData("1m 02s 500ms", "62.50s")]
+    [InlineData("1m 02s 500ms", "1m03s")]
     public void Apply_MtpSummaryBlock_ParsesDuration(string duration, string expectedElapsed)
     {
         var raw = "Test run summary: Passed!\n  total: 2\n  failed: 0\n  succeeded: 2\n  skipped: 0\n"

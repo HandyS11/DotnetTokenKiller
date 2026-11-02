@@ -540,8 +540,29 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
         state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
         state.TotalSkipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
-        state.TotalDurationMs += ParseDurationToMs(summaryMatch.Groups[DurationGroup].Value);
+        var duration = summaryMatch.Groups[DurationGroup].Value;
+        state.TotalDurationMs += ParseDurationToMs(duration);
+
+        // VSTest prints whole units ("1 s", "1 m 40 s"), so only milliseconds or a decimal point tell the
+        // figure is known more finely than that; a total is exact only if each summary it sums was.
+        state.DurationExact &= IsExactDuration(duration);
         state.ProjectCount++;
+    }
+
+    /// <summary>
+    /// Whether every part of a duration is known below the second: given in milliseconds or with a decimal
+    /// point. VSTest's <c>1 s</c> and <c>1 m 40 s</c> are not; they may stand for anything up to a unit more.
+    /// </summary>
+    /// <param name="duration">The text of the duration, one or several parts.</param>
+    private static bool IsExactDuration(string duration)
+    {
+        return DurationPartPattern().Matches(duration)
+            .All(part => IsExactReading(part.Groups["value"].Value, part.Groups["unit"].Value));
+    }
+
+    private static bool IsExactReading(string number, string unit)
+    {
+        return unit.Equals("ms", StringComparison.OrdinalIgnoreCase) || number.Contains('.', StringComparison.Ordinal);
     }
 
     private static double ParseDurationToMs(string duration)
@@ -564,6 +585,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             terminal.DurationMs += NormalizeDurationToMs(
                 double.Parse(durationGroup.Value, CultureInfo.InvariantCulture),
                 summaryMatch.Groups["unit"].Value);
+            terminal.DurationExact &= IsExactReading(durationGroup.Value, summaryMatch.Groups["unit"].Value);
         }
     }
 
@@ -598,6 +620,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         if (terminal.DurationMs > 0)
         {
             state.TotalDurationMs = terminal.DurationMs;
+            state.DurationExact = terminal.DurationExact;
         }
 
         state.ProjectCount = Math.Max(1, state.ProjectCount);
@@ -605,7 +628,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
     private static string FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport)
     {
-        var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
+        var elapsed = DurationFormat.Format(state.TotalDurationMs, state.DurationExact);
         var warnings = DescribeBuildWarnings(buildReport);
 
         // A project that did not compile never ran its tests, and says why in the same diagnostics a
@@ -1132,6 +1155,15 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         public int TotalSkipped { get; set; }
         public int ProjectCount { get; set; }
         public double TotalDurationMs { get; set; }
+
+        /// <summary>
+        /// Whether <see cref="TotalDurationMs"/> is known below the second. The sources that print whole units
+        /// (VSTest's minimal summary) clear it; MTP's <c>duration: 1m 02s 500ms</c>, which always carries its
+        /// milliseconds below a minute, and the console logger's <c>Total time: 0.4814 Seconds</c>, rounded to four
+        /// decimals rather than truncated, never do.
+        /// </summary>
+        public bool DurationExact { get; set; } = true;
+
         public bool ZeroTestsFound { get; set; }
 
         /// <summary>The first filter expression a "No test matches" line quoted, or <see langword="null"/>.</summary>
@@ -1168,6 +1200,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         public int Failed { get; set; }
         public int Skipped { get; set; }
         public double DurationMs { get; set; }
+
+        /// <summary>Whether <see cref="DurationMs"/> is known below the second; see <see cref="ParseState.DurationExact"/>.</summary>
+        public bool DurationExact { get; set; } = true;
     }
 
     private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);

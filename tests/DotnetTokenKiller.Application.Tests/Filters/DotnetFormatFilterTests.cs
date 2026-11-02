@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Tests.Helpers;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
@@ -226,6 +227,17 @@ public class DotnetFormatFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be("✓ dotnet format (nothing to format)\n");
+    }
+
+    [Fact]
+    public void Apply_FrenchCulture_RendersTheElapsedTimeWithADecimalPoint()
+    {
+        // "0,02s" cost a French-locale user about 670 summaries: the number followed the system culture.
+        using var _ = new CultureScope("fr-FR");
+
+        var result = _sut.Apply("Format complete in 20ms.", exitCode: 0);
+
+        result.Should().Be("✓ dotnet format (nothing to format, 0.02s)\n");
     }
 
     [Fact]
