@@ -112,8 +112,8 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
     }
 
     /// <summary>
-    /// Reads NuGet's duration text. It is exact when given in milliseconds or in seconds with a decimal
-    /// point; a whole "2 sec" or a minute count may be truncated, so it is not shown with decimals.
+    /// Reads NuGet's duration text. Whether it is exact follows <see cref="DurationFormat.IsExactReading"/>;
+    /// a minute count never is.
     /// </summary>
     /// <param name="duration">The text between "in" and the closing parenthesis.</param>
     private static (double Milliseconds, bool Exact) ParseDuration(string duration)
@@ -135,11 +135,14 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
 
         if (match.Groups["sec"].Success)
         {
-            var text = match.Groups["sec"].Value;
-            return (double.Parse(text, CultureInfo.InvariantCulture) * 1_000, text.Contains('.', StringComparison.Ordinal));
+            var secondsText = match.Groups["sec"].Value;
+            return (double.Parse(secondsText, CultureInfo.InvariantCulture) * 1_000,
+                DurationFormat.IsExactReading(secondsText, "sec"));
         }
 
-        return (double.Parse(match.Groups["ms"].Value, CultureInfo.InvariantCulture), true);
+        var millisecondsText = match.Groups["ms"].Value;
+        return (double.Parse(millisecondsText, CultureInfo.InvariantCulture),
+            DurationFormat.IsExactReading(millisecondsText, "ms"));
     }
 
     private static string FormatOutput(ParseState state, int exitCode)

@@ -540,6 +540,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.TotalFailed += int.Parse(summaryMatch.Groups["failed"].Value, CultureInfo.InvariantCulture);
         state.TotalPassed += int.Parse(summaryMatch.Groups["passed"].Value, CultureInfo.InvariantCulture);
         state.TotalSkipped += int.Parse(summaryMatch.Groups["skipped"].Value, CultureInfo.InvariantCulture);
+
+        // "< 1 ms" leaves the group empty: zero milliseconds, and exact (it is known below the second).
         var duration = summaryMatch.Groups[DurationGroup].Value;
         state.TotalDurationMs += ParseDurationToMs(duration);
 
@@ -557,12 +559,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private static bool IsExactDuration(string duration)
     {
         return DurationPartPattern().Matches(duration)
-            .All(part => IsExactReading(part.Groups["value"].Value, part.Groups["unit"].Value));
-    }
-
-    private static bool IsExactReading(string number, string unit)
-    {
-        return unit.Equals("ms", StringComparison.OrdinalIgnoreCase) || number.Contains('.', StringComparison.Ordinal);
+            .All(part => DurationFormat.IsExactReading(part.Groups["value"].Value, part.Groups["unit"].Value));
     }
 
     private static double ParseDurationToMs(string duration)
@@ -585,7 +582,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             terminal.DurationMs += NormalizeDurationToMs(
                 double.Parse(durationGroup.Value, CultureInfo.InvariantCulture),
                 summaryMatch.Groups["unit"].Value);
-            terminal.DurationExact &= IsExactReading(durationGroup.Value, summaryMatch.Groups["unit"].Value);
+            terminal.DurationExact &= DurationFormat.IsExactReading(durationGroup.Value, summaryMatch.Groups["unit"].Value);
         }
     }
 
@@ -976,9 +973,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
     // Summary: "Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 89 ms - File.dll"
     // VSTest opens it with "Skipped!" when every test of the project was skipped.
-    // Duration may be a single unit ("89 ms") or multi-part ("1 m 2 s", "1 h 3 m 4 s").
+    // Duration may be a single unit ("89 ms") or multi-part ("1 m 2 s", "1 h 3 m 4 s"), or "< 1 ms" for a
+    // run under a millisecond, which leaves the duration group unset: it adds nothing to the total.
     [GeneratedRegex(
-        @"(?:Passed|Failed|Skipped)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+ (?:ms|s|m|h)(?: [\d.]+ (?:ms|s|m|h))*)",
+        @"(?:Passed|Failed|Skipped)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?:< 1 ms|(?<duration>[\d.]+ (?:ms|s|m|h)(?: [\d.]+ (?:ms|s|m|h))*))",
         RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
 

@@ -43,6 +43,7 @@ public static class SavingsScenarios
         new("test/compile-errors", "dotnet_test_compile_errors.txt", FilterKeys.Test, 1),
         new("test/compile-errors-mixed", "dotnet_test_compile_errors_mixed.txt", FilterKeys.Test, 1),
         new("test/compile-errors-mixed-passing", "dotnet_test_compile_errors_mixed_passing.txt", FilterKeys.Test, 1),
+        new("test/duration-under-1ms", "dotnet_test_duration_under_1ms.txt", FilterKeys.Test, 0),
         new("test/failure-mentions-diagnostic", "dotnet_test_failure_mentions_diagnostic.txt", FilterKeys.Test, 1),
         new("test/failures", "dotnet_test_failures.txt", FilterKeys.Test, 1),
         new("test/failures-with-warnings", "dotnet_test_failures_with_warnings.txt", FilterKeys.Test, 1),

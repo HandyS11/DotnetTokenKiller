@@ -73,6 +73,21 @@ public class DurationFormatTests
     }
 
     [Theory]
+    [InlineData("89", "ms", true)]
+    [InlineData("89", "MS", true)]
+    [InlineData("2.5", "s", true)]
+    [InlineData("1.5", "sec", true)]
+    [InlineData("1", "s", false)]
+    [InlineData("2", "sec", false)]
+    [InlineData("1", "m", false)]
+    [InlineData("1", "min", false)]
+    [InlineData("1", "h", false)]
+    public void IsExactReading_IsTrueOnlyForMillisecondsOrADecimalPoint(string number, string unit, bool expected)
+    {
+        DurationFormat.IsExactReading(number, unit).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData(340, true, "0.34s")]
     [InlineData(2340, true, "2.34s")]
     [InlineData(12_000, false, "12s")]

@@ -256,6 +256,17 @@
       "savingsPercent": 45.7
     },
     {
+      "id": "test/duration-under-1ms",
+      "fixture": "dotnet_test_duration_under_1ms.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 430,
+      "rawTokens": 131,
+      "filteredTokens": 19,
+      "savedTokens": 112,
+      "savingsPercent": 85.5
+    },
+    {
       "id": "test/failure-mentions-diagnostic",
       "fixture": "dotnet_test_failure_mentions_diagnostic.txt",
       "filterKey": "test",

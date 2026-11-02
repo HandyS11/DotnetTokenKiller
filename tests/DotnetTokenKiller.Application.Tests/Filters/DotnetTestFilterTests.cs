@@ -274,6 +274,65 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_SubMillisecondSummaryFixture_RendersTheNormalStatusLine()
+    {
+        // VSTest prints "Duration: < 1 ms" when a project's run took under a millisecond. The fixture is a real
+        // capture of a one-test xUnit project with its path replaced, EXCEPT that duration token: the run was
+        // repeated about seventy times (xUnit pass and skip, NUnit, MSTest) and never printed it (xUnit's fastest
+        // run reads "1 ms"), so "9 ms" was replaced by VSTest's literal "< 1 ms" (ConsoleLogger.GetFormattedDurationString).
+        var result = _sut.Apply(LoadFixture("dotnet_test_duration_under_1ms.txt"), exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.00s)\n");
+    }
+
+    [Theory]
+    [InlineData("250 ms", "0.25s")]
+    [InlineData("1.5 s", "1.50s")]
+    [InlineData("1 s", "1s")]
+    public void Apply_SubMillisecondSummaryBesideAnother_CountsAsZeroAndLeavesExactnessToTheOther(
+        string other, string expected)
+    {
+        var input = $"""
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: < 1 ms - A.Tests.dll
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: {other} - B.Tests.dll
+                     """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 2 passed (2 projects, {expected})\n");
+    }
+
+    [Fact]
+    public void Apply_SubMillisecondFailedSummary_RendersTheFailureReport()
+    {
+        const string input =
+            "Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: < 1 ms - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be("FAILURES (1):\ndotnet test: 1 failed, 0 passed (1 project, 0.00s)\n");
+    }
+
+    [Theory]
+    [InlineData("1 s", "1.3s", "1.30s")]
+    [InlineData("500 ms", "2s", "2s")]
+    public void Apply_TerminalLoggerTotalBesideAssemblySummary_TakesTheTotalsExactness(
+        string assemblyDuration, string terminalDuration, string expected)
+    {
+        // The terminal logger's whole-run total replaces the per-assembly durations, so it also replaces what
+        // they said about their precision: a whole-second VSTest line must not make "1.3s" read "1s", and an
+        // exact assembly line must not make "2s" read "2.00s".
+        var input = $"""
+                     Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: {assemblyDuration} - Tests.dll
+                     Test summary: total: 3, failed: 0, succeeded: 3, skipped: 0, duration: {terminalDuration}
+                     """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 3 passed (1 project, {expected})\n");
+    }
+
+    [Fact]
     public void Apply_ConsoleLoggerTotalTime_IsExact()
     {
         const string input = """

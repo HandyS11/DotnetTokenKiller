@@ -14,6 +14,19 @@ internal static class DurationFormat
     private const long SecondsPerHour = 3_600;
 
     /// <summary>
+    /// Whether one number of a duration, as the tool printed it, is known more finely than whole seconds: it is
+    /// given in milliseconds or carries a decimal point. A bare <c>1 s</c> or <c>2 sec</c> may have been
+    /// truncated, and a count of minutes or hours says nothing below its own unit.
+    /// </summary>
+    /// <param name="number">The digits as printed, such as <c>89</c> or <c>2.5</c>.</param>
+    /// <param name="unit">The unit as printed, such as <c>ms</c>, <c>s</c>, <c>sec</c> or <c>m</c>.</param>
+    /// <returns>Whether the reading counts as exact for <see cref="Format"/>.</returns>
+    public static bool IsExactReading(string number, string unit)
+    {
+        return unit.Equals("ms", StringComparison.OrdinalIgnoreCase) || number.Contains('.', StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Formats a duration compactly: <c>0.34s</c> below a second, <c>2.34s</c> or <c>12s</c> below a minute,
     /// <c>1m40s</c> from a minute and <c>1h02m03s</c> from an hour.
     /// </summary>
