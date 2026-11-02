@@ -98,17 +98,25 @@ public sealed class FilteredOutputPipeline(
         // Finalized before the raw-tail fallback is built, because the fallback embeds this hint.
         var logHint = await FinalizeTeeAsync(session, request.ExitCode, cancellationToken).ConfigureAwait(false);
 
+        var shownLogHint = options.ShowLogHint ? logHint : null;
+
+        // A filtered run never prints nothing, whatever the exit code: empty filter output is
+        // replaced by the raw tail and a status line, and the last line of every filtered run is
+        // its single status line.
         var usedRawTailFallback = false;
-        if (request.ExitCode != 0 && string.IsNullOrWhiteSpace(filtered))
+        if (string.IsNullOrWhiteSpace(filtered))
         {
-            filtered = BuildRawTailFallback(request.DisplayCommandLine, request.ExitCode, stripped,
-                options.ShowLogHint ? logHint : null);
+            filtered = BuildRawTailFallback(request.DisplayCommandLine, request.ExitCode, stripped, shownLogHint);
             usedRawTailFallback = true;
+        }
+        else if (shownLogHint is not null)
+        {
+            filtered = InsertBeforeLastLine(filtered, shownLogHint);
         }
 
         // A faulted filter yields the raw text unchanged (see ApplyFilterSafelyAsync), so when the
-        // raw output is itself empty or whitespace on a failed command, filterFaulted and
-        // usedRawTailFallback are BOTH true at once — the two outcomes are not mutually exclusive.
+        // raw output is itself empty or whitespace, filterFaulted and usedRawTailFallback are
+        // BOTH true at once — the two outcomes are not mutually exclusive.
         // Checking a faulted filter first resolves that overlap in its favour; that ordering is
         // deliberate, not incidental, and is covered by
         // ProcessAsync_PrefersFilterFaulted_WhenBothConditionsOverlap.
@@ -130,11 +138,6 @@ public sealed class FilteredOutputPipeline(
         }
 
         await output.WriteAsync(filtered).ConfigureAwait(false);
-
-        if (!usedRawTailFallback && logHint is not null && options.ShowLogHint)
-        {
-            await output.WriteLineAsync(logHint).ConfigureAwait(false);
-        }
 
         await TrackIfEnabledAsync(prepared, request, stripped, filtered,
                 Stopwatch.GetElapsedTime(request.StartTimestamp), outcome, cancellationToken)
@@ -191,24 +194,43 @@ public sealed class FilteredOutputPipeline(
             .Replace("⚠", "WARN:", StringComparison.Ordinal);
     }
 
-    /// <summary>Builds a fallback message for failed commands whose output the filter could not parse.</summary>
+    /// <summary>
+    /// Builds the fallback shown when the filter left nothing to show: the last 40 raw lines, the tee log
+    /// hint when present, then the run's single status line.
+    /// </summary>
     /// <param name="command">The command line that was run, for display purposes.</param>
-    /// <param name="exitCode">The non-zero process exit code.</param>
+    /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
-    /// <param name="logHint">An optional tee log hint to append when present.</param>
+    /// <param name="logHint">An optional tee log hint, written just before the status line.</param>
     private static string BuildRawTailFallback(string command, int exitCode, string rawOutput, string? logHint)
     {
-        var lines = rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var tail = string.Join('\n', lines.TakeLast(40).Select(line => line.TrimEnd('\r')));
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})")
-            .AppendLine(tail);
-        if (logHint is not null)
+        foreach (var line in rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(40))
         {
-            sb.AppendLine(logHint);
+            sb.Append(line.TrimEnd('\r')).Append('\n');
         }
 
-        return sb.ToString();
+        if (logHint is not null)
+        {
+            sb.Append(logHint).Append('\n');
+        }
+
+        var status = exitCode != 0
+            ? string.Create(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})")
+            : $"⚠ {command}: output not recognized, raw tail shown above";
+
+        return sb.Append(status).Append('\n').ToString();
+    }
+
+    /// <summary>Inserts a line before the last line of a text, so a trailing status line stays last.</summary>
+    /// <param name="text">The text whose last line, with its terminating newline if any, moves down.</param>
+    /// <param name="line">The line to insert, without a terminator.</param>
+    private static string InsertBeforeLastLine(string text, string line)
+    {
+        var body = text.EndsWith('\n') ? text.AsSpan(0, text.Length - 1) : text.AsSpan();
+        var lastLineStart = body.LastIndexOf('\n') + 1;
+
+        return $"{text.AsSpan(0, lastLineStart)}{line}\n{text.AsSpan(lastLineStart)}";
     }
 
     /// <summary>Finalizes a tee session, swallowing any failure so a broken log cannot fail the run.</summary>

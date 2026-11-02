@@ -567,7 +567,9 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_ZeroTokens_RecordsZeroPercentSavings()
     {
-        // Kills boolean mutation on inputTokens > 0 check (line 146) and arithmetic mutations
+        // Kills boolean mutation on inputTokens > 0 check (line 146) and arithmetic mutations.
+        // An empty run still prints the not-recognized status line, so the output side is not zero:
+        // only the input side being zero keeps the percentage at zero instead of -Infinity.
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("", "", 0));
@@ -578,7 +580,7 @@ public class FilteredRunUseCaseTests
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
                 r.InputTokens == 0 &&
-                r.OutputTokens == 0 &&
+                r.OutputTokens > 0 &&
                 Math.Abs(r.SavingsPercentage) < 0.01),
             Arg.Any<CancellationToken>());
     }
