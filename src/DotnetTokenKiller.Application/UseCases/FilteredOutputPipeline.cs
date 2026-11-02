@@ -100,32 +100,33 @@ public sealed class FilteredOutputPipeline(
 
         var shownLogHint = options.ShowLogHint ? logHint : null;
 
-        // A filtered run never prints nothing, whatever the exit code: empty filter output is
-        // replaced by the raw tail and a status line, and the last line of every filtered run is
-        // its single status line.
-        var usedRawTailFallback = false;
-        if (string.IsNullOrWhiteSpace(filtered))
+        // A filtered run never prints nothing, whatever the exit code, and the last line of every
+        // filtered run is its single status line. A faulted filter is checked first: its raw text is
+        // shown whole (not cut to a tail) and the run is FilterFaulted even when that text is empty.
+        // That precedence is deliberate; ProcessAsync_PrefersFilterFaulted_WhenBothConditionsOverlap
+        // covers it.
+        RunOutcome outcome;
+        if (filterFaulted)
         {
-            filtered = BuildRawTailFallback(request.DisplayCommandLine, request.ExitCode, stripped, shownLogHint);
-            usedRawTailFallback = true;
+            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: false,
+                shownLogHint);
+            outcome = RunOutcome.FilterFaulted;
         }
-        else if (shownLogHint is not null)
+        else if (string.IsNullOrWhiteSpace(filtered))
         {
-            filtered = InsertBeforeLastLine(filtered, shownLogHint);
+            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: true,
+                shownLogHint);
+            outcome = RunOutcome.RawTailFallback;
         }
+        else
+        {
+            if (shownLogHint is not null)
+            {
+                filtered = InsertBeforeLastLine(filtered, shownLogHint);
+            }
 
-        // A faulted filter yields the raw text unchanged (see ApplyFilterSafelyAsync), so when the
-        // raw output is itself empty or whitespace, filterFaulted and usedRawTailFallback are
-        // BOTH true at once — the two outcomes are not mutually exclusive.
-        // Checking a faulted filter first resolves that overlap in its favour; that ordering is
-        // deliberate, not incidental, and is covered by
-        // ProcessAsync_PrefersFilterFaulted_WhenBothConditionsOverlap.
-        var outcome = (filterFaulted, usedRawTailFallback) switch
-        {
-            (true, _) => RunOutcome.FilterFaulted,
-            (false, true) => RunOutcome.RawTailFallback,
-            (false, false) => RunOutcome.Filtered
-        };
+            outcome = RunOutcome.Filtered;
+        }
 
         filtered = NormalizeGlyphs(filtered, config);
 
@@ -195,19 +196,37 @@ public sealed class FilteredOutputPipeline(
     }
 
     /// <summary>
-    /// Builds the fallback shown when the filter left nothing to show: the last 40 raw lines, the tee log
-    /// hint when present, then the run's single status line.
+    /// Builds the fallback shown when the filter left nothing to show or threw: the raw output (whole, or its
+    /// last 40 lines), the tee log hint when present, then the run's single status line.
     /// </summary>
     /// <param name="command">The command line that was run, for display purposes.</param>
     /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
+    /// <param name="tailOnly">Whether to show only the last 40 lines of <paramref name="rawOutput"/>.</param>
     /// <param name="logHint">An optional tee log hint, written just before the status line.</param>
-    private static string BuildRawTailFallback(string command, int exitCode, string rawOutput, string? logHint)
+    private static string BuildFallback(
+        string command,
+        int exitCode,
+        string rawOutput,
+        bool tailOnly,
+        string? logHint)
     {
         var sb = new StringBuilder();
-        foreach (var line in rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(40))
+        var hasOutput = !string.IsNullOrWhiteSpace(rawOutput);
+        if (hasOutput && tailOnly)
         {
-            sb.Append(line.TrimEnd('\r')).Append('\n');
+            foreach (var line in rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(40))
+            {
+                sb.Append(line.TrimEnd('\r')).Append('\n');
+            }
+        }
+        else if (hasOutput)
+        {
+            sb.Append(rawOutput);
+            if (!rawOutput.EndsWith('\n'))
+            {
+                sb.Append('\n');
+            }
         }
 
         if (logHint is not null)
@@ -215,11 +234,19 @@ public sealed class FilteredOutputPipeline(
             sb.Append(logHint).Append('\n');
         }
 
-        var status = exitCode != 0
-            ? string.Create(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})")
-            : $"⚠ {command}: output not recognized, raw tail shown above";
+        return sb.Append(FallbackStatusLine(command, exitCode, hasOutput)).Append('\n').ToString();
+    }
 
-        return sb.Append(status).Append('\n').ToString();
+    private static string FallbackStatusLine(string command, int exitCode, bool hasOutput)
+    {
+        if (exitCode != 0)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})");
+        }
+
+        return hasOutput
+            ? $"⚠ {command}: output not recognized, raw tail shown above"
+            : $"✓ {command} (no output)";
     }
 
     /// <summary>Inserts a line before the last line of a text, so a trailing status line stays last.</summary>

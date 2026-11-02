@@ -130,7 +130,7 @@ Each row carries:
 - **Command** — the `dotnet` subcommand as invoked.
 - **Outcome** — `Filtered` when a filter produced the output; `RawTailFallback` when its
   filter produced nothing, whatever the exit code, so the raw tail was emitted instead; `FilterFaulted` when
-  the filter threw and dtk fell back to the raw output unchanged; `PassthroughMeasured` when no
+  the filter threw and dtk showed the whole raw output followed by a status line; `PassthroughMeasured` when no
   filter is registered for that subcommand but the output was still captured and counted; and
   `PassthroughUnmeasured` when no filter exists and the output was not captured, so its size is
   unknown (shown as `not measured`).

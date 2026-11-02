@@ -225,6 +225,97 @@ public class FilteredOutputPipelineTests
         writer.ToString().Should().NotContain("⚠");
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("  \n\n")]
+    public async Task ProcessAsync_EmptyFilterOutputOnSuccessWithNothingInRaw_WritesNoOutputStatusLine(string raw)
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+
+        await sut.ProcessAsync(Request(raw: raw, command: "dotnet restore"), NullTeeSession.Instance);
+
+        writer.ToString().Should().Be("✓ dotnet restore (no output)\n");
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.RawTailFallback),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EmptyFilterOutputOnFailureWithWhitespaceRaw_WritesOnlyTheFailureLine()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+
+        await sut.ProcessAsync(Request(raw: "  \n", exitCode: 2), NullTeeSession.Instance);
+
+        writer.ToString().Should().Be("✗ dotnet build failed (exit 2)\n");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FilterFaultedOnFailure_WritesFullRawThenStatusLine()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+
+        await sut.ProcessAsync(Request(raw: "a\nb\n", exitCode: 1), NullTeeSession.Instance);
+
+        writer.ToString().Should().Be("a\nb\n✗ dotnet build failed (exit 1)\n");
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FilterFaultedWithLogHint_PutsTheHintBetweenRawAndStatusLine()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(raw: "a\nb\n", exitCode: 1, options: new OutputOptions(ShowLogHint: true));
+
+        await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
+
+        writer.ToString().Should().Be("a\nb\n[full output: /x.log]\n✗ dotnet build failed (exit 1)\n");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FilterFaulted_WritesTheWholeRawNotJustTheTail()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var raw = string.Join('\n', Enumerable.Range(0, 60).Select(i => $"line {i}"));
+
+        await sut.ProcessAsync(Request(raw: raw, exitCode: 1), NullTeeSession.Instance);
+
+        var lines = writer.ToString().TrimEnd('\n').Split('\n');
+        lines.Should().HaveCount(61);
+        lines[0].Should().Be("line 0");
+        lines[59].Should().Be("line 59");
+        lines[^1].Should().Be("✗ dotnet build failed (exit 1)");
+    }
+
+    [Theory]
+    [InlineData("a\n", "a\n⚠ dotnet build: output not recognized, raw tail shown above\n")]
+    [InlineData("", "✓ dotnet build (no output)\n")]
+    public async Task ProcessAsync_FilterFaultedOnSuccess_EndsWithTheFallbackStatusLine(string raw, string expected)
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+
+        await sut.ProcessAsync(Request(raw: raw), NullTeeSession.Instance);
+
+        writer.ToString().Should().Be(expected);
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ProcessAsync_PrefersFilterFaulted_WhenBothConditionsOverlap()
     {
