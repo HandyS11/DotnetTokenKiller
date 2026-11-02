@@ -187,9 +187,11 @@ dtk log --full           # everything
 dtk log --all            # include other projects
 ```
 
-Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are
-saved, and output under 500 bytes is never saved. Use `dtk config set tee.mode Always` to keep
-every run. Logs written by dtk 0.6.0 or earlier have no project metadata and appear only under `--all`.
+Logs are written by the tee feature, which defaults to `tee.mode = Failures`: the latest run of each kind
+(build, test, …) in each project is always saved, so `dtk log` never shows an older run as the latest, and
+older runs are kept only when they failed with at least 500 bytes of output. Use
+`dtk config set tee.mode Always` to keep older passing runs too. Logs written by dtk 0.6.0 or earlier have no
+project metadata and appear only under `--all`.
 
 A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice —
 still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying
@@ -417,8 +419,8 @@ dtk completion powershell >> $PROFILE
 
 ## Log Files
 
-DTK saves raw command output to disk for failed runs by default (`tee.mode = failures`). Pass `--show-log` to print the
-log path after any run:
+DTK saves raw command output to disk for failed runs, and for the latest run of each kind, by default
+(`tee.mode = failures`). Pass `--show-log` to print the log path after any run:
 
 ```sh
 dtk dotnet test --show-log

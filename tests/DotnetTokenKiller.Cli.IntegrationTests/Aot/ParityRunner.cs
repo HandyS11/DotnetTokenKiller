@@ -122,7 +122,13 @@ internal static partial class ParityRunner
     private static Dictionary<string, string> ReadFiles(ParitySandbox sandbox)
     {
         var files = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var path in Directory.EnumerateFiles(sandbox.Root, "*", SearchOption.AllDirectories))
+
+        // Ordinal order, and a number for a repeated name: two tee logs of one kind (a failed build
+        // and the latest passing one) normalize to the same name, and directory order differs
+        // between the two sandboxes on most file systems. A log's real name starts with its
+        // timestamp, so this order pairs each side's logs step by step.
+        foreach (var path in Directory.EnumerateFiles(sandbox.Root, "*", SearchOption.AllDirectories)
+                     .Order(StringComparer.Ordinal))
         {
             var relative = Path.GetRelativePath(sandbox.Root, path).Replace('\\', '/');
             if (ParitySandbox.IsIgnored(relative))
@@ -130,7 +136,16 @@ internal static partial class ParityRunner
                 continue;
             }
 
-            files[Normalize(relative, sandbox)] = Normalize(File.ReadAllText(path), sandbox);
+            var name = Normalize(relative, sandbox);
+            var key = name;
+            var occurrence = 1;
+            while (files.ContainsKey(key))
+            {
+                occurrence++;
+                key = $"{name} #{occurrence.ToString(CultureInfo.InvariantCulture)}";
+            }
+
+            files[key] = Normalize(File.ReadAllText(path), sandbox);
         }
 
         return files;

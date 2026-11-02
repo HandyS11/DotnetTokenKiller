@@ -93,12 +93,15 @@ public sealed class FileTeeServiceTests : IDisposable
         await act.Should().NotThrowAsync();
     }
 
-    private static TeeLogHeader RunningHeader() => new(
+    /// <summary>A provisional header, as a filtered run passes it to <see cref="FileTeeService.BeginAsync"/>.</summary>
+    /// <param name="minutesLater">Shifts the run's start, so two runs of one kind are ordered.</param>
+    /// <returns>The header.</returns>
+    private static TeeLogHeader RunningHeader(int minutesLater = 0) => new(
         "dotnet build MyApp.slnx",
         "/home/user/projects/MyApp",
         null,
         RunSource.Run,
-        new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+        new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero).AddMinutes(minutesLater));
 
     /// <summary>
     /// Extracts a body's true last line, mirroring what <c>TeeLogRenderer.IsTruncated</c> actually
@@ -201,17 +204,20 @@ public sealed class FileTeeServiceTests : IDisposable
         // line feed, since the cut content never ends with "\n" on its own), the body lands at 100
         // bytes, one under the 101-byte floor. Without bypassing the floor for a truncated body, this
         // exact (and unremarkable — nothing here is a contrived edge case beyond the specific byte
-        // count) log would be silently discarded despite the marker the writer just wrote proving
-        // real output was lost.
+        // count) log would be silently discarded, once a newer run of its kind completed, despite
+        // the marker the writer just wrote proving real output was lost.
         var sut = CreateSut(new TeeConfig(TeeMode.Always, MaxFileSizeBytes: 101));
 
+        await using var older = await sut.BeginAsync("build", RunningHeader(minutesLater: -5));
+        await older.Writer.WriteLineAsync(new string('é', 40).AsMemory(), CancellationToken.None);
+        (await older.FinalizeAsync(0)).Should().NotBeNull();
         await using var session = await sut.BeginAsync("build", RunningHeader());
-        await session.Writer.WriteLineAsync(new string('é', 40).AsMemory(), CancellationToken.None);
+        await session.Writer.WriteLineAsync("tiny".AsMemory(), CancellationToken.None);
 
         var hint = await session.FinalizeAsync(0);
 
         hint.Should().NotBeNull();
-        Directory.GetFiles(_tempDir).Should().ContainSingle();
+        Directory.GetFiles(_tempDir).Should().HaveCount(2);
     }
 
     [Fact]
@@ -230,6 +236,13 @@ public sealed class FileTeeServiceTests : IDisposable
     /// <param name="suffix">A unique suffix so same-second fixtures do not collide.</param>
     private static string OldLogFileName(int year, string suffix) =>
         TeeLogFileName.Build(new DateTimeOffset(year, 1, 1, 0, 0, 0, TimeSpan.Zero), suffix, "build");
+
+    /// <summary>The text of a failed build's log, from this project, matching <see cref="OldLogFileName"/>.</summary>
+    /// <param name="year">The old log's year, as given to <see cref="OldLogFileName"/>.</param>
+    /// <returns>The header followed by a body above the 500-byte floor.</returns>
+    private static string FailedLogText(int year) =>
+        (RunningHeader() with { ExitCode = 1, TimestampUtc = new DateTimeOffset(year, 1, 1, 0, 0, 0, TimeSpan.Zero) })
+        .Render() + LargeOutput() + "\n";
 
     [Fact]
     public async Task BeginAsync_DoesNotRotate_BeforeTheRetentionDecisionIsKnown()
@@ -254,26 +267,64 @@ public sealed class FileTeeServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task FinalizeAsync_LeavesPreExistingLogsIntact_WhenARunSucceedsInFailuresMode()
+    public async Task FinalizeAsync_KeepsPreExistingFailureLogs_WhenARunSucceedsInFailuresMode()
     {
-        // Reproduces the CRITICAL scenario exactly: MaxFiles 2, two pre-existing logs, a successful
-        // run under the default TeeMode.Failures. The run's own log is discarded by retention, so
-        // rotation (now deferred to the keep path) must not run at all — both pre-existing logs
-        // must survive.
-        var sut = CreateSut(new TeeConfig(TeeMode.Failures, MaxFiles: 2));
+        // A successful run under the default TeeMode.Failures is kept as its kind's latest run, but
+        // it supersedes only older passing (or undersized) logs: stored failure logs of the same
+        // kind survive while there is room under MaxFiles.
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures, MaxFiles: 3));
         Directory.CreateDirectory(_tempDir);
         var older = OldLogFileName(2020, "a");
         var newer = OldLogFileName(2021, "b");
-        await File.WriteAllTextAsync(Path.Combine(_tempDir, older), "old");
-        await File.WriteAllTextAsync(Path.Combine(_tempDir, newer), "old");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, older), FailedLogText(2020));
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, newer), FailedLogText(2021));
 
         var session = await sut.BeginAsync("build", RunningHeader());
         await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
         var hint = await session.FinalizeAsync(0);
 
-        hint.Should().BeNull();
+        hint.Should().NotBeNull();
         Directory.GetFiles(_tempDir, "*.log").Select(Path.GetFileName)
-            .Should().BeEquivalentTo(older, newer);
+            .Should().HaveCount(3).And.Contain([older, newer]);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_CountsAKeptPassingRunTowardMaxFiles_InFailuresMode()
+    {
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures, MaxFiles: 2));
+        Directory.CreateDirectory(_tempDir);
+        var older = OldLogFileName(2020, "a");
+        var newer = OldLogFileName(2021, "b");
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, older), FailedLogText(2020));
+        await File.WriteAllTextAsync(Path.Combine(_tempDir, newer), FailedLogText(2021));
+
+        var session = await sut.BeginAsync("build", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().NotBeNull();
+        var remaining = Directory.GetFiles(_tempDir, "*.log").Select(Path.GetFileName).ToList();
+        remaining.Should().HaveCount(2).And.Contain(newer).And.NotContain(older);
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_ReplacesTheOlderPassingLogOfItsKind_PassingTheSanitizedSlugToTheSession()
+    {
+        // The pruning compares the slug in each file name, which BeginAsync sanitises ("list
+        // package" becomes "list-package"); the session must be handed that same form.
+        var sut = CreateSut(new TeeConfig(TeeMode.Failures));
+        var older = await sut.BeginAsync("list package", RunningHeader(minutesLater: -5));
+        await older.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+        var olderHint = await older.FinalizeAsync(0);
+        var session = await sut.BeginAsync("list package", RunningHeader());
+        await session.Writer.WriteLineAsync(LargeOutput().AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        olderHint.Should().NotBeNull();
+        hint.Should().NotBeNull();
+        Directory.GetFiles(_tempDir, "*.log").Should().ContainSingle()
+            .Which.Should().EndWith("_list-package.log");
     }
 
     [Fact]
@@ -382,35 +433,28 @@ public sealed class FileTeeServiceTests : IDisposable
         session.Should().BeSameAs(NullTeeSession.Instance);
     }
 
-    [Fact]
-    public async Task FinalizeAsync_DiscardsTheLog_WhenTheBodyIsJustUnderTheConfiguredMinBodyBytesGuard()
+    [Theory]
+    // WriteLineAsync appends a forced "\n": 498 chars make a 499-byte body, one under the guard...
+    [InlineData(498, 1)]
+    // ...and 499 chars a 500-byte body, exactly the guard.
+    [InlineData(499, 2)]
+    public async Task FinalizeAsync_AppliesTheConfiguredMinBodyBytesGuard_ToTheOlderLogOfItsKind(
+        int olderBodyChars, int expectedLogs)
     {
         // Pins the 500-byte minBodyBytes constant BeginAsync passes to the session: a caller that
-        // replaced it with a different hardcoded value would still pass this test's sibling below
-        // but fail here, or vice versa.
+        // replaced it with a different hardcoded value would fail one of the two cases. The guard
+        // drops only an older log of the same kind; the latest run is always kept.
         var sut = CreateSut(new TeeConfig(TeeMode.Always));
+        var older = await sut.BeginAsync("build", RunningHeader(minutesLater: -5));
+        await older.Writer.WriteLineAsync(new string('x', olderBodyChars).AsMemory(), CancellationToken.None);
+        (await older.FinalizeAsync(1)).Should().NotBeNull();
         var session = await sut.BeginAsync("build", RunningHeader());
-        // WriteLineAsync appends a forced "\n", so 498 chars + 1 byte = 499 bytes: one under 500.
-        await session.Writer.WriteLineAsync(new string('x', 498).AsMemory(), CancellationToken.None);
+        await session.Writer.WriteLineAsync("tiny".AsMemory(), CancellationToken.None);
 
-        var hint = await session.FinalizeAsync(0);
-
-        hint.Should().BeNull();
-        Directory.GetFiles(_tempDir, "*.log").Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task FinalizeAsync_KeepsTheLog_WhenTheBodyMeetsTheConfiguredMinBodyBytesGuard()
-    {
-        var sut = CreateSut(new TeeConfig(TeeMode.Always));
-        var session = await sut.BeginAsync("build", RunningHeader());
-        // WriteLineAsync appends a forced "\n", so 499 chars + 1 byte = 500 bytes: exactly the guard.
-        await session.Writer.WriteLineAsync(new string('x', 499).AsMemory(), CancellationToken.None);
-
-        var hint = await session.FinalizeAsync(0);
+        var hint = await session.FinalizeAsync(1);
 
         hint.Should().NotBeNull();
-        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(1);
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(expectedLogs);
     }
 
     [Fact]

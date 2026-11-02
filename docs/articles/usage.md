@@ -254,7 +254,7 @@ dtk log --full           # everything
 dtk log --all            # include other projects
 ```
 
-Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are saved, and output under 500 bytes is never saved. Use `dtk config set tee.mode Always` to keep every run. Logs written by dtk 0.6.0 or earlier carry no project metadata and appear only under `--all`.
+Logs are written by the tee feature, which defaults to `tee.mode = Failures`: the latest run of each kind (build, test, …) in each project is always saved, so `dtk log` never shows an older run as the latest, and older runs are kept only when they failed with at least 500 bytes of output. Use `dtk config set tee.mode Always` to keep older passing runs too. Logs written by dtk 0.6.0 or earlier carry no project metadata and appear only under `--all`.
 
 A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice — still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying the output ends where dtk was killed. A single Ctrl-C (or SIGTERM on Linux and macOS) lets dtk finish the log; see [Interrupting a run](#interrupting-a-run).
 
@@ -393,7 +393,7 @@ When dtk stops `dotnet` itself, it prints no filtered output and does not record
 
 ## Log Files
 
-DTK can save the raw, unfiltered command output to disk. This is controlled by the `tee.mode` configuration setting (see [Configuration](configuration.md)). By default, only failed runs are saved.
+DTK can save the raw, unfiltered command output to disk. This is controlled by the `tee.mode` configuration setting (see [Configuration](configuration.md)). By default, failed runs and the latest run of each kind are saved.
 
 Each log file also records the full command line and working directory that produced it, alongside the output. Log files are kept owner-only (mode `0600`) for that reason.
 

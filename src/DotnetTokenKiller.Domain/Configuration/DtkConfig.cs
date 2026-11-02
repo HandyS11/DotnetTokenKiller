@@ -45,7 +45,10 @@ public enum TokenizerModel
 /// <summary>Supported tee output modes.</summary>
 public enum TeeMode
 {
-    /// <summary>Only tee output for commands that fail (non-zero exit code).</summary>
+    /// <summary>
+    /// Keep the output of commands that fail (non-zero exit code), plus the latest run of each kind
+    /// in each project, so <c>dtk log</c> never shows an older run as the latest.
+    /// </summary>
     Failures = 0,
 
     /// <summary>Always tee output regardless of exit code.</summary>

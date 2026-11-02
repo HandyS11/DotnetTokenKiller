@@ -32,6 +32,46 @@ public sealed class LogIntegrationTests
     }
 
     [Fact]
+    public async Task Log_ShowsThePassingRun_AfterAFailingRunOfTheSameKindAsync()
+    {
+        // Regression guard (C1): with the default tee.mode Failures, the passing run's log used to
+        // be deleted, so `dtk log` showed the older failure as if it were the latest run.
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        await IntegrationTestHelper.RunDtkWithStdinInDirAsync(
+            dir, BuildOutput(), "pipe", "test", "--exit-code", "1");
+        await IntegrationTestHelper.RunDtkWithStdinInDirAsync(
+            dir, BuildOutput(), "pipe", "test", "--exit-code", "0");
+
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "log");
+
+        exitCode.Should().Be(0);
+        output.Should().Contain("dotnet test");
+        output.Should().Contain("exit 0");
+        output.Should().NotContain("exit 1");
+    }
+
+    [Fact]
+    public async Task Log_ForOneKind_ShowsItsLatestRun_AfterAnotherKindPassedAsync()
+    {
+        // One slot per kind: a passing test must not cost the passing build its log, or `dtk log
+        // build` would fall back to the older failed build.
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        await IntegrationTestHelper.RunDtkWithStdinInDirAsync(
+            dir, BuildOutput(), "pipe", "build", "--exit-code", "1");
+        await IntegrationTestHelper.RunDtkWithStdinInDirAsync(
+            dir, BuildOutput(), "pipe", "build", "--exit-code", "0");
+        await IntegrationTestHelper.RunDtkWithStdinInDirAsync(
+            dir, BuildOutput(), "pipe", "test", "--exit-code", "0");
+
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "log", "build");
+
+        exitCode.Should().Be(0);
+        output.Should().Contain("dotnet build");
+        output.Should().Contain("exit 0");
+        output.Should().NotContain("exit 1");
+    }
+
+    [Fact]
     public async Task Log_WindowsByDefault_AndFullWidensItAsync()
     {
         var dir = IntegrationTestHelper.NewIsolatedDir();

@@ -23,6 +23,9 @@ internal static class ParityCases
         [
             new ParityStep(["pipe", "build", "--exit-code", "1"], "dotnet_build_errors.txt"),
             new ParityStep(["pipe", "build"], "dotnet_build_warnings.txt"),
+            // Tee off for the --show-log step: a kept log's hint names a file with a random suffix,
+            // whose token count (tracked with the output) would differ between the two sides.
+            new ParityStep(["config", "set", "tee.mode", "Never"]),
             new ParityStep(["pipe", "build", "--vv", "--show-log"], "dotnet_build_success.txt"),
         ]),
         ["pipe-test"] = new ParityCase(

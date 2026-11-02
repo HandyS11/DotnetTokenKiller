@@ -33,12 +33,39 @@ public sealed class FileTeeSessionTests : IDisposable
         }
     }
 
+    private const string ProjectPath = "/home/user/projects/MyApp";
+
+    private static readonly DateTimeOffset RunStart = new(2026, 7, 29, 9, 14, 2, TimeSpan.Zero);
+
+    /// <summary>A body at or above the default 500-byte floor: 600 characters plus the line feed.</summary>
+    private static readonly string LargeBody = new string('x', 600) + "\n";
+
     private static TeeLogHeader RunningHeader() => new(
         "dotnet build MyApp.slnx",
-        "/home/user/projects/MyApp",
+        ProjectPath,
         null,
         RunSource.Run,
-        new DateTimeOffset(2026, 7, 29, 9, 14, 2, TimeSpan.Zero));
+        RunStart);
+
+    /// <summary>Writes a log as another dtk run would have left it in the tee directory.</summary>
+    /// <param name="startedUtc">When that run started; the file name derives from it.</param>
+    /// <param name="slug">The run's subcommand slug.</param>
+    /// <param name="exitCode">Its exit code, or <see langword="null"/> for a run still in flight.</param>
+    /// <param name="body">The log body.</param>
+    /// <param name="projectPath">The working directory recorded in its header.</param>
+    /// <returns>The log's path.</returns>
+    private string SeedLog(
+        DateTimeOffset startedUtc,
+        string slug,
+        int? exitCode,
+        string body,
+        string projectPath = ProjectPath)
+    {
+        var header = new TeeLogHeader($"dotnet {slug}", projectPath, exitCode, RunSource.Run, startedUtc);
+        var path = Path.Combine(_tempDir, TeeLogFileName.Build(startedUtc, Guid.NewGuid().ToString("N"), slug));
+        File.WriteAllText(path, header.Render() + body);
+        return path;
+    }
 
     /// <summary>
     /// Extracts a body's true last line, mirroring the two production steps between a raw file body
@@ -62,26 +89,30 @@ public sealed class FileTeeSessionTests : IDisposable
 
     /// <summary>Opens a session over a real file, mirroring what FileTeeService.BeginAsync does.</summary>
     /// <param name="maxBodyBytes">The body's byte budget.</param>
-    /// <param name="minBodyBytes">Bodies smaller than this are discarded when the run completes.</param>
-    /// <param name="keepOnlyOnFailure">Whether a successful run's log is discarded.</param>
+    /// <param name="minBodyBytes">Older logs of the same kind smaller than this are discarded when the run completes.</param>
+    /// <param name="keepOnlyOnFailure">Whether older passing logs of the same kind are discarded.</param>
     /// <param name="header">The header to render, or <see langword="null"/> to use <see cref="RunningHeader"/>.</param>
     /// <param name="maxFiles">
-    /// Maximum number of tee files to retain once this one is kept or discarded; non-positive
-    /// disables rotation. Rotation always targets <see cref="_tempDir"/>.
+    /// Maximum number of tee files to retain once this one is kept; non-positive disables rotation.
+    /// Rotation and pruning always target <see cref="_tempDir"/>.
     /// </param>
+    /// <param name="slug">The run's subcommand slug, used in its file name and for pruning.</param>
     private (FileTeeSession Session, string Path) CreateSut(
         long maxBodyBytes = 1_048_576L,
         long minBodyBytes = 500,
         bool keepOnlyOnFailure = false,
         TeeLogHeader? header = null,
-        int maxFiles = 0)
+        int maxFiles = 0,
+        string slug = "build")
     {
-        var path = Path.Combine(_tempDir, $"{Guid.NewGuid():N}.log");
+        header ??= RunningHeader();
+        var path = Path.Combine(
+            _tempDir, TeeLogFileName.Build(header.TimestampUtc, Guid.NewGuid().ToString("N"), slug));
         // ReadWrite on both axes: FinalizeAsync reads the status region back before overwriting
         // it, and FileShare.ReadWrite is what lets a second handle (dtk log, or FileTeeLogStore)
         // open the same file for reading on Windows while this handle is still open for writing.
         var stream = new FileStream(path, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite);
-        var rendered = (header ?? RunningHeader()).Render();
+        var rendered = header.Render();
         var region = TeeLogHeader.RenderStatusAndExit(null);
         var charIndex = rendered.IndexOf(region, StringComparison.Ordinal);
         var offset = Encoding.UTF8.GetByteCount(rendered.AsSpan(0, charIndex));
@@ -90,7 +121,7 @@ public sealed class FileTeeSessionTests : IDisposable
         stream.Flush();
 
         var session = new FileTeeSession(stream, path, offset, Encoding.UTF8.GetByteCount(region),
-            new TeeSessionPolicy(maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles));
+            new TeeSessionPolicy(maxBodyBytes, minBodyBytes, keepOnlyOnFailure, _tempDir, maxFiles, slug));
         return (session, path);
     }
 
@@ -132,27 +163,20 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task FinalizeAsync_DeletesTheLog_WhenTheBodyIsBelowTheGuard()
+    public async Task FinalizeAsync_PassingRunInFailuresMode_IsKept()
     {
-        var (session, path) = CreateSut(minBodyBytes: 500);
-        await session.Writer.WriteLineAsync("tiny".AsMemory(), CancellationToken.None);
+        // Regression guard (C1): Failures mode used to delete a passing run's log at finalize, so
+        // `dtk log` then showed an older failed run — possibly of another command — as if it were
+        // the latest. The latest run of each kind is now always kept, whatever its exit code.
+        var (session, path) = CreateSut(keepOnlyOnFailure: true);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
 
         var hint = await session.FinalizeAsync(0);
 
-        hint.Should().BeNull();
-        File.Exists(path).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task FinalizeAsync_DeletesTheLog_WhenOnlyFailuresAreKeptAndTheRunSucceeded()
-    {
-        var (session, path) = CreateSut(minBodyBytes: 0, keepOnlyOnFailure: true);
-        await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
-
-        var hint = await session.FinalizeAsync(0);
-
-        hint.Should().BeNull();
-        File.Exists(path).Should().BeFalse();
+        hint.Should().Contain(path);
+        File.Exists(path).Should().BeTrue();
+        TeeLogHeader.TryParse(await TeeLogFileReader.ReadAllTextAsync(path), out var header).Should().BeTrue();
+        header.ExitCode.Should().Be(0);
     }
 
     [Fact]
@@ -167,29 +191,209 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task FinalizeAsync_RotatesLeftoverLogs_ToTheCap_WhenThisRunsLogIsDiscarded()
+    public async Task FinalizeAsync_SmallestRun_IsKeptDespiteMinimumSize()
     {
-        // Regression guard: round 1 moved rotation onto the keep path only. On the default
-        // TeeMode.Failures, a user whose builds all succeed never keeps a log, so RotateFiles
-        // never runs at all -- meanwhile abandoned "Running" logs (killed mid-flight) and
-        // read-back-guard failures still accumulate on disk with no bound. Rotation must also run
-        // on the discard path, after this run's own file is deleted, sweeping those leftovers back
-        // down to the cap. This run's own log is already gone by the time rotation runs, so it
-        // cannot claim a phantom slot -- only leftovers are being trimmed.
+        // The 500-byte floor applies to older logs only: dropping the latest run's small log would
+        // let `dtk log` surface an older, stale one instead.
+        var (session, path) = CreateSut(minBodyBytes: 500, keepOnlyOnFailure: true);
+        await session.Writer.WriteLineAsync("123456789".AsMemory(), CancellationToken.None); // 10 bytes
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().Contain(path);
+        File.Exists(path).Should().BeTrue();
+        TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path)).Should().Be("123456789\n");
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_PassingRun_ReplacesOlderPassingLogOfSameSlug()
+    {
+        var older = SeedLog(RunStart.AddMinutes(-5), "test", 0, LargeBody);
+        var (session, path) = CreateSut(keepOnlyOnFailure: true, slug: "test");
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        var hint = await session.FinalizeAsync(0);
+
+        hint.Should().Contain(path);
+        File.Exists(older).Should().BeFalse();
+        File.Exists(path).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_FailingRun_ReplacesOlderPassingLogOfSameSlug()
+    {
+        // A failing run supersedes the passing slot too: the latest run of the kind is this one.
+        var older = SeedLog(RunStart.AddMinutes(-5), "test", 0, LargeBody);
+        var (session, path) = CreateSut(keepOnlyOnFailure: true, slug: "test");
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(1);
+
+        File.Exists(older).Should().BeFalse();
+        File.Exists(path).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_PassingRun_KeepsOlderFailingLogOfSameSlug()
+    {
+        var older = SeedLog(RunStart.AddMinutes(-5), "test", 1, LargeBody);
+        var (session, _) = CreateSut(keepOnlyOnFailure: true, slug: "test");
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        File.Exists(older).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_PassingRun_KeepsLogsOfOtherSlugs()
+    {
+        // One slot per kind, not one overall: `dtk log build` must still find the passing build
+        // after a passing test ran.
+        var build = SeedLog(RunStart.AddMinutes(-5), "build", 0, LargeBody);
+        var (session, _) = CreateSut(keepOnlyOnFailure: true, slug: "test");
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        File.Exists(build).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_PassingRun_KeepsOlderPassingLogOfAnotherProject()
+    {
+        // `dtk log` is scoped to the working directory: pruning another project's latest passing
+        // run would make `dtk log` there fall back to an older, stale log of that project.
+        var otherProject = SeedLog(RunStart.AddMinutes(-5), "build", 0, LargeBody, "/home/user/projects/Other");
+        var (session, _) = CreateSut(keepOnlyOnFailure: true);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        File.Exists(otherProject).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_DoesNotDeleteConcurrentRunningLog()
+    {
+        // Agents often run builds and tests in parallel against one tee directory. An older run of
+        // the same kind that is still in flight has a "running" header and must survive, however
+        // small its body is so far — it is another process's open log.
+        var (concurrent, concurrentPath) = CreateSut(
+            keepOnlyOnFailure: true, header: RunningHeader() with { TimestampUtc = RunStart.AddSeconds(-30) });
+        await concurrent.Writer.WriteLineAsync("tiny".AsMemory(), CancellationToken.None);
+        await concurrent.Writer.FlushAsync(CancellationToken.None);
+        var (session, path) = CreateSut(keepOnlyOnFailure: true);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        File.Exists(concurrentPath).Should().BeTrue();
+
+        // Finishing later, the older run must not take the newer run's log with it either.
+        await concurrent.FinalizeAsync(0);
+        File.Exists(concurrentPath).Should().BeTrue();
+        File.Exists(path).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_DoesNotDeleteANewerLogOfSameSlug()
+    {
+        // Two parallel runs of one kind can finish out of order: the one that started first must
+        // not prune the one that started later and already finished.
+        var newer = SeedLog(RunStart.AddMinutes(5), "build", 0, "tiny\n");
+        var (session, _) = CreateSut(keepOnlyOnFailure: true);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        File.Exists(newer).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_DoesNotDeleteAnOlderLogItCannotParse()
+    {
+        // Not provably a finished passing or undersized run (a header this version cannot read, or
+        // a log another process created but has not written its header to yet) — so not ours to drop.
+        var unreadable = Path.Combine(
+            _tempDir, TeeLogFileName.Build(RunStart.AddMinutes(-5), Guid.NewGuid().ToString("N"), "build"));
+        await File.WriteAllTextAsync(unreadable, "# dtk-log v9\n# exit: 0\n---\ntiny\n");
+        var empty = Path.Combine(
+            _tempDir, TeeLogFileName.Build(RunStart.AddMinutes(-4), Guid.NewGuid().ToString("N"), "build"));
+        await File.WriteAllTextAsync(empty, string.Empty);
+        var (session, _) = CreateSut(keepOnlyOnFailure: true);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        File.Exists(unreadable).Should().BeTrue();
+        File.Exists(empty).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_InAlwaysMode_KeepsOlderPassingLogsOfSameSlug()
+    {
+        var older = SeedLog(RunStart.AddMinutes(-5), "build", 0, LargeBody);
+        var (session, _) = CreateSut(keepOnlyOnFailure: false);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        await session.FinalizeAsync(0);
+
+        File.Exists(older).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_StillReturnsTheHint_WhenPruningFailsToDeleteASupersededLog()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // POSIX permission bits (used below to force the prune's File.Delete to fail) are not
+            // meaningful on Windows. The scenario this guards against there is another process
+            // holding the superseded log open without FileShare.Delete.
+            return;
+        }
+
+        var older = SeedLog(RunStart.AddMinutes(-5), "build", 0, LargeBody);
+        var (session, path) = CreateSut(keepOnlyOnFailure: true);
+        await session.Writer.WriteLineAsync(LargeBody.AsMemory(), CancellationToken.None);
+
+        File.SetUnixFileMode(_tempDir, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var hint = await session.FinalizeAsync(0);
+
+            hint.Should().Contain(path);
+            File.Exists(older).Should().BeTrue();
+        }
+        finally
+        {
+            // Restore write access so Dispose() can clean up _tempDir afterward.
+            File.SetUnixFileMode(
+                _tempDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
+    public async Task FinalizeAsync_RotatesLeftoverLogs_ToTheCap_WhenAPassingRunIsKept()
+    {
+        // A kept passing run counts toward MaxFiles like any other log, and rotation still sweeps
+        // leftovers (abandoned "Running" logs from runs killed mid-flight, logs from a read-back-guard
+        // failure) back down to the cap, oldest first.
         const int maxFiles = 2;
         for (var i = 0; i < 5; i++)
         {
-            await File.WriteAllTextAsync(Path.Combine(_tempDir, $"leftover-{i}.log"), "old");
+            await File.WriteAllTextAsync(
+                Path.Combine(_tempDir, TeeLogFileName.Build(RunStart.AddMinutes(-10 + i), $"leftover{i}", "build")),
+                "old");
         }
 
-        var (session, path) = CreateSut(minBodyBytes: 0, keepOnlyOnFailure: true, maxFiles: maxFiles);
+        var (session, path) = CreateSut(keepOnlyOnFailure: true, maxFiles: maxFiles);
         await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
 
         var hint = await session.FinalizeAsync(0);
 
-        hint.Should().BeNull();
-        File.Exists(path).Should().BeFalse();
-        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(maxFiles);
+        hint.Should().Contain(path);
+        Directory.GetFiles(_tempDir, "*.log").Should().HaveCount(maxFiles).And.Contain(path);
     }
 
     [Fact]
@@ -210,7 +414,8 @@ public sealed class FileTeeSessionTests : IDisposable
         // correctly, but the caller -- and so the user -- silently lost the "[full output: ...]"
         // hint pointing at it. Reproduced here by revoking write permission on the tee directory
         // after seeding a leftover log, so RotateFiles' File.Delete throws UnauthorizedAccessException.
-        var leftover = Path.Combine(_tempDir, "leftover.log");
+        // Named as an older log so it, not this run's, is the one rotation picks as the oldest.
+        var leftover = Path.Combine(_tempDir, TeeLogFileName.Build(RunStart.AddMinutes(-5), "leftover", "build"));
         await File.WriteAllTextAsync(leftover, "old");
         var (session, path) = CreateSut(minBodyBytes: 0, maxFiles: 1);
         await session.Writer.WriteLineAsync("body".AsMemory(), CancellationToken.None);
@@ -223,6 +428,7 @@ public sealed class FileTeeSessionTests : IDisposable
             hint.Should().NotBeNull();
             hint.Should().Contain(path);
             File.Exists(path).Should().BeTrue();
+            File.Exists(leftover).Should().BeTrue();
         }
         finally
         {
@@ -391,40 +597,45 @@ public sealed class FileTeeSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task FinalizeAsync_KeepsATruncatedLog_EvenWhenItsBodyIsUnderTheMinBodyBytesFloor()
+    public async Task FinalizeAsync_KeepsAnOlderTruncatedLog_EvenWhenItsBodyIsUnderTheMinBodyBytesFloor()
     {
         // Regression guard: hitting the cap already proves the run produced at least that many
         // bytes of output, so the MinBodyBytes floor (which exists to drop a one-line "Restored.")
         // must not also discard a log that hit a byte cap configured below the floor -- otherwise
-        // every truncated log on a small cap is silently thrown away, the exact bug the floor's own
-        // clamp (Math.Min(500, MaxFileSizeBytes) in FileTeeService.BeginAsync) exists to prevent.
-        var (session, path) = CreateSut(maxBodyBytes: 100, minBodyBytes: 1000);
-
+        // every truncated log on a small cap is silently thrown away once a newer run of its kind
+        // completes, the exact bug the floor's own clamp (Math.Min(500, MaxFileSizeBytes) in
+        // FileTeeService.BeginAsync) exists to prevent.
+        var (older, olderPath) = CreateSut(
+            maxBodyBytes: 100, minBodyBytes: 1000, header: RunningHeader() with { TimestampUtc = RunStart.AddMinutes(-5) });
         for (var i = 0; i < 20; i++)
         {
-            await session.Writer.WriteLineAsync(new string('x', 40).AsMemory(), CancellationToken.None);
+            await older.Writer.WriteLineAsync(new string('x', 40).AsMemory(), CancellationToken.None);
         }
 
-        var hint = await session.FinalizeAsync(0);
+        await older.FinalizeAsync(1);
+        var (session, _) = CreateSut(maxBodyBytes: 100, minBodyBytes: 1000);
+        await session.Writer.WriteLineAsync("tiny".AsMemory(), CancellationToken.None);
 
-        hint.Should().NotBeNull();
-        File.Exists(path).Should().BeTrue();
-        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(path));
+        await session.FinalizeAsync(1);
+
+        File.Exists(olderPath).Should().BeTrue();
+        var body = TeeLogHeader.StripHeader(await TeeLogFileReader.ReadAllTextAsync(olderPath));
         TeeTruncationMarker.IsMarkerLine(LastLine(body)).Should().BeTrue();
     }
 
     [Fact]
-    public async Task FinalizeAsync_DiscardsAShortLog_WhenItNeverHitTheCap()
+    public async Task FinalizeAsync_DropsAnOlderShortLog_WhenItNeverHitTheCap()
     {
         // Companion to the truncated-bypass test above: the MinBodyBytes floor must still apply
-        // normally to a run that never hit the cap at all.
+        // normally to an older run that never hit the cap at all, failed or not.
+        var older = SeedLog(RunStart.AddMinutes(-5), "build", 1, "tiny\n");
         var (session, path) = CreateSut(maxBodyBytes: 1_048_576L, minBodyBytes: 1000);
         await session.Writer.WriteLineAsync("tiny".AsMemory(), CancellationToken.None);
 
-        var hint = await session.FinalizeAsync(0);
+        var hint = await session.FinalizeAsync(1);
 
-        hint.Should().BeNull();
-        File.Exists(path).Should().BeFalse();
+        hint.Should().Contain(path);
+        File.Exists(older).Should().BeFalse();
     }
 
     [Fact]
