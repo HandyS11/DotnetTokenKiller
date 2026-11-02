@@ -44,6 +44,47 @@ public sealed class ArgumentPreprocessorTests
         ArgumentPreprocessor.IsPassthrough(ArgumentPreprocessor.Normalize(args)).Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("dotnet", "list", "package", "--format", "json")]
+    [InlineData("dotnet", "list", "package", "--format=json")]
+    [InlineData("DOTNET", "LIST", "PACKAGE", "--FORMAT", "JSON")]
+    [InlineData("dotnet", "build", "-getProperty:Version")]
+    [InlineData("dotnet", "test", "--getItem:Compile")]
+    [InlineData("dotnet", "publish", "/getTargetResult:Build")]
+    [InlineData("DOTNET", "BUILD", "-GETPROPERTY:Version")]
+    public void IsPassthrough_ReturnsTrue_ForMachineReadableOutput(params string[] args)
+    {
+        // The output is a document or a value that another program parses: dtk's summary line or a
+        // trailing warning would corrupt it, so these run unfiltered.
+        ArgumentPreprocessor.IsPassthrough(ArgumentPreprocessor.Normalize(args)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("dotnet", "list", "package", "--outdated")]
+    [InlineData("dotnet", "list", "package", "--format", "console")]
+    [InlineData("dotnet", "build", "-c", "Release")]
+    public void IsPassthrough_ReturnsFalse_ForHumanReadableOutput(params string[] args)
+    {
+        ArgumentPreprocessor.IsPassthrough(args).Should().BeFalse();
+    }
+
+    [Fact]
+    public void PassthroughArguments_UnknownSubcommand_IsForwardedVerbatim()
+    {
+        // dtk does not filter `dotnet run`, so its -q or --quiet belongs to dotnet (or the app), not to dtk.
+        ArgumentPreprocessor.PassthroughArguments(["dotnet", "run", "-q", "--", "-v"])
+            .Should().Equal("run", "-q", "--", "-v");
+    }
+
+    [Fact]
+    public void PassthroughArguments_FilteredSubcommand_DropsDtkOptionsLikeRawOutput()
+    {
+        // A filtered subcommand passed through is the same as DTK_RAW=1: dotnet rejects dtk's own options.
+        ArgumentPreprocessor.PassthroughArguments(
+                ["dotnet", "build", "-q", "-getProperty:Version", "-v", "minimal", "--show-log"])
+            .Should().Equal("build", "-getProperty:Version", "-v", "minimal");
+    }
+
     [Fact]
     public void IsPassthrough_ReturnsFalse_ForAnInteractiveBuild()
     {

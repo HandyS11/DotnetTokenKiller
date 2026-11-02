@@ -9,7 +9,9 @@ namespace DotnetTokenKiller.Cli;
 /// <remarks>
 /// Handles three cases:
 /// <list type="bullet">
-///   <item><description>Passthrough: <c>dotnet &lt;subcommand not handled by dtk&gt;</c> should bypass the app entirely.</description></item>
+///   <item><description>Passthrough: <c>dotnet &lt;subcommand not handled by dtk&gt;</c> should bypass the app entirely,
+///         as does a filtered one whose output is meant for another program (<c>list package --format json</c>,
+///         <c>build -getProperty:Version</c>).</description></item>
 ///   <item><description>Raw output: under <c>DTK_RAW=1</c> any <c>dotnet</c> invocation bypasses it too, without
 ///         dtk's own options.</description></item>
 ///   <item><description>Separator insertion: <c>dtk dotnet build &lt;args&gt;</c> needs <c>--</c> inserted so
@@ -95,16 +97,35 @@ internal static class ArgumentPreprocessor
 
     /// <summary>
     /// Returns <see langword="true"/> when the invocation should bypass the Spectre app
-    /// and forward directly to <c>dotnet</c>: a subcommand dtk does not filter, or a filtered one
-    /// that <see cref="PassthroughSubcommands.IsInteractiveFilteredRun"/> keeps attached to the terminal.
+    /// and forward directly to <c>dotnet</c>: a subcommand dtk does not filter, or a filtered one whose run must
+    /// stay unfiltered with the terminal attached, because it prompts
+    /// (<see cref="PassthroughSubcommands.IsInteractiveFilteredRun"/>) or prints output for a program to parse
+    /// (<see cref="PassthroughSubcommands.IsMachineReadableRun"/>).
     /// </summary>
     /// <param name="args">The raw CLI arguments.</param>
     internal static bool IsPassthrough(string[] args)
     {
-        return args.Length >= 2 &&
-               string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
-               (!DotnetSubcommands.TryMatch(args[1..], out _) ||
-                PassthroughSubcommands.IsInteractiveFilteredRun(args[1..]));
+        if (args.Length < 2 || !string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var dotnetArgs = args[1..];
+        return !DotnetSubcommands.TryMatch(dotnetArgs, out _) ||
+               PassthroughSubcommands.IsInteractiveFilteredRun(dotnetArgs) ||
+               PassthroughSubcommands.IsMachineReadableRun(dotnetArgs);
+    }
+
+    /// <summary>
+    /// Returns the arguments a passthrough run hands to <c>dotnet</c>. A subcommand dtk does not filter is
+    /// forwarded verbatim; a filtered one passed through anyway loses dtk's own output options as under
+    /// <see cref="RawOutputSwitch.EnvironmentVariable"/> (see <see cref="StripDtkOptions"/>), which dotnet would reject.
+    /// </summary>
+    /// <param name="args">The raw CLI arguments, for which <see cref="IsPassthrough"/> is <see langword="true"/>.</param>
+    internal static string[] PassthroughArguments(string[] args)
+    {
+        var dotnetArgs = args[1..];
+        return DotnetSubcommands.TryMatch(dotnetArgs, out _) ? StripDtkOptions(dotnetArgs) : dotnetArgs;
     }
 
     /// <summary>

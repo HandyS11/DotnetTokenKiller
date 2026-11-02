@@ -165,6 +165,72 @@ public class PassthroughSubcommandsTests
     }
 
     [Theory]
+    [InlineData((object)new[] { "list", "package", "--format", "json" })]
+    [InlineData((object)new[] { "list", "package", "--format=json" })]
+    [InlineData((object)new[] { "list", "package", "--format:json" })]
+    [InlineData((object)new[] { "list", "package", "--outdated", "--format", "JSON" })]
+    [InlineData((object)new[] { "LIST", "PACKAGE", "--FORMAT=Json" })]
+    [InlineData((object)new[] { "build", "-getProperty:Version" })]
+    [InlineData((object)new[] { "build", "MyApp.csproj", "-getProperty:Version,TargetFramework" })]
+    [InlineData((object)new[] { "build", "--getProperty:Version" })]
+    [InlineData((object)new[] { "build", "/getProperty:Version" })]
+    [InlineData((object)new[] { "build", "-GETPROPERTY:Version" })]
+    [InlineData((object)new[] { "build", "-getProperty=Version" })]
+    [InlineData((object)new[] { "build", "-getProperty", "Version" })]
+    [InlineData((object)new[] { "test", "--getItem:Compile" })]
+    [InlineData((object)new[] { "publish", "/getTargetResult:Build" })]
+    [InlineData((object)new[] { "pack", "-getItem:Compile" })]
+    [InlineData((object)new[] { "restore", "-getProperty:Version" })]
+    [InlineData((object)new[] { "clean", "-getTargetResult:Clean" })]
+    [InlineData((object)new[] { "BUILD", "-c", "Release", "-getProperty:Version" })]
+    public void IsMachineReadableRun_IsTrue_ForJsonListsAndMsBuildQueries(string[] args)
+    {
+        // These print a document or a value for a program to read: a status line or a trailing warning
+        // would corrupt it, so they are passed through untouched.
+        PassthroughSubcommands.IsMachineReadableRun(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "list", "package", "--outdated" })]
+    [InlineData((object)new[] { "list", "package", "--format", "console" })]
+    [InlineData((object)new[] { "list", "package", "--format=console" })]
+    [InlineData((object)new[] { "list", "package", "--format" })]
+    [InlineData((object)new[] { "list", "package", "--format", "--outdated" })]
+    [InlineData((object)new[] { "list", "reference", "--format", "json" })]
+    [InlineData((object)new[] { "build" })]
+    [InlineData((object)new[] { "build", "-c", "Release", "-p:Version=1.0" })]
+    [InlineData((object)new[] { "build", "-getPropertyValue" })]
+    [InlineData((object)new[] { "build", "-p:getProperty=1" })]
+    [InlineData((object)new[] { "build", "getProperty" })]
+    [InlineData((object)new[] { "format", "-getProperty:Version" })]
+    [InlineData((object)new[] { "run", "-getProperty:Version" })]
+    [InlineData((object)new[] { "--info" })]
+    [InlineData((object)new string[0])]
+    public void IsMachineReadableRun_IsFalse_Otherwise(string[] args)
+    {
+        PassthroughSubcommands.IsMachineReadableRun(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "list", "package", "--format", "json" })]
+    [InlineData((object)new[] { "list", "package", "--format=json" })]
+    [InlineData((object)new[] { "build", "-getProperty:Version" })]
+    public void IsMeasurable_IsFalse_ForMachineReadableRuns(string[] args)
+    {
+        // `list` is on the measurable allowlist, but capturing would re-split the document into lines.
+        // A machine-readable run keeps the terminal attached, so its bytes reach the reader untouched.
+        PassthroughSubcommands.IsMeasurable(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "list", "package", "--format", "json" }, "list package")]
+    [InlineData((object)new[] { "build", "-getProperty:Version" }, "build")]
+    public void CommandName_IsUnaffectedByMachineReadableOutput(string[] args, string expected)
+    {
+        PassthroughSubcommands.CommandName(args).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData((object)new[] { "publish", "--interactive" })]
     [InlineData((object)new[] { "pack", "--interactive" })]
     public void CommandName_IsUnaffectedByTheInteractiveFlag(string[] args)

@@ -119,9 +119,10 @@ with an explicit truncation line if there are more. The summary is always the la
 `⚠ dotnet list package --outdated: 1 package with updates (all 8 projects)` when an audit variant finds something
 (`✗` instead on the rare non-zero exit).
 
-If the output arrives in a shape dtk does not recognise — `--format json`, a localised SDK, or a
-future column layout — dtk prints it unfiltered, followed by the
+If the output arrives in a shape dtk does not recognise — a localised SDK or a future column layout — dtk
+prints it unfiltered, followed by the
 `⚠ dotnet list package: unrecognized output, passed through unfiltered` line, rather than guessing.
+`dotnet list package --format json` is machine-readable, so dtk passes it through untouched and without that line.
 `dotnet list package` always exits 0, even when it reports vulnerable packages, so this is the only
 signal available: a clean `✓` from dtk always means dtk read the tables, never that it failed to.
 
@@ -194,6 +195,12 @@ On failure the output is the build's error layout ending in the `✗` summary li
 `dtk dotnet publish --interactive` and `dtk dotnet pack --interactive` are not filtered: they run with the
 terminal attached, as they did before dtk filtered these commands, so a credential provider can prompt for a
 private feed. They are recorded as unmeasured passthrough runs.
+
+Output that another program reads is not filtered either: `dtk dotnet list package --format json`, and `-getProperty`,
+`-getItem` or `-getTargetResult` (also spelled `--getProperty` or `/getProperty`) on `build`, `test`, `restore`,
+`clean`, `publish` and `pack`, print exactly what `dotnet` prints, so `| jq` and command substitution keep working.
+dtk's own options (`-q`, `-v` without a level, `--show-log`) are dropped from these runs, which are recorded like the
+`--interactive` ones.
 
 ### `dtk pipe`
 

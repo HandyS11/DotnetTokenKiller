@@ -46,10 +46,14 @@ using var runCancellation = string.Equals(args.FirstOrDefault(), dotnetCmd, Stri
 var cancellationToken = runCancellation?.Token ?? CancellationToken.None;
 
 // Passthrough: run any unsupported dotnet subcommand directly, recording what it cost so the
-// coverage report can rank which subcommand is worth filtering next.
+// coverage report can rank which subcommand is worth filtering next. A filtered subcommand lands here when
+// its run prompts (--interactive) or prints machine-readable output (--format json, -getProperty), and then
+// goes without dtk's output options, which dotnet would reject.
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
-    return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..], runCancellation).ConfigureAwait(false);
+    return await PassthroughEntryPoint
+        .RunAsync(dotnetCmd, ArgumentPreprocessor.PassthroughArguments(args), runCancellation)
+        .ConfigureAwait(false);
 }
 
 // DTK_RAW=1 asks for dotnet's own output: a filtered subcommand is passed through as well, recorded like any

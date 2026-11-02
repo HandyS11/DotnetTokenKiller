@@ -152,7 +152,8 @@ dtk dotnet pack
 ```
 
 Unknown subcommands pass through to `dotnet` unchanged, as do `dotnet publish --interactive` and
-`dotnet pack --interactive`, which keep the terminal so a credential provider can prompt.
+`dotnet pack --interactive`, which keep the terminal so a credential provider can prompt, and the runs whose output a
+program reads: `dotnet list package --format json` and MSBuild's `-getProperty`, `-getItem` and `-getTargetResult`.
 
 ### Filtering output dtk did not produce
 

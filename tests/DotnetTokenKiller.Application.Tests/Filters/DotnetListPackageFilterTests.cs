@@ -385,16 +385,16 @@ public class DotnetListPackageFilterTests
         const string input = "MSBUILD : error MSB1003: Specify a project or solution file.";
 
         _sut.Apply(input, exitCode: 1).Should().BeEmpty(
-            "an empty result is what makes FilteredRunUseCase fall back to the raw tail");
+            "an empty result is what makes the pipeline fall back to the raw tail");
     }
 
     [Fact]
     public void Apply_SucceededRunWithUnparseableOutput_PassesTheRawOutputThrough()
     {
-        // 'dotnet list package --format json' is a documented, first-class option, and it always
-        // exits 0. FilteredRunUseCase's raw-tail fallback is gated on a NON-ZERO exit code, so it
-        // can never fire here: returning empty would show the user nothing at all while recording
-        // the run as successfully filtered with ~100% savings.
+        // A document in a shape this parser does not know, as `dotnet list package --format json | dtk pipe
+        // list package` hands it over (a direct run is passed through before any filter sees it). It exits 0,
+        // and returning empty would leave the pipeline's raw-tail fallback to show only the last 40 lines,
+        // cutting the document in the middle, so the filter passes the whole text through and says so.
         const string input = """
                             {
                               "version": 1,
@@ -422,7 +422,7 @@ public class DotnetListPackageFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().NotBeEmpty("an exit-0 run cannot reach the raw-tail fallback");
+        result.Should().NotBeEmpty("an empty result would be cut to its last 40 lines by the raw-tail fallback");
         result.Should().Contain("\"latestVersion\": \"2.0.0\"", "the raw content must survive verbatim");
         result.Should().StartWith("{\n", "the raw output comes first, untouched");
         LastLine(result).Should().Be(

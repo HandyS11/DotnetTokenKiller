@@ -388,6 +388,15 @@ public sealed class PassthroughRunUseCaseTests : IDisposable
         PassthroughRunUseCase.KeepsStdioAttached(DtkConfig.Default, MsBuildArgs).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("list", "package", "--format", "json")]
+    [InlineData("build", "-getProperty:Version")]
+    public void KeepsStdioAttached_MachineReadableOutput_IsTrue(params string[] args)
+    {
+        // Captured output is re-split into lines; attached, the reader gets dotnet's bytes.
+        PassthroughRunUseCase.KeepsStdioAttached(DtkConfig.Default, args).Should().BeTrue();
+    }
+
     [Fact]
     public void KeepsStdioAttached_TrackingAndTeeOff_IsTrueForAnySubcommand()
     {

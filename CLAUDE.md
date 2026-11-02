@@ -83,6 +83,10 @@ jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Synt
 uses — via `DotnetPublishFilter`/`DotnetPackFilter`, which each add their own success line (`project -> publish dir`,
 `Successfully created package '…'`). Either run with `--interactive` (used to prompt for private-feed credentials) is
 passed through unfiltered with the terminal attached, never captured, via `PassthroughSubcommands.IsInteractiveFilteredRun`.
+`PassthroughSubcommands.IsMachineReadableRun` (`list package --format json`; MSBuild's `-getProperty`, `-getItem` and
+`-getTargetResult` on build, test, restore, clean, publish and pack) takes the same route, so a reader gets dotnet's own
+bytes; `ArgumentPreprocessor.PassthroughArguments` drops dtk's output options from any filtered subcommand that gets
+there, as `DTK_RAW=1` does.
 
 `dtk init copilot-cli` (alias `dtk integrate`) installs a GitHub Copilot CLI `preToolUse` hook (`.github/hooks/`)
 that runs `dtk hook copilot-cli`, rewriting `dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`).
