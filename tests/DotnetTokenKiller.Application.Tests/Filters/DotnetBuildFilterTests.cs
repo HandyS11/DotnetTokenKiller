@@ -515,6 +515,42 @@ public class DotnetBuildFilterTests
 
         result.Split('\n').Should().Contain("6 warnings not shown (dtk log)");
         result.Should().NotContain("--vv");
+        // The warnings are hidden, not shown: the verdict counts them plainly, with no "(3 shown)".
+        result.TrimEnd('\n').Split('\n')[^1].Should().Be("✗ dotnet build failed (exit 1): 1 error, 6 warnings (1 project)");
+    }
+
+    [Fact]
+    public void Apply_ErrorsWithDeclaredWarningsNoneParsed_StillSaysTheWarningsAreNotShown()
+    {
+        // MSBuild declares six warnings, but no line of the output parses as one. They are still hidden
+        // behind the error, so the line is printed from the declared count alone.
+        const string input = """
+                             /path/A.cs(1,1): error CS0001: boom [/path/P.csproj]
+                                 1 Error(s)
+                                 6 Warning(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Split('\n').Should().Contain("6 warnings not shown (dtk log)");
+        result.TrimEnd('\n').Split('\n')[^1].Should().Be("✗ dotnet build failed (exit 1): 1 error, 6 warnings (1 project)");
+    }
+
+    [Fact]
+    public void Apply_WarningsListedWithNoErrors_StatusKeepsTheShownCount()
+    {
+        // With no errors the warnings are listed, so a count of them that outruns the lines shown keeps
+        // its "(3 shown)": the verdict does not claim more lines than the report printed.
+        const string input = """
+                             /path/A.cs(1,1): warning CS0002: one [/path/P.csproj]
+                             /path/B.cs(2,1): warning CS0003: two [/path/P.csproj]
+                             /path/C.cs(3,1): warning CS0004: three [/path/P.csproj]
+                                 4 Warning(s)
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
+
+        result.TrimEnd('\n').Split('\n')[^1].Should().Be("✓ dotnet build: 0 errors, 4 warnings (3 shown) (1 project)");
     }
 
     [Fact]

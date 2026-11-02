@@ -230,7 +230,8 @@ internal sealed partial class MsBuildDiagnosticReport
 
         AppendGroupedByFile(sb, _errors, ErrorLevel);
         AppendTopCodes(sb, _errors, ErrorTotal);
-        if (_warnings.Count > 0)
+        // Stated from the declared count, so it holds even when MSBuild's warnings matched no line.
+        if (WarningTotal > 0)
         {
             sb.AppendLine(CultureInfo.InvariantCulture,
                 $"{CountLabel(WarningTotal, WarningLevel)} not shown (dtk log)");
@@ -242,14 +243,17 @@ internal sealed partial class MsBuildDiagnosticReport
     /// failed run whose errors were never matched (warnings only) still reads as the failure it is
     /// rather than as "0 errors"; the verdict is stated here once, never beside a second verdict line.
     /// An exit code of zero stays the verdict even when errors were counted, but such a line carries a
-    /// warning glyph rather than a tick, which would sit misleadingly beside the error count.
+    /// warning glyph rather than a tick, which would sit misleadingly beside the error count. Warnings
+    /// hidden behind listed errors are counted plainly, since the body already says they are not shown.
     /// </summary>
     /// <param name="command">The command named in the line.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the verdict.</param>
     private string StatusLine(string command, int exitCode)
     {
-        var tally =
-            $"{Tally(ErrorTotal, _errors.Count, ErrorLevel)}, {Tally(WarningTotal, _warnings.Count, WarningLevel)}";
+        var warningTally = _errors.Count > 0
+            ? CountLabel(WarningTotal, WarningLevel)
+            : Tally(WarningTotal, _warnings.Count, WarningLevel);
+        var tally = $"{Tally(ErrorTotal, _errors.Count, ErrorLevel)}, {warningTally}";
         if (exitCode != 0)
         {
             return $"✗ {command} failed (exit {exitCode.ToString(CultureInfo.InvariantCulture)}): {tally}{_context}";
