@@ -180,8 +180,7 @@ public class MsBuildDiagnosticReportTests
             "src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 errors)\n"
             + "  (10,5) CS1002: ; expected\n"
             + "  (12,18) CS0103: The name 'undeclared' does not exist in the current context\n"
-            + "src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs (1 error)\n"
-            + "  (8,10) CS1002: ; expected\n"
+            + "src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10) CS1002: ; expected\n"
             + "1 warning suppressed (use --vv to see)\n");
         body.Should().NotContain("dotnet build:").And.NotContain("---");
     }
@@ -192,8 +191,7 @@ public class MsBuildDiagnosticReportTests
         var body = Parse("dotnet_build_warnings.txt").RenderDiagnostics();
 
         body.Should().StartWith("src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 warnings)\n")
-            .And.Contain("src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs (1 warning)\n")
-            .And.Contain("  (5,10) CS0169: The field '_unused' is never used\n");
+            .And.Contain("src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(5,10) CS0169: The field '_unused' is never used\n");
         body.Should().NotContain("dotnet build:").And.NotContain("---");
         body.Should().NotContain("\r");
         body.Should().EndWith("\n");

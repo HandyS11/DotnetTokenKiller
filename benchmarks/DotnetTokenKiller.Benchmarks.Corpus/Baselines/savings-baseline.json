@@ -9,9 +9,20 @@
       "exitCode": 1,
       "rawBytes": 2603,
       "rawTokens": 710,
-      "filteredTokens": 133,
-      "savedTokens": 577,
-      "savingsPercent": 81.3
+      "filteredTokens": 128,
+      "savedTokens": 582,
+      "savingsPercent": 82
+    },
+    {
+      "id": "build/long-messages",
+      "fixture": "dotnet_build_long_messages.txt",
+      "filterKey": "build",
+      "exitCode": 1,
+      "rawBytes": 5607,
+      "rawTokens": 1174,
+      "filteredTokens": 188,
+      "savedTokens": 986,
+      "savingsPercent": 84
     },
     {
       "id": "build/multitarget-errors",
@@ -20,9 +31,9 @@
       "exitCode": 1,
       "rawBytes": 975,
       "rawTokens": 272,
-      "filteredTokens": 68,
-      "savedTokens": 204,
-      "savingsPercent": 75
+      "filteredTokens": 63,
+      "savedTokens": 209,
+      "savingsPercent": 76.8
     },
     {
       "id": "build/success",
@@ -42,9 +53,9 @@
       "exitCode": 0,
       "rawBytes": 2007,
       "rawTokens": 550,
-      "filteredTokens": 135,
-      "savedTokens": 415,
-      "savingsPercent": 75.5
+      "filteredTokens": 130,
+      "savedTokens": 420,
+      "savingsPercent": 76.4
     },
     {
       "id": "clean/raw",
@@ -141,9 +152,9 @@
       "exitCode": 1,
       "rawBytes": 253,
       "rawTokens": 68,
-      "filteredTokens": 57,
-      "savedTokens": 11,
-      "savingsPercent": 16.2
+      "filteredTokens": 52,
+      "savedTokens": 16,
+      "savingsPercent": 23.5
     },
     {
       "id": "pack/success",
@@ -163,9 +174,9 @@
       "exitCode": 0,
       "rawBytes": 7530,
       "rawTokens": 2113,
-      "filteredTokens": 989,
-      "savedTokens": 1124,
-      "savingsPercent": 53.2
+      "filteredTokens": 644,
+      "savedTokens": 1469,
+      "savingsPercent": 69.5
     },
     {
       "id": "publish/failure",
@@ -174,9 +185,9 @@
       "exitCode": 1,
       "rawBytes": 289,
       "rawTokens": 83,
-      "filteredTokens": 57,
-      "savedTokens": 26,
-      "savingsPercent": 31.3
+      "filteredTokens": 52,
+      "savedTokens": 31,
+      "savingsPercent": 37.3
     },
     {
       "id": "publish/success",
@@ -196,9 +207,9 @@
       "exitCode": 0,
       "rawBytes": 7343,
       "rawTokens": 2063,
-      "filteredTokens": 986,
-      "savedTokens": 1077,
-      "savingsPercent": 52.2
+      "filteredTokens": 641,
+      "savedTokens": 1422,
+      "savingsPercent": 68.9
     },
     {
       "id": "restore/raw",
@@ -240,9 +251,9 @@
       "exitCode": 1,
       "rawBytes": 7440,
       "rawTokens": 1809,
-      "filteredTokens": 1000,
-      "savedTokens": 809,
-      "savingsPercent": 44.7
+      "filteredTokens": 902,
+      "savedTokens": 907,
+      "savingsPercent": 50.1
     },
     {
       "id": "test/compile-errors-mixed",
@@ -251,9 +262,9 @@
       "exitCode": 1,
       "rawBytes": 8369,
       "rawTokens": 2069,
-      "filteredTokens": 1070,
-      "savedTokens": 999,
-      "savingsPercent": 48.3
+      "filteredTokens": 972,
+      "savedTokens": 1097,
+      "savingsPercent": 53
     },
     {
       "id": "test/compile-errors-mixed-passing",
@@ -262,9 +273,9 @@
       "exitCode": 1,
       "rawBytes": 7865,
       "rawTokens": 1941,
-      "filteredTokens": 1016,
-      "savedTokens": 925,
-      "savingsPercent": 47.7
+      "filteredTokens": 918,
+      "savedTokens": 1023,
+      "savingsPercent": 52.7
     },
     {
       "id": "test/duration-under-1ms",
@@ -427,9 +438,9 @@
       "exitCode": 1,
       "rawBytes": 77,
       "rawTokens": 22,
-      "filteredTokens": 31,
-      "savedTokens": -9,
-      "savingsPercent": -40.9
+      "filteredTokens": 26,
+      "savedTokens": -4,
+      "savingsPercent": -18.2
     },
     {
       "id": "test/mtp-all-pass",

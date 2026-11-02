@@ -14,7 +14,17 @@ namespace DotnetTokenKiller.Application.Filters;
 /// </summary>
 internal sealed partial class MsBuildDiagnosticReport
 {
-    private const int MessageMaxLen = 120;
+    /// <summary>
+    /// Longest message an error is rendered with. A compiler error carries what to change late in its text
+    /// (CS1503 ends in the type it expected, CS0121 in its second overload), so this is generous.
+    /// </summary>
+    private const int ErrorMessageMaxLen = 400;
+
+    /// <summary>Longest message a warning is rendered with: a warning is skimmed, and rarely worth more.</summary>
+    private const int WarningMessageMaxLen = 160;
+
+    /// <summary>A URL, up to the whitespace, closing bracket or quote that ends it.</summary>
+    private const string UrlBody = @"https?://[^\s)\]'""<>]+";
 
     /// <summary>Stands in for the diagnostic code on MSBuild output that carries none (Exec tasks).</summary>
     internal const string NoCode = "(no code)";
@@ -189,9 +199,9 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>
     /// Renders the diagnostics alone, for a caller that supplies its own status line: the errors
-    /// grouped by file, with a note of the warnings left out, or, with no errors, the warnings grouped
-    /// by file in the same layout. A list of top codes follows when it adds something. It carries no
-    /// status line.
+    /// grouped by file (see <see cref="AppendGroupedByFile"/>), with a note of the warnings left out, or, with no
+    /// errors, the warnings grouped by file in the same layout. A list of top codes follows when it adds
+    /// something. It carries no status line.
     /// </summary>
     /// <returns>The body, or an empty string when no diagnostic was parsed.</returns>
     public string RenderDiagnostics()
@@ -324,7 +334,7 @@ internal sealed partial class MsBuildDiagnosticReport
             string.Empty,
             simpleDiagMatch.Groups["level"].Value,
             simpleDiagMatch.Groups["code"].Value,
-            TextHelpers.Truncate(simpleDiagMatch.Groups["message"].Value.Trim(), MessageMaxLen),
+            RenderMessage(simpleDiagMatch.Groups["message"].Value, simpleDiagMatch.Groups["level"].Value),
             ProjectName(DropProperties(simpleDiagMatch.Groups["project"].Value)));
 
         // Keyed off the rendered message for the same reason as the file-anchored diagnostics.
@@ -357,7 +367,7 @@ internal sealed partial class MsBuildDiagnosticReport
             diagMatch.Groups["col"].Value,
             diagMatch.Groups["level"].Value,
             diagMatch.Groups["code"].Value,
-            TextHelpers.Truncate(diagMatch.Groups["message"].Value.Trim(), MessageMaxLen),
+            RenderMessage(diagMatch.Groups["message"].Value, diagMatch.Groups["level"].Value),
             ProjectName(projectPath));
 
         // Key off what gets rendered, not the raw capture. Two diagnostics differing only past the
@@ -372,6 +382,57 @@ internal sealed partial class MsBuildDiagnosticReport
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The message as it is rendered: its URLs removed, the framework namespaces in its quoted names shortened,
+    /// then cut at the cap of its level. The cap comes last, so a link or a namespace costs none of it.
+    /// </summary>
+    /// <param name="message">The message as MSBuild printed it.</param>
+    /// <param name="level">Either <c>error</c> or <c>warning</c>.</param>
+    private static string RenderMessage(string message, string level)
+    {
+        var shortened = ShortenFrameworkNamespaces(StripUrls(message.Trim()));
+        return TextHelpers.Truncate(shortened, level == ErrorLevel ? ErrorMessageMaxLen : WarningMessageMaxLen);
+    }
+
+    /// <summary>
+    /// Removes the URLs of a message, with the whitespace before each and the parentheses or brackets that held
+    /// nothing else (<c>(https://aka.ms/dotnet-warnings/SYSLIB0014)</c>): a link is for a person with a browser,
+    /// and an agent reading the line cannot follow it. A URL that ended the message also takes the
+    /// <c>,</c> or <c>:</c> that led into it.
+    /// </summary>
+    /// <param name="message">The message, trimmed.</param>
+    private static string StripUrls(string message)
+    {
+        var stripped = UrlPattern().Replace(message, string.Empty);
+        return stripped.Length == message.Length ? message : stripped.TrimEnd(' ', ',', ';', ':');
+    }
+
+    /// <summary>
+    /// Drops the <c>System.</c> and <c>Microsoft.</c> namespaces from the types a message names inside single
+    /// quotes: <c>'System.Collections.Generic.IEnumerable&lt;int&gt;'</c> reads <c>'IEnumerable&lt;int&gt;'</c>. A
+    /// namespace that is the user's own is kept, as is one outside quotes, and so is a quoted name that follows
+    /// the word "namespace": there <c>'System.Collections'</c> is a namespace, and what remains would name
+    /// another. A chain at the head of a member's signature keeps the member's type as well, since
+    /// <c>'System.Linq.Enumerable.Select&lt;…&gt;(…)'</c> ends in a member, not a type.
+    /// </summary>
+    /// <param name="message">The message, with its URLs removed.</param>
+    private static string ShortenFrameworkNamespaces(string message)
+    {
+        return QuotedSpanPattern().Replace(message, span =>
+            message.AsSpan(0, span.Index).EndsWith("namespace ", StringComparison.Ordinal)
+                ? span.Value
+                : FrameworkNameChainPattern().Replace(span.Value, chain => ShortenChain(chain, span.Value)));
+    }
+
+    /// <summary>The part of a dotted <c>System.</c>/<c>Microsoft.</c> name that stays: its last segment, or its last two at a signature's head.</summary>
+    /// <param name="chain">The dotted name.</param>
+    /// <param name="span">The quoted span the name is in, with its quotes.</param>
+    private static string ShortenChain(Match chain, string span)
+    {
+        var atHeadOfSignature = chain.Index == 1 && span.Contains('(', StringComparison.Ordinal);
+        return string.Join('.', chain.Value.Split('.').TakeLast(atHeadOfSignature ? 2 : 1));
     }
 
     /// <summary>Drops the extra MSBuild properties (<c>::TargetFramework=net8.0</c>) from a <c>[project]</c> suffix.</summary>
@@ -468,37 +529,61 @@ internal sealed partial class MsBuildDiagnosticReport
     }
 
     /// <summary>
-    /// Lays diagnostics out by file, the file with the most first: a heading <c>file (2 errors)</c> and, for
-    /// each diagnostic, <c>(line,col) CODE: message</c>. Errors and warnings both read this way.
+    /// Lays diagnostics out by file, the file with the most first. A diagnostic reads <c>(line,col) CODE: message</c>,
+    /// and those of one file with the same code and message read once, with each of their positions and a count:
+    /// <c>(96,59) (99,59) CS1503 ×2: message</c>. A file that comes to one line is printed on it, led by the file:
+    /// <c>file(96,59) (99,59) CS1503 ×2: message</c>. A file with several lines gets a heading of its own,
+    /// <c>file (3 errors)</c>, which counts the diagnostics, not the lines. Errors and warnings both read this way.
     /// </summary>
     /// <param name="sb">The rendered report.</param>
     /// <param name="diagnostics">The diagnostics of one level.</param>
     /// <param name="noun">The singular noun in the heading ("error" or "warning").</param>
     private static void AppendGroupedByFile(StringBuilder sb, List<Diagnostic> diagnostics, string noun)
     {
-        foreach (var group in diagnostics.GroupBy(d => d.File).OrderByDescending(g => g.Count()))
+        foreach (var fileGroup in diagnostics.GroupBy(d => d.File).OrderByDescending(g => g.Count()))
         {
-            var items = group.ToList();
-            var file = group.Key.Length == 0 ? NoFile : group.Key;
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"{file} ({items.Count} {noun}{(items.Count == 1 ? "" : "s")})");
-            foreach (var d in items)
+            var file = fileGroup.Key.Length == 0 ? NoFile : fileGroup.Key;
+            var lines = fileGroup.GroupBy(d => (d.Code, d.Message)).Select(DescribeLine).ToList();
+
+            if (lines.Count == 1)
             {
-                // Tool-level diagnostics (MSBUILD, CSC) carry neither position nor, sometimes, a
-                // code; both are omitted rather than rendered as the empty "(,)" and ": " stubs.
-                var position = d.Line.Length == 0 ? string.Empty : $"({d.Line},{d.Col}) ";
-                var code = d.Code.Length == 0 ? string.Empty : $"{d.Code}: ";
-                sb.AppendLine(CultureInfo.InvariantCulture, $"  {position}{code}{d.Message}");
+                var (positions, text) = lines[0];
+                sb.AppendLine(positions.Length == 0 ? $"{file} {text}" : $"{file}{positions} {text}");
+                continue;
+            }
+
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{file} ({fileGroup.Count()} {noun}s)");
+            foreach (var (positions, text) in lines)
+            {
+                sb.AppendLine(positions.Length == 0 ? $"  {text}" : $"  {positions} {text}");
             }
         }
+    }
+
+    /// <summary>
+    /// One rendered line for the diagnostics of a file that share a code and a message: where they are, each
+    /// position once, and what they say, with a count when there are several.
+    /// </summary>
+    /// <param name="group">The diagnostics, in the order they were reported.</param>
+    private static (string Positions, string Text) DescribeLine(IGrouping<(string Code, string Message), Diagnostic> group)
+    {
+        // Tool-level diagnostics (MSBUILD, CSC) carry neither position nor, sometimes, a code; both are
+        // omitted rather than rendered as the empty "(,)" and ": " stubs. A diagnostic the same file reports
+        // for two projects shares its position, which is printed once.
+        var positions = string.Join(' ',
+            group.Where(d => d.Line.Length > 0).Select(d => $"({d.Line},{d.Col})").Distinct(StringComparer.Ordinal));
+        var count = group.Count();
+        var times = count > 1 ? string.Create(CultureInfo.InvariantCulture, $"×{count}") : string.Empty;
+        var label = string.Join(' ', new[] { group.Key.Code, times }.Where(part => part.Length > 0));
+        return (positions, label.Length == 0 ? group.Key.Message : $"{label}: {group.Key.Message}");
     }
 
     /// <summary>
     /// Adds <c>Top codes: CS1002 (2x), CS0103 (1x)</c> when the build reported more diagnostics than are
     /// listed (repeats collapsed, shapes not matched) and more than one code is listed: it then ranks the
     /// listed diagnostics by code, which says which codes dominate a result too long to read line by line.
-    /// Its counts are of the lines listed, not of the diagnostics reported. With every diagnostic listed, or
-    /// with a single code, it only repeats what the lines show.
+    /// Its counts are of the diagnostics listed (each position of a grouped line counts), not of the diagnostics
+    /// reported. With every diagnostic listed, or with a single code, it only repeats what the lines show.
     /// </summary>
     /// <param name="sb">The rendered report.</param>
     /// <param name="diagnostics">The diagnostics of one level, one line each.</param>
@@ -539,6 +624,20 @@ internal sealed partial class MsBuildDiagnosticReport
     [GeneratedRegex(
         @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s*\[(?<project>.+?)\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
+
+    // A URL with the whitespace before it, and the parentheses or brackets that hold nothing else.
+    [GeneratedRegex(@"\s*(?:\(\s*" + UrlBody + @"\s*\)|\[\s*" + UrlBody + @"\s*\]|" + UrlBody + ")",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex UrlPattern();
+
+    // A span between single quotes: where a compiler names a type, a member or a namespace.
+    [GeneratedRegex("'[^']*'")]
+    private static partial Regex QuotedSpanPattern();
+
+    // A dotted System./Microsoft. name, its last segment included; not one that follows a dot or a word
+    // character, so a user's own MyApp.System.X and SystemClock.Now are left alone.
+    [GeneratedRegex(@"(?<![\w.])(?:System|Microsoft)(?:\.[A-Za-z_]\w*)+")]
+    private static partial Regex FrameworkNameChainPattern();
 
     // Matches: "  MyProject -> /path/to/bin/MyProject.dll" (or .exe), capturing the project's name
     [GeneratedRegex(@"^\s+(?<name>\S+) -> .+\.(dll|exe)\s*$")]
@@ -583,7 +682,7 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <param name="Col">The column, empty when the diagnostic has no position.</param>
     /// <param name="Level">Either <c>error</c> or <c>warning</c>.</param>
     /// <param name="Code">The diagnostic code, empty when it carried none.</param>
-    /// <param name="Message">The message, truncated to the rendered length.</param>
+    /// <param name="Message">The message as rendered: URLs removed, framework namespaces shortened, cut at the cap of its level.</param>
     /// <param name="Project">The project's file name without extension, empty when the diagnostic named none.</param>
     private sealed record Diagnostic(
         string File,

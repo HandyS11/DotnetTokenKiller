@@ -21,6 +21,7 @@ public static class SavingsScenarios
     public static ImmutableArray<SavingsScenario> All { get; } =
     [
         new("build/errors", "dotnet_build_errors.txt", FilterKeys.Build, 1),
+        new("build/long-messages", "dotnet_build_long_messages.txt", FilterKeys.Build, 1),
         new("build/multitarget-errors", "dotnet_build_multitarget_errors.txt", FilterKeys.Build, 1),
         new("build/success", "dotnet_build_success.txt", FilterKeys.Build, 0),
         new("build/warnings", "dotnet_build_warnings.txt", FilterKeys.Build, 0),

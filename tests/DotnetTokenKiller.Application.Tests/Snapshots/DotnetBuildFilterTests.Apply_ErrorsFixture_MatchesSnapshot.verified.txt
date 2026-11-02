@@ -1,7 +1,6 @@
-src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 errors)
+﻿src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 errors)
   (10,5) CS1002: ; expected
   (12,18) CS0103: The name 'undeclared' does not exist in the current context
-src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs (1 error)
-  (8,10) CS1002: ; expected
+src/DotnetTokenKiller.Application/Helpers/AnsiStrip.cs(8,10) CS1002: ; expected
 1 warning suppressed (use --vv to see)
 ✗ dotnet build failed (exit 1): 3 errors, 1 warning (2 projects, 1.89s)

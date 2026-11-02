@@ -42,8 +42,7 @@ public class DotnetPublishFilterTests
         var result = _sut.Apply(fixture, exitCode: 1);
 
         result.Should().Be(
-            "samples/SampleApp.Broken/BrokenClass.cs (1 error)\n"
-            + "  (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'\n"
+            "samples/SampleApp.Broken/BrokenClass.cs(5,33) CS0029: Cannot implicitly convert type 'string' to 'int'\n"
             + "✗ dotnet publish failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 

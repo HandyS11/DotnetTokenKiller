@@ -119,7 +119,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "App.cs (1 warning)\n  (3,9) CS0219: unused\n\u2713 dotnet build: 0 errors, 1 warning (1 project, 2.00s)\n");
+            "App.cs(3,9) CS0219: unused\n\u2713 dotnet build: 0 errors, 1 warning (1 project, 2.00s)\n");
     }
 
     [Fact]
@@ -281,7 +281,8 @@ public class DotnetBuildFilterTests
     public void Apply_ErrorsAndWarnings_ShareOneLayoutGroupedByFile()
     {
         // Warnings no longer group by code with "File:line — msg": both levels read
-        // "{file} ({n} …)" and "  ({line},{col}) {CODE}: {msg}", so the column is not dropped.
+        // "{file} ({n} …)" and "  ({line},{col}) {CODE}: {msg}", so the column is not dropped. A file that
+        // comes to one line has no heading: B.cs is led by its own name.
         const string warnings = """
                                 /path/A.cs(3,7): warning CS0219: unused one [P.csproj]
                                 /path/A.cs(9,2): warning CS0168: unused two [P.csproj]
@@ -298,11 +299,11 @@ public class DotnetBuildFilterTests
 
         warningBody.Should().Be(
             "A.cs (2 warnings)\n  (3,7) CS0219: unused one\n  (9,2) CS0168: unused two\n"
-            + "B.cs (1 warning)\n  (1,1) CS0219: unused three\n"
+            + "B.cs(1,1) CS0219: unused three\n"
             + "✓ dotnet build: 0 errors, 3 warnings (1 project)\n");
         errorBody.Should().Be(
             "A.cs (2 errors)\n  (3,7) CS0219: unused one\n  (9,2) CS0168: unused two\n"
-            + "B.cs (1 error)\n  (1,1) CS0219: unused three\n"
+            + "B.cs(1,1) CS0219: unused three\n"
             + "✗ dotnet build failed (exit 1): 3 errors, 0 warnings (1 project)\n");
     }
 
@@ -315,8 +316,7 @@ public class DotnetBuildFilterTests
             "src/DotnetTokenKiller.Application/Helpers/TextHelpers.cs (2 warnings)\n"
             + "  (10,18) CS0219: The variable 'unused' is assigned but its value is never used\n"
             + "  (15,22) CS0219: The variable 'alsoUnused' is assigned but its value is never used\n"
-            + "src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs (1 warning)\n"
-            + "  (5,10) CS0169: The field '_unused' is never used\n"
+            + "src/DotnetTokenKiller.Domain/Filters/IOutputFilter.cs(5,10) CS0169: The field '_unused' is never used\n"
             + "✓ dotnet build: 0 errors, 3 warnings (2 projects, 2.67s)\n");
     }
 
@@ -363,7 +363,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "A.cs (2 errors)\n  (1,1) CS0001: one\n  (2,1) CS0001: two\nB.cs (1 error)\n  (3,1) CS0002: three\n"
+            "A.cs (2 errors)\n  (1,1) CS0001: one\n  (2,1) CS0001: two\nB.cs(3,1) CS0002: three\n"
             + "Top codes: CS0001 (2x), CS0002 (1x)\n"
             + "✗ dotnet build failed (exit 1): 6 errors (3 shown), 0 warnings (1 project)\n");
     }
@@ -447,11 +447,11 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
-        // Exact: a tool-level diagnostic has no file, line or column, so it groups under "(no file)"
-        // and renders without a position. Emitting the empty slots produced a nameless heading and a
-        // "(,)" stub that read like a location the filter had lost.
+        // Exact: a tool-level diagnostic has no file, line or column, so "(no file)" stands where the
+        // location would, on the one line it comes to, and no position follows. Emitting the empty slots
+        // produced a nameless heading and a "(,)" stub that read like a location the filter had lost.
         result.Should().Be(
-            "(no file) (1 error)\n  MSB1001: Unknown switch.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
+            "(no file) MSB1001: Unknown switch.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -470,7 +470,7 @@ public class DotnetBuildFilterTests
 
         // Exact: proves the unmatched line contributes nothing and the duplicate is dropped.
         result.Should().Be(
-            "(no file) (1 error)\n  MSB1001: Unknown switch.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
+            "(no file) MSB1001: Unknown switch.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -481,7 +481,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("File.cs (1 warning)\n  (1,1) CS0001: a warning message\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
+        result.Should().Be("File.cs(1,1) CS0001: a warning message\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -494,7 +494,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "File.cs (1 error)\n  (1,1) CS0001: error message\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
+            "File.cs(1,1) CS0001: error message\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -532,7 +532,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "File.cs (1 error)\n  (1,1) CS0001: error message\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
+            "File.cs(1,1) CS0001: error message\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
     }
 
     [Fact]
@@ -552,7 +552,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "File.cs (1 error)\n  (1,1) CS0001: error msg\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
+            "File.cs(1,1) CS0001: error msg\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -563,7 +563,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "Only.cs (1 error)\n  (7,3) CS1002: ; expected\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
+            "Only.cs(7,3) CS1002: ; expected\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -577,7 +577,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "A.cs (1 error)\n  (1,1) CS0001: err1\nB.cs (1 error)\n  (2,1) CS0002: err2\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
+            "A.cs(1,1) CS0001: err1\nB.cs(2,1) CS0002: err2\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -715,7 +715,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "File.cs (1 error)\n  (1,1) CS0001: same error\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
+            "File.cs(1,1) CS0001: same error\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -727,7 +727,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "(no file) (1 error)\n  MSB1003: Specify either a project or solution file.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
+            "(no file) MSB1003: Specify either a project or solution file.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -750,7 +750,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("File.cs (1 warning)\n  (1,1) CS0168: unused var\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
+        result.Should().Be("File.cs(1,1) CS0168: unused var\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -762,7 +762,7 @@ public class DotnetBuildFilterTests
 
         result.Should().NotContain("---");
         result.Should().Be(
-            "File.cs (1 error)\n  (1,1) CS0001: msg\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
+            "File.cs(1,1) CS0001: msg\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -775,7 +775,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
 
-        result.Should().Be("(no file) (1 warning)\n  MSB4011: This is a warning.\n\u2713 dotnet build: 0 errors, 1 warning\n");
+        result.Should().Be("(no file) MSB4011: This is a warning.\n\u2713 dotnet build: 0 errors, 1 warning\n");
     }
 
     [Fact]
@@ -789,7 +789,7 @@ public class DotnetBuildFilterTests
 
         // Verify the grouped-by-code format includes file:line and em-dash separator
         result.Should().Be(
-            "Foo.cs (1 warning)\n  (42,7) CS0168: The variable 'x' is declared but never used\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
+            "Foo.cs(42,7) CS0168: The variable 'x' is declared but never used\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -800,7 +800,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("File.cs (1 warning)\n  (1,1) CS0168: unused\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
+        result.Should().Be("File.cs(1,1) CS0168: unused\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -812,7 +812,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "a.cs (1 error)\n  (1,1) CS001: e\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
+            "a.cs(1,1) CS001: e\n1 warning suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -891,7 +891,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "A.cs (1 warning)\n  (1,1) CS0168: unused var\nB.cs (1 warning)\n  (2,1) CS0219: unused value\n\u2713 dotnet build: 0 errors, 2 warnings (1 project)\n");
+            "A.cs(1,1) CS0168: unused var\nB.cs(2,1) CS0219: unused value\n\u2713 dotnet build: 0 errors, 2 warnings (1 project)\n");
     }
 
     [Fact]
@@ -903,7 +903,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
 
-        result.Should().Be("A.cs (1 warning)\n  (1,1) CS0168: unused\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
+        result.Should().Be("A.cs(1,1) CS0168: unused\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -916,7 +916,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "(no file) (1 error)\n  MSB1001: Something went wrong.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
+            "(no file) MSB1001: Something went wrong.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -929,7 +929,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "(no file) (1 error)\n  MSB3021: Unable to copy file.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
+            "(no file) MSB3021: Unable to copy file.\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
     }
 
     [Fact]
@@ -970,7 +970,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "App.cs (1 warning)\n  (3,9) CS0219: The variable 'x' is assigned but its value is never used\n✗ dotnet build failed (exit 1): 0 errors, 1 warning (1 project)\n");
+            "App.cs(3,9) CS0219: The variable 'x' is assigned but its value is never used\n✗ dotnet build failed (exit 1): 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -983,7 +983,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/repo").Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "App.cs (1 warning)\n  (3,9) CS0219: The variable 'x' is assigned but its value is never used\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
+            "App.cs(3,9) CS0219: The variable 'x' is assigned but its value is never used\n\u2713 dotnet build: 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -1040,7 +1040,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("A.cs (1 error)\n  (1,1) CS0001: msg\nB.cs (1 error)\n  (1,1) CS0001: msg\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
+        result.Should().Be("A.cs(1,1) CS0001: msg\nB.cs(1,1) CS0001: msg\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -1054,7 +1054,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("A.cs (2 errors)\n  (1,1) CS0001: msg\n  (2,1) CS0001: msg\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
+        result.Should().Be("A.cs(1,1) (2,1) CS0001 ×2: msg\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -1068,7 +1068,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("A.cs (2 errors)\n  (1,1) CS0001: msg\n  (1,2) CS0001: msg\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
+        result.Should().Be("A.cs(1,1) (1,2) CS0001 ×2: msg\n\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -1098,7 +1098,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
-        result.Should().Be("A.cs (1 error)\n  (1,1) CS0001: err\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
+        result.Should().Be("A.cs(1,1) CS0001: err\n2 warnings suppressed (use --vv to see)\n\u2717 dotnet build failed (exit 1): 1 error, 2 warnings (1 project)\n");
     }
 
     [Fact]
@@ -1215,7 +1215,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
         result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project)\n");
-        result.Should().Contain("Bad.cs (1 error)");
+        result.Should().Contain("Bad.cs(1,52) CS0029: Cannot implicitly convert type 'string' to 'int'\n");
     }
 
     [Fact]
@@ -1236,7 +1236,7 @@ public class DotnetBuildFilterTests
 
         result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors, 0 warnings (2 projects)\n");
         result.Should().NotContain("shown");
-        result.Should().Contain("GlobalUsings.cs (2 errors)");
+        result.Should().Contain("GlobalUsings.cs(1,1) CS0246 ×2: ");
     }
 
     [Fact]
@@ -1255,7 +1255,7 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
         result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project)\n");
-        result.Should().Contain("Bad.cs (1 error)");
+        result.Should().Contain("Bad.cs(1,52) CS0029: Cannot implicitly convert type 'string' to 'int'\n");
     }
 
     [Fact]
@@ -1316,7 +1316,7 @@ public class DotnetBuildFilterTests
         // Keyed on the raw message these two are distinct and both survive, and truncation then
         // renders them as byte-identical lines: the reader sees the same error twice, and the
         // "(N shown)" annotation claims both were distinct entries worth showing.
-        var shared = new string('X', 120);
+        var shared = new string('X', 400);
         var input = $"""
                      /path/A.cs(1,1): error CS0001: {shared}AAA [P.csproj]
                      /path/A.cs(1,1): error CS0001: {shared}BBB [P.csproj]
@@ -1327,7 +1327,378 @@ public class DotnetBuildFilterTests
         var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
 
         result.Should().Be(
-            $"A.cs (1 error)\n  (1,1) CS0001: {shared}...\n\u2717 dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project)\n");
+            $"A.cs(1,1) CS0001: {shared}...\n\u2717 dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public Task Apply_LongMessagesFixture_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_build_long_messages.txt");
+        var result = _sut.Apply(fixture, exitCode: 1);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_LongMessagesFixture_PrintsTheRepeatedMessageOnceWithItsFullText()
+    {
+        // Three calls pass the same wrong argument: one message, three positions. The compiler's text is
+        // 190+ characters long, and the part after "to" names the type that was expected, so cutting it at
+        // 120 characters hid the half of the error that says what to change.
+        var result = _sut.Apply(LoadFixture("dotnet_build_long_messages.txt"), exitCode: 1);
+
+        result.Should().Contain(
+            "  (27,15) (28,15) (29,15) CS1503 ×3: Argument 1: cannot convert from "
+            + "'Dictionary<string, List<KeyValuePair<string, IReadOnlyList<long>>>>' to "
+            + "'Dictionary<string, List<KeyValuePair<string, IReadOnlyList<int>>>>'\n");
+        result.Split("CS1503").Length.Should().Be(2, "the message is printed once");
+    }
+
+    [Fact]
+    public void Apply_LongMessagesFixture_KeepsBothOverloadsOfAnAmbiguousCall()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_build_long_messages.txt"), exitCode: 1);
+
+        result.Should().Contain(
+            "CS0121: The call is ambiguous between the following methods or properties: "
+            + "'LongMessages.Program.Handle(IEnumerable<string>, ICollection<string>)' and "
+            + "'LongMessages.Program.Handle(ICollection<string>, IEnumerable<string>)'\n");
+    }
+
+    [Fact]
+    public void Apply_LongMessagesFixture_PrintsNoUrl()
+    {
+        var fixture = LoadFixture("dotnet_build_long_messages.txt");
+
+        _sut.Apply(fixture, exitCode: 1).Should().NotContain("http://").And.NotContain("https://");
+
+        // The warnings are left out of a failed build's report, so read them alone as a passing build's.
+        var warningLines = fixture.Split('\n').Where(line => line.Contains(": warning ", StringComparison.Ordinal));
+        var result = _sut.Apply(string.Join('\n', warningLines), exitCode: 0);
+
+        result.Should().NotContain("http://").And.NotContain("https://");
+        result.Should().Be(
+            "Program.cs (2 warnings)\n"
+            + "  (31,28) SYSLIB0014: 'WebClient.WebClient()' is obsolete: 'WebRequest, HttpWebRequest, "
+            + "ServicePoint, and WebClient are obsolete. Use HttpClient instead.'\n"
+            + "  (33,23) SYSLIB0014: 'WebRequest.Create(string)' is obsolete: 'WebRequest, HttpWebRequest, "
+            + "ServicePoint, and WebClient are obsolete. Use HttpClient instead.'\n"
+            + "\u2713 dotnet build: 0 errors, 2 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_RepeatedMessageInOneFileAmongOthers_GroupsItUnderTheFileHeading()
+    {
+        // The heading counts the diagnostics, not the lines: five errors, three lines.
+        const string input = """
+                             /path/A.cs(3,1): error CS0103: The name 'x' does not exist [P.csproj]
+                             /path/A.cs(7,1): error CS0103: The name 'x' does not exist [P.csproj]
+                             /path/A.cs(9,1): error CS0103: The name 'x' does not exist [P.csproj]
+                             /path/A.cs(5,1): error CS0103: The name 'y' does not exist [P.csproj]
+                             /path/A.cs(6,1): error CS1002: ; expected [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            "A.cs (5 errors)\n"
+            + "  (3,1) (7,1) (9,1) CS0103 ×3: The name 'x' does not exist\n"
+            + "  (5,1) CS0103: The name 'y' does not exist\n"
+            + "  (6,1) CS1002: ; expected\n"
+            + "\u2717 dotnet build failed (exit 1): 5 errors, 0 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_FileWhoseDiagnosticsAreOneGroup_PrintsOneLineWithNoHeading()
+    {
+        const string errors = """
+                              /path/A.cs(3,7): error CS0219: unused [P.csproj]
+                              /path/A.cs(9,2): error CS0219: unused [P.csproj]
+                              /path/A.cs(12,4): error CS0219: unused [P.csproj]
+                              """;
+        const string warnings = """
+                                /path/A.cs(3,7): warning CS0219: unused [P.csproj]
+                                /path/A.cs(9,2): warning CS0219: unused [P.csproj]
+                                """;
+
+        var errorBody = new DotnetBuildFilter("/path").Apply(errors, exitCode: 1);
+        var warningBody = new DotnetBuildFilter("/path").Apply(warnings, exitCode: 0);
+
+        errorBody.Should().Be(
+            "A.cs(3,7) (9,2) (12,4) CS0219 ×3: unused\n"
+            + "\u2717 dotnet build failed (exit 1): 3 errors, 0 warnings (1 project)\n");
+        warningBody.Should().Be(
+            "A.cs(3,7) (9,2) CS0219 ×2: unused\n\u2713 dotnet build: 0 errors, 2 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_FileWithOneDiagnostic_PrintsOneLineWithNoHeading()
+    {
+        // Errors and warnings alike, and a file beside other files that do keep their headings.
+        const string input = """
+                             /path/A.cs(3,7): error CS0001: first [P.csproj]
+                             /path/B.cs(1,1): error CS0002: second [P.csproj]
+                             /path/B.cs(2,1): error CS0003: third [P.csproj]
+                             /path/C.cs(4,4): warning CS0168: unused [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            "B.cs (2 errors)\n  (1,1) CS0002: second\n  (2,1) CS0003: third\n"
+            + "A.cs(3,7) CS0001: first\n"
+            + "1 warning suppressed (use --vv to see)\n"
+            + "\u2717 dotnet build failed (exit 1): 3 errors, 1 warning (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_DiagnosticsWithNoFile_KeepTheNoFileHeadingWhenThereAreSeveralLines()
+    {
+        const string input = """
+                             MSBUILD : error MSB1001: First.
+                             MSBUILD : error MSB1002: Second.
+                             """;
+
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 1);
+
+        result.Should().StartWith("(no file) (2 errors)\n  MSB1001: First.\n  MSB1002: Second.\n");
+    }
+
+    [Fact]
+    public void Apply_SingleCodelessDiagnostic_PrintsItsMessageAfterTheLocation()
+    {
+        const string input = "/path/A.cs(1,2): error : could not copy [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs(1,2) could not copy\n");
+    }
+
+    [Fact]
+    public void Apply_RepeatedCodelessMessage_CountsItWhereTheCodeWouldBe()
+    {
+        const string input = """
+                             /path/A.cs(1,2): error : could not copy [P.csproj]
+                             /path/A.cs(5,6): error : could not copy [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs(1,2) (5,6) ×2: could not copy\n");
+    }
+
+    [Fact]
+    public void Apply_SameMessageUnderDifferentCodes_IsNotGrouped()
+    {
+        const string input = """
+                             /path/A.cs(1,1): error CS0001: msg [P.csproj]
+                             /path/A.cs(2,1): error CS0002: msg [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs (2 errors)\n  (1,1) CS0001: msg\n  (2,1) CS0002: msg\n");
+    }
+
+    [Fact]
+    public void Apply_SameCodeWithDifferentMessages_IsNotGrouped()
+    {
+        const string input = """
+                             /path/A.cs(1,1): error CS0103: The name 'x' does not exist [P.csproj]
+                             /path/A.cs(2,1): error CS0103: The name 'y' does not exist [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith(
+            "A.cs (2 errors)\n  (1,1) CS0103: The name 'x' does not exist\n  (2,1) CS0103: The name 'y' does not exist\n");
+    }
+
+    [Fact]
+    public void Apply_SameMessageInTwoFiles_IsGroupedWithinEachFileOnly()
+    {
+        const string input = """
+                             /path/A.cs(1,1): error CS0001: msg [P.csproj]
+                             /path/A.cs(2,1): error CS0001: msg [P.csproj]
+                             /path/B.cs(3,1): error CS0001: msg [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs(1,1) (2,1) CS0001 ×2: msg\nB.cs(3,1) CS0001: msg\n");
+    }
+
+    [Fact]
+    public void Apply_SameDiagnosticFromTwoProjects_PrintsItsPositionOnce()
+    {
+        // Two projects report one linked file's error at one position: two errors, one place to fix.
+        const string input = """
+                             /p/Shared.cs(1,1): error CS0246: The type 'Foo' could not be found [/p/A.csproj]
+                             /p/Shared.cs(1,1): error CS0246: The type 'Foo' could not be found [/p/B.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            "Shared.cs(1,1) CS0246 ×2: The type 'Foo' could not be found\n"
+            + "\u2717 dotnet build failed (exit 1): 2 errors, 0 warnings (2 projects)\n");
+    }
+
+    [Fact]
+    public void Apply_GroupedLines_KeepTheOrderTheyFirstAppeared()
+    {
+        const string input = """
+                             /path/A.cs(1,1): error CS0002: beta [P.csproj]
+                             /path/A.cs(2,1): error CS0001: alpha [P.csproj]
+                             /path/A.cs(3,1): error CS0002: beta [P.csproj]
+                             """;
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs (3 errors)\n  (1,1) (3,1) CS0002 ×2: beta\n  (2,1) CS0001: alpha\n");
+    }
+
+    [Fact]
+    public void Apply_ErrorMessage_IsCutAtFourHundredCharacters()
+    {
+        var longest = new string('E', 400);
+        var input = $"/path/A.cs(1,1): error CS0001: {longest}tail [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith($"A.cs(1,1) CS0001: {longest}...\n");
+    }
+
+    [Fact]
+    public void Apply_ErrorMessageOfFourHundredCharacters_IsKeptWhole()
+    {
+        var message = new string('E', 400);
+        var input = $"/path/A.cs(1,1): error CS0001: {message} [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith($"A.cs(1,1) CS0001: {message}\n");
+    }
+
+    [Fact]
+    public void Apply_WarningMessage_IsCutAtOneHundredSixtyCharacters()
+    {
+        var kept = new string('W', 160);
+        var input = $"/path/A.cs(1,1): warning CS0168: {kept}tail [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
+
+        result.Should().StartWith($"A.cs(1,1) CS0168: {kept}...\n");
+    }
+
+    [Fact]
+    public void Apply_UrlsAreStrippedBeforeTheCap_SoTheyCostNoneOfIt()
+    {
+        // 150 characters of text and a 120-character link: 270 as the compiler wrote it, 150 once stripped.
+        var text = new string('W', 150);
+        var url = $"https://example.com/{new string('p', 100)}";
+        var input = $"/path/A.cs(1,1): warning CS0168: {text} {url} [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
+
+        result.Should().StartWith($"A.cs(1,1) CS0168: {text}\n");
+    }
+
+    [Theory]
+    [InlineData("Known high severity vulnerability, https://github.com/advisories/GHSA-xxxx",
+        "Known high severity vulnerability")]
+    [InlineData("Obsolete. (https://aka.ms/dotnet-warnings/SYSLIB0014)", "Obsolete.")]
+    [InlineData("Obsolete. [https://aka.ms/dotnet-warnings/SYSLIB0014]", "Obsolete.")]
+    [InlineData("Out of support. Refer to http://aka.ms/support for details.", "Out of support. Refer to for details.")]
+    [InlineData("Out of support (see https://aka.ms/support) soon.", "Out of support (see) soon.")]
+    [InlineData("Two links https://a.example/x and HTTPS://b.example/y end.", "Two links and end.")]
+    [InlineData("Keep (this) and [that].", "Keep (this) and [that].")]
+    public void Apply_UrlInMessage_IsRemovedWithTheBracketsItEmptied(string message, string expected)
+    {
+        var input = $"/path/A.cs(1,1): warning CS0168: {message} [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
+
+        result.Should().StartWith($"A.cs(1,1) CS0168: {expected}\n");
+    }
+
+    [Fact]
+    public void Apply_UrlInASimpleDiagnostic_IsRemoved()
+    {
+        const string input = "MSBUILD : warning NETSDK1138: Out of support. Please refer to https://aka.ms/dotnet-core-support.";
+
+        var result = new DotnetBuildFilter().Apply(input, exitCode: 0);
+
+        result.Should().StartWith("(no file) NETSDK1138: Out of support. Please refer to\n");
+    }
+
+    [Theory]
+    [InlineData("'System.Collections.Generic.IEnumerable<int>'", "'IEnumerable<int>'")]
+    [InlineData("'Microsoft.Extensions.Logging.ILogger'", "'ILogger'")]
+    [InlineData("'MyApp.Models.Order'", "'MyApp.Models.Order'")]
+    [InlineData("'System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>>'",
+        "'Dictionary<string, List<int>>'")]
+    [InlineData("'System.Collections.Generic.List<int>.Enumerator'", "'List<int>.Enumerator'")]
+    [InlineData("'System.Int32[]'", "'Int32[]'")]
+    [InlineData("'MyApp.System.Thing'", "'MyApp.System.Thing'")]
+    [InlineData("'Holder.Microsoft.Thing'", "'Holder.Microsoft.Thing'")]
+    [InlineData("'SystemClock.Now'", "'SystemClock.Now'")]
+    public void Apply_QuotedFrameworkNamespace_IsDropped(string span, string expected)
+    {
+        var input = $"/path/A.cs(1,1): error CS1503: Cannot convert {span} to 'string' [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith($"A.cs(1,1) CS1503: Cannot convert {expected} to 'string'\n");
+    }
+
+    [Fact]
+    public void Apply_FrameworkNamespaceOutsideQuotes_IsKept()
+    {
+        const string input = "/path/A.cs(1,1): error CS0001: Use System.Collections.Generic.List<int> or 'string' [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith("A.cs(1,1) CS0001: Use System.Collections.Generic.List<int> or 'string'\n");
+    }
+
+    [Fact]
+    public void Apply_NamespaceNamedInAQuote_IsKept()
+    {
+        // 'System.Collections' here is a namespace, not a type in one: dropping "System." would name
+        // another namespace.
+        const string input =
+            "/path/A.cs(1,1): error CS0234: The type or namespace name 'Foo' does not exist in the namespace 'System.Collections' (are you missing an assembly reference?) [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith(
+            "A.cs(1,1) CS0234: The type or namespace name 'Foo' does not exist in the namespace 'System.Collections' (are you missing an assembly reference?)\n");
+    }
+
+    [Fact]
+    public void Apply_FrameworkMemberInASignature_KeepsItsDeclaringType()
+    {
+        // 'System.Linq.Enumerable.Select<…>(…)': Enumerable is the type that declares Select, not a namespace.
+        const string input =
+            "/path/A.cs(1,1): error CS0121: The call is ambiguous between 'System.Linq.Enumerable.Select<int, int>(System.Collections.Generic.IEnumerable<int>, System.Func<int, int>)' and 'MyApp.Q.Select<int, int>(System.Collections.Generic.IEnumerable<int>, System.Func<int, int>)' [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 1);
+
+        result.Should().StartWith(
+            "A.cs(1,1) CS0121: The call is ambiguous between 'Enumerable.Select<int, int>(IEnumerable<int>, Func<int, int>)' and 'MyApp.Q.Select<int, int>(IEnumerable<int>, Func<int, int>)'\n");
+    }
+
+    [Fact]
+    public void Apply_ShortenedMessages_AreWhatTheCapMeasures()
+    {
+        // Eight spans of 45 characters are 367 as the compiler wrote them and 151 once shortened, which fits.
+        const string span = "'System.Collections.Generic.IEnumerable<int>'";
+        var message = string.Join(" ", Enumerable.Repeat(span, 8));
+        var input = $"/path/A.cs(1,1): warning CS0168: {message} [P.csproj]";
+
+        var result = new DotnetBuildFilter("/path").Apply(input, exitCode: 0);
+
+        result.Should().StartWith($"A.cs(1,1) CS0168: {string.Join(" ", Enumerable.Repeat("'IEnumerable<int>'", 8))}\n");
     }
 
     private static string LoadFixture(string resourceName)

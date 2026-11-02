@@ -58,10 +58,11 @@ public sealed class LogCorpusGeneratorTests
     }
 
     /// <summary>
-    /// The share of its raw log a filter's output must stay under. Half, except for <c>build</c>: it names
-    /// each file once and spends a heading on it, and the generator numbers its files at random, so
-    /// nearly every generated warning sits in a file of its own and pays for a heading of its own. A real
-    /// log lets many diagnostics share one.
+    /// The share of its raw log a filter's output must stay under. Half, except for <c>build</c>: the generator
+    /// prints each warning once, as one line that is mostly the diagnostic itself, and numbers its files at
+    /// random, so nearly every warning sits in a file of its own and reads as one line there. All the filter
+    /// can drop is the root, the word "warning" and the project suffix, which leaves it near 52%. A real log
+    /// prints every diagnostic twice and lets many share a file, a code and a message.
     /// </summary>
     /// <param name="filterKey">The filter whose generated log is judged.</param>
     private static double MaxFilteredShare(string filterKey) => filterKey == FilterKeys.Build ? 2.0 / 3.0 : 0.5;
