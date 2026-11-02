@@ -1011,13 +1011,29 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_AllSkipped_ReportsSkippedNotZeroFound()
+    public void Apply_SkippedOnlyFixture_ReportsSkippedCount()
     {
-        // A run where every test is skipped is not "0 tests found" — tests existed, none executed.
-        const string raw =
-            "Passed!  - Failed:     0, Passed:     0, Skipped:     5, Total:     5, Duration: 10 ms - T.dll";
-        var result = new DotnetTestFilter().Apply(raw, exitCode: 0);
-        result.Should().Contain("5 skipped").And.NotContain("0 tests found");
+        // Real VSTest output of an xUnit project whose tests are all [Fact(Skip = …)]. VSTest then
+        // prints "Skipped!" where it would print "Passed!": tests existed, none executed, so this is
+        // neither "0 tests found" nor silence. The elapsed text is not asserted (it has its own tests).
+        var fixture = LoadFixture("dotnet_test_skipped_only.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 0 passed, 2 skipped \(1 project, [^)]+\)\n$")
+            .And.NotContain("0 tests found");
+    }
+
+    [Fact]
+    public void Apply_MultiProjectWithSkippedOnlyProject_CountsBothProjects()
+    {
+        // One project passes, the other skips everything: the skipped-only project still counts as a
+        // project, and the passed total comes from the other one.
+        var fixture = LoadFixture("dotnet_test_multiproject_skipped.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed, 2 skipped \(2 projects, [^)]+\)\n$");
     }
 
     // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects under

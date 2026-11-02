@@ -352,13 +352,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return FormatFailures(state, elapsed);
         }
 
-        // Skipped-only run: tests were discovered but none executed. This is a success, but it is
-        // not "0 tests found" — surface the skipped count so the distinction isn't lost.
-        if (exitCode == 0 && state is { TotalPassed: 0, TotalSkipped: > 0 })
-        {
-            return $"✓ dotnet test: {state.TotalSkipped} skipped, 0 executed\n";
-        }
-
         if (FormatZeroTests(state, exitCode) is { } zeroTests)
         {
             return zeroTests;
@@ -378,6 +371,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return string.Empty;
         }
 
+        // A skipped-only run (VSTest's "Skipped!" summary) lands here too: "0 passed, N skipped".
         var skippedSuffix = state.TotalSkipped > 0
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
@@ -393,10 +387,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // A "nothing ran" verdict requires that no assembly produced evidence of a test.
         // ZeroTestsFound is per-assembly: in a multi-project run, one assembly matching nothing must
         // never override another's real results. Stated in full — rather than relying on the earlier
-        // skipped-only and failure branches — so the guard is self-contained and survives a future
-        // reordering of those branches. TotalSkipped: 0 is currently shadowed by FormatOutput's
-        // skipped-only branch (it always returns first when TotalSkipped > 0), so that conjunct is defensive,
-        // not load-bearing.
+        // failure branch — so the guard is self-contained and survives a future reordering of the branches.
+        // TotalSkipped: 0 is what keeps a skipped-only run (tests found, none executed) from being reported
+        // as "0 tests found": its skips are evidence, and FormatOutput renders it as "0 passed, N skipped".
         var noTestEvidence = state is { TotalPassed: 0, TotalFailed: 0, TotalSkipped: 0 }
                              && state.Failures.Count == 0;
         // MTP exits 8 when zero tests ran, so exit 8 together with its run-level "Zero tests ran"
@@ -486,9 +479,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     }
 
     // Summary: "Passed! - Failed: 0, Passed: 17, Skipped: 0, Total: 17, Duration: 89 ms - File.dll"
+    // VSTest opens it with "Skipped!" when every test of the project was skipped.
     // Duration may be a single unit ("89 ms") or multi-part ("1 m 2 s", "1 h 3 m 4 s").
     [GeneratedRegex(
-        @"(?:Passed|Failed)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+ (?:ms|s|m|h)(?: [\d.]+ (?:ms|s|m|h))*)",
+        @"(?:Passed|Failed|Skipped)!\s+-\s+Failed:\s+(?<failed>\d+),\s+Passed:\s+(?<passed>\d+),\s+Skipped:\s+(?<skipped>\d+),\s+Total:\s+\d+,\s+Duration:\s+(?<duration>[\d.]+ (?:ms|s|m|h)(?: [\d.]+ (?:ms|s|m|h))*)",
         RegexOptions.IgnoreCase)]
     private static partial Regex SummaryPattern();
 

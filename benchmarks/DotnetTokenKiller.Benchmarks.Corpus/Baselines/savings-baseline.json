@@ -278,6 +278,28 @@
       "savingsPercent": 97.5
     },
     {
+      "id": "test/multiproject-skipped",
+      "fixture": "dotnet_test_multiproject_skipped.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 1220,
+      "rawTokens": 375,
+      "filteredTokens": 23,
+      "savedTokens": 352,
+      "savingsPercent": 93.9
+    },
+    {
+      "id": "test/skipped-only",
+      "fixture": "dotnet_test_skipped_only.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 771,
+      "rawTokens": 237,
+      "filteredTokens": 23,
+      "savedTokens": 214,
+      "savingsPercent": 90.3
+    },
+    {
       "id": "test/zero",
       "fixture": "dotnet_test_zero.txt",
       "filterKey": "test",
