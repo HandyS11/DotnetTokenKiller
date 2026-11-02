@@ -124,6 +124,22 @@ public class PassthroughIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_FilteredSubcommand_RunsAndIsRecordedAsAPassthrough()
+    {
+        // DTK_RAW=1 hands even a filtered subcommand to dotnet unfiltered: --help reaches the SDK (it shows
+        // dtk's own help otherwise), and the run is recorded like any other passthrough.
+        var (output, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync(
+            new Dictionary<string, string> { ["DTK_RAW"] = "1" }, "dotnet", "build", "--help");
+
+        exitCode.Should().Be(0);
+        output.Should().Contain(".NET Builder", "the SDK's own build help is printed, not dtk's");
+        var rows = await ReadCommandRowsAsync(dbPath);
+        rows.Should().ContainSingle();
+        rows[0].Command.Should().Be("build");
+        rows[0].Outcome.Should().Be("PassthroughUnmeasured");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Passthrough_UnmeasurableSubcommand_MatchesRawDotnetExitCode()
     {
         var (_, dtkExit) = await IntegrationTestHelper.RunDtkAsync("dotnet", "--version");

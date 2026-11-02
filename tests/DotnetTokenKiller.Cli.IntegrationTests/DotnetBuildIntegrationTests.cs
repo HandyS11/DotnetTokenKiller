@@ -74,6 +74,21 @@ public class DotnetBuildIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_BuildOfBrokenSample_PrintsRawCompilerLines()
+    {
+        // In this class rather than with the other passthrough tests: it builds a shared sample, which only the
+        // Integration.SampleApp collection does. DTK_RAW=1 asks for dotnet's own output, so the compiler's line
+        // arrives unshortened, and dtk's --show-log is dropped rather than forwarded to MSBuild, which rejects it.
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithDbAsync(
+            new Dictionary<string, string> { ["DTK_RAW"] = "1" }, "dotnet", "build", SampleAppBroken, "--show-log");
+
+        exitCode.Should().Be(1, "dotnet build's own exit code for a compile error");
+        output.Should().Contain("error CS");
+        output.Should().Contain(Path.Combine(SampleAppBroken, "BrokenClass.cs"));
+        output.Should().NotStartWith("dotnet build: 1 error", "the run is not filtered");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleAppBroken_Failure_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);

@@ -114,6 +114,70 @@ public sealed class DotnetCommandRewriterTests
     }
 
     [Theory]
+    [InlineData("rtk proxy dotnet test X")]
+    [InlineData("rtk.exe proxy dotnet build")]
+    [InlineData("rtk  proxy\tdotnet build")]
+    [InlineData("~/.cargo/bin/rtk proxy dotnet build")]
+    [InlineData("cd src && rtk proxy dotnet test")]
+    [InlineData("command dotnet test X")]
+    [InlineData("x=1 command dotnet build")]
+    [InlineData("DTK_RAW=1 dotnet test X")]
+    [InlineData("DTK_RAW=true dotnet build")]
+    [InlineData("\\dotnet test X")]
+    [InlineData("/usr/local/share/dotnet/dotnet test X")]
+    public void Rewrite_RawOutputRequest_IsReturnedUnchanged(string command)
+    {
+        // An agent asking for dotnet's own output: run through rtk proxy or the command builtin, behind a
+        // raw-enabling DTK_RAW assignment, or (as before) escaped or by path.
+        DotnetCommandRewriter.Rewrite(command).Should().BeSameAs(command);
+    }
+
+    [Theory]
+    [InlineData("DTK_RAW=0 dotnet test X", "DTK_RAW=0 dtk dotnet test X")]
+    [InlineData("DTK_RAW=false dotnet build", "DTK_RAW=false dtk dotnet build")]
+    [InlineData("DTK_RAW=FALSE dotnet build", "DTK_RAW=FALSE dtk dotnet build")]
+    [InlineData("DTK_RAW= dotnet build", "DTK_RAW= dtk dotnet build")]
+    [InlineData("DTK_RAW=\"0\" dotnet build", "DTK_RAW=\"0\" dtk dotnet build")]
+    [InlineData("DTK_RAW=$RAW dotnet build", "DTK_RAW=$RAW dtk dotnet build")]
+    [InlineData("DTK_RAW=1 x=1 dotnet build", "DTK_RAW=1 x=1 dtk dotnet build")]
+    [InlineData("XDTK_RAW=1 dotnet build", "XDTK_RAW=1 dtk dotnet build")]
+    [InlineData("rtk proxy ls && dotnet build", "rtk proxy ls && dtk dotnet build")]
+    [InlineData("rtk proxy dotnet build && dotnet test", "rtk proxy dotnet build && dtk dotnet test")]
+    [InlineData("command dotnet build; dotnet test", "command dotnet build; dtk dotnet test")]
+    [InlineData("proxy dotnet build", "proxy dtk dotnet build")]
+    [InlineData("rtk; proxy dotnet build", "rtk; proxy dtk dotnet build")]
+    [InlineData("myrtk proxy dotnet build", "myrtk proxy dtk dotnet build")]
+    [InlineData("env dotnet build", "env dtk dotnet build")]
+    [InlineData("exec dotnet build", "exec dtk dotnet build")]
+    [InlineData("sudo dotnet build", "sudo dtk dotnet build")]
+    [InlineData("time dotnet build", "time dtk dotnet build")]
+    public void Rewrite_NotARawOutputRequest_IsStillPrefixedWithDtk(string command, string expected)
+    {
+        // Only the dotnet that rtk proxy, command or a raw-enabling DTK_RAW runs directly is left alone; a
+        // DTK_RAW the rewriter cannot read for certain is left for dtk to honour at run time.
+        DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("rtk proxy dotnet test X")]
+    [InlineData("rtk.exe proxy dotnet build")]
+    [InlineData("command dotnet test X")]
+    [InlineData("DTK_RAW=1 dotnet test X")]
+    [InlineData("DTK_RAW=0 dotnet test X")]
+    [InlineData("rtk proxy ls && dotnet build")]
+    [InlineData("env dotnet build")]
+    [InlineData("sudo dotnet build")]
+    [InlineData("time dotnet build")]
+    [InlineData("\\dotnet test X")]
+    [InlineData("/usr/local/share/dotnet/dotnet test X")]
+    public void RawOutputCases_AreNeitherSimpleNorAutoApprovable(string command)
+    {
+        // Pinned before the raw-output bypass existed: honouring it must not change what is auto-approved.
+        DotnetCommandRewriter.IsSimpleCommand(command).Should().BeFalse();
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData("dotnet build", true)]
     [InlineData("dotnet test --filter \"A|B\"", true)]
     [InlineData("dotnet test --filter 'A&B'", true)]

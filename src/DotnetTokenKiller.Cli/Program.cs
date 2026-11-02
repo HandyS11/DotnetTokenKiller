@@ -3,6 +3,7 @@ using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Infrastructure;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -49,6 +50,15 @@ var cancellationToken = runCancellation?.Token ?? CancellationToken.None;
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
     return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..], runCancellation).ConfigureAwait(false);
+}
+
+// DTK_RAW=1 asks for dotnet's own output: a filtered subcommand is passed through as well, recorded like any
+// passthrough, without dtk's output options, which dotnet would reject.
+if (ArgumentPreprocessor.IsRawRequested(args, Environment.GetEnvironmentVariable(RawOutputSwitch.EnvironmentVariable)))
+{
+    return await PassthroughEntryPoint
+        .RunAsync(dotnetCmd, ArgumentPreprocessor.StripDtkOptions(args[1..]), runCancellation)
+        .ConfigureAwait(false);
 }
 
 // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are

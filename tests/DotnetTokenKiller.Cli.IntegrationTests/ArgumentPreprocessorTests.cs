@@ -307,6 +307,43 @@ public sealed class ArgumentPreprocessorTests
         ArgumentPreprocessor.IsVerbosityValue(token).Should().BeFalse();
     }
 
+    // ── Raw output (DTK_RAW) ─────────────────────────────────────────────────
+
+    [Fact]
+    public void IsRawRequested_RecognisesOneAndRejectsZero()
+    {
+        ArgumentPreprocessor.IsRawRequested(["dotnet", "build"], "1").Should().BeTrue();
+        ArgumentPreprocessor.IsRawRequested(["DOTNET", "test", "-v", "q"], "true").Should().BeTrue();
+        ArgumentPreprocessor.IsRawRequested(["dotnet", "build"], "yes").Should().BeTrue();
+
+        ArgumentPreprocessor.IsRawRequested(["dotnet", "build"], "0").Should().BeFalse();
+        ArgumentPreprocessor.IsRawRequested(["dotnet", "build"], "false").Should().BeFalse();
+        ArgumentPreprocessor.IsRawRequested(["dotnet", "build"], "FALSE").Should().BeFalse();
+        ArgumentPreprocessor.IsRawRequested(["dotnet", "build"], "").Should().BeFalse();
+        ArgumentPreprocessor.IsRawRequested(["dotnet", "build"], null).Should().BeFalse();
+        ArgumentPreprocessor.IsRawRequested(["gain"], "1").Should().BeFalse("only a wrapped dotnet run has raw output");
+        ArgumentPreprocessor.IsRawRequested([], "1").Should().BeFalse();
+    }
+
+    [Fact]
+    public void StripDtkOptions_RemovesDtkFlagsButKeepsUserSeparatorTail()
+    {
+        var result = ArgumentPreprocessor.StripDtkOptions(
+        [
+            "test", "--vv", "--show-log", "-q", "--quiet", "--verbose", "-v", "--filter", "X",
+            "-v", "q", "--help", "--", "-v", "--quiet"
+        ]);
+
+        // -v q is dotnet's verbosity and --help dotnet's own help; after the user's "--" nothing is dtk's.
+        result.Should().Equal("test", "--filter", "X", "-v", "q", "--help", "--", "-v", "--quiet");
+    }
+
+    [Fact]
+    public void StripDtkOptions_TrailingV_IsDtkVerbose()
+    {
+        ArgumentPreprocessor.StripDtkOptions(["build", "MyApp.slnx", "-v"]).Should().Equal("build", "MyApp.slnx");
+    }
+
     // ── Help routing ─────────────────────────────────────────────────────────
     // --help/-h must reach Spectre (dtk's own help), never be forwarded to dotnet.
 

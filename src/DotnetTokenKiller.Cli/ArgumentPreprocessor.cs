@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Domain;
+using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Cli;
 
@@ -6,9 +7,11 @@ namespace DotnetTokenKiller.Cli;
 /// Preprocesses CLI arguments before they reach the Spectre.Console command app.
 /// </summary>
 /// <remarks>
-/// Handles two cases:
+/// Handles three cases:
 /// <list type="bullet">
 ///   <item><description>Passthrough: <c>dotnet &lt;subcommand not handled by dtk&gt;</c> should bypass the app entirely.</description></item>
+///   <item><description>Raw output: under <c>DTK_RAW=1</c> any <c>dotnet</c> invocation bypasses it too, without
+///         dtk's own options.</description></item>
 ///   <item><description>Separator insertion: <c>dtk dotnet build &lt;args&gt;</c> needs <c>--</c> inserted so
 ///         Spectre forwards dotnet-specific args via <c>Remaining.Raw</c>.</description></item>
 /// </list>
@@ -18,7 +21,8 @@ internal static class ArgumentPreprocessor
     /// <summary>The <c>dotnet</c> driver command that dtk-handled invocations begin with.</summary>
     private const string DotnetCommand = "dotnet";
 
-    private static readonly HashSet<string> DtkOptions =
+    /// <summary>dtk's output options, which dotnet does not understand.</summary>
+    private static readonly HashSet<string> OutputOptions =
         new(StringComparer.Ordinal)
         {
             "-v",
@@ -26,7 +30,13 @@ internal static class ArgumentPreprocessor
             "--vv",
             "--show-log",
             "-q",
-            "--quiet",
+            "--quiet"
+        };
+
+    /// <summary>Every option Spectre must see before the inserted <c>--</c>: the output options and help.</summary>
+    private static readonly HashSet<string> DtkOptions =
+        new(OutputOptions, StringComparer.Ordinal)
+        {
             "-h",
             "--help"
         };
@@ -95,6 +105,46 @@ internal static class ArgumentPreprocessor
                string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
                (!DotnetSubcommands.TryMatch(args[1..], out _) ||
                 PassthroughSubcommands.IsInteractiveFilteredRun(args[1..]));
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when a <c>dotnet</c> invocation asks for raw output through
+    /// <see cref="RawOutputSwitch.EnvironmentVariable"/>, so that even a filtered subcommand is passed through.
+    /// </summary>
+    /// <param name="args">The raw CLI arguments.</param>
+    /// <param name="dtkRawValue">The variable's value, or <see langword="null"/> when it is unset.</param>
+    internal static bool IsRawRequested(string[] args, string? dtkRawValue)
+    {
+        return args.Length >= 1 &&
+               string.Equals(args[0], DotnetCommand, StringComparison.OrdinalIgnoreCase) &&
+               RawOutputSwitch.IsOnFor(dtkRawValue);
+    }
+
+    /// <summary>
+    /// Removes dtk's output options (<c>-v</c>, <c>--verbose</c>, <c>--vv</c>, <c>--show-log</c>, <c>-q</c>,
+    /// <c>--quiet</c>) from arguments a raw run passes to dotnet, which would reject them. A <c>-v</c> followed by a
+    /// dotnet verbosity level is dotnet's own and stays, as does help, which dotnet then prints; the user's own
+    /// <c>--</c> and everything after it are forwarded verbatim.
+    /// </summary>
+    /// <param name="dotnetArgs">The arguments for dotnet, starting at the subcommand.</param>
+    internal static string[] StripDtkOptions(string[] dotnetArgs)
+    {
+        var kept = new List<string>(dotnetArgs.Length);
+        for (var i = 0; i < dotnetArgs.Length; i++)
+        {
+            if (string.Equals(dotnetArgs[i], "--", StringComparison.Ordinal))
+            {
+                kept.AddRange(dotnetArgs[i..]);
+                break;
+            }
+
+            if (!OutputOptions.Contains(dotnetArgs[i]) || IsDotnetVerbosityFlag(dotnetArgs, i))
+            {
+                kept.Add(dotnetArgs[i]);
+            }
+        }
+
+        return [.. kept];
     }
 
     /// <summary>
