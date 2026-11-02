@@ -1238,7 +1238,8 @@ public class DotnetTestFilterTests
     {
         var fixture = LoadFixture("dotnet_test_mtp_all_pass.txt");
 
-        _sut.Apply(fixture, exitCode: 0).Should().Be("✓ dotnet test: 3 passed, 1 skipped (1 project, 0.32s)\n");
+        _sut.Apply(fixture, exitCode: 0).Should().MatchRegex(
+            @"^✓ dotnet test: 3 passed, 1 skipped \(1 project, [^)]+\) · 3 build warnings \(MSTEST0032×3\)\n$");
     }
 
     [Fact]
@@ -1561,8 +1562,8 @@ public class DotnetTestFilterTests
         result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
         result.Should().Contain("Top codes:");
         result.Should().Contain("1 warning suppressed");
-        result.Should().EndWith("\n✗ dotnet test: 1 project did not build (34 errors)\n");
-        LastLine(result).Should().Be("✗ dotnet test: 1 project did not build (34 errors)");
+        result.Should().EndWith("\n✗ dotnet test: 1 project did not build (34 errors) · 1 build warning (CS0219)\n");
+        LastLine(result).Should().Be("✗ dotnet test: 1 project did not build (34 errors) · 1 build warning (CS0219)");
     }
 
     [Fact]
@@ -1590,7 +1591,7 @@ public class DotnetTestFilterTests
             .Should().BeLessThan(result.IndexOf("FAILURES (1):", StringComparison.Ordinal),
                 "the compile errors come first, then the failing tests");
         LastLine(result).Should().MatchRegex(
-            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\)$");
+            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
     }
 
     [Fact]
@@ -1613,7 +1614,7 @@ public class DotnetTestFilterTests
         result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
         result.Should().NotContain("FAILURES");
         LastLine(result).Should().MatchRegex(
-            @"^dotnet test: 0 failed, 3 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\)$");
+            @"^dotnet test: 0 failed, 3 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
     }
 
     [Fact]
@@ -1663,7 +1664,7 @@ public class DotnetTestFilterTests
 
         result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
         LastLine(result).Should().MatchRegex(
-            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\)$");
+            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
     }
 
     [Fact]
@@ -1710,6 +1711,159 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(fixture, exitCode: 0);
 
         result.Should().BeEmpty();
+    }
+
+    // The dotnet_test_*_with_warnings fixtures are real .NET 10.0.403 SDK runs (VSTest, xUnit 2.9.3) of a scratch
+    // project with two CS0219 and one CS8602 in its tests; the failing one throws a NullReferenceException.
+
+    private const string BuildWarningsOfTheFixtures = " · 3 build warnings (CS0219×2, CS8602)";
+    private const string WarnProjectSuffix = "[/test/project/root/Warn.Tests/Warn.Tests.csproj]";
+
+    /// <summary>A compiler warning as MSBuild prints it for the fixtures' project, each at a line of its own.</summary>
+    /// <param name="code">The diagnostic code.</param>
+    /// <param name="line">The line it is reported at.</param>
+    private static string WarnLine(string code, int line) =>
+        $"/test/project/root/Warn.Tests/WarnTests.cs({line},1): warning {code}: Synthetic {line}. {WarnProjectSuffix}";
+
+    private static string WithLinesFirst(string fixture, params string[] lines) =>
+        string.Join('\n', lines) + "\n" + fixture;
+
+    [Fact]
+    public void Apply_PassingRunWithBuildWarnings_AppendsTheCountAndTheTopCodes()
+    {
+        var fixture = LoadFixture("dotnet_test_pass_with_warnings.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().MatchRegex(
+            @"^✓ dotnet test: 2 passed \(1 project, [^)]+\) · 3 build warnings \(CS0219×2, CS8602\)\n$");
+    }
+
+    [Fact]
+    public void Apply_FailingRunWithBuildWarnings_AppendsTheSuffixToTheStatusLine()
+    {
+        var fixture = LoadFixture("dotnet_test_failures_with_warnings.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().StartWith("FAILURES (1):\n  Warn.Tests.WarnTests.Measures");
+        LastLine(result).Should().StartWith("dotnet test: 1 failed, 1 passed (1 project, ")
+            .And.EndWith(BuildWarningsOfTheFixtures);
+    }
+
+    [Fact]
+    public void Apply_MoreThanThreeWarningCodes_ListsThreeAndTrailsOff()
+    {
+        // The fixture's CS0219×2 and CS8602, plus three codes of one warning each: six warnings, five codes.
+        // After CS0219×2, equal counts order by code: CA1863 and CS0168 fill the other two places, and CS8602
+        // and IDE0051 are cut.
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_pass_with_warnings.txt"),
+            WarnLine("IDE0051", 31), WarnLine("CA1863", 32), WarnLine("CS0168", 33));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        LastLine(result).Should().EndWith(" · 6 build warnings (CS0219×2, CA1863, CS0168, …)");
+    }
+
+    [Fact]
+    public void Apply_SingleBuildWarning_UsesTheSingularAndNoCount()
+    {
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_all_pass.txt"), WarnLine("CS0219", 5));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        LastLine(result).Should().EndWith(" · 1 build warning (CS0219)");
+    }
+
+    [Fact]
+    public void Apply_CodelessBuildWarning_IsCountedButNeverNamed()
+    {
+        // An Exec task's "EXEC : warning : …" carries no code: it counts toward the total, and the list leaves
+        // it out rather than printing "(no code)".
+        var codeless = $"EXEC : warning : could not lock config file {WarnProjectSuffix}";
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_pass_with_warnings.txt"), codeless);
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        LastLine(result).Should().EndWith(" · 4 build warnings (CS0219×2, CS8602)");
+        result.Should().NotContain("no code");
+
+        var onlyCodeless = _sut.Apply(WithLinesFirst(LoadFixture("dotnet_test_all_pass.txt"), codeless), exitCode: 0);
+
+        LastLine(onlyCodeless).Should().EndWith(" · 1 build warning");
+    }
+
+    [Fact]
+    public void Apply_BuildWarningsRepeatedPerTargetFramework_AreCountedOnce()
+    {
+        // A multi-targeted project re-reports each warning, closed by "[proj::TargetFramework=…]".
+        var fixture = LoadFixture("dotnet_test_pass_with_warnings.txt");
+        var repeats = fixture.Split('\n')
+            .Where(l => l.Contains(": warning ", StringComparison.Ordinal))
+            .Select(l => l.Replace("Warn.Tests.csproj]", "Warn.Tests.csproj::TargetFramework=net10.0]",
+                StringComparison.Ordinal))
+            .ToArray();
+        repeats.Should().HaveCount(3);
+
+        var result = _sut.Apply(WithLinesFirst(fixture, repeats), exitCode: 0);
+
+        LastLine(result).Should().EndWith(BuildWarningsOfTheFixtures);
+    }
+
+    [Fact]
+    public void Apply_RunWithoutBuildWarnings_HasNoSuffix()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_all_pass.txt"), exitCode: 0);
+
+        result.Should().NotContain("build warning");
+    }
+
+    [Fact]
+    public void Apply_WarningQuotedByAPassingTest_IsNotABuildWarning()
+    {
+        // A test's own output can look like compiler output (a Roslyn-driven test prints its diagnostics). Only
+        // a diagnostic MSBuild closed with its "[project.csproj]" suffix is a build warning.
+        const string quoted = "  Program.cs(4,1): warning CS0168: The variable 'y' is declared but never used";
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_all_pass.txt"), quoted);
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().NotContain("build warning");
+        LastLine(result).Should().MatchRegex(@"^✓ dotnet test: 17 passed \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_WarningNamedByAFailureMessage_IsNotABuildWarning()
+    {
+        // The real fixture's failure message quotes "Program.cs(4,1): warning CS0168" without a project suffix.
+        var fixture = LoadFixture("dotnet_test_failure_mentions_diagnostic.txt");
+        fixture.Should().Contain("warning CS0168");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().NotContain("build warning");
+    }
+
+    [Fact]
+    public void Apply_ListTestsRunWithBuildWarnings_KeepsItsStatusLineAsIs()
+    {
+        // A listing is a lookup of names, not a verdict on the build: its status line stays as it is.
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_list_tests_single.txt"), WarnLine("CS0219", 5));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().Be("Beta.Tests.BetaTests.Concatenates\n✓ dotnet test --list-tests: 1 test (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_ZeroTestsRunWithBuildWarnings_KeepsItsWarningAsIs()
+    {
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_zero.txt"), WarnLine("CS0219", 5));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().Be(_sut.Apply(LoadFixture("dotnet_test_zero.txt"), exitCode: 0));
+        result.Should().NotContain("build warning");
     }
 
     [Fact]

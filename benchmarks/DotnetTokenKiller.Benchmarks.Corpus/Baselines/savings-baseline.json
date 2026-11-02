@@ -229,9 +229,9 @@
       "exitCode": 1,
       "rawBytes": 7440,
       "rawTokens": 1809,
-      "filteredTokens": 1028,
-      "savedTokens": 781,
-      "savingsPercent": 43.2
+      "filteredTokens": 1038,
+      "savedTokens": 771,
+      "savingsPercent": 42.6
     },
     {
       "id": "test/compile-errors-mixed",
@@ -240,9 +240,9 @@
       "exitCode": 1,
       "rawBytes": 8369,
       "rawTokens": 2069,
-      "filteredTokens": 1098,
-      "savedTokens": 971,
-      "savingsPercent": 46.9
+      "filteredTokens": 1108,
+      "savedTokens": 961,
+      "savingsPercent": 46.4
     },
     {
       "id": "test/compile-errors-mixed-passing",
@@ -251,9 +251,9 @@
       "exitCode": 1,
       "rawBytes": 7865,
       "rawTokens": 1941,
-      "filteredTokens": 1044,
-      "savedTokens": 897,
-      "savingsPercent": 46.2
+      "filteredTokens": 1054,
+      "savedTokens": 887,
+      "savingsPercent": 45.7
     },
     {
       "id": "test/failure-mentions-diagnostic",
@@ -276,6 +276,17 @@
       "filteredTokens": 188,
       "savedTokens": 620,
       "savingsPercent": 76.7
+    },
+    {
+      "id": "test/failures-with-warnings",
+      "fixture": "dotnet_test_failures_with_warnings.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1498,
+      "rawTokens": 396,
+      "filteredTokens": 89,
+      "savedTokens": 307,
+      "savingsPercent": 77.5
     },
     {
       "id": "test/list-tests",
@@ -405,9 +416,9 @@
       "exitCode": 0,
       "rawBytes": 1243,
       "rawTokens": 347,
-      "filteredTokens": 23,
-      "savedTokens": 324,
-      "savingsPercent": 93.4
+      "filteredTokens": 37,
+      "savedTokens": 310,
+      "savingsPercent": 89.3
     },
     {
       "id": "test/mtp-failures",
@@ -518,6 +529,17 @@
       "filteredTokens": 16,
       "savedTokens": 156,
       "savingsPercent": 90.7
+    },
+    {
+      "id": "test/pass-with-warnings",
+      "fixture": "dotnet_test_pass_with_warnings.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 981,
+      "rawTokens": 273,
+      "filteredTokens": 35,
+      "savedTokens": 238,
+      "savingsPercent": 87.2
     },
     {
       "id": "test/reqnroll-pending",

@@ -17,7 +17,7 @@ internal sealed partial class MsBuildDiagnosticReport
     private const int MessageMaxLen = 120;
 
     /// <summary>Stands in for the diagnostic code on MSBuild output that carries none (Exec tasks).</summary>
-    private const string NoCode = "(no code)";
+    internal const string NoCode = "(no code)";
 
     /// <summary>Groups diagnostics that name no source file, such as tool- and project-level errors.</summary>
     private const string NoFile = "(no file)";

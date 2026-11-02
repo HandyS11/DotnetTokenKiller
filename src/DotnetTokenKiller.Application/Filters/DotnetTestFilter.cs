@@ -8,13 +8,17 @@ namespace DotnetTokenKiller.Application.Filters;
 
 /// <summary>
 /// Condenses dotnet test output to a concise pass/fail summary. A test project that fails to compile
-/// gets the grouped diagnostics <c>dotnet build</c> prints for it, ahead of the other projects' results.
+/// gets the grouped diagnostics <c>dotnet build</c> prints for it, ahead of the other projects' results,
+/// and the status line of a run that compiled with warnings ends in their count and top codes.
 /// </summary>
 /// <param name="rootPath">Optional root path used to shorten file paths in stack traces and diagnostics.</param>
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputFilter
 {
     private const int MaxFailures = 15;
     private const int MessageMaxLen = 300;
+
+    /// <summary>How many warning codes the status line names before it trails off.</summary>
+    private const int MaxWarningCodes = 3;
 
     /// <summary>Cap on the innermost exception of a nested message, so that it survives a long outer one.</summary>
     private const int InnerExceptionMaxLen = 200;
@@ -46,12 +50,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         var lines = strippedOutput.Split('\n');
         var state = ParseLines(lines);
 
-        // A test project that fails to compile prints the same diagnostics `dotnet build` does, so they
-        // are read the same way. Only a failed run can have a build failure: on a zero exit a
-        // diagnostic-shaped line is never one.
-        var buildReport = exitCode == 0
-            ? null
-            : MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
+        // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
+        // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
+        var buildReport = MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
         return FormatOutput(state, exitCode, buildReport);
     }
 
@@ -65,7 +66,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// </summary>
     /// <remarks>
     /// The cost: under the terminal logger (<c>--tl:on</c>) compile errors print without the suffix, so
-    /// they are not read and such a run falls back to the raw tail.
+    /// they are not read and such a run falls back to the raw tail, and its warnings are not counted.
     /// </remarks>
     /// <param name="line">One line of output, without its carriage return.</param>
     private static bool IsTestTextDiagnostic(string line)
@@ -602,15 +603,17 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.ProjectCount = Math.Max(1, state.ProjectCount);
     }
 
-    private static string FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport? buildReport)
+    private static string FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport)
     {
         var elapsed = $"{state.TotalDurationMs / 1000.0:F2}s";
+        var warnings = DescribeBuildWarnings(buildReport);
 
         // A project that did not compile never ran its tests, and says why in the same diagnostics a
-        // build prints; that comes first, with whatever the other projects' tests reported after it.
-        if (buildReport is { ErrorTotal: > 0 })
+        // build prints; that comes first, with whatever the other projects' tests reported after it. Only
+        // a failed run can have a build failure: on a zero exit a diagnostic-shaped line is never one.
+        if (exitCode != 0 && buildReport.ErrorTotal > 0)
         {
-            return FormatBuildFailure(state, buildReport, elapsed);
+            return FormatBuildFailure(state, buildReport, elapsed, warnings);
         }
 
         // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
@@ -620,7 +623,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // because a stray line happened to match a failure-shaped pattern.
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
-            return FormatFailures(state, elapsed);
+            return FormatFailures(state, elapsed, warnings: warnings);
         }
 
         // A listing that found names wins even beside a "No test matches" line: that one is another
@@ -654,7 +657,40 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
         return
-            $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed})\n";
+            $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n";
+    }
+
+    /// <summary>
+    /// What the status line of a run adds for the compiler warnings its build raised:
+    /// <c> · 3 build warnings (CS0219×2, CS8602)</c>. The list names at most <see cref="MaxWarningCodes"/>
+    /// codes, the most frequent first, with a count only where a code occurs more than once, and trails off
+    /// with <c>, …</c> when more codes exist. A warning that carries no code counts toward the total but is
+    /// not named, and the list is left out when no warning carries one. A run without warnings adds nothing.
+    /// A <c>--list-tests</c> listing and a zero-tests verdict are no verdict on the build and do not carry it.
+    /// </summary>
+    /// <param name="report">The run's build diagnostics.</param>
+    private static string DescribeBuildWarnings(MsBuildDiagnosticReport report)
+    {
+        var total = report.WarningTotal;
+        if (total == 0)
+        {
+            return string.Empty;
+        }
+
+        var codes = report.WarningCodes
+            .Where(c => c.Code != MsBuildDiagnosticReport.NoCode)
+            .ToList();
+        var counted = string.Create(CultureInfo.InvariantCulture,
+            $" \u00b7 {total} build warning{(total == 1 ? "" : "s")}");
+        if (codes.Count == 0)
+        {
+            return counted;
+        }
+
+        var named = codes.Take(MaxWarningCodes).Select(c =>
+            c.Count == 1 ? c.Code : string.Create(CultureInfo.InvariantCulture, $"{c.Code}\u00d7{c.Count}"));
+        var more = codes.Count > MaxWarningCodes ? ", \u2026" : string.Empty;
+        return $"{counted} ({string.Join(", ", named)}{more})";
     }
 
     /// <summary>The names a <c>--list-tests</c> run listed, one per line in listed order, then its status line.</summary>
@@ -726,16 +762,18 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// <param name="state">The parsed run.</param>
     /// <param name="report">The build's diagnostics, with at least one error.</param>
     /// <param name="elapsed">The test run's duration.</param>
-    private static string FormatBuildFailure(ParseState state, MsBuildDiagnosticReport report, string elapsed)
+    /// <param name="warnings">What the status line says of the build's warnings, from <see cref="DescribeBuildWarnings"/>.</param>
+    private static string FormatBuildFailure(ParseState state, MsBuildDiagnosticReport report, string elapsed,
+        string warnings)
     {
         var diagnostics = report.RenderDiagnostics();
         var buildFailure = DescribeBuildFailure(report);
         if (state.ProjectCount > 0 || state.TotalFailed > 0 || state.Failures.Count > 0)
         {
-            return diagnostics + FormatFailures(state, elapsed, buildFailure);
+            return diagnostics + FormatFailures(state, elapsed, buildFailure, warnings);
         }
 
-        return $"{diagnostics}\u2717 dotnet test: {buildFailure}\n";
+        return $"{diagnostics}\u2717 dotnet test: {buildFailure}{warnings}\n";
     }
 
     /// <summary>What did not build, as the status line says it: <c>1 project did not build (34 errors)</c>.</summary>
@@ -762,7 +800,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// <param name="state">The parsed run.</param>
     /// <param name="elapsed">The test run's duration.</param>
     /// <param name="buildFailure">What did not build, or <see langword="null"/> when everything did.</param>
-    private static string FormatFailures(ParseState state, string elapsed, string? buildFailure = null)
+    /// <param name="warnings">What the status line says of the build's warnings, from <see cref="DescribeBuildWarnings"/>.</param>
+    private static string FormatFailures(ParseState state, string elapsed, string? buildFailure = null,
+        string warnings = "")
     {
         // When a summary is present, its failed count is authoritative; when the host crashed before
         // printing one, fall back to the number of failure headers we actually parsed.
@@ -786,7 +826,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         var buildSuffix = buildFailure is null ? string.Empty : $" \u00b7 {buildFailure}";
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{buildSuffix}{context}");
+            $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{buildSuffix}{context}{warnings}");
 
         // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
         // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.
