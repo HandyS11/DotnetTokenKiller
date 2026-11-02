@@ -24,7 +24,7 @@ internal static partial class ParityRunner
     /// muxer dtk would find the real SDK before a fake <c>dotnet</c>. The apphost is also what the
     /// framework-dependent tool package runs.
     /// </summary>
-    private static readonly string JitAppHost =
+    internal static readonly string JitAppHost =
         Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "dtk.exe" : "dtk");
 
     internal static string FixturePath(string fixture) =>
@@ -106,7 +106,8 @@ internal static partial class ParityRunner
         psi.Environment["DTK_TEE_DIR"] = Path.Combine(sandbox.Home, "logs");
         psi.Environment["HOME"] = sandbox.Home;
         psi.Environment["USERPROFILE"] = sandbox.Home;
-        psi.Environment["XDG_CONFIG_HOME"] = Path.Combine(sandbox.Home, ".config");
+        psi.Environment["XDG_CONFIG_HOME"] = sandbox.XdgConfigHome;
+        psi.Environment["APPDATA"] = sandbox.AppData;
         psi.Environment["NO_COLOR"] = "1";
         psi.Environment["DOTNET_NOLOGO"] = "1";
         psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";

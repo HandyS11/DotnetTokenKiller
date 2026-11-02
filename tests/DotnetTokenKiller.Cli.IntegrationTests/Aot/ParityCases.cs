@@ -1,3 +1,4 @@
+using DotnetTokenKiller.Application.Integration;
 using Xunit;
 
 namespace DotnetTokenKiller.Cli.IntegrationTests.Aot;
@@ -123,9 +124,22 @@ internal static class ParityCases
     private static ParityCase Steps(params string[][] invocations) =>
         new([.. invocations.Select(arguments => new ParityStep(arguments))]);
 
+    /// <summary>
+    /// Where dtk looks for rtk's config in <paramref name="sandbox"/> on this operating system: the sandbox moves
+    /// <c>HOME</c>, <c>XDG_CONFIG_HOME</c> and <c>APPDATA</c>, so this is under it on Linux, macOS and Windows alike.
+    /// </summary>
+    /// <param name="sandbox">The sandbox dtk runs in.</param>
+    internal static string RtkConfigPath(ParitySandbox sandbox) =>
+        RtkConfigLocator.PlatformDefault(
+            RtkConfigLocator.CurrentPlatform(), sandbox.Home, sandbox.XdgConfigHome, sandbox.AppData);
+
     private static void ArrangeRtk(ParitySandbox sandbox)
     {
-        sandbox.WriteFile("home/.config/rtk/config.toml", "[hooks]\nexclude_commands = [\"git\"]\n");
+        // Seeded where dtk reads it on this OS, so every platform exercises the existing-file TOML merge, the
+        // part of the init path that depends on the TOML library under Native AOT.
+        sandbox.WriteFile(
+            Path.GetRelativePath(sandbox.Root, RtkConfigPath(sandbox)).Replace('\\', '/'),
+            "[hooks]\nexclude_commands = [\"git\"]\n");
         sandbox.WriteFile("proj/.claude/settings.json", RtkHookSettings);
         sandbox.WriteFile("home/.claude/settings.json", RtkHookSettings);
     }

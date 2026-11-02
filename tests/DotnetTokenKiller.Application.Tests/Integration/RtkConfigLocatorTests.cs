@@ -65,6 +65,27 @@ public sealed class RtkConfigLocatorTests
     }
 
     [Fact]
+    public void AppDataDirectory_AnAbsoluteAppDataVariableWins_SoTheLocationCanBeRedirected()
+    {
+        // Like XDG_CONFIG_HOME on Linux: a test sandbox (or a user) can move it. In real use both name one folder.
+        var redirected = Path.Combine(Path.GetTempPath(), "redirected-appdata");
+
+        RtkConfigLocator.AppDataDirectory(redirected, Path.Combine(Path.GetTempPath(), "known-folder"))
+            .Should().Be(redirected);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("relative/appdata")]
+    public void AppDataDirectory_AMissingEmptyOrRelativeVariable_FallsBackToTheKnownFolder(string? variable)
+    {
+        var knownFolder = Path.Combine(Path.GetTempPath(), "known-folder");
+
+        RtkConfigLocator.AppDataDirectory(variable, knownFolder).Should().Be(knownFolder);
+    }
+
+    [Fact]
     public void ParseConfigCommandOutput_ReadsThePathAfterConfigOnItsOwnLine()
     {
         const string output = "Config: /a b/c.toml\n\n[tracking]\nenabled = true\n";

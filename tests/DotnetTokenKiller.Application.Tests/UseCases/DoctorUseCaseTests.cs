@@ -12,7 +12,11 @@ public sealed class DoctorUseCaseTests : IDisposable
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly DoctorUseCase _sut;
+    private string? _rtkOnPath = RtkPath;
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-doctor-test-{Guid.NewGuid()}");
+
+    /// <summary>Where the fake PATH finds rtk; a probe must start this absolute path, never the bare name.</summary>
+    private const string RtkPath = "/opt/rtk/bin/rtk";
 
     private static readonly string[] RewriteDotnetBuild = ["rewrite", "dotnet build"];
 
@@ -28,7 +32,8 @@ public sealed class DoctorUseCaseTests : IDisposable
             _configProvider,
             new HookHealthChecker(_runner),
             [new GeminiCliIntegrator(new HomePaths(_tempDir))],
-            new RtkHookCoexistence(Path.Combine(_tempDir, "home", ".claude"), RtkConfigPath));
+            new RtkHookCoexistence(Path.Combine(_tempDir, "home", ".claude"), RtkConfigPath),
+            () => _rtkOnPath);
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
         _runner.RunCapturedAsync(null!, null!)
             .ReturnsForAnyArgs(new CommandResult("10.0.0", string.Empty, 0));
@@ -383,7 +388,7 @@ public sealed class DoctorUseCaseTests : IDisposable
             "rtk also rewrites dotnet commands. Add \"dotnet\" to [hooks].exclude_commands in "
             + $"{RtkConfigPath}, or run 'dtk init claude' again.");
         await _runner.Received(1).RunCapturedAsync(
-            "rtk",
+            RtkPath,
             Arg.Is<IReadOnlyList<string>>(args => args.SequenceEqual(RewriteDotnetBuild)),
             Arg.Any<CancellationToken>());
     }
@@ -407,14 +412,44 @@ public sealed class DoctorUseCaseTests : IDisposable
         var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
 
         checks.Select(c => c.Name).Should().NotContain("rtk coexistence");
-        await _runner.DidNotReceive().RunCapturedAsync("rtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>());
+        AssertRtkNeverStarted();
+    }
+
+    [Fact]
+    public async Task RunAsync_RtkHookRegisteredButRtkIsNotOnPath_AddsNoRtkCheckAndStartsNothingNamedRtk()
+    {
+        // A bare "rtk" would be found beside the running dtk, or on Windows in the current directory, before PATH:
+        // a cloned repository shipping rtk.exe and a .claude/settings.json would then run it from `dtk doctor`.
+        await RegisterRtkHookAsync();
+        _rtkOnPath = null;
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        checks.Select(c => c.Name).Should().NotContain("rtk coexistence");
+        AssertRtkNeverStarted();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(127)]
+    public async Task RunAsync_RtkPrintsNothingButDoesNotExitOne_AddsNoRtkCheckRatherThanReassure(int exitCode)
+    {
+        // Real rtk exits 1 and prints nothing when dotnet is excluded. Empty output with any other exit code is a
+        // crash, or an rtk too old to have `rewrite`: dtk cannot tell, so it says nothing.
+        await RegisterRtkHookAsync();
+        RtkAnswersRewriteWith(string.Empty, exitCode);
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        checks.Select(c => c.Name).Should().NotContain("rtk coexistence");
     }
 
     [Fact]
     public async Task RunAsync_RtkHookRegisteredButRtkCannotBeRun_AddsNoRtkCheckAndDoesNotThrow()
     {
         await RegisterRtkHookAsync();
-        _runner.RunCapturedAsync("rtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunCapturedAsync(RtkPath, Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<CommandResult>(new InvalidOperationException("rtk: not found")));
 
         var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
@@ -430,6 +465,11 @@ public sealed class DoctorUseCaseTests : IDisposable
     }
 
     private void RtkAnswersRewriteWith(string stdout, int exitCode) =>
-        _runner.RunCapturedAsync("rtk", Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+        _runner.RunCapturedAsync(RtkPath, Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult(stdout, string.Empty, exitCode));
+
+    private void AssertRtkNeverStarted() =>
+        _runner.ReceivedCalls()
+            .Select(call => call.GetArguments()[0] as string)
+            .Should().NotContain(command => command == "rtk" || command == RtkPath);
 }

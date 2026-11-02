@@ -156,9 +156,22 @@ internal static class RtkConfigLocator
             CurrentPlatform(),
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
+            AppDataDirectory(
+                Environment.GetEnvironmentVariable("APPDATA"),
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)));
 
-    private static OSPlatform CurrentPlatform()
+    /// <summary>
+    /// The roaming application data directory: the <c>APPDATA</c> variable when it is an absolute path, otherwise the
+    /// system's known folder. In real use both name one folder; honoring the variable makes it redirectable, as
+    /// <c>XDG_CONFIG_HOME</c> is on Linux, which a test sandbox needs to keep a Windows run out of the real profile.
+    /// </summary>
+    /// <param name="appDataVariable">The <c>APPDATA</c> environment variable, if set.</param>
+    /// <param name="knownFolder">The system's roaming application data folder.</param>
+    internal static string AppDataDirectory(string? appDataVariable, string knownFolder) =>
+        !string.IsNullOrEmpty(appDataVariable) && Path.IsPathRooted(appDataVariable) ? appDataVariable : knownFolder;
+
+    /// <summary>The operating system this process runs on, as <see cref="PlatformDefault"/> distinguishes them.</summary>
+    internal static OSPlatform CurrentPlatform()
     {
         if (OperatingSystem.IsMacOS())
         {
