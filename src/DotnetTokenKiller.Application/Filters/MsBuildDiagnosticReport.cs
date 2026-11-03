@@ -80,6 +80,13 @@ internal sealed partial class MsBuildDiagnosticReport
     /// </summary>
     public int ErrorTotal { get; }
 
+    /// <summary>
+    /// How many errors were parsed (after collapsing repeats), whatever MSBuild's own tally says. Zero with a
+    /// non-zero <see cref="ErrorTotal"/> means the build declared errors that no pattern matched, so there is
+    /// no cause to render.
+    /// </summary>
+    public int ParsedErrorCount => _errors.Count;
+
     /// <summary>The larger of MSBuild's own "N Warning(s)" tally and the warnings parsed.</summary>
     public int WarningTotal { get; }
 
@@ -118,8 +125,17 @@ internal sealed partial class MsBuildDiagnosticReport
         int? declaredErrors = null;
         int? declaredWarnings = null;
 
-        foreach (var rawLine in strippedOutput.Split('\n'))
+        var lines = strippedOutput.Split('\n');
+        var lineTaken = false;
+        foreach (var (index, rawLine) in lines.Index())
         {
+            // A "Switch:" line was joined into the diagnostic before it, which is all it is.
+            if (lineTaken)
+            {
+                lineTaken = false;
+                continue;
+            }
+
             var line = rawLine.TrimEnd('\r');
 
             if (claimLine?.Invoke(line) == true)
@@ -154,7 +170,8 @@ internal sealed partial class MsBuildDiagnosticReport
             // Skip noise lines, then parse diagnostic lines with and without a file/line/col anchor
             if (!IsNoiseLine(line) && !TryAddDiagnosticLine(line, rootPath, seen, diagnostics))
             {
-                AddSimpleDiagnosticLine(line, seen, diagnostics);
+                var next = index + 1 < lines.Length ? lines[index + 1].TrimEnd('\r') : string.Empty;
+                lineTaken = AddSimpleDiagnosticLine(line, next, seen, diagnostics);
             }
         }
 
@@ -326,19 +343,32 @@ internal sealed partial class MsBuildDiagnosticReport
         return true;
     }
 
-    /// <summary>Parses a diagnostic without file/line/col (e.g., "MSBUILD : error MSB1001: message").</summary>
+    /// <summary>
+    /// Parses a diagnostic without file/line/col (e.g., "MSBUILD : error MSB1001: message"). MSBuild names the
+    /// argument it rejected on a line of its own after such a diagnostic (<c>Switch: nothere.csproj</c> after
+    /// MSB1009), and that line is where the cause is: it joins the message.
+    /// </summary>
     /// <param name="line">The output line.</param>
+    /// <param name="nextLine">The line after it, with its trailing <c>'\r'</c> removed.</param>
     /// <param name="seen">The keys of the diagnostics already added.</param>
     /// <param name="diagnostics">The diagnostics parsed so far.</param>
-    private static void AddSimpleDiagnosticLine(string line, HashSet<string> seen, List<Diagnostic> diagnostics)
+    /// <returns>Whether <paramref name="nextLine"/> was a <c>Switch:</c> line and has been taken into the message.</returns>
+    private static bool AddSimpleDiagnosticLine(string line, string nextLine, HashSet<string> seen,
+        List<Diagnostic> diagnostics)
     {
         var simpleDiagMatch = SimpleDiagnosticPattern().Match(line);
         if (!simpleDiagMatch.Success)
         {
-            return;
+            return false;
         }
 
         var rawMessage = simpleDiagMatch.Groups["message"].Value.Trim();
+        var continuation = SwitchContinuationPattern().Match(nextLine);
+        if (continuation.Success)
+        {
+            rawMessage = $"{rawMessage} {continuation.Value.Trim()}";
+        }
+
         var simpleDiagnostic = new Diagnostic(
             string.Empty,
             string.Empty,
@@ -353,6 +383,8 @@ internal sealed partial class MsBuildDiagnosticReport
         {
             diagnostics.Add(simpleDiagnostic);
         }
+
+        return continuation.Success;
     }
 
     private static bool TryAddDiagnosticLine(string line, string rootPath, HashSet<string> seen,
@@ -698,6 +730,11 @@ internal sealed partial class MsBuildDiagnosticReport
     [GeneratedRegex(
         @"^\s*\S*\s*:\s*(?<level>error|warning)\s+(?:(?<code>[A-Za-z]+\d+)\s*)?:\s*(?<message>.+?)(?:\s*\[(?<project>.+?)\])?\s*$")]
     private static partial Regex SimpleDiagnosticPattern();
+
+    // The line MSBuild prints after a command-line diagnostic to name the argument it rejected:
+    // "Switch: nothere.csproj".
+    [GeneratedRegex(@"^Switch: \S.*$")]
+    private static partial Regex SwitchContinuationPattern();
 
     // A URL with the whitespace before it: inside parentheses that hold nothing else (or only the word that
     // introduces it), inside brackets that hold nothing else, with its introduction and the sentence it

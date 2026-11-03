@@ -91,7 +91,7 @@ public class DotnetTestIntegrationTests
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsCsproj);
 
-        output.Should().Contain("dotnet test: 1 failed, 3 passed");
+        output.Should().Contain("✗ dotnet test: 1 failed, 3 passed");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -139,7 +139,7 @@ public class DotnetTestIntegrationTests
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsMultiFailureCsproj);
 
-        output.Should().Contain("dotnet test: 12 failed, 9 passed");
+        output.Should().Contain("✗ dotnet test: 12 failed, 9 passed");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -210,7 +210,7 @@ public class DotnetTestIntegrationTests
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsNUnitCsproj);
 
-        output.Should().Contain("dotnet test: 3 failed, 5 passed");
+        output.Should().Contain("✗ dotnet test: 3 failed, 5 passed");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -254,7 +254,7 @@ public class DotnetTestIntegrationTests
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsMsTestCsproj);
 
-        output.Should().Contain("dotnet test: 3 failed, 5 passed");
+        output.Should().Contain("✗ dotnet test: 3 failed, 5 passed");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -298,7 +298,7 @@ public class DotnetTestIntegrationTests
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "test", SampleTestsReqnrollCsproj);
 
-        output.Should().Contain("dotnet test: 2 failed, 5 passed");
+        output.Should().Contain("✗ dotnet test: 2 failed, 5 passed");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

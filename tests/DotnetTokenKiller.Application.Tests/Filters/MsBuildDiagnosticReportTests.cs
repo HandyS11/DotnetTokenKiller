@@ -210,6 +210,36 @@ public class MsBuildDiagnosticReportTests
     }
 
     [Fact]
+    public void RenderDiagnostics_SwitchLineAfterASimpleDiagnostic_JoinsItsMessage()
+    {
+        // The real `dotnet build nothere.csproj`: MSBuild names the offending argument on the line after
+        // its MSB1009, and that line is where the cause is, so it belongs to the message.
+        Parse("dotnet_test_missing_project.txt").RenderDiagnostics()
+            .Should().Be("(no file) MSB1009: Project file does not exist. Switch: nothere.csproj\n");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_SwitchLineBesideNoDiagnostic_IsDropped()
+    {
+        MsBuildDiagnosticReport.Parse("Some output\nSwitch: nothere.csproj\n", Root).RenderDiagnostics()
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RenderDiagnostics_SameSimpleDiagnosticTwiceWithItsSwitch_ListsItOnce()
+    {
+        const string output = """
+                              MSBUILD : error MSB1009: Project file does not exist.
+                              Switch: nothere.csproj
+                              MSBUILD : error MSB1009: Project file does not exist.
+                              Switch: nothere.csproj
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).RenderDiagnostics()
+            .Should().Be("(no file) MSB1009: Project file does not exist. Switch: nothere.csproj\n");
+    }
+
+    [Fact]
     public void Render_IsExactlyTheBodyRenderDiagnosticsReturnsPlusTheVerdictLine()
     {
         var expectedVerdicts = new Dictionary<string, string>

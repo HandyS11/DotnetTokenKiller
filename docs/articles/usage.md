@@ -47,7 +47,7 @@ dtk dotnet test src/MyProject.Tests/MyProject.Tests.csproj
 dtk dotnet test -q                   # quiet mode
 ```
 
-Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths. xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
+Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths; the status line of a failing run opens with `✗` (`✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`). xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
 
 ### `dtk dotnet restore`
 

@@ -455,6 +455,19 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
+    public void Apply_MissingProjectFixture_KeepsTheSwitchLineWithTheDiagnostic()
+    {
+        // The real `dotnet build nothere.csproj` prints the same two lines as `dotnet test nothere.csproj`:
+        // the argument MSBuild rejected sits on a line of its own after the MSB1009.
+        var fixture = LoadFixture("dotnet_test_missing_project.txt");
+
+        var result = new DotnetBuildFilter().Apply(fixture, exitCode: 1);
+
+        result.Should().Be(
+            "(no file) MSB1009: Project file does not exist. Switch: nothere.csproj\n\u2717 dotnet build failed (exit 1): 1 error, 0 warnings\n");
+    }
+
+    [Fact]
     public void Apply_SimpleMsbuildDiagnosticWithNonMatchingLine_BothBranchesCovered()
     {
         // "Some random output" → TryAddDiagnosticLine false → SimpleDiagnosticPattern false → continue (lines 80-82)

@@ -251,9 +251,9 @@
       "exitCode": 1,
       "rawBytes": 1482,
       "rawTokens": 413,
-      "filteredTokens": 141,
-      "savedTokens": 272,
-      "savingsPercent": 65.9
+      "filteredTokens": 143,
+      "savedTokens": 270,
+      "savingsPercent": 65.4
     },
     {
       "id": "test/compile-errors",
@@ -273,9 +273,9 @@
       "exitCode": 1,
       "rawBytes": 8369,
       "rawTokens": 2069,
-      "filteredTokens": 971,
-      "savedTokens": 1098,
-      "savingsPercent": 53.1
+      "filteredTokens": 973,
+      "savedTokens": 1096,
+      "savingsPercent": 53
     },
     {
       "id": "test/compile-errors-mixed-passing",
@@ -284,9 +284,9 @@
       "exitCode": 1,
       "rawBytes": 7865,
       "rawTokens": 1941,
-      "filteredTokens": 917,
-      "savedTokens": 1024,
-      "savingsPercent": 52.8
+      "filteredTokens": 919,
+      "savedTokens": 1022,
+      "savingsPercent": 52.7
     },
     {
       "id": "test/duration-under-1ms",
@@ -306,9 +306,9 @@
       "exitCode": 1,
       "rawBytes": 1169,
       "rawTokens": 321,
-      "filteredTokens": 113,
-      "savedTokens": 208,
-      "savingsPercent": 64.8
+      "filteredTokens": 115,
+      "savedTokens": 206,
+      "savingsPercent": 64.2
     },
     {
       "id": "test/failures",
@@ -317,9 +317,9 @@
       "exitCode": 1,
       "rawBytes": 3156,
       "rawTokens": 808,
-      "filteredTokens": 188,
-      "savedTokens": 620,
-      "savingsPercent": 76.7
+      "filteredTokens": 190,
+      "savedTokens": 618,
+      "savingsPercent": 76.5
     },
     {
       "id": "test/failures-with-warnings",
@@ -328,9 +328,9 @@
       "exitCode": 1,
       "rawBytes": 1498,
       "rawTokens": 396,
-      "filteredTokens": 89,
-      "savedTokens": 307,
-      "savingsPercent": 77.5
+      "filteredTokens": 91,
+      "savedTokens": 305,
+      "savingsPercent": 77
     },
     {
       "id": "test/list-tests",
@@ -372,9 +372,9 @@
       "exitCode": 1,
       "rawBytes": 2199,
       "rawTokens": 660,
-      "filteredTokens": 78,
-      "savedTokens": 582,
-      "savingsPercent": 88.2
+      "filteredTokens": 80,
+      "savedTokens": 580,
+      "savingsPercent": 87.9
     },
     {
       "id": "test/logger-detailed-fail-interleaved",
@@ -383,9 +383,9 @@
       "exitCode": 1,
       "rawBytes": 2199,
       "rawTokens": 660,
-      "filteredTokens": 78,
-      "savedTokens": 582,
-      "savingsPercent": 88.2
+      "filteredTokens": 80,
+      "savedTokens": 580,
+      "savingsPercent": 87.9
     },
     {
       "id": "test/logger-detailed-fail-multiproject",
@@ -394,9 +394,9 @@
       "exitCode": 1,
       "rawBytes": 3039,
       "rawTokens": 944,
-      "filteredTokens": 78,
-      "savedTokens": 866,
-      "savingsPercent": 91.7
+      "filteredTokens": 80,
+      "savedTokens": 864,
+      "savingsPercent": 91.5
     },
     {
       "id": "test/logger-detailed-pass",
@@ -449,9 +449,9 @@
       "exitCode": 1,
       "rawBytes": 77,
       "rawTokens": 22,
-      "filteredTokens": 26,
-      "savedTokens": -4,
-      "savingsPercent": -18.2
+      "filteredTokens": 33,
+      "savedTokens": -11,
+      "savingsPercent": -50
     },
     {
       "id": "test/mtp-all-pass",
@@ -471,9 +471,9 @@
       "exitCode": 2,
       "rawBytes": 2444,
       "rawTokens": 598,
-      "filteredTokens": 84,
-      "savedTokens": 514,
-      "savingsPercent": 86
+      "filteredTokens": 86,
+      "savedTokens": 512,
+      "savingsPercent": 85.6
     },
     {
       "id": "test/mtp-multiproject",
@@ -482,9 +482,9 @@
       "exitCode": 2,
       "rawBytes": 2520,
       "rawTokens": 669,
-      "filteredTokens": 88,
-      "savedTokens": 581,
-      "savingsPercent": 86.8
+      "filteredTokens": 90,
+      "savedTokens": 579,
+      "savingsPercent": 86.5
     },
     {
       "id": "test/mtp-xunit3-failures",
@@ -493,9 +493,9 @@
       "exitCode": 2,
       "rawBytes": 2418,
       "rawTokens": 638,
-      "filteredTokens": 230,
-      "savedTokens": 408,
-      "savingsPercent": 63.9
+      "filteredTokens": 232,
+      "savedTokens": 406,
+      "savingsPercent": 63.6
     },
     {
       "id": "test/mtp-xunit3-timeout",
@@ -504,9 +504,9 @@
       "exitCode": 2,
       "rawBytes": 1163,
       "rawTokens": 333,
-      "filteredTokens": 97,
-      "savedTokens": 236,
-      "savingsPercent": 70.9
+      "filteredTokens": 99,
+      "savedTokens": 234,
+      "savingsPercent": 70.3
     },
     {
       "id": "test/mtp-zero",
@@ -559,9 +559,9 @@
       "exitCode": 1,
       "rawBytes": 1350,
       "rawTokens": 342,
-      "filteredTokens": 112,
-      "savedTokens": 230,
-      "savingsPercent": 67.3
+      "filteredTokens": 114,
+      "savedTokens": 228,
+      "savingsPercent": 66.7
     },
     {
       "id": "test/no-test-available",
@@ -592,9 +592,9 @@
       "exitCode": 1,
       "rawBytes": 8391,
       "rawTokens": 1920,
-      "filteredTokens": 171,
-      "savedTokens": 1749,
-      "savingsPercent": 91.1
+      "filteredTokens": 173,
+      "savedTokens": 1747,
+      "savingsPercent": 91
     },
     {
       "id": "test/skipped-only",

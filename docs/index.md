@@ -50,7 +50,7 @@ Build failed with 1 error(s) in 5.4s</pre>
   SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [5 ms]
     Intentional failure
     at <span class="dtk-path">samples/SampleApp.Tests/IntentionallyFailingTests.cs</span>:line 8
-dotnet test: <span class="dtk-fail">1 failed</span>, <span class="dtk-kept">3 passed</span> (1 project, 0.07s)</pre>
+✗ dotnet test: <span class="dtk-fail">1 failed</span>, <span class="dtk-kept">3 passed</span> (1 project, 0.07s)</pre>
 <div class="dtk-term-cut">30 lines removed</div>
 </div>
 </section>

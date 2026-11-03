@@ -42,7 +42,7 @@ FAILURES (1):
   SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]
     Intentional failure
     at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
-dotnet test: 1 failed, 3 passed (1 project, 0.03s)
+✗ dotnet test: 1 failed, 3 passed (1 project, 0.03s)
 ```
 
 Token reduction: **14 lines -> 5 lines**
@@ -217,7 +217,7 @@ FAILURES (12):
   SampleApp.Tests.MultiFailure.AssertionFailures.String_Should_Match_But_Doesnt [1 ms]
     Expected actual to be a match with the expectation because this demonstrates string diff output, but it differs at index 6: ↓ (actual) "Hello World" "Hello Mars" ↑ (expected)
     at samples/SampleApp.Tests.MultiFailure/AssertionFailures.cs:line 20
-dotnet test: 12 failed, 9 passed (1 project, 0.05s)
+✗ dotnet test: 12 failed, 9 passed (1 project, 0.05s)
 ```
 
 Token reduction: **118 lines -> 38 lines**
@@ -284,7 +284,7 @@ FAILURES (3):
   Unexpected_Exception [1 ms]
     System.InvalidOperationException : Something went wrong in the test
     at samples/SampleApp.Tests.NUnit/FailingTests.cs:line 24
-dotnet test: 3 failed, 5 passed (1 project, 0.03s)
+✗ dotnet test: 3 failed, 5 passed (1 project, 0.03s)
 ```
 
 Token reduction: **30 lines -> 11 lines**
@@ -342,7 +342,7 @@ FAILURES (3):
   Wrong_Exception_Type [< 1 ms]
     Test method threw exception System.InvalidOperationException, but exception System.ArgumentException was expected. Exception message: System.InvalidOperationException: Wrong exception type
     at samples/SampleApp.Tests.MSTest/FailingTests.cs:line 26
-dotnet test: 3 failed, 5 passed (1 project, 0.03s)
+✗ dotnet test: 3 failed, 5 passed (1 project, 0.03s)
 ```
 
 Token reduction: **27 lines -> 11 lines**
@@ -435,7 +435,7 @@ FAILURES (2):
   Intentionally wrong expectation [33 ms]
     Assert.Equal() Failure: Strings differ at pos 0 — Expected: "xyz", Actual: "cba"
     at samples/SampleApp.Tests.Reqnroll/StepDefinitions/StringSteps.cs:line 32
-dotnet test: 2 failed, 5 passed (1 project, 0.07s)
+✗ dotnet test: 2 failed, 5 passed (1 project, 0.07s)
 ```
 
 Token reduction: **64 lines -> 8 lines**

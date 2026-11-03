@@ -41,6 +41,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   is the `dotnet` command line as dtk ran it (`dotnet test --no-build --filter X`; `dtk pipe` names only `dotnet test`).
   On a zero exit such a run used to print nothing, and on a failure it put the status line above the raw tail. A run
   that exits 0 but whose output counted errors ends with `⚠` rather than `✓`; the exit code stays the verdict.
+- A failing `dotnet test` run's status line now opens with `✗` like every other failure line, where 0.9.0 printed it
+  bare: `✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`. A script that matches the start of that line must allow
+  for the glyph.
 - `dtk log` now keeps the newest run of each kind (build, test, format, …) in each project, passing or failing and
   whatever its size, so `dtk log` and `dtk log build` always show the latest run. In the default `tee.mode` of
   `Failures` a passing run's log used to be deleted as it finished, so after a passing run `dtk log` showed an older
@@ -88,7 +91,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A `dotnet test` run whose test project does not compile (the red step of TDD) shows its compile errors grouped like
   `dotnet build` does, ending with `✗ dotnet test: 1 project did not build (2 errors)`, instead of the last 40 raw
   MSBuild lines, which lost the first errors and the total. When other projects ran, their failures follow the errors
-  and one line names both counts: `dotnet test: 1 failed, 2 passed · 1 project did not build (2 errors) (1 project,
+  and one line names both counts: `✗ dotnet test: 1 failed, 2 passed · 1 project did not build (2 errors) (1 project,
   0.02s)`, where the trailing `(1 project, …)` counts the projects that ran tests. They were dropped silently before.
 - `dotnet test` runs that printed nothing now print a result: a project whose tests are all skipped (VSTest's
   `Skipped!`), alone or next to others, a project that finished in under a millisecond (`Duration: < 1 ms`), and a run

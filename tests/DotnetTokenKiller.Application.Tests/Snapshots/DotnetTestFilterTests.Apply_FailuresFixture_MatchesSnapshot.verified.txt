@@ -5,4 +5,4 @@ FAILURES (2):
   DotnetTokenKiller.Application.Tests.Helpers.TokenEstimatorTests.Estimate_KnownText_ReturnsExpected [5 ms]
     Assert.Equal() Failure: Values differ — Expected: 42, Actual: 38
     at tests/DotnetTokenKiller.Application.Tests/Helpers/TokenEstimatorTests.cs:line 15
-dotnet test: 2 failed, 41 passed (1 project, 0.23s)
+✗ dotnet test: 2 failed, 41 passed (1 project, 0.23s)

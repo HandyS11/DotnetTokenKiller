@@ -32,4 +32,4 @@ FAILURES (1):
   Gamma.Tests.GammaTests.Divides [5 ms]
     Assert.Equal() Failure: Values differ — Expected: 3, Actual: 2
     at Gamma.Tests/GammaTests.cs:line 14
-dotnet test: 1 failed, 2 passed · 1 project did not build (34 errors) (1 project, 0.03s) · 1 build warning (CS0219)
+✗ dotnet test: 1 failed, 2 passed · 1 project did not build (34 errors) (1 project, 0.03s) · 1 build warning (CS0219)

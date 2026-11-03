@@ -65,7 +65,7 @@ FAILURES (1):
   SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]
     Intentional failure
     at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
-dotnet test: 1 failed, 3 passed (1 project, 0.03s)
+✗ dotnet test: 1 failed, 3 passed (1 project, 0.03s)
 ```
 
 </details>

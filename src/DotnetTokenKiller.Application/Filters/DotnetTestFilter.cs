@@ -631,7 +631,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // A project that did not compile never ran its tests, and says why in the same diagnostics a
         // build prints; that comes first, with whatever the other projects' tests reported after it. Only
         // a failed run can have a build failure: on a zero exit a diagnostic-shaped line is never one.
-        if (exitCode != 0 && buildReport.ErrorTotal > 0)
+        // Only a parsed error counts: MSBuild's declared "N Error(s)" can include one no pattern matched,
+        // and a status line over an empty body would lose its cause, so such a run falls through and, with
+        // nothing else to report, yields to the raw tail.
+        if (exitCode != 0 && buildReport.ParsedErrorCount > 0)
         {
             return FormatBuildFailure(state, buildReport, elapsed, warnings);
         }
@@ -846,7 +849,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
 
         var buildSuffix = buildFailure is null ? string.Empty : $" \u00b7 {buildFailure}";
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{buildSuffix}{context}{warnings}");
+            $"\u2717 dotnet test: {failedCount} failed, {state.TotalPassed} passed{(state.TotalSkipped > 0 ? $", {state.TotalSkipped} skipped" : string.Empty)}{buildSuffix}{context}{warnings}");
 
         // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
         // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.
@@ -876,7 +879,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// <summary>
     /// Joins a failure's message lines into the one line the report prints. An xUnit assertion with an
     /// <c>Expected:</c>/<c>Actual:</c> pair keeps its <c>Assert.…</c> header and its <c>↓ (pos N)</c> pointer; a
-    /// nested exception keeps its innermost <c>---- Type : message</c> segment, the usual real cause, whole.
+    /// nested exception keeps its innermost <c>---- Type : message</c> segment, the usual real cause, up to
+    /// <see cref="InnerExceptionMaxLen"/> characters.
     /// </summary>
     /// <param name="lines">The trimmed, non-empty lines of the message.</param>
     private static string CompactMessage(List<string> lines)

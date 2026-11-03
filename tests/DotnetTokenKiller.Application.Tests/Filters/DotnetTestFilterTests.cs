@@ -310,7 +310,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Be("FAILURES (1):\ndotnet test: 1 failed, 0 passed (1 project, 0.00s)\n");
+        result.Should().Be("FAILURES (1):\n✗ dotnet test: 1 failed, 0 passed (1 project, 0.00s)\n");
     }
 
     [Theory]
@@ -423,7 +423,7 @@ public class DotnetTestFilterTests
               MyTests.FailingTest [1 ms]
                 Assert failed
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 0 passed, 3 skipped (1 project, 0.05s)
+            ✗ dotnet test: 1 failed, 0 passed, 3 skipped (1 project, 0.05s)
 
             """);
     }
@@ -450,7 +450,7 @@ public class DotnetTestFilterTests
               MyTests.FailingTest [1 ms]
                 Assert failed
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 0 passed (1 project, 0.05s)
+            ✗ dotnet test: 1 failed, 0 passed (1 project, 0.05s)
 
             """);
     }
@@ -480,7 +480,7 @@ public class DotnetTestFilterTests
               MyTests.FailingTest [1 ms]
                 Assert failed
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 5 passed (2 projects, 0.15s)
+            ✗ dotnet test: 1 failed, 5 passed (2 projects, 0.15s)
 
             """);
     }
@@ -726,7 +726,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("dotnet test: 1 failed, 2 passed");
+        result.Should().Contain("✗ dotnet test: 1 failed, 2 passed");
     }
 
     [Fact]
@@ -1026,7 +1026,7 @@ public class DotnetTestFilterTests
         // A bare MTP failure line carries no message, so the message row renders as indent-only.
         // Spelled with \n rather than a raw literal because that trailing indent is significant.
         result.Should().Be(
-            "FAILURES (1):\n  MyTests.T1 [12ms]\n    \ndotnet test: 1 failed, 9 passed (1 project, 2.30s)\n");
+            "FAILURES (1):\n  MyTests.T1 [12ms]\n    \n✗ dotnet test: 1 failed, 9 passed (1 project, 2.30s)\n");
     }
 
     [Fact]
@@ -1052,7 +1052,7 @@ public class DotnetTestFilterTests
               MyTests.T1 [12ms]
                 Assert.Equal() Failure — Expected: 1, Actual: 2
                 at ../../../path/to/Test.cs:line 42
-            dotnet test: 1 failed, 1 passed (1 project, 2.30s)
+            ✗ dotnet test: 1 failed, 1 passed (1 project, 2.30s)
 
             """);
     }
@@ -1085,7 +1085,7 @@ public class DotnetTestFilterTests
         const string raw = "  Failed MyTests.T1 [15 ms]\n  Error Message:\n   boom";
         var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
         result.Should().Be(
-            "FAILURES (1):\n  MyTests.T1 [15 ms]\n    boom\ndotnet test: 1 failed, 0 passed\n");
+            "FAILURES (1):\n  MyTests.T1 [15 ms]\n    boom\n✗ dotnet test: 1 failed, 0 passed\n");
     }
 
     [Fact]
@@ -1113,7 +1113,7 @@ public class DotnetTestFilterTests
               MyTests.Multi [1 ms]
                 first part second part
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 0 passed (1 project, 0.00s)
+            ✗ dotnet test: 1 failed, 0 passed (1 project, 0.00s)
 
             """);
     }
@@ -1142,7 +1142,7 @@ public class DotnetTestFilterTests
               MyTests.OnlyOneShown [1 ms]
                 boom
                 at ../../../path/Test.cs:line 1
-            dotnet test: 5 failed, 0 passed (1 project, 0.01s)
+            ✗ dotnet test: 5 failed, 0 passed (1 project, 0.01s)
 
             """);
     }
@@ -1158,7 +1158,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Be("FAILURES (2):\ndotnet test: 2 failed, 1 passed (1 project, 0.02s)\n");
+        result.Should().Be("FAILURES (2):\n✗ dotnet test: 2 failed, 1 passed (1 project, 0.02s)\n");
     }
 
     [Fact]
@@ -1172,7 +1172,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \ndotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1s)\n");
+            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \n✗ dotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1s)\n");
     }
 
     [Fact]
@@ -1242,7 +1242,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail.txt"), exitCode: 1);
 
         result.Should().StartWith("FAILURES (1):\n  Alpha.Tests.AlphaTests.Divides [");
-        LastLine(result).Should().StartWith("dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
     }
 
     [Fact]
@@ -1252,7 +1252,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail_interleaved.txt"), exitCode: 1);
 
         result.Should().StartWith("FAILURES (1):\n  Alpha.Tests.AlphaTests.Divides [");
-        LastLine(result).Should().StartWith("dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
     }
 
     [Fact]
@@ -1263,7 +1263,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail_multiproject.txt"), exitCode: 1);
 
         result.Should().Contain("Alpha.Tests.AlphaTests.Divides [");
-        LastLine(result).Should().StartWith("dotnet test: 1 failed, 6 passed, 1 skipped (2 projects, ");
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 6 passed, 1 skipped (2 projects, ");
     }
 
     [Theory]
@@ -1394,7 +1394,7 @@ public class DotnetTestFilterTests
               Parse_Negative_ReturnsValue [14ms]
                 Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
                 at Beta.Tests/Test1.cs:line 14
-            dotnet test: 1 failed, 2 passed (1 project, 0.33s)
+            ✗ dotnet test: 1 failed, 2 passed (1 project, 0.33s)
 
             """);
     }
@@ -1422,7 +1422,7 @@ public class DotnetTestFilterTests
               XV3.DiffTests.FailStrings [2ms]
                 Assert.Equal() Failure: Strings differ at pos 9 — Expected: "hello world", Actual: "hello wordl"
                 at XV3/Tests.cs:line 32
-            dotnet test: 3 failed, 1 passed (1 project, 0.51s)
+            ✗ dotnet test: 3 failed, 1 passed (1 project, 0.51s)
 
             """);
     }
@@ -1446,7 +1446,7 @@ public class DotnetTestFilterTests
                 at XV3/Tests.cs:line 14
               (canceled) XV3.TimeoutTests.Hangs [203ms]
                 Xunit.MicrosoftTestingPlatform.XunitException: Test execution timed out after 200 milliseconds
-            dotnet test: 2 failed, 1 passed (1 project, 0.71s)
+            ✗ dotnet test: 2 failed, 1 passed (1 project, 0.71s)
 
             """);
     }
@@ -1520,7 +1520,7 @@ public class DotnetTestFilterTests
               Parse_Negative_ReturnsValue [13ms]
                 Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
                 at Beta.Tests/Test1.cs:line 14
-            dotnet test: 1 failed, 5 passed, 1 skipped (2 projects, 0.34s)
+            ✗ dotnet test: 1 failed, 5 passed, 1 skipped (2 projects, 0.34s)
 
             """);
     }
@@ -1727,7 +1727,7 @@ public class DotnetTestFilterTests
             .Should().BeLessThan(result.IndexOf("FAILURES (1):", StringComparison.Ordinal),
                 "the compile errors come first, then the failing tests");
         LastLine(result).Should().MatchRegex(
-            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
+            @"^✗ dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
     }
 
     [Fact]
@@ -1750,7 +1750,7 @@ public class DotnetTestFilterTests
         result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
         result.Should().NotContain("FAILURES");
         LastLine(result).Should().MatchRegex(
-            @"^dotnet test: 0 failed, 3 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
+            @"^✗ dotnet test: 0 failed, 3 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
     }
 
     [Fact]
@@ -1762,9 +1762,33 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 1);
 
-        result.Should().Contain("MSB1009: Project file does not exist.");
+        result.Should().Contain("MSB1009: Project file does not exist. Switch: nothere.csproj");
         result.Should().NotContain("0 project");
         LastLine(result).Should().Be("✗ dotnet test: build failed (1 error)");
+    }
+
+    [Fact]
+    public void Apply_DeclaredErrorNoPatternParsed_SaysNothingSoTheRawTailShows()
+    {
+        // MSBuild's "1 Error(s)" counts a diagnostic no pattern matched: a project path with a space defeats
+        // the codeless-diagnostic pattern, and a restore error carries no line or column. A status line over
+        // an empty body ("build failed (1 error)") would hide the cause, so the filter says nothing and the
+        // pipeline prints the raw tail, where the NU1101 is.
+        const string input = """
+                             Determining projects to restore...
+                             /home/u/My Proj/A.Tests.csproj : error NU1101: Unable to find package Missing.Pkg. No packages exist with this id in source(s): nuget.org
+                               Failed to restore /home/u/My Proj/A.Tests.csproj (in 457 ms).
+
+                             Build FAILED.
+
+                             /home/u/My Proj/A.Tests.csproj : error NU1101: Unable to find package Missing.Pkg. No packages exist with this id in source(s): nuget.org
+                                 0 Warning(s)
+                                 1 Error(s)
+
+                             Time Elapsed 00:00:00.99
+                             """;
+
+        _sut.Apply(input, exitCode: 1).Should().BeEmpty();
     }
 
     [Fact]
@@ -1781,7 +1805,7 @@ public class DotnetTestFilterTests
         result.Should().Contain("error CS0103");
         result.Should().NotContain("did not build");
         result.Should().NotContain("build failed");
-        LastLine(result).Should().MatchRegex(@"^dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
+        LastLine(result).Should().MatchRegex(@"^✗ dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
     }
 
     [Fact]
@@ -1800,7 +1824,7 @@ public class DotnetTestFilterTests
 
         result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
         LastLine(result).Should().MatchRegex(
-            @"^dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
+            @"^✗ dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
     }
 
     [Fact]
@@ -1818,7 +1842,7 @@ public class DotnetTestFilterTests
         result.Should().NotContain("did not build");
         result.Should().NotContain("build failed");
         result.Should().NotContain("[xUnit.net");
-        LastLine(result).Should().MatchRegex(@"^dotnet test: 1 failed, 3 passed, 1 skipped \(1 project, [^)]+\)$");
+        LastLine(result).Should().MatchRegex(@"^✗ dotnet test: 1 failed, 3 passed, 1 skipped \(1 project, [^)]+\)$");
     }
 
     [Fact]
@@ -1834,7 +1858,7 @@ public class DotnetTestFilterTests
 
         result.Should().NotContain("did not build");
         result.Should().NotContain("build failed");
-        LastLine(result).Should().MatchRegex(@"^dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
+        LastLine(result).Should().MatchRegex(@"^✗ dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
     }
 
     [Fact]
@@ -1883,7 +1907,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(fixture, exitCode: 1);
 
         result.Should().StartWith("FAILURES (1):\n  Warn.Tests.WarnTests.Measures");
-        LastLine(result).Should().StartWith("dotnet test: 1 failed, 1 passed (1 project, ")
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 1 passed (1 project, ")
             .And.EndWith(BuildWarningsOfTheFixtures);
     }
 
@@ -2194,7 +2218,7 @@ public class DotnetTestFilterTests
 
         result.Should().Contain("Assert.Equal() Failure: Strings differ at pos 0 — Expected: \"xyz\", Actual: \"cba\"\n");
         result.Should().Contain("System.DivideByZeroException : Attempted to divide by zero.\n");
-        result.Should().Contain("dotnet test: 4 failed, 5 passed");
+        result.Should().Contain("✗ dotnet test: 4 failed, 5 passed");
     }
 
     [Fact]
