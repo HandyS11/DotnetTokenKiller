@@ -14,10 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   mean 'reset'?", which points at the command that deletes your tracking data.
 - A way to get `dotnet`'s own output when the filtered one is not enough. Set `DTK_RAW=1` (any non-empty value except
   `0` and `false`, in the environment or as a prefix) and `dtk dotnet …` runs `dotnet` unfiltered, recorded like any
-  other passthrough, without dtk's own `-q`, `-v` and `--show-log`. The rewrite hook of every supported agent now also
-  leaves alone a `dotnet` that the command asks for raw: `rtk proxy dotnet …`, `command dotnet …` and
-  `DTK_RAW=1 dotnet …`, next to the `\dotnet` and absolute-path forms that already worked. What a hook auto-approves
-  does not change.
+  other passthrough, without dtk's own output options (`-q`, `--quiet`, `-v` without a level, `--verbose`, `--vv`,
+  `--show-log`). The rewrite hook of every supported agent now also leaves alone a `dotnet` that the command asks for
+  raw: `rtk proxy dotnet …`, `command dotnet …` and `DTK_RAW=1 dotnet …`, next to the `\dotnet` and absolute-path forms
+  that already worked. What a hook auto-approves does not change.
 - `dotnet test --list-tests` prints the listed test names, one per line, with the build noise removed, and ends with
   `✓ dotnet test --list-tests: 4 tests (1 project)`. It printed nothing before.
 - A test run that compiled with warnings reports them at the end of its status line, naming at most three codes, most
@@ -36,11 +36,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `✓ dotnet build (1 project, 1.19s)`). `dotnet restore` errors, `dotnet format` and every `dotnet list package`
   report close with their summary instead of opening with it, a failed `dotnet clean` now ends with one
   (`✗ dotnet clean: 1 error`), and the `--show-log` hint comes before the status line. A run whose filter has nothing
-  to show prints the last 40 raw lines and then a status line
-  (`⚠ dotnet X: output not recognized, raw tail shown above`, `✗ dotnet X failed (exit N)`, or `✓ dotnet X (no
-  output)` when there was nothing at all). On a zero exit such a run used to print nothing, and on a failure it put the
-  status line above the raw tail. A run that exits 0 but whose output counted errors ends with `⚠` rather than `✓`; the
-  exit code stays the verdict.
+  to show prints the last 40 raw lines and then a status line: `⚠ <command>: output not recognized, raw tail shown
+  above`, `✗ <command> failed (exit N)`, or `✓ <command> (no output)` when there was nothing at all, where `<command>`
+  is the `dotnet` command line as dtk ran it (`dotnet test --no-build --filter X`; `dtk pipe` names only `dotnet test`).
+  On a zero exit such a run used to print nothing, and on a failure it put the status line above the raw tail. A run
+  that exits 0 but whose output counted errors ends with `⚠` rather than `✓`; the exit code stays the verdict.
 - `dtk log` now keeps the newest run of each kind (build, test, format, …) in each project, passing or failing and
   whatever its size, so `dtk log` and `dtk log build` always show the latest run. In the default `tee.mode` of
   `Failures` a passing run's log used to be deleted as it finished, so after a passing run `dtk log` showed an older
@@ -52,7 +52,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   a project path (MSB1009). Only a `-v` followed by `q`, `quiet`, `m`, `minimal`, `n`, `normal`, `d`, `detailed`,
   `diag` or `diagnostic` (any case) is left to `dotnet`; a bare `-v` is still dtk's verbose flag.
 - `dotnet publish --interactive` and `dotnet pack --interactive` still pass through unfiltered with the terminal
-  attached, but no longer hand dtk's own `-q`, bare `-v` and `--show-log` to `dotnet`, which rejects them.
+  attached, but no longer hand dtk's own output options (`-q`, `--quiet`, `-v` without a level, `--verbose`, `--vv`,
+  `--show-log`) to `dotnet`, which rejects them.
 - Errors and warnings from `dotnet build`, `publish`, `pack` and `dotnet test` share one layout, grouped by file as
   `(line,col) CODE: message`, where errors were grouped by file and warnings by code. A file with a single line of
   diagnostics prints it on that line with no heading, and a diagnostic repeated in a file prints once with all its
@@ -65,9 +66,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   --vv to see)`: the failed run is already saved for `dtk log`, which costs far less than `--vv`'s raw dump.
 - `dotnet format` problems are grouped by file and code, one line each, where each violation had a line of its own: the
   `[project.csproj]` suffix is gone, a whitespace change reads in words (`WHITESPACE ×7 (1:8 newline, 2:4 insert 1
-  space, …)`), and the verdict is `✗ dotnet format: 18 violations in 2 files`. A line lists at most 20 positions and the
-  report at most 40 lines, then `… 6 more groups in 2 files (dtk log)`; the counts stay complete. The old cap of ten
-  violations is gone.
+  space, …)`), and the verdict is `✗ dotnet format: 18 violations in 2 files`. A line lists at most 20 positions, then
+  `… +N more`. The report lists at most 40 group lines, then one `… 6 more groups in 2 files (dtk log)` line and the
+  status line; the counts stay complete. The old cap of ten violations is gone.
 - A `dotnet test` filter that matches nothing now says which one: `⚠ dotnet test: no test matched filter
   FullyQualifiedName~X (Probe.dll)`, where it said `0 tests found (no assembly matched)`. The exit code is still
   dotnet's own.
@@ -88,28 +89,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `dotnet build` does, ending with `✗ dotnet test: 1 project did not build (2 errors)`, instead of the last 40 raw
   MSBuild lines, which lost the first errors and the total. When other projects ran, their failures follow the errors
   and one line names both counts: `dotnet test: 1 failed, 2 passed · 1 project did not build (2 errors) (1 project,
-  0.02s)`. They were dropped silently before.
+  0.02s)`, where the trailing `(1 project, …)` counts the projects that ran tests. They were dropped silently before.
 - `dotnet test` runs that printed nothing now print a result: a project whose tests are all skipped (VSTest's
   `Skipped!`), alone or next to others, a project that finished in under a millisecond (`Duration: < 1 ms`), and a run
   with the normal or detailed console logger (`Test Run Successful.` / `Test Run Failed.`), which also reported
   `1 failed, 0 passed` for a failing run that had passes.
 - A failed test keeps its cause. A message may run to 300 characters (it was 200), and when it nests exceptions the
-  innermost `---- Type : message` is kept whole and the outer ones are shortened first. xUnit's assertion header
-  (`Collections differ`, `Strings differ`, `Values differ`) and mismatch position survive (`Assert.Equal() Failure:
-  Collections differ at pos 0 — Expected: [1, 2, 3], Actual: [9, 2, 3]`), and a pending Reqnroll step shows the step to
-  implement (`No matching step definition: When the numbers are frobnicated`) instead of the generated binding snippet.
-  xUnit v3 failures under Microsoft.Testing.Platform, a timeout included, keep their message instead of a blank line.
+  innermost `---- Type : message` is kept (up to 200 characters) and the outer ones are shortened first. xUnit's
+  assertion header (`Collections differ`, `Strings differ`, `Values differ`) and mismatch position survive
+  (`Assert.Equal() Failure: Collections differ at pos 0 — Expected: [1, 2, 3], Actual: [9, 2, 3]`), and a pending
+  Reqnroll step shows the step to implement (`No matching step definition: When the numbers are frobnicated`) instead of
+  the generated binding snippet. xUnit v3 failures under Microsoft.Testing.Platform, a timeout included, keep their
+  message instead of a blank line.
 - `dtk dotnet list package --format json` and the MSBuild queries `-getProperty:`, `-getItem:` and `-getTargetResult:`
   (on `build`, `test`, `restore`, `clean`, `publish` and `pack`) pass through untouched, with the terminal attached
-  and dtk's own `-q`, bare `-v` and `--show-log` dropped. A filter used to append a line to the JSON document or replace
-  the printed value with a status line, which broke `| jq .` and `-getProperty:Version`.
+  and dtk's own output options (`-q`, `--quiet`, `-v` without a level, `--verbose`, `--vv`, `--show-log`) dropped. A
+  filter used to append a line to the JSON document or replace the printed value with a status line, which broke
+  `| jq .` and `-getProperty:Version`.
 - Numbers and durations no longer follow the system culture: under a French locale a summary read `0,34s`. Durations
-  also stop claiming precision the source never gave: VSTest's `Duration: 1 m 40 s` prints `1m40s` rather than `100.00s`
-  and `Duration: 12 s` prints `12s` rather than `12.00s`, while sub-second durations keep two decimals.
-- `dtk init claude` writes rtk's `[hooks] exclude_commands = ["dotnet"]` where rtk reads it: the path `rtk config`
-  prints, or else the platform default (`~/Library/Application Support/rtk/config.toml` on macOS). It wrote
-  `~/.config/rtk/config.toml` on every system, so on macOS both hooks still rewrote `dotnet build`. Re-run `dtk init
-  claude` to write the right file; an exclusion in the old place is left as it was.
+  also changed shape in every filter that prints one (build, publish, pack, test, restore and format). A minute or more
+  now reads `1m03s`, and an hour `1h02m03s`, where 0.9.0 printed `63.21s` and `3723.40s`; a script that parses seconds
+  out of a status line must read the new form. Under a minute, a duration the tool gives with fractions is unchanged
+  (`12.50s`, `0.78s`). A source that only gives whole units no longer claims decimals: VSTest's `Duration: 12 s` prints
+  `12s` rather than `12.00s`, `Duration: 1 m 40 s` prints `1m40s` rather than `100.00s`, and restore's `(in 2 sec)`
+  prints `2s`.
+- `dtk init` writes rtk's `[hooks] exclude_commands = ["dotnet"]` where rtk reads it: the path `rtk config` prints, or
+  else the platform default (`$XDG_CONFIG_HOME` or `~/.config` on Linux, `~/Library/Application Support/rtk/config.toml`
+  on macOS, `%APPDATA%\rtk\config.toml` on Windows, which is inferred and not verified). This applies to every
+  provider that detects an rtk hook: Claude Code, Codex, Cursor, OpenCode, pi and oh-my-pi, Antigravity and Factory
+  Droid. It wrote `$XDG_CONFIG_HOME` or `~/.config` on every system, so on macOS both hooks still rewrote
+  `dotnet build`. Re-run `dtk init <provider>` to write the right file; an exclusion in the old place is left as it was.
+  `dtk doctor`'s rtk check looks only at Claude Code's settings.
 - `dtk config` with no subcommand shows the configuration instead of printing help and exiting 1.
 - `dtk doctor` no longer lists a hook's checks twice when the working directory is your home directory.
 - `dtk doctor`, `dtk gain` and dtk's other messages no longer wrap at 80 columns in the middle of a path when their
