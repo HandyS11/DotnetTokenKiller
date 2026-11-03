@@ -98,10 +98,10 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     /// shipped in a release, append its hash (the pinned value) to the matching list in
     /// <see cref="IntegrationInstructions"/>, then pin the new one here.
     /// </summary>
-    private const string CurrentCursorRuleHash = "6e3e9608d4e7c2ec5405e0523fca0cda9dd77ababb17dcd4d367fdb7dd0353ce";
+    private const string CurrentCursorRuleHash = "7c369fc9f3989aea48fce6aa9e723267b637808f0844628c3c93089f134a0c7c";
 
     /// <inheritdoc cref="CurrentCursorRuleHash"/>
-    private const string CurrentMarkdownRuleHash = "39c8fe1f5d75de509aefadcfb015696b9a08df6e76d0d967413a99f36e86d28f";
+    private const string CurrentMarkdownRuleHash = "9a4f734ee4318b9b203a5d87532a4fc6c25ce465a8b62fe842f428f3baca54b8";
 
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-released-hashes-{Guid.NewGuid()}");
 

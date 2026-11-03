@@ -41,8 +41,7 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
 
     /// <summary>What an agent needs from the shared instructions beyond the commands themselves.</summary>
     public static TheoryData<string> TaughtPoints() => new(
-        "`dtk log`",
-        "`dtk log build`",
+        "`dtk log [build|test]`",
         "`--list`",
         "`dtk pipe <subcommand>`",
         "`-q`",
@@ -62,6 +61,17 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
     [MemberData(nameof(TaughtPoints))]
     public void Section_TeachesTheLogTheBypassAndNotToPipe(string point) =>
         SharedInstructionArtifacts.Section.Should().Contain(point);
+
+    [Fact]
+    public void Section_StaysShortAndMakesNoInteractiveClaim()
+    {
+        // Loaded into every agent session, often next to the skill: every added sentence is paid for each time.
+        System.Text.Encoding.UTF8.GetByteCount(SharedInstructionArtifacts.Section).Should().BeLessThan(1200);
+
+        // Only publish and pack pass --interactive through; build and restore still filter it.
+        SharedInstructionArtifacts.Section.Should().NotContain("--interactive");
+        SharedInstructionArtifacts.SkillMarkdown.Should().NotContain("--interactive");
+    }
 
     [Fact]
     public void SkillMarkdown_FlagsTable_DemotesVvInFavourOfTheLog()

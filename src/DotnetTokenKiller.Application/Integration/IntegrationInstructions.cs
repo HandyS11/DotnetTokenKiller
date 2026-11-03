@@ -35,12 +35,13 @@ internal static class IntegrationInstructions
     /// <summary>
     /// Introductory sentence describing dtk's purpose. Used standalone (followed by a "## Usage"
     /// subheading) by Aider, Cursor, and Devin, or as the lead-in of <see cref="Markdown"/> for
-    /// providers that embed the instructions directly under their own heading.
+    /// providers that embed the instructions directly under their own heading. One sentence, because it is loaded
+    /// in every agent session: the 0.9.0 text added "<c>dtk</c> filters output to actionable signal only, reducing
+    /// noise by 50-97%.", a claim the agent cannot act on.
     /// </summary>
     internal static readonly string Intro =
         $"""
         Use `dtk` instead of raw `dotnet` for {SubcommandProse} commands.
-        `dtk` filters output to actionable signal only, reducing noise by 50-97%.
         """;
 
     /// <summary>
@@ -62,13 +63,13 @@ internal static class IntegrationInstructions
         dtk dotnet pack
         ```
 
-        - All arguments and flags are forwarded to `dotnet` unchanged. `dtk test`, `dtk build` and the other subcommands also work without `dotnet`.
-        - Exit codes are preserved — CI pipelines work correctly.
-        - Unknown subcommands (e.g. `run`, `watch`), machine-readable runs (`list package --format json`, `-getProperty:`) and `--interactive` pass through to `dotnet` unchanged.
-        - Read the whole output. Don't pipe dtk output into tail or grep: its last line is the status.
-        - `dtk log` prints the raw output of the latest run, passing or failing (last 100 lines, `--full` for all): use it instead of re-running. `dtk log build` or `dtk log test` picks a kind, `--list` shows what is kept.
-        - `dtk pipe <subcommand>` filters output read from stdin; `-q` prints the filtered output alone.
-        - Raw `dotnet` output: set `DTK_RAW=1` (in the environment or as a prefix). Where dtk's hook rewrites plain `dotnet …` commands, it leaves `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …` alone.
+        - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
+        - Exit codes are preserved.
+        - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
+        - Don't pipe dtk output into tail or grep: its last line is the status.
+        - `dtk log [build|test]` prints the latest run's raw output instead of re-running: last 100 lines, `--full` for all, `--list`.
+        - `dtk pipe <subcommand>` filters stdin. `-q` (any command) prints only the filtered output.
+        - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
         """;
 
     /// <summary>

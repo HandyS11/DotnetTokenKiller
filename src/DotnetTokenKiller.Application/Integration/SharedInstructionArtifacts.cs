@@ -75,7 +75,7 @@ internal static class SharedInstructionArtifacts
         - Paths are workspace-relative (`src/Foo.cs`, not absolute)
         - Errors and warnings are grouped by file
         - Works with xUnit, NUnit, MSTest, and Reqnroll
-        - Test status lines add the count and top codes of the build warnings of the projects compiled in that run; an up-to-date build compiles nothing and reports none
+        - Test status lines count the build warnings of the projects compiled in that run; an up-to-date build compiles nothing and reports none
 
         ## Token Savings
 
