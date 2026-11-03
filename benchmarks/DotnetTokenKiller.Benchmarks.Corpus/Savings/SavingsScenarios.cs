@@ -46,6 +46,8 @@ public static class SavingsScenarios
         new("test/compile-errors", "dotnet_test_compile_errors.txt", FilterKeys.Test, 1),
         new("test/compile-errors-mixed", "dotnet_test_compile_errors_mixed.txt", FilterKeys.Test, 1),
         new("test/compile-errors-mixed-passing", "dotnet_test_compile_errors_mixed_passing.txt", FilterKeys.Test, 1),
+        // A real capture but for one token: VSTest never printed "Duration: < 1 ms" in about 70 runs, so the
+        // run's "Duration: 9 ms" was replaced by it.
         new("test/duration-under-1ms", "dotnet_test_duration_under_1ms.txt", FilterKeys.Test, 0),
         new("test/failure-mentions-diagnostic", "dotnet_test_failure_mentions_diagnostic.txt", FilterKeys.Test, 1),
         new("test/failures", "dotnet_test_failures.txt", FilterKeys.Test, 1),

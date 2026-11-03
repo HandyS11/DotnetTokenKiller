@@ -6,7 +6,8 @@ namespace DotnetTokenKiller.Benchmarks.Corpus;
 /// <summary>
 /// Reads the real captured <c>dotnet</c> outputs that the Application filter tests assert against.
 /// These drive the savings baseline: the published savings percentages have to come from output
-/// dotnet actually produced, not from generated approximations of it.
+/// dotnet actually produced, not from generated approximations of it. The one exception is a single token of
+/// <c>dotnet_test_duration_under_1ms.txt</c>, noted beside its scenario in <c>SavingsScenarios</c>.
 /// </summary>
 public static class FixtureCorpus
 {

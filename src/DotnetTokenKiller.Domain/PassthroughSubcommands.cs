@@ -249,7 +249,6 @@ public static class PassthroughSubcommands
                && HasInteractiveFlag(dotnetArgs);
     }
 
-
     /// <summary>
     /// Returns <see langword="true"/> when this invocation prints output for a program to parse, which a
     /// filter would corrupt or replace: <c>dotnet list package --format json</c>, or an MSBuild query

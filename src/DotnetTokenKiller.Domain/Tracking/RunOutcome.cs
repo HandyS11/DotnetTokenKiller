@@ -6,7 +6,10 @@ public enum RunOutcome
     /// <summary>A filter ran and produced the output.</summary>
     Filtered = 0,
 
-    /// <summary>The command failed and its filter produced nothing, so the raw tail was emitted.</summary>
+    /// <summary>
+    /// The filter produced nothing, so the raw tail and a status line were emitted instead. Whatever the exit
+    /// code: a failed run is the common case, but a run that exited zero with nothing to show lands here too.
+    /// </summary>
     RawTailFallback = 1,
 
     /// <summary>The filter threw, so the raw output was emitted unchanged.</summary>
@@ -15,7 +18,12 @@ public enum RunOutcome
     /// <summary>No filter exists; output was streamed through and its tokens counted.</summary>
     PassthroughMeasured = 3,
 
-    /// <summary>No filter exists and the output was not captured, so its size is unknown.</summary>
+    /// <summary>
+    /// No filter exists and the output was not captured, so its size is unknown: a run that keeps the terminal
+    /// attached (<c>dotnet run</c>, <c>watch</c>, an <c>--interactive</c> or prompting run), a filtered subcommand
+    /// under <c>DTK_RAW</c>, and a machine-readable run (<c>list package --format json</c>, an MSBuild
+    /// <c>-getProperty</c> query) whose reader wants dotnet's own bytes.
+    /// </summary>
     PassthroughUnmeasured = 4
 }
 
