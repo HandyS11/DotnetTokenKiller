@@ -2,6 +2,7 @@ using System.Diagnostics;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
@@ -12,12 +13,14 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <param name="commandRunner">The command runner.</param>
 /// <param name="teeService">Opens the log the run streams into.</param>
 /// <param name="rawOutputCopyFactory">Creates the file <c>--tee &lt;path&gt;</c> copies the raw output into.</param>
+/// <param name="fileSnapshotter">Hashes the tree around a run for filters that need the changed files.</param>
 /// <param name="pipeline">The shared output-filtering pipeline.</param>
 /// <param name="output">The text writer for user-facing output.</param>
 public sealed class FilteredRunUseCase(
     ICommandRunner commandRunner,
     ITeeService teeService,
     IRawOutputCopyFactory rawOutputCopyFactory,
+    IFileContentSnapshotter fileSnapshotter,
     FilteredOutputPipeline pipeline,
     TextWriter output)
 {
@@ -102,6 +105,12 @@ public sealed class FilteredRunUseCase(
 #pragma warning restore CA2007
         var stdOutSink = countingSink ?? session.Writer;
 
+        // Before the child starts; only a filter that asks for it pays for the walk.
+        var snapshotRoot = filter is ISnapshotFilter snapshotFilter
+            ? snapshotFilter.SnapshotRoot(ArgumentsAfterSubcommand(args), Environment.CurrentDirectory)
+            : null;
+        var snapshotBefore = snapshotRoot is null ? null : fileSnapshotter.Take(snapshotRoot, cancellationToken);
+
         CommandResult result;
         try
         {
@@ -127,6 +136,10 @@ public sealed class FilteredRunUseCase(
             await copy.DisposeAsync().ConfigureAwait(false);
         }
 
+        // Only here, once the child has exited on its own: a cancelled run rethrew above. Not cancellable, like
+        // the pipeline call below, so a late Ctrl+C cannot drop the output of a run that finished.
+        var changes = snapshotRoot is null ? null : ChangesSince(snapshotBefore, snapshotRoot);
+
         var request = new FilteredOutputRequest(
             filter,
             result.StdOut + result.StdErr,
@@ -145,13 +158,22 @@ public sealed class FilteredRunUseCase(
                 Arguments = ArgumentsAfterSubcommand(args),
                 WorkingDirectory = Environment.CurrentDirectory,
                 StartedUtc = startedUtc,
-                Test = test ?? TestOptions.None
+                Test = test ?? TestOptions.None,
+                Changes = changes
             }
         };
 
         // None: the child has exited, and a cancellation landing now (Ctrl+C's grace period elapsing)
         // must not drop the filtered output, the log or the record of a run that finished on its own.
         return await pipeline.ProcessAsync(request, session, prepared, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private FileChangeSet ChangesSince(FileContentSnapshot? before, string root)
+    {
+        var after = before is null ? null : fileSnapshotter.Take(root);
+        return before is null || after is null
+            ? FileChangeSet.NotComputed("tree too large")
+            : new FileChangeSet(after.ChangedSince(before));
     }
 
     /// <summary>The arguments after the subcommand's tokens, or after the first one when none matches.</summary>

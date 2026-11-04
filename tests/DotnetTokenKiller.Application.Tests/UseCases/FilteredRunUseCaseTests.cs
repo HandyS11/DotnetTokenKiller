@@ -4,6 +4,7 @@ using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
@@ -23,6 +24,7 @@ public class FilteredRunUseCaseTests
     private readonly IRawOutputCopyFactory _rawOutputCopyFactory = Substitute.For<IRawOutputCopyFactory>();
 
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
+    private readonly IFileContentSnapshotter _snapshotter = Substitute.For<IFileContentSnapshotter>();
     private readonly FilteredRunUseCase _sut;
     private readonly ITeeService _teeService = Substitute.For<ITeeService>();
     private readonly ITracker _tracker = Substitute.For<ITracker>();
@@ -35,7 +37,7 @@ public class FilteredRunUseCaseTests
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
         var pipeline = new FilteredOutputPipeline(_tracker, TextWriter.Null, _configProvider);
-        _sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, pipeline, TextWriter.Null);
+        _sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter, pipeline, TextWriter.Null);
     }
 
     private static ITeeSession CreateSession(string? finalizeHint = null)
@@ -384,7 +386,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -407,7 +409,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -431,7 +433,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -453,7 +455,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -472,7 +474,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -491,7 +493,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -513,7 +515,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -551,7 +553,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -618,7 +620,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -638,7 +640,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -661,7 +663,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -687,7 +689,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession(finalizeHint: null);
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -722,7 +724,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -748,7 +750,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -768,7 +770,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -790,7 +792,7 @@ public class FilteredRunUseCaseTests
             Tracking = new TrackingConfig(false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, TextWriter.Null, configProvider), TextWriter.Null);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -812,7 +814,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -832,7 +834,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -946,7 +948,7 @@ public class FilteredRunUseCaseTests
     private async Task<string> RunUseCaseAsync(int exitCode, string rawOutput)
     {
         await using var writer = new StringWriter();
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, _configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -972,7 +974,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -998,7 +1000,7 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
                 new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
             _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1028,7 +1030,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1054,7 +1056,7 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
+            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
                 new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
             _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1280,7 +1282,7 @@ public class FilteredRunUseCaseTests
     }
 
     private FilteredRunUseCase CreateWithOutput(TextWriter writer) =>
-        new(_runner, _teeService, _rawOutputCopyFactory,
+        new(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, _configProvider), writer);
 
     [Fact]
@@ -1424,5 +1426,75 @@ public class FilteredRunUseCaseTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         copy.DisposeCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotFilter_PassesChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "snap-root");
+        var before = new FileContentSnapshot(root, new Dictionary<string, string> { ["a.cs"] = "1", ["b.cs"] = "1" });
+        var after = new FileContentSnapshot(root, new Dictionary<string, string> { ["a.cs"] = "1", ["b.cs"] = "2" });
+        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        var filter = new SnapshotFilter(root);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode", "X.slnx"], new OutputOptions());
+
+        filter.Seen.Should().NotBeNull();
+        filter.Seen.Computed.Should().BeTrue();
+        filter.Seen.ChangedPaths.Should().Equal("b.cs");
+        filter.Arguments.Should().Equal("X.slnx");
+        _snapshotter.Received(2).Take(root, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotFilter_TreeTooLarge_ReportsNotComputed()
+    {
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((FileContentSnapshot?)null);
+        var filter = new SnapshotFilter("/somewhere");
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        filter.Seen!.Computed.Should().BeFalse();
+        filter.Seen.NotComputedReason.Should().Be("tree too large");
+    }
+
+    [Fact]
+    public async Task RunAsync_PlainFilter_TakesNoSnapshot()
+    {
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
+
+        _snapshotter.DidNotReceiveWithAnyArgs().Take(default!, default);
+    }
+
+    private sealed class SnapshotFilter(string root) : IContextualOutputFilter, ISnapshotFilter
+    {
+        public FileChangeSet? Seen { get; private set; }
+
+        public IReadOnlyList<string>? Arguments { get; private set; }
+
+        public string SnapshotRoot(IReadOnlyList<string> arguments, string workingDirectory)
+        {
+            Arguments = arguments;
+            return root;
+        }
+
+        public string Apply(string strippedOutput, int exitCode) => Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;
+
+        public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
+        {
+            Seen = context.Changes;
+            return new FilterResult("done\n");
+        }
     }
 }
