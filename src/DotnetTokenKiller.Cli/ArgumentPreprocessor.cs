@@ -472,13 +472,35 @@ internal static class ArgumentPreprocessor
                 continue;
             }
 
-            if (DtkOptions.Contains(args[i]) && !IsDotnetVerbosityFlag(args, i))
+            if (JoinedTestOptionName(args[i]) is { } joined)
+            {
+                yield return new DtkOption(joined, i, 1, MissingValue: false);
+            }
+            else if (DtkOptions.Contains(args[i]) && !IsDotnetVerbosityFlag(args, i))
             {
                 yield return new DtkOption(args[i], i, 1, MissingValue: false);
             }
 
             i++;
         }
+    }
+
+    /// <summary>
+    /// Returns the test option <paramref name="token"/> names with a value joined by <c>=</c> or <c>:</c>
+    /// (<c>--names=true</c>), or <see langword="null"/> when it is not one. Spectre refuses a value on a flag, so the
+    /// token is dtk's: it must never reach dotnet.
+    /// </summary>
+    /// <param name="token">A single raw CLI token.</param>
+    private static string? JoinedTestOptionName(string token)
+    {
+        var separator = token.AsSpan().IndexOfAny('=', ':');
+        if (separator < 0)
+        {
+            return null;
+        }
+
+        var name = token[..separator];
+        return TestOnlyOptions.Contains(name) ? name : null;
     }
 
     /// <summary>

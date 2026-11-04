@@ -21,3 +21,6 @@ OPTIONS:
                                       content                                                       
         --tee <PATH>                  Also write the raw output to PATH                             
         --max-lines <N>    0          Print at most N lines of filtered output (0: no limit)        
+        --names                       List the names of the tests that ran                          
+        --show-output                 Show the console output the tests wrote                       
+        --fail-on-empty               Fail when no test matched                                     

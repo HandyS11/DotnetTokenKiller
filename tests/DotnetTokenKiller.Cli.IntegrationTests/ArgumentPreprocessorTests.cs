@@ -412,6 +412,7 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("test --tee:out.log --max-lines 3 --filter X", "test --filter X")]
     [InlineData("test --max-lines -1 --filter X", "test --filter X")]
     [InlineData("test --names --show-output --fail-on-empty --filter X", "test --filter X")]
+    [InlineData("test --names=true --show-output:false --fail-on-empty=true --filter X", "test --filter X")]
     // A value option missing its value goes alone: dotnet's next option is never taken for it.
     [InlineData("test --tee --filter X", "test --filter X")]
     // --max-lines takes only an integer: a project after it is dotnet's.
@@ -495,6 +496,13 @@ public sealed class ArgumentPreprocessorTests
             .Should().Equal("dotnet", "test", "--names", "--show-output", "--fail-on-empty", "--", "--filter", "X");
     }
 
+    [Fact]
+    public void InsertSeparator_PartitionsJoinedTestOnlyOptions()
+    {
+        ArgumentPreprocessor.InsertSeparator(["dotnet", "test", "--names=true", "--filter", "X", "--fail-on-empty:true"])
+            .Should().Equal("dotnet", "test", "--names=true", "--fail-on-empty:true", "--", "--filter", "X");
+    }
+
     [Theory]
     [InlineData("dotnet test --tee", "--tee")]
     [InlineData("dotnet test --tee --filter X", "--tee")]
@@ -522,6 +530,8 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet build --names", "--names")]
     [InlineData("dotnet build MyApp.slnx --show-output", "--show-output")]
     [InlineData("dotnet list package --fail-on-empty", "--fail-on-empty")]
+    [InlineData("dotnet build --names=true", "--names")]
+    [InlineData("dotnet test --names=true", null)]
     [InlineData("dotnet test --names", null)]
     [InlineData("dotnet test --names --show-output --fail-on-empty", null)]
     [InlineData("dotnet build -- --names", null)]

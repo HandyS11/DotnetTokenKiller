@@ -2,6 +2,7 @@ using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands.Settings;
 using DotnetTokenKiller.Cli.Infrastructure;
 using DotnetTokenKiller.Domain;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -57,11 +58,33 @@ internal sealed class PipeCommand(
             return Task.FromResult(1);
         }
 
+        if (!string.Equals(match.Name, DotnetSubcommands.Test, StringComparison.Ordinal)
+            && FirstTestOption(settings) is { } option)
+        {
+            console.MarkupLine($"[red]dtk:[/] {option} applies only to dtk pipe test");
+            return Task.FromResult(ExitCodes.UsageError);
+        }
+
         // Keyed by the canonical name, the same key FilterKeys aliases, so pipe mode can never
         // address a filter that CLI routing cannot (or vice versa).
         var filter = services.GetRequiredKeyedService<IOutputFilter>(match.Name);
 
         return pipeFilter
-            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), cancellationToken: cancellationToken);
+            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), settings.ToTestOptions(), cancellationToken);
+    }
+
+    private static string? FirstTestOption(PipeCommandSettings settings)
+    {
+        if (settings.Names)
+        {
+            return "--names";
+        }
+
+        if (settings.ShowOutput)
+        {
+            return "--show-output";
+        }
+
+        return settings.FailOnEmpty ? "--fail-on-empty" : null;
     }
 }

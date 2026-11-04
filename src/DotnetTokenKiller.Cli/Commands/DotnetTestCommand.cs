@@ -11,16 +11,17 @@ namespace DotnetTokenKiller.Cli.Commands;
 /// <param name="filter">The test output filter.</param>
 internal sealed class DotnetTestCommand(
     FilteredRunUseCase filteredRun,
-    [FromKeyedServices(FilterKeys.Test)] IOutputFilter filter) : AsyncCommand<DotnetCommandSettings>
+    [FromKeyedServices(FilterKeys.Test)] IOutputFilter filter) : AsyncCommand<DotnetTestCommandSettings>
 {
     /// <inheritdoc/>
-    public override Task<int> ExecuteAsync(CommandContext context, DotnetCommandSettings settings,
+    public override Task<int> ExecuteAsync(CommandContext context, DotnetTestCommandSettings settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(context);
 
         var args = settings.PositionalArgs.Prepend("test").Concat(context.Remaining.Raw).ToArray();
-        return filteredRun.RunAsync(filter, "dotnet", args, settings.ToOutputOptions(), cancellationToken: cancellationToken);
+        return filteredRun.RunAsync(filter, "dotnet", args, settings.ToOutputOptions(),
+            settings.ToTestOptions(), cancellationToken);
     }
 }

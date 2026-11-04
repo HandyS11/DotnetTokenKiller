@@ -21,3 +21,6 @@ OPTIONS:
         --tee <PATH>                  Also write the raw output to PATH                             
         --max-lines <N>    0          Print at most N lines of filtered output (0: no limit)        
         --exit-code        0          Exit code of the command that produced the output (default 0) 
+        --names                       List the names of the tests that ran (pipe test only)         
+        --show-output                 Show the console output the tests wrote (pipe test only)      
+        --fail-on-empty               Fail when no test matched (pipe test only)                    
