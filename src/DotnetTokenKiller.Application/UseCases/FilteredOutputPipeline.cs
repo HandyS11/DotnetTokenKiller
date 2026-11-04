@@ -108,10 +108,11 @@ public sealed class FilteredOutputPipeline(
             ? ExitCodes.NoTestsMatched
             : request.ExitCode;
 
-        // Finalized before the raw-tail fallback is built, because the fallback embeds this hint.
+        // Finalized before the output is capped, because the footer names the log when there is one.
         var logHint = await FinalizeTeeAsync(session, exitCode, cancellationToken).ConfigureAwait(false);
 
         var shownLogHint = options.ShowLogHint ? logHint : null;
+        var footerTarget = logHint is null ? "rerun without --max-lines" : "dtk log";
 
         // A filtered run never prints nothing, whatever the exit code, and the last line of every
         // filtered run is its single status line. A faulted filter is checked first: its raw text is
@@ -121,24 +122,24 @@ public sealed class FilteredOutputPipeline(
         RunOutcome outcome;
         if (filterFaulted)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false,
-                shownLogHint);
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false);
             outcome = RunOutcome.FilterFaulted;
         }
         else if (string.IsNullOrWhiteSpace(filtered))
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true,
-                shownLogHint);
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true);
             outcome = RunOutcome.RawTailFallback;
         }
         else
         {
-            if (shownLogHint is not null)
-            {
-                filtered = InsertBeforeLastLine(filtered, shownLogHint);
-            }
-
             outcome = RunOutcome.Filtered;
+        }
+
+        // Capped before the hint goes in, so the hint is never counted or cut: tail, footer, hint, status.
+        filtered = OutputCap.Truncate(filtered, options.MaxLines, footerTarget);
+        if (shownLogHint is not null)
+        {
+            filtered = InsertBeforeLastLine(filtered, shownLogHint);
         }
 
         filtered = NormalizeGlyphs(filtered, config);
@@ -212,19 +213,17 @@ public sealed class FilteredOutputPipeline(
 
     /// <summary>
     /// Builds the fallback shown when the filter left nothing to show or threw: the raw output (whole, or its
-    /// last 40 lines), the tee log hint when present, then the run's single status line.
+    /// last 40 lines), then the run's single status line.
     /// </summary>
     /// <param name="command">The command line that was run, for display purposes.</param>
     /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
     /// <param name="tailOnly">Whether to show only the last 40 lines of <paramref name="rawOutput"/>.</param>
-    /// <param name="logHint">An optional tee log hint, written just before the status line.</param>
     private static string BuildFallback(
         string command,
         int exitCode,
         string rawOutput,
-        bool tailOnly,
-        string? logHint)
+        bool tailOnly)
     {
         var sb = new StringBuilder();
         var hasOutput = !string.IsNullOrWhiteSpace(rawOutput);
@@ -242,11 +241,6 @@ public sealed class FilteredOutputPipeline(
             {
                 sb.Append('\n');
             }
-        }
-
-        if (logHint is not null)
-        {
-            sb.Append(logHint).Append('\n');
         }
 
         return sb.Append(FallbackStatusLine(command, exitCode, hasOutput)).Append('\n').ToString();

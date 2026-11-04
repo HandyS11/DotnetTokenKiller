@@ -219,6 +219,56 @@ public class FilteredOutputPipelineTests
         writer.ToString().Should().Be("a\nb\n[full output: /x.log]\n✗ dotnet build failed (exit 1)\n");
     }
 
+    private static string NumberedLines(int count) =>
+        string.Concat(Enumerable.Range(1, count).Select(i => $"line {i}\n"));
+
+    [Fact]
+    public async Task ProcessAsync_MaxLines_CapsFallbackTail_HintStaysBeforeStatus()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(raw: NumberedLines(100), exitCode: 1,
+            options: new OutputOptions(ShowLogHint: true, MaxLines: 5));
+
+        await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
+
+        writer.ToString().Should().Be(
+            "line 61\nline 62\nline 63\nline 64\nline 65\n… 35 more lines (dtk log)\n"
+            + "[full output: /x.log]\n✗ dotnet build failed (exit 1)\n");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MaxLines_FooterSaysRerun_WhenNoLog()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(raw: NumberedLines(100), exitCode: 1, options: new OutputOptions(MaxLines: 5));
+
+        await sut.ProcessAsync(request, NullTeeSession.Instance);
+
+        var lines = writer.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        lines[^2].Should().Be("… 35 more lines (rerun without --max-lines)");
+        lines[^1].Should().Be("✗ dotnet build failed (exit 1)");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MaxLines_CapsFaultedFilterRawOutput()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(raw: NumberedLines(100), exitCode: 1, options: new OutputOptions(MaxLines: 10));
+
+        await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
+
+        var lines = writer.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        lines.Should().HaveCount(12);
+        lines[10].Should().Be("… 90 more lines (dtk log)");
+        lines[^1].Should().Be("✗ dotnet build failed (exit 1)");
+    }
+
     [Fact]
     public async Task ProcessAsync_RawTailFallbackOfEmptyRaw_WritesOnlyTheStatusLine()
     {
