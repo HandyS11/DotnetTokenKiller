@@ -440,7 +440,7 @@ When dtk stops `dotnet` itself, it prints no filtered output and does not record
 
 DTK can save the raw, unfiltered command output to disk. This is controlled by the `tee.mode` configuration setting (see [Configuration](configuration.md)). By default, failed runs and the latest run of each kind are saved.
 
-Each log file also records the full command line and working directory that produced it, alongside the output. Log files are kept owner-only (mode `0600`) for that reason.
+Each log file also records the full command line and working directory that produced it, alongside the output. For that reason, on Linux and macOS log files are kept owner-only (mode `0600`, in a `0700` directory). On Windows they take the permissions of the folder they are written to, by default `%LOCALAPPDATA%\dtk\tee`.
 
 To print the log path after a command:
 

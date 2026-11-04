@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-04
+
 ### Added
 
 - `dtk test`, `dtk build`, `dtk restore`, `dtk clean`, `dtk format`, `dtk publish`, `dtk pack` and `dtk list package`
@@ -51,7 +53,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   even when everything passes, each at most `tee.maxFileSizeBytes` (1 MB by default) and counted toward `tee.maxFiles`
   (20). The next run of that kind in that project replaces the previous passing log, and any older log under 500
   bytes; failing logs of 500 bytes or more stay until `tee.maxFiles` rotates them out. A passing run's raw output,
-  test stdout included, is therefore now kept on disk by default (readable by its owner only); set `tee.mode` to
+  test stdout included, is therefore now kept on disk by default (readable by its owner only on Linux and macOS; on
+  Windows a log takes the permissions of its folder, by default `%LOCALAPPDATA%\dtk\tee`); set `tee.mode` to
   `Never` (`dtk config set tee.mode Never`) to turn the logs off.
 - `-v <level>` now goes to `dotnet`: `dtk dotnet build -v q` used to take `-v` for dtk's `--verbose` and pass `q` on as
   a project path (MSB1009). Only a `-v` followed by `q`, `quiet`, `m`, `minimal`, `n`, `normal`, `d`, `detailed`,
@@ -92,6 +95,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - A failed `dotnet clean` prints its error lines as MSBuild wrote them, with only the project root shortened. dtk used
   to treat each whole line as a path, so on Windows a line lost its final `.`.
+- An MSBuild command-line error keeps the argument it rejected. After `MSB1009: Project file does not exist.` MSBuild
+  names that argument on a line of its own (`Switch: nothere.csproj`), which `dotnet build`, `publish` and `pack` used
+  to drop. It now ends the error's message: `(no file) MSB1009: Project file does not exist. Switch: nothere.csproj`.
 - A `dotnet test` run whose test project does not compile (the red step of TDD) shows its compile errors grouped like
   `dotnet build` does, ending with `✗ dotnet test: 1 project did not build (2 errors)`, instead of the last 40 raw
   MSBuild lines, which lost the first errors and the total. When other projects ran, their failures follow the errors
@@ -313,7 +319,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - JSON configuration support.
 - Packaging as a .NET tool (`dotnet tool install DotnetTokenKiller`).
 
-[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0-beta.1...v0.8.0
 [0.8.0-beta.1]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.7.2...v0.8.0-beta.1

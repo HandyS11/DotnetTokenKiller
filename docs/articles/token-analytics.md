@@ -132,8 +132,10 @@ Each row carries:
   filter produced nothing, whatever the exit code, so the raw tail was emitted instead; `FilterFaulted` when
   the filter threw and dtk showed the whole raw output followed by a status line; `PassthroughMeasured` when no
   filter is registered for that subcommand but the output was still captured and counted; and
-  `PassthroughUnmeasured` when no filter exists and the output was not captured, so its size is
-  unknown (shown as `not measured`).
+  `PassthroughUnmeasured` when the output was not captured, so its size is unknown (shown as
+  `not measured`): a run that keeps the terminal attached (`dotnet run`, `dotnet watch`, an
+  `--interactive` run), and, even where a filter exists, a run made raw with `DTK_RAW=1` and a
+  machine-readable run (`list package --format json`, an MSBuild `-getProperty` query).
 - **Source** — `run` for output dtk produced itself, `pipe` for output supplied through
   `dtk pipe`. Piped runs are tracked separately because dtk did not control the invocation and
   cannot vouch for the exit code it was not given.
