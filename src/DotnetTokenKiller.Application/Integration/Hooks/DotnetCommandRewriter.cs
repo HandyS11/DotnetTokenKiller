@@ -46,6 +46,18 @@ internal static class DotnetCommandRewriter
     /// <summary>dtk's option that writes a file, which <see cref="IsAutoApprovable"/> never approves.</summary>
     private const string TeeOption = "--tee";
 
+    /// <summary>The shortest prefix a glob could complete to <see cref="TeeOption"/> from (<c>--t*</c>).</summary>
+    private const string TeeGlobPrefix = "--t";
+
+    /// <summary>The quoting characters the shell removes from a word before the program sees it.</summary>
+    private static readonly SearchValues<char> QuotingCharacters = SearchValues.Create("'\"\\");
+
+    /// <summary>The characters that make a word a glob pattern the shell may replace with file names.</summary>
+    private static readonly SearchValues<char> GlobCharacters = SearchValues.Create("*?[");
+
+    /// <summary>The blanks the shell splits words on.</summary>
+    private static readonly char[] WordSeparators = [' ', '\t', '\n'];
+
     /// <summary>Characters that may precede <c>dotnet</c> where a command starts.</summary>
     private static readonly SearchValues<char> Boundaries = SearchValues.Create(" \t;&|({`\n");
 
@@ -147,19 +159,14 @@ internal static class DotnetCommandRewriter
     /// <summary>
     /// Whether Copilot CLI may run <paramref name="command"/>'s rewrite without asking: it is
     /// <see cref="IsSimpleCommand">simple</see>, its subcommand is one of <see cref="AutoApprovableSubcommands"/>,
-    /// and it contains no <c>--tee</c>. <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they
-    /// write artifacts (and a publish profile can deploy), so they are left to the user's own approval.
+    /// and the shell could not hand dtk a <c>--tee</c> option from it (<see cref="MayPassTeeOption"/>).
+    /// <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they write artifacts (and a publish
+    /// profile can deploy), so they are left to the user's own approval.
     /// </summary>
-    /// <remarks>
-    /// <c>--tee &lt;path&gt;</c> writes dtk's copy of the raw output wherever its value points, so
-    /// <c>dotnet test --tee ~/.bashrc</c> is the file write <see cref="IsSimpleCommand"/> refuses as
-    /// <c>dotnet test &gt; ~/.bashrc</c>. The text is searched anywhere, quoted or not and in any form
-    /// (<c>--tee x</c>, <c>--tee=x</c>, <c>--tee:x</c>): a false match costs an approval prompt, never an approval.
-    /// </remarks>
     /// <param name="command">The original, unrewritten command.</param>
     internal static bool IsAutoApprovable(string command)
     {
-        if (!IsSimpleCommand(command) || command.Contains(TeeOption, StringComparison.Ordinal))
+        if (!IsSimpleCommand(command) || MayPassTeeOption(command))
         {
             return false;
         }
@@ -175,6 +182,41 @@ internal static class DotnetCommandRewriter
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Whether the shell might turn <paramref name="command"/> into one that passes dtk a <c>--tee</c> option, in any
+    /// form (<c>--tee x</c>, <c>--tee=x</c>, <c>--tee:x</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>--tee &lt;path&gt;</c> writes dtk's copy of the raw output wherever its value points, so
+    /// <c>dotnet test --tee ~/.bashrc</c> is the file write <see cref="IsSimpleCommand"/> refuses as
+    /// <c>dotnet test &gt; ~/.bashrc</c>. The shell assembles the word dtk sees, so this is fail-closed against each
+    /// way it does: <c>true</c> when the command, with every <c>'</c>, <c>"</c> and <c>\</c> removed (quote removal:
+    /// <c>--"tee"</c>, <c>--t\ee</c>, <c>--te''e</c>), contains <c>--tee</c>; when it contains a <c>{</c> anywhere
+    /// (brace expansion: <c>{--te,x}e</c> is <c>--tee xe</c>); and when a word of that quote-stripped command starts
+    /// with <c>--t</c> and contains <c>*</c>, <c>?</c> or <c>[</c> (globbing: <c>--te[e]</c> matches a file named
+    /// <c>--tee</c>).
+    /// </para>
+    /// <para>
+    /// None of these parses the command, and each matches far more than an option (a quoted <c>--filter "A{B}"</c>,
+    /// a test named <c>--tee</c>): a false match costs an approval prompt, never an approval.
+    /// </para>
+    /// </remarks>
+    /// <param name="command">A <see cref="IsSimpleCommand">simple</see> command.</param>
+    private static bool MayPassTeeOption(string command)
+    {
+        if (command.Contains('{', StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // Every quoting character goes, wherever it stands: no scan decides which ones the shell would keep.
+        var unquoted = string.Concat(command.Where(character => !QuotingCharacters.Contains(character)));
+        return unquoted.Contains(TeeOption, StringComparison.Ordinal)
+               || unquoted.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries).Any(word =>
+                   word.StartsWith(TeeGlobPrefix, StringComparison.Ordinal) && word.AsSpan().ContainsAny(GlobCharacters));
     }
 
     private static bool TryMatchSubcommand(string command, int position, out int subcommandStart, out int end)

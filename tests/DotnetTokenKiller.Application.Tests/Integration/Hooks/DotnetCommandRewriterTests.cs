@@ -271,6 +271,18 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet build --tee x")]
     [InlineData("dotnet test --tee:out.log")]
     [InlineData("dotnet test --filter X --tee ~/.bashrc")]
+    // The shell removes quotes and backslashes before dtk sees the word: each of these reaches dtk as `--tee`.
+    [InlineData("dotnet test --\"tee\" ~/.bashrc")]
+    [InlineData("dotnet test --t\\ee ~/.bashrc")]
+    [InlineData("dotnet test --te''e ~/.bashrc")]
+    [InlineData("dotnet build --t\"ee\"=/home/u/.bashrc")]
+    // Brace expansion assembles it: `{--te,/home/u/.profil}e` becomes `--tee /home/u/.profile`.
+    [InlineData("dotnet test {--te,/home/u/.profil}e")]
+    // Globbing can match a file named `--tee` that the shell then hands over as the option.
+    [InlineData("dotnet test --te[e] x")]
+    // Fail-closed: a brace anywhere could be an expansion that assembles `--tee`, so none is approved.
+    [InlineData("dotnet test --filter \"A{B}\"")]
+    [InlineData("dotnet build {a,b}")]
     public void IsAutoApprovable_IsFalse_WhenTheCommandWritesATeeFile(string command)
     {
         // `--tee` writes wherever its value points, so approving it would approve a file write that
@@ -279,10 +291,14 @@ public sealed class DotnetCommandRewriterTests
         DotnetCommandRewriter.IsAutoApprovable(command).Should().BeFalse();
     }
 
-    [Fact]
-    public void IsAutoApprovable_StaysTrue_WithoutATeeOption()
+    [Theory]
+    [InlineData("dotnet test")]
+    [InlineData("dotnet build --tl:off")]
+    [InlineData("dotnet test --filter \"FullyQualifiedName~Foo\"")]
+    [InlineData("dotnet test --filter 'Name=A|B' --no-build")]
+    public void IsAutoApprovable_StaysTrue_WithoutATeeOption(string command)
     {
-        DotnetCommandRewriter.IsAutoApprovable("dotnet test").Should().BeTrue();
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().BeTrue();
     }
 
     [Fact]
