@@ -39,6 +39,17 @@ public class DotnetBuildIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Build_WithoutTheDotnetWord_RunsTheFilteredBuild()
+    {
+        // An agent types `dtk build`; Spectre alone would answer "Unknown command 'build'. Did you mean
+        // 'reset'?", pointing at the command that wipes the tracking data.
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("build", SampleApp);
+
+        exitCode.Should().Be(0, output);
+        output.Should().Contain("✓ dotnet build").And.NotContain("Did you mean").And.NotContain("Unknown command");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Build_SampleApp_Success_NoMsBuildNoise()
     {
         var (output, _) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleApp);
@@ -53,12 +64,12 @@ public class DotnetBuildIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Build_SampleAppBroken_Failure_OutputStartsWith1Error()
+    public async Task Build_SampleAppBroken_Failure_OutputEndsWith1ErrorVerdict()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppBroken);
 
         exitCode.Should().NotBe(0);
-        output.Trim().Should().StartWith("dotnet build: 1 error");
+        output.Trim().Split('\n')[^1].Should().StartWith("✗ dotnet build failed (exit 1): 1 error");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -71,6 +82,21 @@ public class DotnetBuildIntegrationTests
         output.Should().NotContain(absolutePath);
         output.Should().Contain("BrokenClass.cs");
         output.Should().MatchRegex(@"\(\d+,\d+\)");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_BuildOfBrokenSample_PrintsRawCompilerLines()
+    {
+        // In this class rather than with the other passthrough tests: it builds a shared sample, which only the
+        // Integration.SampleApp collection does. DTK_RAW=1 asks for dotnet's own output, so the compiler's line
+        // arrives unshortened, and dtk's --show-log is dropped rather than forwarded to MSBuild, which rejects it.
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithDbAsync(
+            new Dictionary<string, string> { ["DTK_RAW"] = "1" }, "dotnet", "build", SampleAppBroken, "--show-log");
+
+        exitCode.Should().Be(1, "dotnet build's own exit code for a compile error");
+        output.Should().Contain("error CS");
+        output.Should().Contain(Path.Combine(SampleAppBroken, "BrokenClass.cs"));
+        output.Should().NotContain("dotnet build failed", "the run is not filtered");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -97,12 +123,12 @@ public class DotnetBuildIntegrationTests
     // ── SampleApp.MultiError ────────────────────────────────────────────
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Build_SampleAppMultiError_Failure_OutputStartsWithMultipleErrors()
+    public async Task Build_SampleAppMultiError_Failure_OutputEndsWithMultipleErrorsVerdict()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "build", SampleAppMultiError);
 
         exitCode.Should().NotBe(0);
-        output.Should().MatchRegex(@"^dotnet build: \d+ errors");
+        output.Trim().Split('\n')[^1].Should().MatchRegex(@"^✗ dotnet build failed \(exit 1\): \d+ errors");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -168,7 +194,7 @@ public class DotnetBuildIntegrationTests
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
-        output.Should().MatchRegex(@"dotnet build: 0 errors, \d+ warnings");
+        output.Trim().Split('\n')[^1].Should().MatchRegex(@"^✓ dotnet build: 0 errors, \d+ warnings");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

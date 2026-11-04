@@ -1,0 +1,18 @@
+  Determining projects to restore...
+  Restored /test/project/root/Warn.Tests/Warn.Tests.csproj (in 513 ms).
+/test/project/root/Warn.Tests/WarnTests.cs(10,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/test/project/root/Warn.Tests/Warn.Tests.csproj]
+/test/project/root/Warn.Tests/WarnTests.cs(20,25): warning CS8602: Dereference of a possibly null reference. [/test/project/root/Warn.Tests/Warn.Tests.csproj]
+/test/project/root/Warn.Tests/WarnTests.cs(17,13): warning CS0219: The variable 'leftover' is assigned but its value is never used [/test/project/root/Warn.Tests/Warn.Tests.csproj]
+  Warn.Tests -> /test/project/root/Warn.Tests/bin/Debug/net10.0/Warn.Tests.dll
+Test run for /test/project/root/Warn.Tests/bin/Debug/net10.0/Warn.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+  Failed Warn.Tests.WarnTests.Measures [< 1 ms]
+  Error Message:
+   System.NullReferenceException : Object reference not set to an instance of an object.
+  Stack Trace:
+     at Warn.Tests.WarnTests.Measures() in /test/project/root/Warn.Tests/WarnTests.cs:line 20
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+Failed!  - Failed:     1, Passed:     1, Skipped:     0, Total:     2, Duration: 15 ms - Warn.Tests.dll (net10.0)
+[xUnit.net 00:00:00.15]     Warn.Tests.WarnTests.Measures [FAIL]

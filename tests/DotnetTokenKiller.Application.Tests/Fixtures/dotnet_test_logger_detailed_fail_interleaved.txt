@@ -1,0 +1,44 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Alpha.Tests -> /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll
+Test run for /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v4.0.1+0f7d528729 (64-bit .NET 10.0.14)
+[xUnit.net 00:00:00.06]   Discovering: Alpha.Tests
+[xUnit.net 00:00:00.10]   Discovered:  Alpha.Tests
+[xUnit.net 00:00:00.12]   Starting:    Alpha.Tests
+[xUnit.net 00:00:00.13]     Alpha.Tests.AlphaTests.Persists [SKIP]
+[xUnit.net 00:00:00.13]       Needs a database
+[xUnit.net 00:00:00.15]     Alpha.Tests.AlphaTests.Divides [FAIL]
+[xUnit.net 00:00:00.15]       Assert.Equal() Failure: Values differ
+[xUnit.net 00:00:00.15]       Expected: 3
+[xUnit.net 00:00:00.15]       Actual:   2
+[xUnit.net 00:00:00.15]       Stack Trace:
+[xUnit.net 00:00:00.15]         /test/project/root/Alpha.Tests/AlphaTests.cs(17,0): at Alpha.Tests.AlphaTests.Divides()
+[xUnit.net 00:00:00.15]            at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+[xUnit.net 00:00:00.15]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.15]   Finished:    Alpha.Tests
+  Skipped Alpha.Tests.AlphaTests.Persists [1 ms]
+  Error Message:
+   Needs a database
+
+  Passed Alpha.Tests.AlphaTests.Multiplies [4 ms]
+  Passed Alpha.Tests.AlphaTests.Adds [< 1 ms]
+  Passed Alpha.Tests.AlphaTests.Subtracts [< 1 ms]
+  Failed Alpha.Tests.AlphaTests.Divides [1 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: 3
+Actual:   2
+  Stack Trace:
+     at Alpha.Tests.AlphaTests.Divides() in /test/project/root/Alpha.Tests/AlphaTests.cs:line 17
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+Test Run Failed.
+Total tests: 5
+     Passed: 3
+     Failed: 1
+    Skipped: 1
+ Total time: 0.4840 Seconds

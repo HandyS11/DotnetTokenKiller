@@ -17,6 +17,8 @@ dtk [OPTIONS] <COMMAND>
 
 ## Commands
 
+The `dotnet` word is optional for the filtered subcommands: `dtk test --filter "Category=Unit"` runs `dtk dotnet test --filter "Category=Unit"`, and `dtk build`, `dtk restore`, `dtk clean`, `dtk format`, `dtk list package`, `dtk publish` and `dtk pack` work the same way. They are not listed in `dtk --help` or in shell completion.
+
 ### `dtk dotnet build`
 
 Run `dotnet build` with filtered output. All positional arguments and flags are forwarded:
@@ -29,7 +31,9 @@ dtk dotnet build --no-restore
 dtk dotnet build -q                  # quiet: filtered content only, no DTK meta-output
 ```
 
-On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths and top error codes.
+On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths, each as `(line,col) CODE: message`; a build that only warns lists its warnings the same way. A file's diagnostics that share a code and a message read once, with each position, in line order, and a count (`(96,59) (99,59) (111,59) CS1503 ×3: message`; a line lists at most 20 positions and then counts the rest, `… +N more`, with the count and the file's heading keeping the full numbers), and a file that comes to a single line is printed on it, led by its name (`src/Foo.cs(8,10) CS1002: ; expected`), with no heading. Messages are printed whole, up to 400 characters for an error and 160 for a warning; links are removed with the "see …" that introduced them, and the `System.` and `Microsoft.` namespaces inside a quoted type name are dropped (`'System.Collections.Generic.IEnumerable<int>'` reads `'IEnumerable<int>'`; a quoted package, assembly, path or file name is left as written). A `Top codes:` line, ranking the codes among the diagnostics listed, follows only when the build reported more diagnostics than are listed (a project built for several target frameworks reports each diagnostic once per framework, and dtk shows it once) and more than one code is listed. The summary counts the projects involved, those that failed as well as those that built, by project file (a solution is not a project), and a multi-targeted project counts once.
+The summary is always the last line (`✓ dotnet build …`, or `✗ dotnet build failed (exit 1): 3 errors, 1 warning …`
+when the exit code is non-zero), so `| tail -1` carries the verdict. A coding agent should read the whole (short) output instead of piping it into `tail` or `grep`, which would drop the diagnostics above the status line or the status line itself.
 
 ### `dtk dotnet test`
 
@@ -43,7 +47,7 @@ dtk dotnet test src/MyProject.Tests/MyProject.Tests.csproj
 dtk dotnet test -q                   # quiet mode
 ```
 
-Passing tests are summarized with counts. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths. xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
+Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths; the status line of a failing run opens with `✗` (`✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`). xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
 
 ### `dtk dotnet restore`
 
@@ -55,7 +59,8 @@ dtk dotnet restore src/MyProject/MyProject.csproj
 dtk dotnet restore -q
 ```
 
-Restore errors include the error code, message, and workspace-relative project path.
+Restore errors include the error code, message, and workspace-relative project path, one line each, followed by the
+status line `✗ dotnet restore: 2 errors`.
 
 ### `dtk dotnet clean`
 
@@ -66,6 +71,9 @@ dtk dotnet clean
 dtk dotnet clean --configuration Release
 dtk dotnet clean -q
 ```
+
+A successful clean prints `✓ dotnet clean`. A failed one lists its first five error lines, then `... and N more errors`
+when there are more, and ends with the status line `✗ dotnet clean: 7 errors`, which counts every error.
 
 ### `dtk dotnet format`
 
@@ -78,7 +86,20 @@ dtk dotnet format --verify-no-changes
 dtk dotnet format -q
 ```
 
-When nothing needs formatting, the raw command produces no output at all. dtk synthesises a `✓ dotnet format (nothing to format)` confirmation so AI agents receive an explicit positive signal. When `--verify-no-changes` finds violations, the file paths and violation types are shown with workspace-relative paths.
+When nothing needs formatting, the raw command produces no output at all. dtk synthesises a `✓ dotnet format (nothing to format)` confirmation so AI agents receive an explicit positive signal. When `--verify-no-changes` finds violations, they are grouped by file and code, one line each, with workspace-relative paths, and the last line is the verdict:
+
+```text
+Fmt/F.cs: WHITESPACE ×10 (5:28 insert 1 space, 7:17 insert 1 space, 7:18 insert 1 space, 11:9 delete 2 chars, 11:28 insert 1 space, 11:29 insert 1 space, 11:31 insert 1 space, 11:33 insert 1 space, 11:34 insert 1 space, 12:18 delete 1 char)
+Fmt/A.cs: WHITESPACE ×5 (2:1 insert newline, 2:15 newline, 3:21 newline + 4 spaces, 9:7 insert 2 spaces, 11:1 4 spaces)
+Fmt/B.cs: WHITESPACE ×2 (8:25 newline + 8 spaces, 10:40 newline + 12 spaces)
+Fmt/B.cs: IDE0005 (1:1): Using directive is unnecessary.
+Fmt/B.cs: IDE0161 (3:11): Convert to file-scoped namespace
+Fmt/B.cs: IMPORTS (1:1): Fix imports ordering.
+Fmt/NoFinal.cs: FINALNEWLINE (6:2 insert newline)
+✗ dotnet format: 21 violations in 4 files
+```
+
+Each position is `line:col`, in line and column order, and `×n` appears only for a group of more than one. A whitespace violation says what to change there: the text the tool puts in (`newline + 4 spaces`, `4 spaces`), or `insert …` and `delete n chars`. A violation with no change to name (`IMPORTS`, `CHARSET`, an analyzer's diagnostic) has its message once, after the positions; the same code with different messages in one file keeps a line for each message. The `[project.csproj]` suffix is dropped, and a diagnostic the tool reports twice counts once. The files with the most violations come first, ties in name order. A line lists at most 20 positions, then ` … +N more` (`×n` keeps the full count), and the report at most 40 lines, then one line such as `… 6 more groups in 2 files (dtk log)`; the verdict counts everything either way. It reads `⚠` instead of `✗` when the exit code is zero.
 
 ### `dtk dotnet list package`
 
@@ -95,11 +116,15 @@ The plain variant collapses packages shared by every project into one `all proje
 lists only each project's remaining additions. The `--outdated`, `--deprecated`, and `--vulnerable`
 variants group findings by package across projects instead of repeating them per project, and a
 clean audit run (no findings) collapses to a single `✓` line. Output is capped at 30 package groups,
-with an explicit truncation line if there are more.
+with an explicit truncation line if there are more. The summary is always the last line:
+`✓ dotnet list package (8 projects, 21 packages)` for the plain variant and
+`⚠ dotnet list package --outdated: 1 package with updates (all 8 projects)` when an audit variant finds something
+(`✗` instead on the rare non-zero exit).
 
-If the output arrives in a shape dtk does not recognise — `--format json`, a localised SDK, or a
-future column layout — dtk prints it unfiltered behind a
-`⚠ dotnet list package: unrecognized output, passed through unfiltered` line rather than guessing.
+If the output arrives in a shape dtk does not recognise — a localised SDK or a future column layout — dtk
+prints it unfiltered, followed by the
+`⚠ dotnet list package: unrecognized output, passed through unfiltered` line, rather than guessing.
+`dotnet list package --format json` is machine-readable, so dtk passes it through untouched and without that line.
 `dotnet list package` always exits 0, even when it reports vulnerable packages, so this is the only
 signal available: a clean `✓` from dtk always means dtk read the tables, never that it failed to.
 
@@ -137,15 +162,15 @@ dtk dotnet publish src/MyApp/MyApp.csproj -c Release
 dtk dotnet publish -r linux-x64 --self-contained
 ```
 
-Diagnostics are summarised exactly as for `dtk dotnet build`. On success the summary line is followed by each
-project's publish directory, with a workspace-relative path:
+Diagnostics are summarised exactly as for `dtk dotnet build`. On success each project's publish directory, with a
+workspace-relative path, sits directly above the summary line, which stays last:
 
 ```text
-✓ dotnet publish (2 projects)
   MyApp -> src/MyApp/bin/Release/net10.0/publish/
+✓ dotnet publish (2 projects)
 ```
 
-On failure the output is the build's error layout, and no publish directory is listed.
+On failure the output is the build's error layout ending in the `✗` summary line, and no publish directory is listed.
 
 ### `dtk dotnet pack`
 
@@ -158,20 +183,26 @@ dtk dotnet pack -c Release -p:Version=1.2.3
 ```
 
 Diagnostics, including NuGet's `NU5xxx` pack warnings, are summarised exactly as for `dtk dotnet build`. On
-success the summary line is followed by every package created (`.nupkg` and `.snupkg`), with a
-workspace-relative path:
+success every package created (`.nupkg` and `.snupkg`), with a workspace-relative path, sits directly above the
+summary line, which stays last:
 
 ```text
-✓ dotnet pack (1 project)
   artifacts/MyLib.1.2.3.nupkg
   artifacts/MyLib.1.2.3.snupkg
+✓ dotnet pack (1 project)
 ```
 
-On failure the output is the build's error layout, and no package is listed.
+On failure the output is the build's error layout ending in the `✗` summary line, and no package is listed.
 
 `dtk dotnet publish --interactive` and `dtk dotnet pack --interactive` are not filtered: they run with the
 terminal attached, as they did before dtk filtered these commands, so a credential provider can prompt for a
 private feed. They are recorded as unmeasured passthrough runs.
+
+Output that another program reads is not filtered either: `dtk dotnet list package --format json`, and `-getProperty`,
+`-getItem` or `-getTargetResult` (also spelled `--getProperty` or `/getProperty`) on `build`, `test`, `restore`,
+`clean`, `publish` and `pack`, print exactly what `dotnet` prints, so `| jq` and command substitution keep working.
+dtk's own options (`-q`, `-v` without a level, `--show-log`) are dropped from these runs, which are recorded like the
+`--interactive` ones.
 
 ### `dtk pipe`
 
@@ -189,8 +220,8 @@ dotnet build 2>&1 | dtk pipe build
 dotnet list package --outdated 2>&1 | dtk pipe list package
 ```
 
-`dtk pipe` exits with whatever `--exit-code` it was given, so a CI step wrapping a failed build
-still fails. Piped runs are tracked separately from runs dtk executed itself under a `Source`
+`dtk pipe` takes the same `-q`, `-v` and `--show-log` options as `dtk dotnet` and exits with whatever
+`--exit-code` it was given, so a CI step wrapping a failed build still fails. Piped runs are tracked separately from runs dtk executed itself under a `Source`
 column in `dtk gain --coverage`.
 
 ### `dtk init`
@@ -254,7 +285,7 @@ dtk log --full           # everything
 dtk log --all            # include other projects
 ```
 
-Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are saved, and output under 500 bytes is never saved. Use `dtk config set tee.mode Always` to keep every run. Logs written by dtk 0.6.0 or earlier carry no project metadata and appear only under `--all`.
+Logs are written by the tee feature, which defaults to `tee.mode = Failures`: the latest run of each kind (build, test, …) in each project is always saved, so `dtk log` never shows an older run as the latest, and older runs are kept only when they failed with at least 500 bytes of output. Use `dtk config set tee.mode Always` to keep older passing runs too. Logs written by dtk 0.6.0 or earlier carry no project metadata and appear only under `--all`.
 
 A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice — still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying the output ends where dtk was killed. A single Ctrl-C (or SIGTERM on Linux and macOS) lets dtk finish the log; see [Interrupting a run](#interrupting-a-run).
 
@@ -278,7 +309,7 @@ dtk reset --all --force  # full cleanup without confirmation
 View or modify configuration without editing the JSON file directly:
 
 ```sh
-dtk config show                          # display all keys and current values
+dtk config show                          # display all keys and current values (plain `dtk config` does the same)
 dtk config set <key> <value>             # update a single value and save
 ```
 
@@ -350,7 +381,7 @@ dtk completion powershell >> $PROFILE
 
 ## Verbosity
 
-Add `-v` / `--verbose` to any `dtk dotnet` (or `dtk pipe`) command to echo the resolved command line before running it. Add `--vv` instead to also dump the raw, unfiltered `dotnet` output and the elapsed time — useful when the filtered result looks wrong and you need to see what dtk actually saw:
+Add `-v` / `--verbose` to any `dtk dotnet` (or `dtk pipe`) command to echo the resolved command line before running it. Add `--vv` instead to also dump the raw, unfiltered `dotnet` output and the elapsed time — useful when the filtered result looks wrong and you need to see what dtk actually saw. It prints all of that output, so to read the raw output of a run you already made, prefer [`dtk log`](#dtk-log):
 
 ```sh
 dtk dotnet build --verbose
@@ -361,12 +392,13 @@ dtk dotnet test --vv
 
 ## Quiet Mode
 
-Add `-q` / `--quiet` to any `dtk dotnet` command to suppress DTK meta-output and forward only the filtered content. This is useful when piping output into other tools:
+Add `-q` / `--quiet` to any `dtk dotnet` (or `dtk pipe`) command to suppress DTK meta-output and forward only the filtered content. This is useful when writing output to a file or handing it to another tool:
 
 ```sh
-dtk dotnet build -q | grep "error"
 dtk dotnet test -q > test-results.txt
 ```
+
+The status line stays: every filtered run ends with one, so a `| grep` or `| tail` that does not keep the last line loses the verdict.
 
 In quiet mode, verbosity flags (`-v`/`--verbose`, `--vv`) and `--show-log` are ignored — only the filtered command output is written.
 
@@ -379,6 +411,19 @@ dtk dotnet run        # runs: dotnet run
 dtk dotnet watch      # runs: dotnet watch
 dtk dotnet msbuild    # runs: dotnet msbuild
 ```
+
+## Raw Output
+
+Set `DTK_RAW=1` to get `dotnet`'s own output, unfiltered: in the environment, or as a prefix to the command:
+
+```sh
+DTK_RAW=1 dtk dotnet test
+export DTK_RAW=1
+```
+
+dtk then runs `dotnet` as a passthrough (recorded like any other, and without dtk's own `-q`, `-v` and `--show-log`). Any non-empty value except `0` and `false` turns it on.
+
+An agent hook rewrites plain `dotnet build|test|…` to `dtk dotnet …`, and leaves alone a `dotnet` that the command asks for raw: `DTK_RAW=1 dotnet test`, `\dotnet test`, `command dotnet test` and `rtk proxy dotnet test`. See [AI Agent Setup](ai-agent-setup.md).
 
 ## Interrupting a run
 
@@ -393,7 +438,7 @@ When dtk stops `dotnet` itself, it prints no filtered output and does not record
 
 ## Log Files
 
-DTK can save the raw, unfiltered command output to disk. This is controlled by the `tee.mode` configuration setting (see [Configuration](configuration.md)). By default, only failed runs are saved.
+DTK can save the raw, unfiltered command output to disk. This is controlled by the `tee.mode` configuration setting (see [Configuration](configuration.md)). By default, failed runs and the latest run of each kind are saved.
 
 Each log file also records the full command line and working directory that produced it, alongside the output. Log files are kept owner-only (mode `0600`) for that reason.
 

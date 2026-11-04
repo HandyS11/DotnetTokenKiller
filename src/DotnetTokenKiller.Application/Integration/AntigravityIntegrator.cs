@@ -89,7 +89,11 @@ internal sealed class AntigravityIntegrator(RtkHookCoexistence rtk, HomePaths ho
         var hook = DescribeHooks(directory, scope)[0];
         await UninstallHelpers.RemoveHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
 
-        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook.RegistrationPath)));
+        await rtk.NoteRemainingExclusionAsync(
+                context,
+                RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(hook.RegistrationPath)),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <inheritdoc/>

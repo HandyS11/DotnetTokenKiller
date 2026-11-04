@@ -112,7 +112,11 @@ internal sealed class FactoryDroidIntegrator(RtkHookCoexistence rtk, HomePaths h
             }
         }
 
-        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(directory, scope)));
+        await rtk.NoteRemainingExclusionAsync(
+                context,
+                RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(directory, scope)),
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static HookRegistrationSpec Registration(string path, string? containerKey) =>

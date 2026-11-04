@@ -84,7 +84,7 @@ Controls raw output logging to disk.
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `mode` | `"failures"` | `"failures"` saves only failed runs; `"always"` saves all runs; `"never"` disables tee logging |
+| `mode` | `"failures"` | `"failures"` saves failed runs and the latest run of each kind; `"always"` saves all runs; `"never"` disables tee logging |
 | `directory` | `null` | Log directory (defaults to `%LOCALAPPDATA%/dtk/tee`) |
 | `maxFiles` | `20` | Maximum log files to keep; oldest are deleted first |
 | `maxFileSizeBytes` | `1048576` | Maximum size per log file (1 MB) |

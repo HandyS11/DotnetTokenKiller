@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Tests.Helpers;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -43,7 +44,7 @@ public class DotnetRestoreFilterTests
                                /home/handys11/Dev/DotnetTokenKiller/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj : error NU1101: Unable to find package 'NonExistent.Package'. No packages exist with this id in source(s): nuget.org
                              """;
         var result = _sut.Apply(input, exitCode: 1);
-        result.Should().StartWith("dotnet restore: 1 error");
+        LastLine(result).Should().Be("✗ dotnet restore: 1 error");
         result.Should().Contain("NU1101:");
         result.Should().Contain("src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj");
     }
@@ -73,6 +74,29 @@ public class DotnetRestoreFilterTests
     }
 
     [Fact]
+    public void Apply_FrenchCulture_RendersTheDurationWithADecimalPoint()
+    {
+        // "0,02s" cost a French-locale user about 670 summaries: the number followed the system culture.
+        using var _ = new CultureScope("fr-FR");
+
+        var result = _sut.Apply("Restored /path/Proj.csproj (in 20 ms).", exitCode: 0);
+
+        result.Should().Be("✓ dotnet restore (1 project, 0.02s)\n");
+    }
+
+    [Theory]
+    [InlineData("1.5 sec", "1.50s")]
+    [InlineData("2 sec", "2s")]
+    [InlineData("1 min 5 sec", "1m05s")]
+    public void Apply_DurationInSeconds_KeepsThePrecisionTheLineGives(string duration, string expected)
+    {
+        // A whole-second reading may be truncated, so it is not shown with decimals it never had.
+        var result = _sut.Apply($"Restored /path/Proj.csproj (in {duration}).", exitCode: 0);
+
+        result.Should().Be($"✓ dotnet restore (1 project, {expected})\n");
+    }
+
+    [Fact]
     public void Apply_FSharpProject_IsDetected()
     {
         const string input = "  Restored /path/Proj.fsproj (in 50 ms).";
@@ -90,7 +114,7 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet restore (1 project, 90.00s)\n");
+        result.Should().Be("✓ dotnet restore (1 project, 1m30s)\n");
     }
 
     [Fact]
@@ -101,7 +125,7 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet restore (1 project, 120.00s)\n");
+        result.Should().Be("✓ dotnet restore (1 project, 2m00s)\n");
     }
 
     [Fact]
@@ -153,8 +177,8 @@ public class DotnetRestoreFilterTests
         // neither is checked by a StartWith/Contain pair.
         result.Should().Be(
             """
-            dotnet restore: 1 error
               NU1101: Unable to find package (../../../path/proj.csproj)
+            ✗ dotnet restore: 1 error
 
             """);
     }
@@ -169,8 +193,8 @@ public class DotnetRestoreFilterTests
 
         result.Should().Be(
             """
-            dotnet restore: 1 error
               NU1101: Unable to find package 'Foo'
+            ✗ dotnet restore: 1 error
 
             """);
     }
@@ -186,9 +210,9 @@ public class DotnetRestoreFilterTests
 
         result.Should().Be(
             """
-            dotnet restore: 2 errors
               NU1101: Package not found (../../../path/a.csproj)
               NU1102: Version mismatch (../../../path/b.csproj)
+            ✗ dotnet restore: 2 errors
 
             """);
     }
@@ -287,8 +311,7 @@ public class DotnetRestoreFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("1 error");
-        result.Should().NotContain("1 errors");
+        LastLine(result).Should().Be("✗ dotnet restore: 1 error");
     }
 
     [Fact]
@@ -373,14 +396,28 @@ public class DotnetRestoreFilterTests
     }
 
     [Fact]
-    public void Apply_MultipleErrorsFormat_ContainsDotnetRestore()
+    public void Apply_Errors_EndWithTheirStatusLineAndNoOtherLineIsOne()
     {
-        // Kills string mutations on header format (line 136)
+        // The verdict is the last line, so `| tail -1` carries it; nothing above it may read as a second one.
         const string input = "error NU1101: p1\nerror NU1102: p2";
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().StartWith("dotnet restore:");
+        var lines = result.TrimEnd('\n').Split('\n');
+        lines[^1].Should().Be("✗ dotnet restore: 2 errors");
+        lines[..^1].Should().NotContain(l => l.Length > 0 && "✓⚠✗".Contains(l[0], StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_ErrorsButZeroExit_EndWithAWarningGlyph()
+    {
+        // Errors were printed but the run did not fail: something to look at, not a failure. The exit code is the
+        // sole source of the verdict's glyph, as in the format filter.
+        const string input = "error NU1101: p1";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        LastLine(result).Should().Be("⚠ dotnet restore: 1 error");
     }
 
     [Fact]
@@ -427,6 +464,8 @@ public class DotnetRestoreFilterTests
 
         result.Should().Be("✓ dotnet restore (1 project, 0.12s)\n");
     }
+
+    private static string LastLine(string result) => result.TrimEnd('\n').Split('\n')[^1];
 
     private static string LoadFixture(string resourceName)
     {

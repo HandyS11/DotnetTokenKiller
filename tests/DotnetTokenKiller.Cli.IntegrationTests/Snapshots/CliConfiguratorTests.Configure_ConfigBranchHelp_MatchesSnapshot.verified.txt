@@ -2,7 +2,7 @@ DESCRIPTION:
 View or modify dtk configuration
 
 USAGE:
-    dtk config [OPTIONS] <COMMAND>
+    dtk config [OPTIONS] [COMMAND]
 
 EXAMPLES:
     dtk config show

@@ -14,7 +14,7 @@ namespace DotnetTokenKiller.Infrastructure.Tee;
 /// The open log file, positioned at the end of the header. Opened for both read and write so
 /// <see cref="FinalizeAsync"/> can read back the status region before overwriting it.
 /// </param>
-/// <param name="filePath">The log's path, used for the hint and for deletion.</param>
+/// <param name="filePath">The log's path, used for the hint and to find the older logs it supersedes.</param>
 /// <param name="statusRegionOffset">Byte offset of the status/exit region within the file.</param>
 /// <param name="statusRegionLength">Byte length of that region.</param>
 /// <param name="policy">The size and retention rules to apply when the run completes.</param>
@@ -57,29 +57,12 @@ public sealed class FileTeeSession(
 
         async Task<string?> FinalizeCoreAsync(CancellationToken ct)
         {
+            // This run's own log is always kept, whatever its exit code or size: it is now the
+            // latest run of its kind, and deleting it (as Failures mode once did for a passing run,
+            // and the size floor for a short one) left `dtk log` showing an older run, possibly of
+            // another command, as if it were this one. The retention rules apply instead to the
+            // older logs this one supersedes (TryPruneSuperseded below).
             await stream.FlushAsync(ct).ConfigureAwait(false);
-
-            // A truncated body bypasses the MinBodyBytes floor: hitting the byte cap already proves
-            // the run produced at least that many bytes of output (in practice, likely far more —
-            // the child kept producing output after the point the cap was reached), which is exactly
-            // the kind of run the floor exists to keep, not the one-line "Restored." it exists to
-            // drop. Without this, a cap configured below the floor (itself clamped to the cap in
-            // FileTeeService.BeginAsync so a *plain* small-but-real log can still pass it) discarded
-            // every truncated log outright — the marker line the writer just spent a whole cap's
-            // worth of effort reserving room for would never survive to be read.
-            if ((policy.KeepOnlyOnFailure && exitCode == 0) ||
-                (_writer.BodyBytesWritten < policy.MinBodyBytes && !_writer.Truncated))
-            {
-                await DisposeAsync().ConfigureAwait(false);
-                File.Delete(filePath);
-
-                // This run's own log is already gone, so it cannot claim a phantom slot here — this
-                // only trims leftovers (abandoned "Running" logs from runs killed mid-flight, or
-                // logs from a previous read-back-guard failure below) that would otherwise never be
-                // rotated on a config where every run in Failures mode happens to succeed.
-                TryRotateFiles();
-                return null;
-            }
 
             // Read back the region rather than trusting statusRegionOffset: both renderings are
             // fixed-width ASCII, so a length check can never fail, but the offset itself is a
@@ -102,25 +85,41 @@ public sealed class FileTeeSession(
             await stream.FlushAsync(ct).ConfigureAwait(false);
             await DisposeAsync().ConfigureAwait(false);
 
-            // The hint is computed before rotation runs, and TryRotateFiles can never throw, so a
-            // rotation failure can never cost this kept log its hint (see TryRotateFiles).
+            // The hint is computed before pruning and rotation run, and neither TryPruneSuperseded
+            // nor TryRotateFiles can throw, so housekeeping can never cost this kept log its hint.
             var hint = $"[full output: {filePath}]";
 
-            // Rotation runs here, on the keep path, rather than when the session was opened: at
-            // open time it is not yet known whether this run's log will be kept at all, and
-            // rotating before that decision would let a run destined for deletion (a success in
-            // Failures mode, or a body under the guard) evict an older log it was never going to
-            // replace. The stream is closed first so a file this call decides to delete cannot
-            // still be open on platforms that refuse to delete an in-use handle.
+            // Pruning and rotation run here, once this log is finalized, rather than when the
+            // session was opened: a run killed before it finishes has superseded nothing, and must
+            // not have evicted an older log in advance. Pruning goes first, so rotation counts only
+            // the logs that remain. The stream is closed first so a file either decides to delete
+            // cannot still be open here on platforms that refuse to delete an in-use handle.
+            TryPruneSuperseded();
             TryRotateFiles();
             return hint;
+        }
+
+        void TryPruneSuperseded()
+        {
+            try
+            {
+                FileTeeService.PruneSuperseded(
+                    policy.TeeDir, policy.Slug, policy.ProjectPath, filePath, policy.MinBodyBytes,
+                    policy.KeepOnlyOnFailure);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Intentional: pruning is best-effort housekeeping, not part of this run's outcome
+                // (see TryRotateFiles). PruneSuperseded already skips a log it cannot read or
+                // delete; this covers the directory itself becoming unreadable.
+            }
         }
 
         void TryRotateFiles()
         {
             try
             {
-                FileTeeService.RotateFiles(policy.TeeDir, policy.MaxFiles);
+                FileTeeService.RotateFiles(policy.TeeDir, policy.MaxFiles, filePath);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -129,9 +128,8 @@ public sealed class FileTeeSession(
                 // FileTeeService opens log files without FileShare.Delete, so a concurrently running
                 // dtk process's own open log cannot be unlinked here. Left uncaught, this would
                 // propagate to FinalizeAsync's outer catch, which returns null — silently costing
-                // the user the "[full output: …]" hint (or, on the discard path, no hint to lose,
-                // but still an unrelated failure) even though the log itself was written and, on the
-                // keep path, already correctly kept.
+                // the user the "[full output: …]" hint even though the log itself was written and
+                // already correctly kept.
             }
         }
     }

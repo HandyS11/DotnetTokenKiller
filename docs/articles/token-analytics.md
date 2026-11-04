@@ -65,7 +65,7 @@ spacer row between commands so each group reads as one block:
 | **Runs** | Number of times the command was executed |
 | **Without Tool** | Total tokens in the raw `dotnet` output |
 | **Used by Tool** | Total tokens in the filtered DTK output |
-| **Saved** | Tokens saved (Without Tool − Used by Tool); colored green when positive, red when negative, grey when zero |
+| **Saved** | Tokens saved, summed per run: each run counts Without Tool − Used by Tool, or zero when its output outweighs its input (a `format` run with nothing to format), so the column can exceed the difference of the two before it; colored green when positive, grey when zero, red when negative (only for runs recorded by dtk 0.9.0 or earlier) |
 | **Avg%** | Average percentage reduction across the row's runs; colored green ≥ 80%, yellow 40–79%, red < 40% |
 | **Impact** | A 10-character `█`/`░` bar proportional to the row's saved tokens relative to the largest row (rows with non-positive savings render an empty bar) |
 
@@ -128,9 +128,9 @@ dtk gain --coverage
 Each row carries:
 
 - **Command** — the `dotnet` subcommand as invoked.
-- **Outcome** — `Filtered` when a filter produced the output; `RawTailFallback` when the command
-  failed and its filter produced nothing, so the raw tail was emitted instead; `FilterFaulted` when
-  the filter threw and dtk fell back to the raw output unchanged; `PassthroughMeasured` when no
+- **Outcome** — `Filtered` when a filter produced the output; `RawTailFallback` when its
+  filter produced nothing, whatever the exit code, so the raw tail was emitted instead; `FilterFaulted` when
+  the filter threw and dtk showed the whole raw output followed by a status line; `PassthroughMeasured` when no
   filter is registered for that subcommand but the output was still captured and counted; and
   `PassthroughUnmeasured` when no filter exists and the output was not captured, so its size is
   unknown (shown as `not measured`).

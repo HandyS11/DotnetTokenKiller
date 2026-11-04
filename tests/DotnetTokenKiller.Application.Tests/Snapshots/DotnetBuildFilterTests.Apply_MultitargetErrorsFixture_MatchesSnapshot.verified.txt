@@ -1,0 +1,2 @@
+src/MultiTarget/Greeter.cs(7,22) CS0029: Cannot implicitly convert type 'string' to 'int'
+✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project, 1.13s)

@@ -42,10 +42,11 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             state.RestoredCount++;
             // Track the slowest single restore, not the sum: restores run in parallel, so summing
             // the per-project times wildly overstates the actual wall-clock elapsed.
-            var ms = ParseDurationToMs(restoredMatch.Groups["dur"].Value);
+            var (ms, exact) = ParseDuration(restoredMatch.Groups["dur"].Value);
             if (ms > state.MaxDurationMs)
             {
                 state.MaxDurationMs = ms;
+                state.MaxDurationExact = exact;
             }
 
             return;
@@ -110,12 +111,17 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             proj));
     }
 
-    private static double ParseDurationToMs(string duration)
+    /// <summary>
+    /// Reads NuGet's duration text. Whether it is exact follows <see cref="DurationFormat.IsExactReading"/>;
+    /// a minute count never is.
+    /// </summary>
+    /// <param name="duration">The text between "in" and the closing parenthesis.</param>
+    private static (double Milliseconds, bool Exact) ParseDuration(string duration)
     {
         var match = DurationPattern().Match(duration.Trim());
         if (!match.Success)
         {
-            return 0;
+            return (0, false);
         }
 
         if (match.Groups["min"].Success)
@@ -124,15 +130,19 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             var seconds = match.Groups["minsec"].Success
                 ? double.Parse(match.Groups["minsec"].Value, CultureInfo.InvariantCulture)
                 : 0;
-            return (minutes * 60_000) + (seconds * 1_000);
+            return ((minutes * 60_000) + (seconds * 1_000), false);
         }
 
         if (match.Groups["sec"].Success)
         {
-            return double.Parse(match.Groups["sec"].Value, CultureInfo.InvariantCulture) * 1_000;
+            var secondsText = match.Groups["sec"].Value;
+            return (double.Parse(secondsText, CultureInfo.InvariantCulture) * 1_000,
+                DurationFormat.IsExactReading(secondsText, "sec"));
         }
 
-        return double.Parse(match.Groups["ms"].Value, CultureInfo.InvariantCulture);
+        var millisecondsText = match.Groups["ms"].Value;
+        return (double.Parse(millisecondsText, CultureInfo.InvariantCulture),
+            DurationFormat.IsExactReading(millisecondsText, "ms"));
     }
 
     private static string FormatOutput(ParseState state, int exitCode)
@@ -147,7 +157,7 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
 
         if (state.Errors.Count > 0)
         {
-            return FormatErrors(state.Errors);
+            return FormatErrors(state.Errors, exitCode);
         }
 
         var totalProjects = state.RestoredCount + state.UpToDateCount;
@@ -162,15 +172,16 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
             return string.Empty;
         }
 
-        var elapsed = $"{state.MaxDurationMs / 1000.0:F2}s";
+        var elapsed = DurationFormat.Format(state.MaxDurationMs, state.MaxDurationExact);
         return $"✓ dotnet restore ({totalProjects} project{(totalProjects == 1 ? "" : "s")}, {elapsed})\n";
     }
 
-    private static string FormatErrors(List<NuGetError> errors)
+    /// <summary>The errors, one line each, then the status line: the last line is always the verdict.</summary>
+    /// <param name="errors">The parsed errors, at least one.</param>
+    /// <param name="exitCode">The process exit code; the sole source of truth for the verdict's glyph.</param>
+    private static string FormatErrors(List<NuGetError> errors, int exitCode)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet restore: {errors.Count} error{(errors.Count == 1 ? "" : "s")}");
         foreach (var e in errors)
         {
             if (string.IsNullOrEmpty(e.Project))
@@ -182,6 +193,11 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
                 sb.AppendLine(CultureInfo.InvariantCulture, $"  {e.Code}: {e.Message} ({e.Project})");
             }
         }
+
+        // A warning glyph rather than a cross for a zero exit code: the run did not fail, but errors were printed.
+        var glyph = exitCode == 0 ? '⚠' : '✗';
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"{glyph} dotnet restore: {errors.Count} error{(errors.Count == 1 ? "" : "s")}");
 
         // Normalize to '\n' so failure output matches the success paths (which use explicit '\n')
         // and stays identical across platforms; StringBuilder.AppendLine emits '\r\n' on Windows.
@@ -226,6 +242,9 @@ public sealed partial class DotnetRestoreFilter(string? rootPath = null) : IOutp
         public int UpToDateCount { get; set; }
         public bool AllUpToDate { get; set; }
         public double MaxDurationMs { get; set; }
+
+        /// <summary>Whether <see cref="MaxDurationMs"/> was printed below the second; see <c>ParseDuration</c>.</summary>
+        public bool MaxDurationExact { get; set; }
     }
 
     private sealed record NuGetError(string Code, string Message, string Project);

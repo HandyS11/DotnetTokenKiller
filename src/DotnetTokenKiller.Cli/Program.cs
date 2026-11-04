@@ -3,6 +3,7 @@ using DotnetTokenKiller.Application;
 using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Cli;
 using DotnetTokenKiller.Cli.Infrastructure;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -32,6 +33,9 @@ var noColor = Environment.GetEnvironmentVariable("NO_COLOR") is not null;
 
 const string dotnetCmd = "dotnet";
 
+// Wide enough that no line dtk prints wraps; Spectre pads nothing out to it.
+const int redirectedOutputWidth = 4096;
+
 // Canonicalize `dotnet <sub>` casing (e.g. `DOTNET BUILD` -> `dotnet build`) so Spectre's
 // case-sensitive routing resolves it; unknown/passthrough invocations are left untouched.
 args = ArgumentPreprocessor.Normalize(args);
@@ -45,10 +49,23 @@ using var runCancellation = string.Equals(args.FirstOrDefault(), dotnetCmd, Stri
 var cancellationToken = runCancellation?.Token ?? CancellationToken.None;
 
 // Passthrough: run any unsupported dotnet subcommand directly, recording what it cost so the
-// coverage report can rank which subcommand is worth filtering next.
+// coverage report can rank which subcommand is worth filtering next. A filtered subcommand lands here when
+// its run prompts (--interactive) or prints machine-readable output (--format json, -getProperty), and then
+// goes without dtk's output options, which dotnet would reject.
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
-    return await PassthroughEntryPoint.RunAsync(dotnetCmd, args[1..], runCancellation).ConfigureAwait(false);
+    return await PassthroughEntryPoint
+        .RunAsync(dotnetCmd, ArgumentPreprocessor.PassthroughArguments(args), runCancellation)
+        .ConfigureAwait(false);
+}
+
+// DTK_RAW=1 asks for dotnet's own output: a filtered subcommand is passed through as well, recorded like any
+// passthrough, without dtk's output options, which dotnet would reject.
+if (ArgumentPreprocessor.IsRawRequested(args, Environment.GetEnvironmentVariable(RawOutputSwitch.EnvironmentVariable)))
+{
+    return await PassthroughEntryPoint
+        .RunAsync(dotnetCmd, ArgumentPreprocessor.StripDtkOptions(args[1..]), runCancellation)
+        .ConfigureAwait(false);
 }
 
 // Auto-insert "--" so dotnet-specific options (e.g. --filter, --no-restore) are
@@ -59,6 +76,14 @@ args = ArgumentPreprocessor.InsertSeparator(args);
 
 try
 {
+    // A pipe has no width, so Spectre assumes 80 columns and hard-wraps a long path or message mid-word in
+    // what a harness captures. A terminal keeps its real width. Commands get AnsiConsole.Console (the
+    // IAnsiConsole factory registered below is never invoked), so the width goes on that one.
+    if (Console.IsOutputRedirected)
+    {
+        AnsiConsole.Profile.Width = redirectedOutputWidth;
+    }
+
     var services = new ServiceCollection();
     services.AddInfrastructure();
     services.AddApplication();

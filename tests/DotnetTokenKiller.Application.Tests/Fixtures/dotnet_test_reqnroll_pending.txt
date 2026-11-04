@@ -1,0 +1,183 @@
+  Determining projects to restore...
+  Restored /test/project/root/SampleApp.Tests.Reqnroll.csproj (in 218 ms).
+  SampleApp.Tests.Reqnroll -> /test/project/root/bin/Debug/net10.0/SampleApp.Tests.Reqnroll.dll
+Test run for /test/project/root/bin/Debug/net10.0/SampleApp.Tests.Reqnroll.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.33]     Division by zero should fail [FAIL]
+[xUnit.net 00:00:00.33]     Intentionally wrong expectation [FAIL]
+[xUnit.net 00:00:00.36]     Two undefined steps [FAIL]
+[xUnit.net 00:00:00.37]     One undefined step [FAIL]
+  Failed Intentionally wrong expectation [34 ms]
+  Error Message:
+   Assert.Equal() Failure: Strings differ
+           ↓ (pos 0)
+Expected: "xyz"
+Actual:   "cba"
+           ↑ (pos 0)
+  Stack Trace:
+     at SampleApp.Tests.Reqnroll.StepDefinitions.StringSteps.ThenTheResultStringShouldBe(String expected) in /test/project/root/StepDefinitions/StringSteps.cs:line 32
+   at InvokeStub_Action`2.Invoke(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithFewArgs(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+--- End of stack trace from previous location ---
+   at Reqnroll.Bindings.BindingInvoker.InvokeBindingAsync(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepAsync(IContextManager contextManager, StepInstance stepInstance)
+   at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+   at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+   at SampleApp.Tests.Reqnroll.Features.StringManipulationFeature.ScenarioCleanupAsync()
+   at SampleApp.Tests.Reqnroll.Features.StringManipulationFeature.IntentionallyWrongExpectation() in /test/project/root/Features/StringManipulation.feature:line 17
+--- End of stack trace from previous location ---
+  Standard Output Messages:
+ Given the string "abc"
+ -> done: StringSteps.GivenTheString("abc") (0.0s)
+ When the string is reversed
+ -> done: StringSteps.WhenReversed() (0.0s)
+ Then the result string should be "xyz"
+ -> error: Assert.Equal() Failure: Strings differ
+            ↓ (pos 0)
+ Expected: "xyz"
+ Actual:   "cba"
+            ↑ (pos 0) (0.0s)
+
+
+  Failed Division by zero should fail [34 ms]
+  Error Message:
+   System.DivideByZeroException : Attempted to divide by zero.
+  Stack Trace:
+     at SampleApp.Tests.Reqnroll.StepDefinitions.CalculatorSteps.WhenDivided() in /test/project/root/StepDefinitions/CalculatorSteps.cs:line 32
+   at InvokeStub_Action`1.Invoke(Object, Span`1)
+   at System.Reflection.MethodBaseInvoker.InvokeWithOneArg(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+--- End of stack trace from previous location ---
+   at Reqnroll.Bindings.BindingInvoker.InvokeBindingAsync(IBinding binding, IContextManager contextManager, Object[] arguments, ITestTracer testTracer, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepMatchAsync(BindingMatch match, Object[] arguments, DurationHolder durationHolder)
+   at Reqnroll.Infrastructure.TestExecutionEngine.ExecuteStepAsync(IContextManager contextManager, StepInstance stepInstance)
+   at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+   at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+   at SampleApp.Tests.Reqnroll.Features.CalculatorFeature.ScenarioCleanupAsync()
+   at SampleApp.Tests.Reqnroll.Features.CalculatorFeature.DivisionByZeroShouldFail() in /test/project/root/Features/Calculator.feature:line 26
+--- End of stack trace from previous location ---
+  Standard Output Messages:
+ Given the first number is 10
+ -> done: CalculatorSteps.GivenTheFirstNumberIs(10) (0.0s)
+ And the second number is 0
+ -> done: CalculatorSteps.GivenTheSecondNumberIs(0) (0.0s)
+ When the first number is divided by the second
+ -> error: Attempted to divide by zero. (0.0s)
+ Then the result should be 0
+ -> skipped because of previous errors
+
+
+  Failed Two undefined steps [78 ms]
+  Error Message:
+   Reqnroll.xUnit.ReqnrollPlugin.XUnitPendingStepException : Test pending: No matching step definition found for one or more steps.
+using System;
+using Reqnroll;
+
+namespace MyNamespace
+{
+    [Binding]
+    public class StepDefinitions
+    {
+        private readonly ScenarioContext _scenarioContext;
+
+        public StepDefinitions(ScenarioContext scenarioContext)
+        {
+            _scenarioContext = scenarioContext;
+        }
+        [When("the numbers are frobnicated")]
+        public void WhenTheNumbersAreFrobnicated()
+        {
+            _scenarioContext.Pending();
+        }
+        
+        [When("the frobnication is verified")]
+        public void WhenTheFrobnicationIsVerified()
+        {
+            _scenarioContext.Pending();
+        }
+    }
+}
+
+  Stack Trace:
+     at Reqnroll.xUnit.ReqnrollPlugin.XUnitRuntimeProvider.TestPending(String message)
+   at Reqnroll.ErrorHandling.ErrorProvider.ThrowPendingError(ScenarioExecutionStatus testStatus, String message)
+   at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+   at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+   at SampleApp.Tests.Reqnroll.Features.PendingFeature.ScenarioCleanupAsync()
+   at SampleApp.Tests.Reqnroll.Features.PendingFeature.TwoUndefinedSteps() in /test/project/root/Features/Pending.feature:line 14
+--- End of stack trace from previous location ---
+  Standard Output Messages:
+ Given the first number is 50
+ -> done: CalculatorSteps.GivenTheFirstNumberIs(50) (0.0s)
+ When the numbers are frobnicated
+ -> No matching step definition found for the step. Use the following code to create one:
+         [When("the numbers are frobnicated")]
+         public void WhenTheNumbersAreFrobnicated()
+         {
+             _scenarioContext.Pending();
+         }
+ 
+ And the frobnication is verified
+ -> No matching step definition found for the step. Use the following code to create one:
+         [When("the frobnication is verified")]
+         public void WhenTheFrobnicationIsVerified()
+         {
+             _scenarioContext.Pending();
+         }
+ 
+ Then the result should be 120
+ -> skipped because of previous errors
+
+
+  Failed One undefined step [7 ms]
+  Error Message:
+   Reqnroll.xUnit.ReqnrollPlugin.XUnitPendingStepException : Test pending: No matching step definition found for one or more steps.
+using System;
+using Reqnroll;
+
+namespace MyNamespace
+{
+    [Binding]
+    public class StepDefinitions
+    {
+        private readonly ScenarioContext _scenarioContext;
+
+        public StepDefinitions(ScenarioContext scenarioContext)
+        {
+            _scenarioContext = scenarioContext;
+        }
+        [When("the two numbers are exponentiated")]
+        public void WhenTheTwoNumbersAreExponentiated()
+        {
+            _scenarioContext.Pending();
+        }
+    }
+}
+
+  Stack Trace:
+     at Reqnroll.xUnit.ReqnrollPlugin.XUnitRuntimeProvider.TestPending(String message)
+   at Reqnroll.ErrorHandling.ErrorProvider.ThrowPendingError(ScenarioExecutionStatus testStatus, String message)
+   at Reqnroll.Infrastructure.TestExecutionEngine.OnAfterLastStepAsync()
+   at Reqnroll.TestRunner.CollectScenarioErrorsAsync()
+   at SampleApp.Tests.Reqnroll.Features.PendingFeature.ScenarioCleanupAsync()
+   at SampleApp.Tests.Reqnroll.Features.PendingFeature.OneUndefinedStep() in /test/project/root/Features/Pending.feature:line 8
+--- End of stack trace from previous location ---
+  Standard Output Messages:
+ Given the first number is 50
+ -> done: CalculatorSteps.GivenTheFirstNumberIs(50) (0.0s)
+ And the second number is 70
+ -> done: CalculatorSteps.GivenTheSecondNumberIs(70) (0.0s)
+ When the two numbers are exponentiated
+ -> No matching step definition found for the step. Use the following code to create one:
+         [When("the two numbers are exponentiated")]
+         public void WhenTheTwoNumbersAreExponentiated()
+         {
+             _scenarioContext.Pending();
+         }
+ 
+ Then the result should be 120
+ -> skipped because of previous errors
+
+
+
+Failed!  - Failed:     4, Passed:     5, Skipped:     0, Total:     9, Duration: 94 ms - SampleApp.Tests.Reqnroll.dll (net10.0)

@@ -131,9 +131,12 @@ public sealed class LogCommandTests
         var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);
 
         exitCode.Should().Be(1);
-        // The reason matters more than the fact: with tee.mode Failures a passing run leaves nothing.
+        // The reason matters more than the fact: which runs tee.mode Failures keeps. It must not
+        // claim that only failed runs are saved — the latest run of each kind is kept too.
         console.Output.Should().Contain("Failures");
+        console.Output.Should().Contain("latest run of each kind");
         console.Output.Should().Contain("500");
+        console.Output.Should().NotContain("only failed runs");
     }
 
     [Fact]
@@ -151,8 +154,8 @@ public sealed class LogCommandTests
     [Fact]
     public async Task Run_ExplainsTheSizeFloorOnly_WhenEveryRunIsAlreadyKept()
     {
-        // With tee.mode Always, "only failures are saved" would be wrong guidance; the 500-character
-        // floor is then the sole reason a run left nothing behind.
+        // With tee.mode Always, Failures-mode guidance would be wrong; the 500-character floor on
+        // older runs is then the only retention rule left to explain.
         var (command, console, _) = Create(new FakeStore([]), TeeMode.Always);
 
         var exitCode = await command.RunAsync(new LogCommandSettings(), CancellationToken.None);

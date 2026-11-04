@@ -1,0 +1,18 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  XN -> /test/project/root/XN/bin/Debug/net10.0/XN.dll
+Test run for /test/project/root/XN/bin/Debug/net10.0/XN.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.15]     XN.NestedTests.FailNestedException [FAIL]
+  Failed XN.NestedTests.FailNestedException [1 ms]
+  Error Message:
+   System.InvalidOperationException : An error occurred while saving the entity changes while processing the order pipeline for customer 12345 in region eu-west; see the inner exception for details about the operation that was attempted, the retry policy that was applied, and the transaction that was rolled back before the failure surfaced to the caller of the repository
+---- System.ArgumentException : THE-INNER-CAUSE
+  Stack Trace:
+     at XN.NestedTests.FailNestedException() in /test/project/root/XN/Tests.cs:line 14
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace -----
+   at XN.NestedTests.FailNestedException() in /test/project/root/XN/Tests.cs:line 10
+
+Failed!  - Failed:     1, Passed:     0, Skipped:     0, Total:     1, Duration: 9 ms - XN.dll (net10.0)

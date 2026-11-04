@@ -14,7 +14,7 @@ namespace DotnetTokenKiller.Application.Filters;
 /// column parse correctly.
 /// <para>
 /// Unlike every other dtk filter, this one carries its own unrecognized-output guard rather than
-/// leaning on <c>FilteredRunUseCase</c>'s raw-tail fallback: see <see cref="Unrecognized"/>.
+/// leaning on the pipeline's raw-tail fallback, which shows only the last 40 lines: see <see cref="Unrecognized"/>.
 /// </para>
 /// </remarks>
 public sealed partial class DotnetListPackageFilter : IOutputFilter
@@ -62,22 +62,23 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
     /// <param name="stripped">The ANSI-stripped raw output.</param>
     /// <param name="exitCode">The process exit code.</param>
     /// <returns>
-    /// On a failed run, <see cref="string.Empty"/> — the exit code is non-zero, so
-    /// <c>FilteredRunUseCase</c>'s raw-tail fallback fires, prefixes an explicit failure verdict, and
-    /// records the run as <c>RawTailFallback</c>. On a successful run, the raw output behind a
-    /// <c>⚠</c> marker, because that fallback is gated on a non-zero exit code and this command never
-    /// produces one.
+    /// On a failed run, <see cref="string.Empty"/> — the pipeline's raw-tail fallback then shows the last
+    /// 40 raw lines and ends with a <c>✗</c> line naming the exit code, and records the run as
+    /// <c>RawTailFallback</c>. On a successful run, the whole raw output followed by a <c>⚠</c> status line
+    /// (the status line is last, like every filter's): the same fallback would show only the last 40 lines,
+    /// which cuts a long table, or a JSON document, in the middle.
     /// </returns>
     /// <remarks>
-    /// <c>dotnet list package</c> exits 0 even when it reports deprecated or vulnerable packages
-    /// (verified against SDK 10.0.302), so this filter cannot borrow the exit-code-gated raw-tail
-    /// fallback the way its siblings do — it has to carry its own guard. Without one, an unrecognized
-    /// table shape drops every <c>&gt; </c> row while the project headers still parse, and the
-    /// zero-findings path then emits an affirmative <c>✓ … (no vulnerable packages, N projects)</c>
-    /// for a repository that has them. Output in a shape this parser does not know
-    /// (<c>--format json</c>, a localized SDK, a future column layout) would likewise vanish entirely.
-    /// Passing the raw text through keeps the "never worse than raw" guarantee and mirrors what
-    /// <c>FilteredRunUseCase.ApplyFilterSafelyAsync</c> already does for a filter that throws.
+    /// <c>dotnet list package</c> exits 0 even when it reports deprecated or vulnerable packages (verified
+    /// against SDK 10.0.302), so a zero exit says nothing about whether this filter understood the output.
+    /// Without a guard, an unrecognized table shape drops every <c>&gt; </c> row while the project headers
+    /// still parse, and the zero-findings path then emits an affirmative
+    /// <c>✓ … (no vulnerable packages, N projects)</c> for a repository that has them. Output in a shape this
+    /// parser does not know (a localized SDK, a future column layout, or <c>--format json</c> handed over by
+    /// <c>dtk pipe</c>; a direct <c>dtk dotnet list package --format json</c> is passed through before it
+    /// reaches a filter) would likewise reach the reader as a 40-line tail. Passing the raw text through keeps
+    /// the "never worse than raw" guarantee and mirrors what <c>FilteredOutputPipeline</c> already does, whole,
+    /// for a filter that throws.
     /// </remarks>
     private static string Unrecognized(string stripped, int exitCode)
     {
@@ -87,7 +88,7 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         }
 
         var text = stripped.ReplaceLineEndings("\n").TrimEnd('\n');
-        return $"⚠ dotnet list package: unrecognized output, passed through unfiltered\n{text}\n";
+        return $"{text}\n⚠ dotnet list package: unrecognized output, passed through unfiltered\n";
     }
 
     private static ParseState Parse(string[] lines)
@@ -248,10 +249,6 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         var distinct = byProject.Values.SelectMany(v => v).Distinct(StringComparer.Ordinal).Count();
 
         var sb = new StringBuilder();
-        var glyph = exitCode == 0 ? "✓ " : string.Empty;
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"{glyph}dotnet list package ({state.Projects.Count} project{Plural(state.Projects.Count)}, {distinct} package{Plural(distinct)})");
-
         var groups = 0;
         var omitted = 0;
 
@@ -281,6 +278,11 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         }
 
         AppendTruncation(sb, omitted);
+
+        // The status line is last, so `| tail -1` carries the verdict: a zero exit code is a success, any other a cross.
+        var glyph = exitCode == 0 ? '✓' : '✗';
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"{glyph} dotnet list package ({state.Projects.Count} project{Plural(state.Projects.Count)}, {distinct} package{Plural(distinct)})");
         return sb.ToString().ReplaceLineEndings("\n");
     }
 
@@ -329,9 +331,6 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
             : $"{affected} of {projects} projects";
 
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"dotnet list package {flag}: {groups.Count} {(groups.Count == 1 ? noun.Singular : noun.Plural)} ({scope})");
-
         var omitted = 0;
         for (var i = 0; i < groups.Count; i++)
         {
@@ -349,6 +348,12 @@ public sealed partial class DotnetListPackageFilter : IOutputFilter
         }
 
         AppendTruncation(sb, omitted);
+
+        // The status line is last, so `| tail -1` carries the verdict. The command exits 0 whatever it finds, so
+        // findings on a zero exit are a warning: something to look at, not a failure.
+        var glyph = exitCode == 0 ? '⚠' : '✗';
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"{glyph} dotnet list package {flag}: {groups.Count} {(groups.Count == 1 ? noun.Singular : noun.Plural)} ({scope})");
         return sb.ToString().ReplaceLineEndings("\n");
     }
 

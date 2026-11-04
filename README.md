@@ -65,7 +65,7 @@ FAILURES (1):
   SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]
     Intentional failure
     at samples/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
-dotnet test: 1 failed, 3 passed (1 project, 0.03s)
+✗ dotnet test: 1 failed, 3 passed (1 project, 0.03s)
 ```
 
 </details>
@@ -78,7 +78,7 @@ context consumed.
 - **Build filtering** — strips MSBuild noise, keeps only errors, warnings, and a compact summary (~78% savings)
 - **Test filtering** — removes adapter banners, license warnings, and reflection stack frames (~84% savings)
 - **Restore/Clean filtering** — condenses output to essentials (~47–98% savings)
-- **Format filtering** — shows only violations with workspace-relative paths
+- **Format filtering** — groups violations by file and code, with workspace-relative paths and the verdict on the last line
 - **`list package` filtering** — collapses per-TFM duplication across plain, `--outdated`,
   `--deprecated`, and `--vulnerable` (~80.9% savings)
 - **Publish/Pack filtering** — the build's error/warning summary, plus the publish directories or
@@ -152,7 +152,8 @@ dtk dotnet pack
 ```
 
 Unknown subcommands pass through to `dotnet` unchanged, as do `dotnet publish --interactive` and
-`dotnet pack --interactive`, which keep the terminal so a credential provider can prompt.
+`dotnet pack --interactive`, which keep the terminal so a credential provider can prompt, and the runs whose output a
+program reads: `dotnet list package --format json` and MSBuild's `-getProperty`, `-getItem` and `-getTargetResult`.
 
 ### Filtering output dtk did not produce
 
@@ -187,9 +188,11 @@ dtk log --full           # everything
 dtk log --all            # include other projects
 ```
 
-Logs are written by the tee feature, which defaults to `tee.mode = Failures` — only failed runs are
-saved, and output under 500 bytes is never saved. Use `dtk config set tee.mode Always` to keep
-every run. Logs written by dtk 0.6.0 or earlier have no project metadata and appear only under `--all`.
+Logs are written by the tee feature, which defaults to `tee.mode = Failures`: the latest run of each kind
+(build, test, …) in each project is always saved, so `dtk log` never shows an older run as the latest, and
+older runs are kept only when they failed with at least 500 bytes of output. Use
+`dtk config set tee.mode Always` to keep older passing runs too. Logs written by dtk 0.6.0 or earlier have no
+project metadata and appear only under `--all`.
 
 A run that dtk did not finish — because dtk itself was killed outright, or you pressed Ctrl-C twice —
 still leaves a log. `dtk log` shows it with `incomplete` in place of an exit code and a note saying
@@ -296,7 +299,7 @@ DTK Token Savings (Global Scope)
 Total commands:    1059
 Without tool:      1.0M
 Used by tool:      92.9K
-Tokens saved:      911.2K (90.7%)
+Tokens saved:      912.2K (90.7%)
 Total exec time:   26m28s (avg 1.5s)
 Efficiency meter: ██████████████████████░░ 90.7%
 
@@ -308,7 +311,7 @@ By Command
 
  clean (ok)        3        241.9K            18    241.9K  100.0%  ██████░░░░
 
- format (ok)     103             0          1.0K     -1.0K    0.0%  ░░░░░░░░░░
+ format (ok)     103             0          1.0K         0    0.0%  ░░░░░░░░░░
 
  restore (ok)     89         12.3K          6.5K      5.8K   47.2%  █░░░░░░░░░
 
@@ -417,8 +420,8 @@ dtk completion powershell >> $PROFILE
 
 ## Log Files
 
-DTK saves raw command output to disk for failed runs by default (`tee.mode = failures`). Pass `--show-log` to print the
-log path after any run:
+DTK saves raw command output to disk for failed runs, and for the latest run of each kind, by default
+(`tee.mode = failures`). Pass `--show-log` to print the log path after any run:
 
 ```sh
 dtk dotnet test --show-log

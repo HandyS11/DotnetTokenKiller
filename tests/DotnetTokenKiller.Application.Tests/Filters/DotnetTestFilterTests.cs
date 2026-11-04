@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Application.Tests.Helpers;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -66,10 +68,51 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_ZeroTestsFixture_ReturnsZeroTestsMessage()
+    public void Apply_ZeroFixture_NamesFilterAndAssembly()
     {
         var fixture = LoadFixture("dotnet_test_zero.txt");
-        _sut.Apply(fixture, exitCode: 0).Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+        _sut.Apply(fixture, exitCode: 0).Should().Be(
+            "⚠ dotnet test: no test matched filter FullyQualifiedName~NonExistentTest (DotnetTokenKiller.Domain.Tests.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_MultiProjectZeroFixture_NamesFilterAndEveryAssemblyInOrder()
+    {
+        // Real two-project run: both assemblies print the same filter, B.Tests ran first.
+        var fixture = LoadFixture("dotnet_test_multiproject_zero.txt");
+        _sut.Apply(fixture, exitCode: 0).Should().Be(
+            "⚠ dotnet test: no test matched filter FullyQualifiedName~NonExistentTest (B.Tests.dll, A.Tests.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_NoTestAvailableFixture_NamesAssemblyWithoutFilter()
+    {
+        // A test project without a registered adapter: VSTest says "No test is available in <dll>.", and no
+        // filter was given, so there is none to name.
+        var fixture = LoadFixture("dotnet_test_no_test_available.txt");
+        _sut.Apply(fixture, exitCode: 0).Should().Be("⚠ dotnet test: no test found (C.NoAdapter.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_NoTestMatchesDifferingFiltersAndRepeatedAssembly_UsesFirstFilterAndEachAssemblyOnce()
+    {
+        const string input = """
+                             No test matches the given testcase filter `Name~First` in /r/A.Tests/bin/Debug/net10.0/A.Tests.dll
+                             No test matches the given testcase filter `Name~Second` in /r/B.Tests/bin/Debug/net10.0/B.Tests.dll
+                             No test matches the given testcase filter `Name~Second` in /r/A.Tests/bin/Debug/net10.0/A.Tests.dll
+
+                             """;
+
+        _sut.Apply(input, exitCode: 0).Should().Be("⚠ dotnet test: no test matched filter Name~First (A.Tests.dll, B.Tests.dll)\n");
+    }
+
+    [Fact]
+    public void Apply_NoTestMatchesWindowsPathWithSpaces_NamesTheFileOnly()
+    {
+        const string input =
+            "No test matches the given testcase filter `Category=Slow & Name~X` in C:\\My Repo\\tests\\My Tests\\bin\\Debug\\net10.0\\My Tests.dll\r\n";
+
+        _sut.Apply(input, exitCode: 0).Should().Be("⚠ dotnet test: no test matched filter Category=Slow & Name~X (My Tests.dll)\n");
     }
 
     [Fact]
@@ -136,7 +179,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 60.00s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 1m00s)\n");
     }
 
     [Fact]
@@ -146,7 +189,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 3600.00s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 1h00m00s)\n");
     }
 
     [Fact]
@@ -167,6 +210,141 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be("✓ dotnet test: 4 passed (1 project, 0.10s)\n");
+    }
+
+    [Fact]
+    public void Apply_FrenchCulture_RendersTheDurationWithADecimalPoint()
+    {
+        // "0,02s" cost a French-locale user about 670 summaries: the number followed the system culture.
+        using var _ = new CultureScope("fr-FR");
+        const string input = "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 20 ms - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.02s)\n");
+    }
+
+    [Theory]
+    [InlineData("Duration: 89 ms", "0.09s")]
+    [InlineData("Duration: 2.5 s", "2.50s")]
+    [InlineData("Duration: 1 s", "1s")]
+    [InlineData("Duration: 12 s", "12s")]
+    [InlineData("Duration: 1 m", "1m00s")]
+    [InlineData("Duration: 1 m 40 s", "1m40s")]
+    [InlineData("Duration: 1 h 2 m 3 s", "1h02m03s")]
+    public void Apply_VsTestSummaryDuration_KeepsThePrecisionTheSummaryGives(string duration, string expected)
+    {
+        // VSTest prints whole units (`Duration: 1 s`, `1 m 40 s`), so "1.00s" or "100.00s" would claim
+        // a precision the summary never had.
+        var input = $"Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, {duration} - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 1 passed (1 project, {expected})\n");
+    }
+
+    [Theory]
+    [InlineData("1 s", "250 ms", "1s")]
+    [InlineData("250 ms", "1 s", "1s")]
+    [InlineData("250 ms", "1.5 s", "1.75s")]
+    [InlineData("1000 ms", "250 ms", "1.25s")]
+    public void Apply_SummedAssemblyDurations_AreExactOnlyWhenEveryOneWas(string first, string second, string expected)
+    {
+        var input = $"""
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: {first} - A.Tests.dll
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: {second} - B.Tests.dll
+                     """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 2 passed (2 projects, {expected})\n");
+    }
+
+    [Theory]
+    [InlineData("duration: 2.3s", "2.30s")]
+    [InlineData("duration: 343ms", "0.34s")]
+    [InlineData("duration: 2s", "2s")]
+    public void Apply_TerminalLoggerSummaryDuration_KeepsThePrecisionTheSummaryGives(string duration, string expected)
+    {
+        var input = $"Test summary: total: 3, failed: 0, succeeded: 3, skipped: 0, {duration}";
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 3 passed (1 project, {expected})\n");
+    }
+
+    [Fact]
+    public void Apply_SubMillisecondSummaryFixture_RendersTheNormalStatusLine()
+    {
+        // VSTest prints "Duration: < 1 ms" when a project's run took under a millisecond. The fixture is a real
+        // capture of a one-test xUnit project with its path replaced, EXCEPT that duration token: the run was
+        // repeated about seventy times (xUnit pass and skip, NUnit, MSTest) and never printed it (xUnit's fastest
+        // run reads "1 ms"), so "9 ms" was replaced by VSTest's literal "< 1 ms" (ConsoleLogger.GetFormattedDurationString).
+        var result = _sut.Apply(LoadFixture("dotnet_test_duration_under_1ms.txt"), exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.00s)\n");
+    }
+
+    [Theory]
+    [InlineData("250 ms", "0.25s")]
+    [InlineData("1.5 s", "1.50s")]
+    [InlineData("1 s", "1s")]
+    public void Apply_SubMillisecondSummaryBesideAnother_CountsAsZeroAndLeavesExactnessToTheOther(
+        string other, string expected)
+    {
+        var input = $"""
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: < 1 ms - A.Tests.dll
+                     Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: {other} - B.Tests.dll
+                     """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 2 passed (2 projects, {expected})\n");
+    }
+
+    [Fact]
+    public void Apply_SubMillisecondFailedSummary_RendersTheFailureReport()
+    {
+        const string input =
+            "Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: < 1 ms - Tests.dll";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be("FAILURES (1):\n✗ dotnet test: 1 failed, 0 passed (1 project, 0.00s)\n");
+    }
+
+    [Theory]
+    [InlineData("1 s", "1.3s", "1.30s")]
+    [InlineData("500 ms", "2s", "2s")]
+    public void Apply_TerminalLoggerTotalBesideAssemblySummary_TakesTheTotalsExactness(
+        string assemblyDuration, string terminalDuration, string expected)
+    {
+        // The terminal logger's whole-run total replaces the per-assembly durations, so it also replaces what
+        // they said about their precision: a whole-second VSTest line must not make "1.3s" read "1s", and an
+        // exact assembly line must not make "2s" read "2.00s".
+        var input = $"""
+                     Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: {assemblyDuration} - Tests.dll
+                     Test summary: total: 3, failed: 0, succeeded: 3, skipped: 0, duration: {terminalDuration}
+                     """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be($"✓ dotnet test: 3 passed (1 project, {expected})\n");
+    }
+
+    [Fact]
+    public void Apply_ConsoleLoggerTotalTime_IsExact()
+    {
+        const string input = """
+                             Test Run Successful.
+                             Total tests: 2
+                                  Passed: 2
+                              Total time: 0.4814 Seconds
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 0);
+
+        result.Should().Be("✓ dotnet test: 2 passed (1 project, 0.48s)\n");
     }
 
     [Fact]
@@ -245,7 +423,7 @@ public class DotnetTestFilterTests
               MyTests.FailingTest [1 ms]
                 Assert failed
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 0 passed, 3 skipped (1 project, 0.05s)
+            ✗ dotnet test: 1 failed, 0 passed, 3 skipped (1 project, 0.05s)
 
             """);
     }
@@ -272,7 +450,7 @@ public class DotnetTestFilterTests
               MyTests.FailingTest [1 ms]
                 Assert failed
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 0 passed (1 project, 0.05s)
+            ✗ dotnet test: 1 failed, 0 passed (1 project, 0.05s)
 
             """);
     }
@@ -302,7 +480,7 @@ public class DotnetTestFilterTests
               MyTests.FailingTest [1 ms]
                 Assert failed
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 5 passed (2 projects, 0.15s)
+            ✗ dotnet test: 1 failed, 5 passed (2 projects, 0.15s)
 
             """);
     }
@@ -495,7 +673,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("2.00s");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 2s)\n");
     }
 
     [Fact]
@@ -503,11 +681,11 @@ public class DotnetTestFilterTests
     {
         // Kills arithmetic mutation: value * 60_000 → value / 60_000 (line 236)
         const string input =
-            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m - Tests.dll";
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 3 m - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("60.00s");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 3m00s)\n");
     }
 
     [Fact]
@@ -515,11 +693,11 @@ public class DotnetTestFilterTests
     {
         // Kills arithmetic mutation: value * 3_600_000 → value / 3_600_000 (line 237)
         const string input =
-            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 h - Tests.dll";
+            "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 2 h - Tests.dll";
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Contain("3600.00s");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 2h00m00s)\n");
     }
 
     [Fact]
@@ -548,7 +726,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("dotnet test: 1 failed, 2 passed");
+        result.Should().Contain("✗ dotnet test: 1 failed, 2 passed");
     }
 
     [Fact]
@@ -729,8 +907,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Contain("Expected: 42");
-        result.Should().Contain("Actual:   99");
+        result.Should().Contain("Expected: 42, Actual: 99");
     }
 
     [Fact]
@@ -824,7 +1001,7 @@ public class DotnetTestFilterTests
         const string input =
             "Passed!  - Failed: 0, Passed: 1, Skipped: 0, Total: 1, Duration: 1 m 2 s - Tests.dll";
         var result = _sut.Apply(input, exitCode: 0);
-        result.Should().Contain("62.00s").And.NotContain("60.00s");
+        result.Should().Contain("1m02s").And.NotContain("1m00s");
     }
 
     [Fact]
@@ -849,7 +1026,7 @@ public class DotnetTestFilterTests
         // A bare MTP failure line carries no message, so the message row renders as indent-only.
         // Spelled with \n rather than a raw literal because that trailing indent is significant.
         result.Should().Be(
-            "FAILURES (1):\n  MyTests.T1 [12ms]\n    \ndotnet test: 1 failed, 9 passed (1 project, 2.30s)\n");
+            "FAILURES (1):\n  MyTests.T1 [12ms]\n    \n✗ dotnet test: 1 failed, 9 passed (1 project, 2.30s)\n");
     }
 
     [Fact]
@@ -873,9 +1050,9 @@ public class DotnetTestFilterTests
             """
             FAILURES (1):
               MyTests.T1 [12ms]
-                Expected: 1, Actual: 2
+                Assert.Equal() Failure — Expected: 1, Actual: 2
                 at ../../../path/to/Test.cs:line 42
-            dotnet test: 1 failed, 1 passed (1 project, 2.30s)
+            ✗ dotnet test: 1 failed, 1 passed (1 project, 2.30s)
 
             """);
     }
@@ -908,7 +1085,7 @@ public class DotnetTestFilterTests
         const string raw = "  Failed MyTests.T1 [15 ms]\n  Error Message:\n   boom";
         var result = new DotnetTestFilter().Apply(raw, exitCode: 1);
         result.Should().Be(
-            "FAILURES (1):\n  MyTests.T1 [15 ms]\n    boom\ndotnet test: 1 failed, 0 passed\n");
+            "FAILURES (1):\n  MyTests.T1 [15 ms]\n    boom\n✗ dotnet test: 1 failed, 0 passed\n");
     }
 
     [Fact]
@@ -936,7 +1113,7 @@ public class DotnetTestFilterTests
               MyTests.Multi [1 ms]
                 first part second part
                 at ../../../path/Test.cs:line 1
-            dotnet test: 1 failed, 0 passed (1 project, 0.00s)
+            ✗ dotnet test: 1 failed, 0 passed (1 project, 0.00s)
 
             """);
     }
@@ -965,7 +1142,7 @@ public class DotnetTestFilterTests
               MyTests.OnlyOneShown [1 ms]
                 boom
                 at ../../../path/Test.cs:line 1
-            dotnet test: 5 failed, 0 passed (1 project, 0.01s)
+            ✗ dotnet test: 5 failed, 0 passed (1 project, 0.01s)
 
             """);
     }
@@ -981,7 +1158,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Be("FAILURES (2):\ndotnet test: 2 failed, 1 passed (1 project, 0.02s)\n");
+        result.Should().Be("FAILURES (2):\n✗ dotnet test: 2 failed, 1 passed (1 project, 0.02s)\n");
     }
 
     [Fact]
@@ -995,7 +1172,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Be(
-            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \ndotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1.00s)\n");
+            "FAILURES (3):\n  MyTests.T1 [5ms]\n    \n✗ dotnet test: 3 failed, 3 passed, 2 skipped (1 project, 1s)\n");
     }
 
     [Fact]
@@ -1011,25 +1188,194 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_AllSkipped_ReportsSkippedNotZeroFound()
+    public void Apply_SkippedOnlyFixture_ReportsSkippedCount()
     {
-        // A run where every test is skipped is not "0 tests found" — tests existed, none executed.
-        const string raw =
-            "Passed!  - Failed:     0, Passed:     0, Skipped:     5, Total:     5, Duration: 10 ms - T.dll";
-        var result = new DotnetTestFilter().Apply(raw, exitCode: 0);
-        result.Should().Contain("5 skipped").And.NotContain("0 tests found");
+        // Real VSTest output of an xUnit project whose tests are all [Fact(Skip = …)]. VSTest then
+        // prints "Skipped!" where it would print "Passed!": tests existed, none executed, so this is
+        // neither "0 tests found" nor silence. The elapsed text is not asserted (it has its own tests).
+        var fixture = LoadFixture("dotnet_test_skipped_only.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 0 passed, 2 skipped \(1 project, [^)]+\)\n$")
+            .And.NotContain("0 tests found");
     }
 
-    // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects under
-    // Microsoft.Testing.Platform ("test": {"runner": "Microsoft.Testing.Platform"} in global.json),
-    // with the machine path replaced by /test/project/root.
+    [Fact]
+    public void Apply_MultiProjectWithSkippedOnlyProject_CountsBothProjects()
+    {
+        // One project passes, the other skips everything: the skipped-only project still counts as a
+        // project, and the passed total comes from the other one.
+        var fixture = LoadFixture("dotnet_test_multiproject_skipped.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed, 2 skipped \(2 projects, [^)]+\)\n$");
+    }
+
+    // The dotnet_test_logger_* and dotnet_test_list_tests* fixtures are real .NET 10.0.403 SDK runs of two
+    // scratch xUnit 2.9.3 projects (Alpha: 4 passing, 1 skipped, and a fifth test that fails when
+    // ALPHA_FAIL is set; Beta: 1 fact and a 2-row theory) under `--logger "console;verbosity=…"` or
+    // `--list-tests`, with the machine path replaced by /test/project/root. Each is the child's stdout
+    // followed by its stderr, which is the text dtk's own capture hands the filter: VSTest writes its
+    // "Test Run Failed." header and the failing test's xUnit line to stderr, so a failed run's header
+    // arrives after the counts it introduces. The one `_interleaved` fixture is the same failing run
+    // with both streams merged in arrival order (`2>&1`, what `dtk pipe` reads).
+
+    [Theory]
+    [InlineData("dotnet_test_logger_normal_pass.txt")]
+    [InlineData("dotnet_test_logger_detailed_pass.txt")]
+    public void Apply_ConsoleLoggerPass_ReportsCounts(string fixture)
+    {
+        // Under the normal and detailed console loggers VSTest prints no "Passed!" line at all: the run's
+        // result is the "Test Run Successful." block, so the counts must come from there, once.
+        var result = _sut.Apply(LoadFixture(fixture), exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 4 passed, 1 skipped \(1 project, [^)]+\)\n$");
+    }
+
+    [Fact]
+    public void Apply_DetailedLoggerFail_ReportsTrueCounts()
+    {
+        // The failing test's stack trace is the last thing before the "Test Run Failed." block, so the
+        // failure parser must stop there instead of swallowing the block (which used to lose the counts).
+        var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail.txt"), exitCode: 1);
+
+        result.Should().StartWith("FAILURES (1):\n  Alpha.Tests.AlphaTests.Divides [");
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
+    }
+
+    [Fact]
+    public void Apply_DetailedLoggerFailInArrivalOrder_ReportsTrueCounts()
+    {
+        // The same run with stdout and stderr merged in arrival order: the header comes before its counts.
+        var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail_interleaved.txt"), exitCode: 1);
+
+        result.Should().StartWith("FAILURES (1):\n  Alpha.Tests.AlphaTests.Divides [");
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 3 passed, 1 skipped (1 project, ");
+    }
+
+    [Fact]
+    public void Apply_DetailedLoggerFailInTwoProjects_CountsEachProjectOnce()
+    {
+        // Parallel projects interleave their output: Beta's passing block lands between Alpha's xUnit
+        // lines and Alpha's own result lines, and Alpha's counts precede its "Test Run Failed." header.
+        var result = _sut.Apply(LoadFixture("dotnet_test_logger_detailed_fail_multiproject.txt"), exitCode: 1);
+
+        result.Should().Contain("Alpha.Tests.AlphaTests.Divides [");
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 6 passed, 1 skipped (2 projects, ");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_logger_normal_terminal_logger.txt")]
+    [InlineData("dotnet_test_logger_minimal_terminal_logger.txt")]
+    public void Apply_TerminalLoggerAlongsideAssemblySummaries_CountsEachTestOnce(string fixture)
+    {
+        // `--tl:on` with an explicit console logger prints each assembly's own summary (a "Test Run"
+        // block, or a "Passed!" line) *and* the terminal logger's whole-run "Test summary:". They
+        // describe the same 8 tests, so the whole-run totals stand in for the per-assembly ones. These
+        // fixtures keep their escape sequences: the pipeline strips them before the filter.
+        var result = _sut.Apply(AnsiStrip.Strip(LoadFixture(fixture)), exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 7 passed, 1 skipped \(2 projects, [^)]+\)\n$");
+    }
+
+    [Fact]
+    public void Apply_ListTests_PrintsNamesThenCount()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_list_tests.txt"), exitCode: 0);
+
+        result.Should().Be(
+            """
+            Beta.Tests.BetaTests.Concatenates
+            Beta.Tests.BetaTests.IsPositive(value: 1)
+            Beta.Tests.BetaTests.IsPositive(value: 2)
+            Alpha.Tests.AlphaTests.Adds
+            Alpha.Tests.AlphaTests.Subtracts
+            Alpha.Tests.AlphaTests.Multiplies
+            Alpha.Tests.AlphaTests.Divides
+            Alpha.Tests.AlphaTests.Persists
+            ✓ dotnet test --list-tests: 8 tests (2 projects)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_ListTestsWithOneTest_UsesTheSingularForm()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_list_tests_single.txt"), exitCode: 0);
+
+        result.Should().Be("Beta.Tests.BetaTests.Concatenates\n✓ dotnet test --list-tests: 1 test (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_ListTestsWhereOneProjectMatchesNothing_StillListsTheOthersNames()
+    {
+        // Alpha's "No test matches the given testcase filter" line must not turn the listing of Beta's
+        // three tests into a "0 tests found" warning.
+        var result = _sut.Apply(LoadFixture("dotnet_test_list_tests_filtered.txt"), exitCode: 0);
+
+        result.Should().Be(
+            """
+            Beta.Tests.BetaTests.Concatenates
+            Beta.Tests.BetaTests.IsPositive(value: 1)
+            Beta.Tests.BetaTests.IsPositive(value: 2)
+            ✓ dotnet test --list-tests: 3 tests (2 projects)
+
+            """);
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_logger_normal_pass.txt")]
+    [InlineData("dotnet_test_logger_detailed_pass.txt")]
+    public void Apply_ConsoleLoggerPass_ReadsTheTotalTime(string fixture)
+    {
+        // "Total time: 0.4794 Seconds" is the only duration the block carries. Not parsing it would leave the
+        // status line at "0.00s"; the digits are not asserted because their format has its own tests.
+        var result = _sut.Apply(LoadFixture(fixture), exitCode: 0);
+
+        result.Should().StartWith("✓ dotnet test: 4 passed").And.NotContain("0.00s");
+    }
+
+    [Fact]
+    public void Apply_ConsoleLoggerCountLinesWithoutRunHeader_AreNotCounted()
+    {
+        // A test's own output can print a line shaped like a count; without a "Test Run …" header above
+        // or below it, it is not a run summary and must not be added to the real one.
+        const string input =
+            "     Passed: 3\n" +
+            "Passed!  - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 10 ms - T.dll\n";
+
+        _sut.Apply(input, exitCode: 0).Should().StartWith("✓ dotnet test: 2 passed (1 project, ");
+    }
+
+    [Fact]
+    public void Apply_IndentedLineWithoutListHeader_IsNotAListedTest()
+    {
+        const string input =
+            "    Some.Indented.Line\n" +
+            "Passed!  - Failed: 0, Passed: 2, Skipped: 0, Total: 2, Duration: 10 ms - T.dll\n";
+
+        _sut.Apply(input, exitCode: 0).Should().NotContain("Some.Indented.Line").And.NotContain("--list-tests");
+    }
+
+    private const string QuotedDiagnostic = "Program.cs(3,5): error CS0103: The name 'x' does not exist in the current context";
+    private const string AssertEqualFailureMessage = "Assert.Equal() Failure: Values differ";
+    private const string MtpStdoutLine = "  Telemetry";
+
+    private static string LastLine(string output) => output.TrimEnd('\n').Split('\n')[^1];
+
+    // The dotnet_test_mtp_* fixtures are real .NET 10 SDK runs of MSTest 4.0.2 projects (the xunit3 ones:
+    // xunit.v3.mtp-v2 4.0.2) under Microsoft.Testing.Platform ("test": {"runner": "Microsoft.Testing.Platform"}
+    // in global.json), with the machine path replaced by /test/project/root.
 
     [Fact]
     public void Apply_MtpAllPassFixture_ReportsPassedAndSkipped()
     {
         var fixture = LoadFixture("dotnet_test_mtp_all_pass.txt");
 
-        _sut.Apply(fixture, exitCode: 0).Should().Be("✓ dotnet test: 3 passed, 1 skipped (1 project, 0.32s)\n");
+        _sut.Apply(fixture, exitCode: 0).Should().MatchRegex(
+            @"^✓ dotnet test: 3 passed, 1 skipped \(1 project, [^)]+\) · 3 build warnings \(MSTEST0032×3\)\n$");
     }
 
     [Fact]
@@ -1048,9 +1394,92 @@ public class DotnetTestFilterTests
               Parse_Negative_ReturnsValue [14ms]
                 Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
                 at Beta.Tests/Test1.cs:line 14
-            dotnet test: 1 failed, 2 passed (1 project, 0.33s)
+            ✗ dotnet test: 1 failed, 2 passed (1 project, 0.33s)
 
             """);
+    }
+
+    [Fact]
+    public void Apply_XunitV3UnderMtp_KeepsTheFailureMessage()
+    {
+        // Real xunit.v3.mtp-v2 4.0.2 run. Unlike MSTest, xUnit v3 prints "from <assembly>" BEFORE the message
+        // and prints the message once: the report used to show a blank line for every failure. The nested
+        // exception's message carries xUnit's own wrapper type, kept as printed; its "----- Inner Stack Trace
+        // -----" line belongs to the stack trace, not the message.
+        var fixture = LoadFixture("dotnet_test_mtp_xunit3_failures.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        result.Should().Be(
+            """
+            FAILURES (3):
+              XV3.DiffTests.FailCollections [20ms]
+                Assert.Equal() Failure: Collections differ at pos 0 — Expected: [1, 2, 3], Actual: [9, 2, 3]
+                at XV3/Tests.cs:line 29
+              XV3.NestedTests.FailNestedException [11ms]
+                Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidOperationException : An error occurred while saving the entity changes while processing the order pipeline for customer 12345 in region eu-west; see the inner exception for details about the ... ---- System.ArgumentException : THE-INNER-CAUSE
+                at XV3/Tests.cs:line 14
+              XV3.DiffTests.FailStrings [2ms]
+                Assert.Equal() Failure: Strings differ at pos 9 — Expected: "hello world", Actual: "hello wordl"
+                at XV3/Tests.cs:line 32
+            ✗ dotnet test: 3 failed, 1 passed (1 project, 0.51s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_XunitV3TimeoutUnderMtp_EndsTheMessageBeforeTheTraceMarkerAndCapturedOutput()
+    {
+        // Real xunit.v3.mtp-v2 4.0.2 run. A [Fact(Timeout = 200)] test that hangs fails with no stack frame
+        // at all: MTP prints the message, "--- End of stack trace from previous location ---", then the test's
+        // captured "Standard output" and "Error output" sections inside the same failure block. None of that
+        // is the message, and with no frame there is no source reference.
+        var fixture = LoadFixture("dotnet_test_mtp_xunit3_timeout.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        result.Should().Be(
+            """
+            FAILURES (2):
+              XV3.TimeoutTests.FailsWithPlainMessage [9ms]
+                plain message from the test
+                at XV3/Tests.cs:line 14
+              (canceled) XV3.TimeoutTests.Hangs [203ms]
+                Xunit.MicrosoftTestingPlatform.XunitException: Test execution timed out after 200 milliseconds
+            ✗ dotnet test: 2 failed, 1 passed (1 project, 0.71s)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_MtpMessageWithAFrameBeforeTheFromLine_KeepsEveryMessageLine()
+    {
+        // MSTest's shape (the message is already collected when "from" arrives) is read exactly as before:
+        // a frame-shaped line inside the message block is skipped, it does not end the message. Only a
+        // "from" line that precedes any message (xUnit v3) lets a stack frame end it.
+        const string input = """
+                             Running tests from /r/T/bin/Debug/net10.0/T.dll (net10.0|x64)
+                             failed Some.Test (3ms)
+                               Line one of the message
+                                 at Some.Helper() in /r/T/Helper.cs:5
+                               Line two of the message
+                               from /r/T/bin/Debug/net10.0/T.dll (net10.0|x64)
+                               Line one of the message
+                                 at Some.Helper() in /r/T/Helper.cs:5
+                             /r/T/bin/Debug/net10.0/T.dll (net10.0|x64) failed with 1 error(s) (20ms)
+                             Exit code: 2
+
+                             Test run summary: Failed!
+                               total: 1
+                               failed: 1
+                               succeeded: 0
+                               skipped: 0
+                               duration: 40ms
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 2);
+
+        MessageLine(result).Should().Be("Line one of the message Line two of the message");
     }
 
     [Fact]
@@ -1060,7 +1489,7 @@ public class DotnetTestFilterTests
         // code a "nothing matched" warning rather than a blank report.
         var fixture = LoadFixture("dotnet_test_mtp_zero.txt");
 
-        _sut.Apply(fixture, exitCode: 8).Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+        _sut.Apply(fixture, exitCode: 8).Should().Be("⚠ dotnet test: no test found (Alpha.Tests.dll)\n");
     }
 
     [Theory]
@@ -1091,7 +1520,7 @@ public class DotnetTestFilterTests
               Parse_Negative_ReturnsValue [13ms]
                 Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.
                 at Beta.Tests/Test1.cs:line 14
-            dotnet test: 1 failed, 5 passed, 1 skipped (2 projects, 0.34s)
+            ✗ dotnet test: 1 failed, 5 passed, 1 skipped (2 projects, 0.34s)
 
             """);
     }
@@ -1127,7 +1556,7 @@ public class DotnetTestFilterTests
     [Theory]
     [InlineData("320ms", "0.32s")]
     [InlineData("4s 250ms", "4.25s")]
-    [InlineData("1m 02s 500ms", "62.50s")]
+    [InlineData("1m 02s 500ms", "1m03s")]
     public void Apply_MtpSummaryBlock_ParsesDuration(string duration, string expectedElapsed)
     {
         var raw = "Test run summary: Passed!\n  total: 2\n  failed: 0\n  succeeded: 2\n  skipped: 0\n"
@@ -1213,7 +1642,7 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_NoTestsLineOnly_ReportsZeroWithNoAssemblyMatched()
+    public void Apply_NoTestsLineOnly_NamesFilterAndAssembly()
     {
         // Kills the mutant that drops `state.ZeroTestsFound` from the disjunction: with no summary at
         // all, ProjectCount is 0, so only ZeroTestsFound can produce the verdict.
@@ -1222,7 +1651,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("⚠ dotnet test: 0 tests found (no assembly matched)\n");
+        result.Should().Be("⚠ dotnet test: no test matched filter X (A.Tests.dll)\n");
     }
 
     [Fact]
@@ -1253,4 +1682,604 @@ public class DotnetTestFilterTests
 
         result.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Apply_CompileErrors_RendersGroupedErrorsAndTotal()
+    {
+        // A test project that does not compile (the TDD red step): `dotnet test` prints the compiler's
+        // diagnostics and restore noise, no test summary, and no "Build FAILED." tally.
+        var fixture = LoadFixture("dotnet_test_compile_errors.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().NotContain("/test/project/root");
+        result.Should().NotContain(" -> ");
+        result.Should().NotContain("Determining projects");
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        result.Should().NotContain("Top codes", "every one of the 34 errors is listed, repeats grouped on one line");
+        result.Should().Contain("1 warning not shown (dtk log)");
+        result.Should().EndWith("\n✗ dotnet test: 1 project did not build (34 errors) · 1 build warning (CS0219)\n");
+        LastLine(result).Should().Be("✗ dotnet test: 1 project did not build (34 errors) · 1 build warning (CS0219)");
+    }
+
+    [Fact]
+    public Task Apply_CompileErrors_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_compile_errors.txt");
+        var result = _sut.Apply(fixture, exitCode: 1);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_CompileErrorsWithTestResults_ShowsBoth()
+    {
+        // One project of the solution does not compile, another runs and has a failing test.
+        var fixture = LoadFixture("dotnet_test_compile_errors_mixed.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().NotContain("/test/project/root");
+        result.Should().NotContain(" -> ");
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        result.Should().Contain("FAILURES (1):");
+        result.Should().Contain("Gamma.Tests.GammaTests.Divides");
+        result.IndexOf("(9 errors)", StringComparison.Ordinal)
+            .Should().BeLessThan(result.IndexOf("FAILURES (1):", StringComparison.Ordinal),
+                "the compile errors come first, then the failing tests");
+        LastLine(result).Should().MatchRegex(
+            @"^✗ dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
+    }
+
+    [Fact]
+    public Task Apply_CompileErrorsWithTestResults_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_compile_errors_mixed.txt");
+        var result = _sut.Apply(fixture, exitCode: 1);
+        return Verify(result);
+    }
+
+    [Fact]
+    public void Apply_CompileErrorsBesideAPassingProject_HasNoFailuresBlock()
+    {
+        // The common red step in a solution: the other test projects pass. Nothing failed, so there is
+        // no "FAILURES (0):" block, but the status still counts the passed tests next to the build failure.
+        var fixture = LoadFixture("dotnet_test_compile_errors_mixed_passing.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        result.Should().NotContain("FAILURES");
+        LastLine(result).Should().MatchRegex(
+            @"^✗ dotnet test: 0 failed, 3 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
+    }
+
+    [Fact]
+    public void Apply_ErrorWithoutAProject_SaysBuildFailedNotZeroProjects()
+    {
+        // `dotnet test nothere.csproj`: MSBuild's own "MSB1009" names no project, so there is no project
+        // to count and the status must not claim "0 projects did not build".
+        var fixture = LoadFixture("dotnet_test_missing_project.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("MSB1009: Project file does not exist. Switch: nothere.csproj");
+        result.Should().NotContain("0 project");
+        LastLine(result).Should().Be("✗ dotnet test: build failed (1 error)");
+    }
+
+    [Fact]
+    public void Apply_DeclaredErrorNoPatternParsed_SaysNothingSoTheRawTailShows()
+    {
+        // MSBuild's "1 Error(s)" counts a diagnostic no pattern matched: a project path with a space defeats
+        // the codeless-diagnostic pattern, and a restore error carries no line or column. A status line over
+        // an empty body ("build failed (1 error)") would hide the cause, so the filter says nothing and the
+        // pipeline prints the raw tail, where the NU1101 is.
+        const string input = """
+                             Determining projects to restore...
+                             /home/u/My Proj/A.Tests.csproj : error NU1101: Unable to find package Missing.Pkg. No packages exist with this id in source(s): nuget.org
+                               Failed to restore /home/u/My Proj/A.Tests.csproj (in 457 ms).
+
+                             Build FAILED.
+
+                             /home/u/My Proj/A.Tests.csproj : error NU1101: Unable to find package Missing.Pkg. No packages exist with this id in source(s): nuget.org
+                                 0 Warning(s)
+                                 1 Error(s)
+
+                             Time Elapsed 00:00:00.99
+                             """;
+
+        _sut.Apply(input, exitCode: 1).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_FailureMessageNamingADiagnostic_IsNotACompileError()
+    {
+        // A failing test whose message quotes compiler output ("Program.cs(3,5): error CS0103: ...", as a
+        // Roslyn-driven test does) is a test failure: a diagnostic only counts when MSBuild closed it with
+        // its "[project.csproj]" suffix, and a quoted one has none.
+        var fixture = LoadFixture("dotnet_test_failure_mentions_diagnostic.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("FAILURES (1):");
+        result.Should().Contain("error CS0103");
+        result.Should().NotContain("did not build");
+        result.Should().NotContain("build failed");
+        LastLine(result).Should().MatchRegex(@"^✗ dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_CompileErrorLandingInsideAFailureBlock_IsStillCounted()
+    {
+        // Projects build and run in parallel, so a project still compiling can print its diagnostic after
+        // another project's failure began, before that project's summary. The real mixed run, with its
+        // first error line moved there, must still count all 34 errors: position in the output does not
+        // matter, a diagnostic closed by its [project.csproj] suffix is MSBuild's.
+        var lines = LoadFixture("dotnet_test_compile_errors_mixed.txt").Split('\n').ToList();
+        var moved = lines.Single(l => l.Contains("ConversionTests.cs(7,32): error CS0029", StringComparison.Ordinal));
+        lines.Remove(moved);
+        lines.Insert(lines.FindIndex(l => l.StartsWith("Failed!  - ", StringComparison.Ordinal)), moved);
+
+        var result = _sut.Apply(string.Join('\n', lines), exitCode: 1);
+
+        result.Should().Contain("Broken.Tests/ConversionTests.cs (9 errors)");
+        LastLine(result).Should().MatchRegex(
+            @"^✗ dotnet test: 1 failed, 2 passed · 1 project did not build \(34 errors\) \(1 project, [^)]+\) · 1 build warning \(CS0219\)$");
+    }
+
+    [Fact]
+    public void Apply_FailureQuotedByTheDetailedLogger_IsNotACompileError()
+    {
+        // The normal and detailed console loggers repeat each failing message outside its block, behind
+        // xUnit's "[xUnit.net hh:mm:ss.ff]" prefix. The real fixture with the message swapped for a quoted
+        // diagnostic: no "[project.csproj]" suffix, so neither copy is MSBuild's.
+        var fixture = LoadFixture("dotnet_test_logger_detailed_fail.txt");
+        fixture.Should().Contain(AssertEqualFailureMessage);
+
+        var result = _sut.Apply(fixture.Replace(AssertEqualFailureMessage, QuotedDiagnostic, StringComparison.Ordinal),
+            exitCode: 1);
+
+        result.Should().NotContain("did not build");
+        result.Should().NotContain("build failed");
+        result.Should().NotContain("[xUnit.net");
+        LastLine(result).Should().MatchRegex(@"^✗ dotnet test: 1 failed, 3 passed, 1 skipped \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_DiagnosticWrittenToStdoutByAnMtpRun_IsNotACompileError()
+    {
+        // Microsoft.Testing.Platform prints the test app's "Standard output:" outside every failure block.
+        // The real fixture with one of those lines swapped for a diagnostic-shaped one.
+        var fixture = LoadFixture("dotnet_test_mtp_failures.txt");
+        fixture.Should().Contain(MtpStdoutLine);
+
+        var result = _sut.Apply(fixture.Replace(MtpStdoutLine, $"  {QuotedDiagnostic}", StringComparison.Ordinal),
+            exitCode: 2);
+
+        result.Should().NotContain("did not build");
+        result.Should().NotContain("build failed");
+        LastLine(result).Should().MatchRegex(@"^✗ dotnet test: 1 failed, 2 passed \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_CompileErrorsOnZeroExit_NeverReportABuildFailure()
+    {
+        // The exit code stays the verdict: diagnostic-shaped lines in a run that exited 0 are not a failure,
+        // and with no summary there is nothing else to report.
+        var fixture = LoadFixture("dotnet_test_compile_errors.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().BeEmpty();
+    }
+
+    // The dotnet_test_*_with_warnings fixtures are real .NET 10.0.403 SDK runs (VSTest, xUnit 2.9.3) of a scratch
+    // project with two CS0219 and one CS8602 in its tests; the failing one throws a NullReferenceException.
+
+    private const string BuildWarningsOfTheFixtures = " · 3 build warnings (CS0219×2, CS8602)";
+    private const string WarnProjectSuffix = "[/test/project/root/Warn.Tests/Warn.Tests.csproj]";
+
+    /// <summary>A compiler warning as MSBuild prints it for the fixtures' project, each at a line of its own.</summary>
+    /// <param name="code">The diagnostic code.</param>
+    /// <param name="line">The line it is reported at.</param>
+    private static string WarnLine(string code, int line) =>
+        $"/test/project/root/Warn.Tests/WarnTests.cs({line},1): warning {code}: Synthetic {line}. {WarnProjectSuffix}";
+
+    private static string WithLinesFirst(string fixture, params string[] lines) =>
+        string.Join('\n', lines) + "\n" + fixture;
+
+    [Fact]
+    public void Apply_PassingRunWithBuildWarnings_AppendsTheCountAndTheTopCodes()
+    {
+        var fixture = LoadFixture("dotnet_test_pass_with_warnings.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().MatchRegex(
+            @"^✓ dotnet test: 2 passed \(1 project, [^)]+\) · 3 build warnings \(CS0219×2, CS8602\)\n$");
+    }
+
+    [Fact]
+    public void Apply_FailingRunWithBuildWarnings_AppendsTheSuffixToTheStatusLine()
+    {
+        var fixture = LoadFixture("dotnet_test_failures_with_warnings.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().StartWith("FAILURES (1):\n  Warn.Tests.WarnTests.Measures");
+        LastLine(result).Should().StartWith("✗ dotnet test: 1 failed, 1 passed (1 project, ")
+            .And.EndWith(BuildWarningsOfTheFixtures);
+    }
+
+    [Fact]
+    public void Apply_MoreThanThreeWarningCodes_ListsThreeAndTrailsOff()
+    {
+        // The fixture's CS0219×2 and CS8602, plus three codes of one warning each: six warnings, five codes.
+        // After CS0219×2, equal counts order by code: CA1863 and CS0168 fill the other two places, and CS8602
+        // and IDE0051 are cut.
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_pass_with_warnings.txt"),
+            WarnLine("IDE0051", 31), WarnLine("CA1863", 32), WarnLine("CS0168", 33));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        LastLine(result).Should().EndWith(" · 6 build warnings (CS0219×2, CA1863, CS0168, …)");
+    }
+
+    [Fact]
+    public void Apply_SingleBuildWarning_UsesTheSingularAndNoCount()
+    {
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_all_pass.txt"), WarnLine("CS0219", 5));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        LastLine(result).Should().EndWith(" · 1 build warning (CS0219)");
+    }
+
+    [Fact]
+    public void Apply_CodelessBuildWarning_IsCountedButNeverNamed()
+    {
+        // An Exec task's "EXEC : warning : …" carries no code: it counts toward the total, and the list leaves
+        // it out rather than printing "(no code)".
+        var codeless = $"EXEC : warning : could not lock config file {WarnProjectSuffix}";
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_pass_with_warnings.txt"), codeless);
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        LastLine(result).Should().EndWith(" · 4 build warnings (CS0219×2, CS8602)");
+        result.Should().NotContain("no code");
+
+        var onlyCodeless = _sut.Apply(WithLinesFirst(LoadFixture("dotnet_test_all_pass.txt"), codeless), exitCode: 0);
+
+        LastLine(onlyCodeless).Should().EndWith(" · 1 build warning");
+    }
+
+    [Fact]
+    public void Apply_BuildWarningsRepeatedPerTargetFramework_AreCountedOnce()
+    {
+        // A multi-targeted project re-reports each warning, closed by "[proj::TargetFramework=…]".
+        var fixture = LoadFixture("dotnet_test_pass_with_warnings.txt");
+        var repeats = fixture.Split('\n')
+            .Where(l => l.Contains(": warning ", StringComparison.Ordinal))
+            .Select(l => l.Replace("Warn.Tests.csproj]", "Warn.Tests.csproj::TargetFramework=net10.0]",
+                StringComparison.Ordinal))
+            .ToArray();
+        repeats.Should().HaveCount(3);
+
+        var result = _sut.Apply(WithLinesFirst(fixture, repeats), exitCode: 0);
+
+        LastLine(result).Should().EndWith(BuildWarningsOfTheFixtures);
+    }
+
+    [Fact]
+    public void Apply_RunWithoutBuildWarnings_HasNoSuffix()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_all_pass.txt"), exitCode: 0);
+
+        result.Should().NotContain("build warning");
+    }
+
+    [Fact]
+    public void Apply_WarningQuotedByAPassingTest_IsNotABuildWarning()
+    {
+        // A test's own output can look like compiler output (a Roslyn-driven test prints its diagnostics). Only
+        // a diagnostic MSBuild closed with its "[project.csproj]" suffix is a build warning.
+        const string quoted = "  Program.cs(4,1): warning CS0168: The variable 'y' is declared but never used";
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_all_pass.txt"), quoted);
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().NotContain("build warning");
+        LastLine(result).Should().MatchRegex(@"^✓ dotnet test: 17 passed \(1 project, [^)]+\)$");
+    }
+
+    [Fact]
+    public void Apply_WarningNamedByAFailureMessage_IsNotABuildWarning()
+    {
+        // The real fixture's failure message quotes "Program.cs(4,1): warning CS0168" without a project suffix.
+        var fixture = LoadFixture("dotnet_test_failure_mentions_diagnostic.txt");
+        fixture.Should().Contain("warning CS0168");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().NotContain("build warning");
+    }
+
+    [Fact]
+    public void Apply_ListTestsRunWithBuildWarnings_KeepsItsStatusLineAsIs()
+    {
+        // A listing is a lookup of names, not a verdict on the build: its status line stays as it is.
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_list_tests_single.txt"), WarnLine("CS0219", 5));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().Be("Beta.Tests.BetaTests.Concatenates\n✓ dotnet test --list-tests: 1 test (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_ZeroTestsRunWithBuildWarnings_KeepsItsWarningAsIs()
+    {
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_zero.txt"), WarnLine("CS0219", 5));
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        result.Should().Be(_sut.Apply(LoadFixture("dotnet_test_zero.txt"), exitCode: 0));
+        result.Should().NotContain("build warning");
+    }
+
+    [Fact]
+    public void Apply_NestedException_KeepsInnermostCause()
+    {
+        // xUnit's VSTest adapter prints "Outer : message" and, on the next line, "---- Inner : message". The
+        // outer message of the real fixture is over 300 characters, so cutting the joined text at the
+        // budget used to drop the inner exception, which is usually the real cause.
+        var fixture = LoadFixture("dotnet_test_nested_exception.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("---- System.ArgumentException : THE-INNER-CAUSE");
+        result.Should().Contain("System.InvalidOperationException : An error occurred while saving");
+        MessageLine(result).Length.Should().BeLessThanOrEqualTo(303);
+    }
+
+    [Fact]
+    public void Apply_NestedExceptionWithALongInnerMessage_CapsTheInnerAtTwoHundred()
+    {
+        var inner = string.Concat(Enumerable.Repeat("0123456789", 40));
+        var input = $"""
+                       Failed MyTests.Nested [1 ms]
+                       Error Message:
+                        System.InvalidOperationException : {new string('o', 500)}
+                     ---- System.ArgumentException : {inner}
+                       Stack Trace:
+                          at MyTests.Nested() in /path/Test.cs:line 1
+
+                     Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                     """;
+
+        var message = MessageLine(_sut.Apply(input, exitCode: 1));
+
+        const string marker = "---- System.ArgumentException : ";
+        message.Should().EndWith($"{marker}{inner[..(200 - marker.Length)]}...");
+        message.Should().StartWith("System.InvalidOperationException : oooo");
+        message.Should().Contain("... ---- ");
+        message.Length.Should().BeLessThanOrEqualTo(303);
+    }
+
+    [Fact]
+    public void Apply_ThreeLevelsOfNesting_KeepsTheDeepestSegment()
+    {
+        // xUnit adds four dashes per level ("----", "--------"), as printed for a real three-level chain.
+        var input = $"""
+                       Failed MyTests.Deep [1 ms]
+                       Error Message:
+                        System.InvalidOperationException : {new string('o', 400)}
+                     ---- System.ArgumentException : middle
+                     -------- System.TimeoutException : THE-DEEPEST-CAUSE
+                       Stack Trace:
+                          at MyTests.Deep() in /path/Test.cs:line 1
+
+                     Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                     """;
+
+        var message = MessageLine(_sut.Apply(input, exitCode: 1));
+
+        message.Should().EndWith("... -------- System.TimeoutException : THE-DEEPEST-CAUSE");
+        message.Should().NotContain("middle");
+    }
+
+    [Fact]
+    public void Apply_NestedExceptionThatFits_IsKeptWhole()
+    {
+        const string input = """
+                               Failed MyTests.Nested [1 ms]
+                               Error Message:
+                                System.InvalidOperationException : outer
+                             ---- System.ArgumentException : inner
+                               Stack Trace:
+                                  at MyTests.Nested() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        MessageLine(result).Should().Be("System.InvalidOperationException : outer ---- System.ArgumentException : inner");
+    }
+
+    [Fact]
+    public void Apply_CollectionDiff_KeepsHeaderAndPosition()
+    {
+        // The real xUnit 2.9.3 failure: header, a "↓ (pos 0)" pointer above Expected/Actual (padded to
+        // line up) and a "↑ (pos 0)" pointer below them.
+        var fixture = LoadFixture("dotnet_test_assert_diffs.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain(
+            "    Assert.Equal() Failure: Collections differ at pos 0 — Expected: [1, 2, 3], Actual: [9, 2, 3]\n");
+    }
+
+    [Fact]
+    public void Apply_StringDiff_KeepsPosition()
+    {
+        var fixture = LoadFixture("dotnet_test_assert_diffs.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain(
+            "    Assert.Equal() Failure: Strings differ at pos 9 — Expected: \"hello world\", Actual: \"hello wordl\"\n");
+    }
+
+    [Fact]
+    public void Apply_ValuesDiffWithoutAPointer_KeepsTheHeader()
+    {
+        const string input = """
+                               Failed MyTests.Values [1 ms]
+                               Error Message:
+                                Assert.Equal() Failure: Values differ
+                             Expected: 42
+                             Actual:   38
+                               Stack Trace:
+                                  at MyTests.Values() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        MessageLine(result).Should().Be("Assert.Equal() Failure: Values differ — Expected: 42, Actual: 38");
+    }
+
+    [Fact]
+    public void Apply_ExpectedAndActualWithSpacesInsideTheValues_OnlyCollapsesThePadding()
+    {
+        const string input = """
+                               Failed MyTests.Padded [1 ms]
+                               Error Message:
+                                Expected: "a  b"
+                             Actual:   "a   c"
+                               Stack Trace:
+                                  at MyTests.Padded() in /path/Test.cs:line 1
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        MessageLine(result).Should().Be("Expected: \"a  b\", Actual: \"a   c\"");
+    }
+
+    [Fact]
+    public void Apply_MtpMessageOnOneLine_IsKeptAsPrinted()
+    {
+        // MSTest under Microsoft.Testing.Platform puts "Expected:<…>. Actual:<…>." inside one line that
+        // starts with "Assert." – no line starts with "Expected:", so it is joined, not rebuilt.
+        var fixture = LoadFixture("dotnet_test_mtp_failures.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2);
+
+        MessageLine(result).Should().Be(
+            "Assert.AreEqual failed. Expected:<-1>. Actual:<1>. 'expected' expression: 'expected', 'actual' expression: 'actual'.");
+    }
+
+    [Fact]
+    public void Apply_ReqnrollPendingStep_ShowsStepText()
+    {
+        // Real xUnit + Reqnroll 2.4.1 output: the failure message is only "Test pending: No matching step
+        // definition found for one or more steps." followed by the generated binding snippet, and the steps
+        // themselves are printed in "Standard Output Messages:", each followed by "-> No matching step
+        // definition found for the step.". The snippet used to be all the report showed, cut off.
+        var fixture = LoadFixture("dotnet_test_reqnroll_pending.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("\n    No matching step definition: When the two numbers are exponentiated\n");
+        result.Should().NotContain("[Binding]");
+        result.Should().NotContain("using System");
+    }
+
+    [Fact]
+    public void Apply_ReqnrollSeveralPendingSteps_JoinsThemInScenarioOrder()
+    {
+        var fixture = LoadFixture("dotnet_test_reqnroll_pending.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain(
+            "\n    No matching step definition: When the numbers are frobnicated; And the frobnication is verified\n");
+    }
+
+    [Fact]
+    public void Apply_ReqnrollPendingStep_LeavesTheOtherFailuresAlone()
+    {
+        var fixture = LoadFixture("dotnet_test_reqnroll_pending.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        result.Should().Contain("Assert.Equal() Failure: Strings differ at pos 0 — Expected: \"xyz\", Actual: \"cba\"\n");
+        result.Should().Contain("System.DivideByZeroException : Attempted to divide by zero.\n");
+        result.Should().Contain("✗ dotnet test: 4 failed, 5 passed");
+    }
+
+    [Fact]
+    public void Apply_ReqnrollPendingStepWithArguments_ShowsTheStepLineNotTheArgument()
+    {
+        // Reqnroll prints a table or doc string argument under its step, indented by three spaces and
+        // introduced by a "--- … step argument ---" line, ahead of the "->" result line.
+        const string input = """
+                               Failed Pending.Table [3 ms]
+                               Error Message:
+                                Reqnroll.xUnit.ReqnrollPlugin.XUnitPendingStepException : Test pending: No matching step definition found for one or more steps.
+                             using System;
+                             using Reqnroll;
+
+                             namespace MyNamespace
+                             {
+                                 [Binding]
+                                 public class StepDefinitions
+                                 {
+                                 }
+                             }
+
+                               Stack Trace:
+                                  at Reqnroll.xUnit.ReqnrollPlugin.XUnitRuntimeProvider.TestPending(String message)
+                               Standard Output Messages:
+                              Given the first number is 50
+                              -> done: CalculatorSteps.GivenTheFirstNumberIs(50) (0.0s)
+                              When the following users exist
+                                --- table step argument ---
+                                | name | age |
+                                | bob  | 4   |
+                              -> No matching step definition found for the step. Use the following code to create one:
+                                      [When("the following users exist")]
+                                      public void WhenTheFollowingUsersExist(DataTable dataTable)
+                                      {
+                                          _scenarioContext.Pending();
+                                      }
+
+                              Then the payload is
+                                --- multiline step argument ---
+                                {"a": 1}
+                              -> No matching step definition found for the step. Use the following code to create one:
+                                      [Then("the payload is")]
+                                      public void ThenThePayloadIs(string multilineText)
+                                      {
+                                          _scenarioContext.Pending();
+                                      }
+
+
+
+                             Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 3 ms - Tests.dll
+                             """;
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Contain(
+            "\n    No matching step definition: When the following users exist; Then the payload is\n");
+    }
+
+    /// <summary>The first failure's message line of the filtered output, without its indent.</summary>
+    /// <param name="output">The filtered output.</param>
+    private static string MessageLine(string output) =>
+        output.Split('\n').SkipWhile(l => !l.StartsWith("FAILURES", StringComparison.Ordinal)).ElementAt(2).Trim();
 }

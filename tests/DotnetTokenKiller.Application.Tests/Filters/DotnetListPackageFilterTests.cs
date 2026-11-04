@@ -385,16 +385,16 @@ public class DotnetListPackageFilterTests
         const string input = "MSBUILD : error MSB1003: Specify a project or solution file.";
 
         _sut.Apply(input, exitCode: 1).Should().BeEmpty(
-            "an empty result is what makes FilteredRunUseCase fall back to the raw tail");
+            "an empty result is what makes the pipeline fall back to the raw tail");
     }
 
     [Fact]
     public void Apply_SucceededRunWithUnparseableOutput_PassesTheRawOutputThrough()
     {
-        // 'dotnet list package --format json' is a documented, first-class option, and it always
-        // exits 0. FilteredRunUseCase's raw-tail fallback is gated on a NON-ZERO exit code, so it
-        // can never fire here: returning empty would show the user nothing at all while recording
-        // the run as successfully filtered with ~100% savings.
+        // A document in a shape this parser does not know, as `dotnet list package --format json | dtk pipe
+        // list package` hands it over (a direct run is passed through before any filter sees it). It exits 0,
+        // and returning empty would leave the pipeline's raw-tail fallback to show only the last 40 lines,
+        // cutting the document in the middle, so the filter passes the whole text through and says so.
         const string input = """
                             {
                               "version": 1,
@@ -422,9 +422,12 @@ public class DotnetListPackageFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().NotBeEmpty("an exit-0 run cannot reach the raw-tail fallback");
+        result.Should().NotBeEmpty("an empty result would be cut to its last 40 lines by the raw-tail fallback");
         result.Should().Contain("\"latestVersion\": \"2.0.0\"", "the raw content must survive verbatim");
-        result.Should().StartWith("⚠ ", "the degradation is stated, not hidden");
+        result.Should().StartWith("{\n", "the raw output comes first, untouched");
+        LastLine(result).Should().Be(
+            "⚠ dotnet list package: unrecognized output, passed through unfiltered",
+            "the degradation is stated, not hidden, and it is the status line, so it is last");
         result.Should().NotContain("✓", "nothing here was understood, so nothing can be pronounced clean");
     }
 
@@ -472,8 +475,164 @@ public class DotnetListPackageFilterTests
                                > Direct               1.0.0       1.0.0
                             """;
 
-        _sut.Apply(input, exitCode: 1).Should().Contain("Direct 1.0.0").And.NotContain("✓");
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Contain("Direct 1.0.0").And.NotContain("✓");
+        LastLine(result).Should().Be("✗ dotnet list package (1 project, 1 package)");
     }
+
+    [Fact]
+    public void Apply_Plain_EndsWithItsSummary()
+    {
+        const string input = """
+                            Project 'Alpha' has the following package references
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved
+                               > Shared               1.0.0       1.0.0
+                               > OnlyAlpha            2.0.0       2.0.0
+
+                            Project 'Beta' has the following package references
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved
+                               > Shared               1.0.0       1.0.0
+                            """;
+
+        _sut.Apply(input, exitCode: 0).Should().Be(
+            """
+              all projects: Shared 1.0.0
+              Alpha: OnlyAlpha 2.0.0
+            ✓ dotnet list package (2 projects, 2 packages)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_Outdated_EndsWithItsSummary()
+    {
+        const string input = """
+                            Project `Alpha` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Analyzer             1.0.0       1.0.0      2.0.0
+
+                            Project `Beta` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Analyzer             1.0.0       1.0.0      2.0.0
+                            """;
+
+        _sut.Apply(input, exitCode: 0).Should().Be(
+            """
+              Analyzer 1.0.0 → 2.0.0 (2 projects)
+            ⚠ dotnet list package --outdated: 1 package with updates (all 2 projects)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_Deprecated_EndsWithItsSummary()
+    {
+        const string input = """
+                            Project `Alpha` has the following deprecated packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Reason(s)   Alternative
+                               > Old                  1.0.0       1.0.0      Legacy      New >= 2.0.0
+
+                            The given project `Beta` has no deprecated packages given the current sources.
+                            """;
+
+        _sut.Apply(input, exitCode: 0).Should().Be(
+            """
+              Old 1.0.0 — Legacy → New >= 2.0.0 (Alpha)
+            ⚠ dotnet list package --deprecated: 1 deprecated package (1 of 2 projects)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_Vulnerable_EndsWithItsSummary()
+    {
+        const string input = """
+                            Project `Alpha` has the following vulnerable packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Severity   Advisory URL
+                               > Legacy.Crypto        2.1.0       2.1.0      Critical   https://github.com/advisories/GHSA-dddd-eeee-ffff
+                            """;
+
+        _sut.Apply(input, exitCode: 0).Should().Be(
+            """
+              Legacy.Crypto 2.1.0 — Critical https://github.com/advisories/GHSA-dddd-eeee-ffff (Alpha)
+            ⚠ dotnet list package --vulnerable: 1 vulnerable package (all 1 project)
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_AuditFindingsOnAFailedRun_EndWithACross()
+    {
+        const string input = """
+                            Project `Alpha` has the following updates to its packages
+                               [net10.0]:
+                               Top-level Package      Requested   Resolved   Latest
+                               > Analyzer             1.0.0       1.0.0      2.0.0
+                            """;
+
+        LastLine(_sut.Apply(input, exitCode: 1)).Should().Be(
+            "✗ dotnet list package --outdated: 1 package with updates (all 1 project)");
+    }
+
+    [Fact]
+    public void Apply_Outdated_TruncationLineComesBeforeTheSummary()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Project `Alpha` has the following updates to its packages")
+            .AppendLine("   [net10.0]:")
+            .AppendLine("   Top-level Package      Requested   Resolved   Latest");
+        for (var i = 0; i < 35; i++)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"   > Pkg{i:D2}                1.0.0       1.0.0      2.0.0");
+        }
+
+        var lines = _sut.Apply(sb.ToString(), exitCode: 0).TrimEnd('\n').Split('\n');
+
+        lines[^2].Should().StartWith("  … and 5 more");
+        lines[^1].Should().Be("⚠ dotnet list package --outdated: 35 packages with updates (all 1 project)");
+    }
+
+    [Fact]
+    public void Apply_Plain_TruncationLineComesBeforeTheSummary()
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < 40; i++)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"Project 'P{i:D2}' has the following package references")
+                .AppendLine("   [net10.0]:")
+                .AppendLine("   Top-level Package      Requested   Resolved")
+                .AppendLine(CultureInfo.InvariantCulture, $"   > Only{i:D2}                1.0.0       1.0.0")
+                .AppendLine();
+        }
+
+        var lines = _sut.Apply(sb.ToString(), exitCode: 0).TrimEnd('\n').Split('\n');
+
+        lines[^2].Should().StartWith("  … and 10 more packages");
+        lines[^1].Should().Be("✓ dotnet list package (40 projects, 40 packages)");
+    }
+
+    [Theory]
+    [InlineData("dotnet_list_package_raw.txt")]
+    [InlineData("dotnet_list_package_outdated_raw.txt")]
+    [InlineData("dotnet_list_package_deprecated_raw.txt")]
+    [InlineData("dotnet_list_package_vulnerable_raw.txt")]
+    public void Apply_EveryFixture_EndsWithExactlyOneStatusLine(string fixture)
+    {
+        // `| tail -1` must carry the verdict, and no other line may claim to be one.
+        var lines = _sut.Apply(LoadFixture(fixture), exitCode: 0).TrimEnd('\n').Split('\n');
+
+        lines[^1].Should().MatchRegex("^[✓⚠✗] dotnet list package");
+        lines[..^1].Should().NotContain(l => l.Length > 0 && "✓⚠✗".Contains(l[0], StringComparison.Ordinal));
+    }
+
+    private static string LastLine(string result) => result.TrimEnd('\n').Split('\n')[^1];
 
     private static string LoadFixture(string resourceName)
     {

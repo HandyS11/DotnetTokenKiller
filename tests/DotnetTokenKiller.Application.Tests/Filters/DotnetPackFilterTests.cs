@@ -15,8 +15,8 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(fixture, exitCode: 0);
 
         result.Should().Be(
-            "✓ dotnet pack (2 projects)\n"
-            + "  samples/SampleApp.MultiProject/bin/Release/SampleApp.MultiProject.0.5.0.nupkg\n");
+            "  samples/SampleApp.MultiProject/bin/Release/SampleApp.MultiProject.0.5.0.nupkg\n"
+            + "✓ dotnet pack (2 projects)\n");
     }
 
     [Fact]
@@ -26,12 +26,11 @@ public class DotnetPackFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().StartWith(
-            "dotnet pack: 0 errors, 34 warnings (1 project)\n"
-            + "  samples/SampleApp.Warnings/bin/Release/SampleApp.Warnings.0.5.0.nupkg\n"
-            + "---\n"
-            + "CA1024 (1x)\n");
-        result.Should().NotContain("missing a readme");
+        result.Should().StartWith("samples/SampleApp.Warnings/NullableWarnings.cs (17 warnings)\n");
+        result.Should().EndWith(
+            "  samples/SampleApp.Warnings/bin/Release/SampleApp.Warnings.0.5.0.nupkg\n"
+            + "✓ dotnet pack: 0 errors, 34 warnings (1 project)\n");
+        result.Should().NotContain("missing a readme").And.NotContain("---");
     }
 
     [Fact]
@@ -42,17 +41,14 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(fixture, exitCode: 1);
 
         result.Should().Be(
-            "dotnet pack: 1 error, 0 warnings\n"
-            + "---\n"
-            + "samples/SampleApp.Broken/BrokenClass.cs (1 error)\n"
-            + "  (5,33) CS0029: Cannot implicitly convert type 'string' to 'int'\n"
-            + "Top codes: CS0029 (1x)\n");
+            "samples/SampleApp.Broken/BrokenClass.cs(5,33) CS0029: Cannot implicitly convert type 'string' to 'int'\n"
+            + "✗ dotnet pack failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Theory]
     [InlineData("dotnet_pack_success.txt", 0, 70.0)]
     [InlineData("dotnet_pack_warnings.txt", 0, 40.0)]
-    [InlineData("dotnet_pack_failure.txt", 1, 30.0)]
+    [InlineData("dotnet_pack_failure.txt", 1, 24.0)]
     public void Apply_Fixture_SavesAtLeast(string fixtureName, int exitCode, double minimumSavings)
     {
         var fixture = LoadFixture(fixtureName);
@@ -75,7 +71,7 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "✓ dotnet pack (1 project)\n  artifacts/Lib.1.2.3.nupkg\n  artifacts/Lib.1.2.3.snupkg\n");
+            "  artifacts/Lib.1.2.3.nupkg\n  artifacts/Lib.1.2.3.snupkg\n✓ dotnet pack (1 project)\n");
     }
 
     [Fact]
@@ -90,11 +86,9 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "dotnet pack: 0 errors, 1 warning (1 project)\n"
+            "(no file) NU5104: A stable release of a package should not have a prerelease dependency.\n"
             + "  Lib/bin/Release/Lib.1.0.0.nupkg\n"
-            + "---\n"
-            + "NU5104 (1x)\n"
-            + "  A stable release of a package should not have a prerelease dependency.\n");
+            + "✓ dotnet pack: 0 errors, 1 warning (1 project)\n");
     }
 
     [Fact]
@@ -108,7 +102,8 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().NotContain(".nupkg");
-        result.Should().StartWith("dotnet pack: 1 error, 0 warnings\n---\n(no file) (1 error)\n");
+        result.Should().StartWith("(no file) NU5017: Cannot create a package that has no dependencies nor content.\n");
+        result.Should().EndWith("✗ dotnet pack failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 
     [Fact]

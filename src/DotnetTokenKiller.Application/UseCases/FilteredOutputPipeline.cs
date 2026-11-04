@@ -98,26 +98,35 @@ public sealed class FilteredOutputPipeline(
         // Finalized before the raw-tail fallback is built, because the fallback embeds this hint.
         var logHint = await FinalizeTeeAsync(session, request.ExitCode, cancellationToken).ConfigureAwait(false);
 
-        var usedRawTailFallback = false;
-        if (request.ExitCode != 0 && string.IsNullOrWhiteSpace(filtered))
-        {
-            filtered = BuildRawTailFallback(request.DisplayCommandLine, request.ExitCode, stripped,
-                options.ShowLogHint ? logHint : null);
-            usedRawTailFallback = true;
-        }
+        var shownLogHint = options.ShowLogHint ? logHint : null;
 
-        // A faulted filter yields the raw text unchanged (see ApplyFilterSafelyAsync), so when the
-        // raw output is itself empty or whitespace on a failed command, filterFaulted and
-        // usedRawTailFallback are BOTH true at once — the two outcomes are not mutually exclusive.
-        // Checking a faulted filter first resolves that overlap in its favour; that ordering is
-        // deliberate, not incidental, and is covered by
-        // ProcessAsync_PrefersFilterFaulted_WhenBothConditionsOverlap.
-        var outcome = (filterFaulted, usedRawTailFallback) switch
+        // A filtered run never prints nothing, whatever the exit code, and the last line of every
+        // filtered run is its single status line. A faulted filter is checked first: its raw text is
+        // shown whole (not cut to a tail) and the run is FilterFaulted even when that text is empty.
+        // That precedence is deliberate; ProcessAsync_PrefersFilterFaulted_WhenBothConditionsOverlap
+        // covers it.
+        RunOutcome outcome;
+        if (filterFaulted)
         {
-            (true, _) => RunOutcome.FilterFaulted,
-            (false, true) => RunOutcome.RawTailFallback,
-            (false, false) => RunOutcome.Filtered
-        };
+            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: false,
+                shownLogHint);
+            outcome = RunOutcome.FilterFaulted;
+        }
+        else if (string.IsNullOrWhiteSpace(filtered))
+        {
+            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: true,
+                shownLogHint);
+            outcome = RunOutcome.RawTailFallback;
+        }
+        else
+        {
+            if (shownLogHint is not null)
+            {
+                filtered = InsertBeforeLastLine(filtered, shownLogHint);
+            }
+
+            outcome = RunOutcome.Filtered;
+        }
 
         filtered = NormalizeGlyphs(filtered, config);
 
@@ -130,11 +139,6 @@ public sealed class FilteredOutputPipeline(
         }
 
         await output.WriteAsync(filtered).ConfigureAwait(false);
-
-        if (!usedRawTailFallback && logHint is not null && options.ShowLogHint)
-        {
-            await output.WriteLineAsync(logHint).ConfigureAwait(false);
-        }
 
         await TrackIfEnabledAsync(prepared, request, stripped, filtered,
                 Stopwatch.GetElapsedTime(request.StartTimestamp), outcome, cancellationToken)
@@ -191,24 +195,69 @@ public sealed class FilteredOutputPipeline(
             .Replace("⚠", "WARN:", StringComparison.Ordinal);
     }
 
-    /// <summary>Builds a fallback message for failed commands whose output the filter could not parse.</summary>
+    /// <summary>
+    /// Builds the fallback shown when the filter left nothing to show or threw: the raw output (whole, or its
+    /// last 40 lines), the tee log hint when present, then the run's single status line.
+    /// </summary>
     /// <param name="command">The command line that was run, for display purposes.</param>
-    /// <param name="exitCode">The non-zero process exit code.</param>
+    /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
-    /// <param name="logHint">An optional tee log hint to append when present.</param>
-    private static string BuildRawTailFallback(string command, int exitCode, string rawOutput, string? logHint)
+    /// <param name="tailOnly">Whether to show only the last 40 lines of <paramref name="rawOutput"/>.</param>
+    /// <param name="logHint">An optional tee log hint, written just before the status line.</param>
+    private static string BuildFallback(
+        string command,
+        int exitCode,
+        string rawOutput,
+        bool tailOnly,
+        string? logHint)
     {
-        var lines = rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var tail = string.Join('\n', lines.TakeLast(40).Select(line => line.TrimEnd('\r')));
         var sb = new StringBuilder();
-        sb.AppendLine(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})")
-            .AppendLine(tail);
-        if (logHint is not null)
+        var hasOutput = !string.IsNullOrWhiteSpace(rawOutput);
+        if (hasOutput && tailOnly)
         {
-            sb.AppendLine(logHint);
+            foreach (var line in rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(40))
+            {
+                sb.Append(line.TrimEnd('\r')).Append('\n');
+            }
+        }
+        else if (hasOutput)
+        {
+            sb.Append(rawOutput);
+            if (!rawOutput.EndsWith('\n'))
+            {
+                sb.Append('\n');
+            }
         }
 
-        return sb.ToString();
+        if (logHint is not null)
+        {
+            sb.Append(logHint).Append('\n');
+        }
+
+        return sb.Append(FallbackStatusLine(command, exitCode, hasOutput)).Append('\n').ToString();
+    }
+
+    private static string FallbackStatusLine(string command, int exitCode, bool hasOutput)
+    {
+        if (exitCode != 0)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})");
+        }
+
+        return hasOutput
+            ? $"⚠ {command}: output not recognized, raw tail shown above"
+            : $"✓ {command} (no output)";
+    }
+
+    /// <summary>Inserts a line before the last line of a text, so a trailing status line stays last.</summary>
+    /// <param name="text">The text whose last line, with its terminating newline if any, moves down.</param>
+    /// <param name="line">The line to insert, without a terminator.</param>
+    private static string InsertBeforeLastLine(string text, string line)
+    {
+        var body = text.EndsWith('\n') ? text.AsSpan(0, text.Length - 1) : text.AsSpan();
+        var lastLineStart = body.LastIndexOf('\n') + 1;
+
+        return $"{text.AsSpan(0, lastLineStart)}{line}\n{text.AsSpan(lastLineStart)}";
     }
 
     /// <summary>Finalizes a tee session, swallowing any failure so a broken log cannot fail the run.</summary>
@@ -258,7 +307,9 @@ public sealed class FilteredOutputPipeline(
                 ? await counter.TotalAsync().ConfigureAwait(false)
                 : TokenEstimator.Estimate(stripped, config.Tracking.Tokenizer);
             var outputTokens = TokenEstimator.Estimate(filtered, config.Tracking.Tokenizer);
-            var savedTokens = inputTokens - outputTokens;
+            // Clamped: a filter whose own status line outweighs its input saved nothing, and a negative
+            // saving would be read as a loss. OutputTokens still records what the caller actually saw.
+            var savedTokens = Math.Max(0, inputTokens - outputTokens);
             var savingsPct = inputTokens > 0 ? (double)savedTokens / inputTokens * 100.0 : 0.0;
 
             var record = new CommandRecord(

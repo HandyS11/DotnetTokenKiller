@@ -328,7 +328,10 @@ internal sealed class PendingRecordJournal(string root, TimeSpan? lockWait = nul
             }
             catch (IOException ex) when (Stopwatch.GetElapsedTime(started) >= _lockWait)
             {
-                throw new TimeoutException($"Another process held the tracking journal lock at {path} for over {_lockWait.TotalSeconds:0.#} s.", ex);
+                throw new TimeoutException(
+                    string.Create(CultureInfo.InvariantCulture,
+                        $"Another process held the tracking journal lock at {path} for over {_lockWait.TotalSeconds:0.#} s."),
+                    ex);
             }
             catch (IOException)
             {

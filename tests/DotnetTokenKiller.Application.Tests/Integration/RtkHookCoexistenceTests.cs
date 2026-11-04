@@ -246,43 +246,78 @@ public sealed class RtkHookCoexistenceTests : IDisposable
     }
 
     [Fact]
-    public async Task DefaultInstance_ResolvesTheRtkConfigUnderXdgConfigHome()
+    public async Task ReconcileRtkConfig_WritesWhereTheResolverSaysRtkReadsItsConfig()
     {
-        // The parameterless constructor is what production uses; these are the paths it picks.
-        var saved = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        var xdgHome = Path.Combine(_tempRoot, "xdg");
-        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", xdgHome);
-        try
-        {
-            var outcome = await new RtkHookCoexistence().ReconcileRtkConfigAsync(CancellationToken.None);
+        // rtk on macOS reads ~/Library/Application Support/rtk/config.toml, not ~/.config/rtk/config.toml.
+        // The exclusion must land in the file the resolver reports, and nowhere else.
+        var rtkReads = Path.Combine(_tempRoot, "home", "Library", "Application Support", "rtk", "config.toml");
+        var sut = new RtkHookCoexistence(UserClaudeDir, _ => Task.FromResult(rtkReads));
 
-            outcome.CreatedConfigPath.Should().Be(Path.Combine(xdgHome, "rtk", "config.toml"));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", saved);
-        }
+        var outcome = await sut.ReconcileRtkConfigAsync(CancellationToken.None);
+
+        outcome.CreatedConfigPath.Should().Be(rtkReads);
+        (await File.ReadAllTextAsync(rtkReads)).Should().Contain("exclude_commands = [\"dotnet\"]");
+        File.Exists(Path.Combine(_tempRoot, "home", ".config", "rtk", "config.toml")).Should().BeFalse();
     }
 
     [Fact]
-    public void DefaultInstance_IgnoresARelativeXdgConfigHome_RatherThanWritingIntoTheWorkingDirectory()
+    public async Task ReconcileRtkConfig_AdviceNoteNamesTheResolvedPath()
     {
-        // XDG requires an absolute path. Honoring a relative one would resolve a global config
-        // against whatever directory dtk happened to be launched from.
-        const string relative = "dtk-relative-xdg-should-be-ignored";
-        var saved = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-        Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", relative);
-        try
-        {
-            var act = () => new RtkHookCoexistence();
+        var rtkReads = Path.Combine(_tempRoot, "home", "Library", "Application Support", "rtk", "config.toml");
+        await WriteAsync(rtkReads, "[hooks]\nexclude_commands = [[\"a\"], \"git\"]\n"); // the edit cannot be verified
+        var sut = new RtkHookCoexistence(UserClaudeDir, _ => Task.FromResult(rtkReads));
 
-            act.Should().NotThrow();
-            Directory.Exists(Path.Combine(Environment.CurrentDirectory, relative)).Should().BeFalse();
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", saved);
-        }
+        var outcome = await sut.ReconcileRtkConfigAsync(CancellationToken.None);
+
+        outcome.Notes.Should().ContainSingle().Which.Should().Contain(rtkReads);
+    }
+
+    [Fact]
+    public async Task ResolveConfigPathAsync_ReturnsTheResolvedPath()
+    {
+        (await CreateSut().ResolveConfigPathAsync(CancellationToken.None)).Should().Be(RtkConfigPath);
+    }
+
+    [Fact]
+    public async Task NoteRemainingExclusion_RtkHookDetectedAndConfigExcludesDotnet_NamesTheResolvedPath()
+    {
+        var rtkReads = Path.Combine(_tempRoot, "home", "Library", "Application Support", "rtk", "config.toml");
+        await WriteAsync(rtkReads, "[hooks]\nexclude_commands = [\"dotnet\"]\n");
+        var sut = new RtkHookCoexistence(UserClaudeDir, _ => Task.FromResult(rtkReads));
+        var context = UninstallContextThatRemovedSomething();
+
+        await sut.NoteRemainingExclusionAsync(context, rtkHookDetected: true, CancellationToken.None);
+
+        context.Notes.Should().ContainSingle().Which.Should().Contain(rtkReads);
+    }
+
+    [Fact]
+    public async Task NoteRemainingExclusion_NoRtkHook_SaysNothing()
+    {
+        await WriteAsync(RtkConfigPath, "[hooks]\nexclude_commands = [\"dotnet\"]\n");
+        var context = UninstallContextThatRemovedSomething();
+
+        await CreateSut().NoteRemainingExclusionAsync(context, rtkHookDetected: false, CancellationToken.None);
+
+        context.Notes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task NoteRemainingExclusion_ConfigDoesNotExcludeDotnet_SaysNothing()
+    {
+        await WriteAsync(RtkConfigPath, "[hooks]\nexclude_commands = [\"git\"]\n");
+        var context = UninstallContextThatRemovedSomething();
+
+        await CreateSut().NoteRemainingExclusionAsync(context, rtkHookDetected: true, CancellationToken.None);
+
+        context.Notes.Should().BeEmpty();
+    }
+
+    private IntegrationContext UninstallContextThatRemovedSomething()
+    {
+        var context = IntegrationContext.ForUninstall(ProjectDir, new Dictionary<string, string>());
+        context.Removed.Add(Path.Combine(ProjectDir, "removed"));
+        return context;
     }
 
     [Fact]

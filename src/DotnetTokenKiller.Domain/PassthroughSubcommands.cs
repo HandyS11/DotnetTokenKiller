@@ -32,6 +32,26 @@ public static class PassthroughSubcommands
         new(StringComparer.OrdinalIgnoreCase) { DotnetSubcommands.Publish, DotnetSubcommands.Pack };
 
     /// <summary>
+    /// Filtered subcommands that hand their arguments to MSBuild, which understands the
+    /// <see cref="MsBuildQuerySwitches"/>.
+    /// </summary>
+    private static readonly HashSet<string> MsBuildQueryVerbs =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            DotnetSubcommands.Build, DotnetSubcommands.Test, DotnetSubcommands.Restore,
+            DotnetSubcommands.Clean, DotnetSubcommands.Publish, DotnetSubcommands.Pack
+        };
+
+    /// <summary>
+    /// MSBuild switches that print a property, item or target result (plain text or JSON) instead of a build
+    /// log, spelled <c>-name</c>, <c>--name</c> or <c>/name</c> and ignoring case.
+    /// </summary>
+    private static readonly string[] MsBuildQuerySwitches = ["getProperty", "getItem", "getTargetResult"];
+
+    /// <summary>The <c>dotnet list package</c> option that selects JSON output, as <c>--format json</c> or <c>--format=json</c>.</summary>
+    private const string FormatOption = "--format";
+
+    /// <summary>
     /// <c>dotnet ef</c> invocations, keyed by their (subcommand, verb) token pair, that block on an
     /// interactive confirmation read from standard input unless one of the listed flags is present.
     /// </summary>
@@ -163,7 +183,8 @@ public static class PassthroughSubcommands
     /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> instead. The same is true of the
     /// <c>dotnet ef</c> invocations in <see cref="PromptingEfInvocations"/>: closing stdin would make
     /// their confirmation read see EOF immediately, so they are excluded unless the flag that
-    /// suppresses the prompt is present.
+    /// suppresses the prompt is present. A machine-readable run (<see cref="IsMachineReadableRun"/>) is
+    /// excluded too: captured output is re-split into lines, and its reader wants dotnet's bytes.
     /// </remarks>
     public static bool IsMeasurable(IReadOnlyList<string> dotnetArgs)
     {
@@ -174,7 +195,9 @@ public static class PassthroughSubcommands
             return false;
         }
 
-        return !HasInteractiveFlag(dotnetArgs) && !IsPromptingEfInvocation(dotnetArgs);
+        return !HasInteractiveFlag(dotnetArgs)
+               && !IsPromptingEfInvocation(dotnetArgs)
+               && !IsMachineReadableRun(dotnetArgs);
     }
 
     /// <summary>
@@ -224,6 +247,121 @@ public static class PassthroughSubcommands
         return dotnetArgs.Count > 0
                && PassedThroughWhenInteractive.Contains(dotnetArgs[0])
                && HasInteractiveFlag(dotnetArgs);
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when this invocation prints output for a program to parse, which a
+    /// filter would corrupt or replace: <c>dotnet list package --format json</c>, or an MSBuild query
+    /// (<c>-getProperty</c>, <c>-getItem</c>, <c>-getTargetResult</c>) on <c>build</c>, <c>test</c>,
+    /// <c>restore</c>, <c>clean</c>, <c>publish</c> or <c>pack</c>.
+    /// </summary>
+    /// <param name="dotnetArgs">
+    /// The arguments passed to <c>dotnet</c>, starting at the subcommand.
+    /// </param>
+    /// <remarks>
+    /// The list-package filter would append a <c>⚠</c> line to the JSON document, and a query prints the
+    /// requested value and no build log, which a build filter would replace with a status line. These runs are
+    /// passed through with the terminal attached, like <see cref="IsInteractiveFilteredRun"/>'s, so the
+    /// bytes a reader sees are dotnet's own; they record as
+    /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> via <see cref="IsMeasurable"/>.
+    /// </remarks>
+    public static bool IsMachineReadableRun(IReadOnlyList<string> dotnetArgs)
+    {
+        ArgumentNullException.ThrowIfNull(dotnetArgs);
+
+        if (dotnetArgs.Count == 0)
+        {
+            return false;
+        }
+
+        if (string.Equals(dotnetArgs[0], "list", StringComparison.OrdinalIgnoreCase))
+        {
+            return dotnetArgs.Count > 1
+                   && string.Equals(dotnetArgs[1], "package", StringComparison.OrdinalIgnoreCase)
+                   && RequestsJsonFormat(dotnetArgs);
+        }
+
+        return MsBuildQueryVerbs.Contains(dotnetArgs[0]) && HasMsBuildQuery(dotnetArgs);
+    }
+
+    /// <summary>Whether <c>--format json</c>, <c>--format=json</c> or <c>--format:json</c> follows the subcommand.</summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>
+    private static bool RequestsJsonFormat(IReadOnlyList<string> dotnetArgs)
+    {
+        for (var i = 1; i < dotnetArgs.Count; i++)
+        {
+            if (FormatValue(dotnetArgs, i).Equals("json", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The value the <c>--format</c> option at <paramref name="index"/> sets, or empty when it is another argument.</summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>.</param>
+    /// <param name="index">The index of the argument to read.</param>
+    private static ReadOnlySpan<char> FormatValue(IReadOnlyList<string> dotnetArgs, int index)
+    {
+        var arg = dotnetArgs[index];
+        if (!arg.StartsWith(FormatOption, StringComparison.OrdinalIgnoreCase))
+        {
+            return default;
+        }
+
+        if (arg.Length == FormatOption.Length)
+        {
+            return index + 1 < dotnetArgs.Count ? dotnetArgs[index + 1].AsSpan() : default;
+        }
+
+        return arg[FormatOption.Length] is ':' or '=' ? arg.AsSpan(FormatOption.Length + 1) : default;
+    }
+
+    /// <summary>Whether any argument after the subcommand is one of the <see cref="MsBuildQuerySwitches"/>.</summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>
+    private static bool HasMsBuildQuery(IReadOnlyList<string> dotnetArgs)
+    {
+        for (var i = 1; i < dotnetArgs.Count; i++)
+        {
+            if (IsMsBuildQuerySwitch(dotnetArgs[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="arg"/> is a query switch: a <c>-</c>, <c>--</c> or <c>/</c> prefix, the switch
+    /// name, then nothing or a <c>:</c> or <c>=</c> and its value.
+    /// </summary>
+    /// <param name="arg">One argument.</param>
+    private static bool IsMsBuildQuerySwitch(string arg)
+    {
+        var name = arg.AsSpan();
+        if (name.Length < 2 || name[0] is not ('-' or '/'))
+        {
+            return false;
+        }
+
+        name = name[(name[0] == '-' && name[1] == '-' ? 2 : 1)..];
+        var valueStart = name.IndexOfAny(':', '=');
+        if (valueStart >= 0)
+        {
+            name = name[..valueStart];
+        }
+
+        foreach (var query in MsBuildQuerySwitches)
+        {
+            if (name.Equals(query, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool HasInteractiveFlag(IReadOnlyList<string> dotnetArgs) =>

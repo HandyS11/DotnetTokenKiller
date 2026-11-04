@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Domain;
+using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Application.Integration.Hooks;
 
@@ -14,9 +15,10 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// A match is <c>dotnet</c>, blanks (spaces or tabs), and a subcommand (blanks between a multi-token
 /// subcommand's tokens, the longest subcommand tried first, a word boundary after it). It is left alone when
 /// the character before it cannot end a previous command (a path such as <c>/usr/lib/dotnet/dotnet build</c>),
-/// when <c>dtk</c> already runs it, or when it is not shell code at all. <see cref="IsPythonWord"/> keeps the
-/// Unicode-aware <c>\w</c> of the Python hooks dtk generated before <c>dtk hook</c>, which this class started as
-/// a port of.
+/// when <c>dtk</c> already runs it, when it asks for dotnet's raw output (<c>rtk proxy dotnet …</c>,
+/// <c>command dotnet …</c>, <c>DTK_RAW=1 dotnet …</c>), or when it is not shell code at all.
+/// <see cref="IsPythonWord"/> keeps the Unicode-aware <c>\w</c> of the Python hooks dtk generated before
+/// <c>dtk hook</c>, which this class started as a port of.
 /// </para>
 /// <para>
 /// One left-to-right pass of <see cref="ShellScanner"/> decides what is shell code. It understands backslash
@@ -46,6 +48,9 @@ internal static class DotnetCommandRewriter
 
     /// <summary>Unquoted characters that chain, pipe, subshell or redirect, none of which a simple command has.</summary>
     private static readonly SearchValues<char> NotSimple = SearchValues.Create(";&|`\n()<>");
+
+    /// <summary>Characters that make an assignment's value something other than its literal text.</summary>
+    private static readonly SearchValues<char> ShellValueCharacters = SearchValues.Create("\"'\\$`");
 
     /// <summary>Each subcommand's tokens, longest name first; a stable sort keeps equal lengths alphabetical.</summary>
     private static readonly string[][] SubcommandTokens =
@@ -210,7 +215,11 @@ internal static class DotnetCommandRewriter
         return true;
     }
 
-    /// <summary>Whether the <c>dotnet</c> at <paramref name="start"/> follows a command boundary and is not run by <c>dtk</c>.</summary>
+    /// <summary>
+    /// Whether the <c>dotnet</c> at <paramref name="start"/> follows a command boundary, is not run by <c>dtk</c>,
+    /// and is not a request for dotnet's raw output: run by <c>rtk proxy</c> or the <c>command</c> builtin, or
+    /// directly behind a <c>DTK_RAW=</c> assignment that turns raw output on.
+    /// </summary>
     /// <param name="command">The full command being scanned.</param>
     /// <param name="start">The index of the <c>dotnet</c> token being considered.</param>
     private static bool IsCommandPosition(string command, int start)
@@ -220,17 +229,50 @@ internal static class DotnetCommandRewriter
             return false;
         }
 
-        var preceding = command.AsSpan(0, start);
-        var length = preceding.Length;
-        while (length > 0 && IsBlank(preceding[length - 1]))
+        var word = LastWord(command.AsSpan(0, start), out var beforeWord);
+        var program = ProgramName(word);
+        if (program is "dtk" or "dtk.exe" or "command" || IsRawOutputAssignment(word))
         {
-            length--;
+            return false;
         }
 
-        preceding = preceding[..length];
-        var word = preceding[(preceding.LastIndexOfAny(Boundaries) + 1)..];
-        var program = word[(word.LastIndexOfAny('/', '\\') + 1)..];
-        return program is not ("dtk" or "dtk.exe");
+        return word is not "proxy" || ProgramName(LastWord(beforeWord, out _)) is not ("rtk" or "rtk.exe");
+    }
+
+    /// <summary>
+    /// The last word of <paramref name="text"/>, ignoring trailing blanks: empty when a boundary ends it.
+    /// </summary>
+    /// <param name="text">The command text before the position being considered.</param>
+    /// <param name="beforeWord">The text before the word.</param>
+    private static ReadOnlySpan<char> LastWord(ReadOnlySpan<char> text, out ReadOnlySpan<char> beforeWord)
+    {
+        text = text.TrimEnd(" \t");
+        var wordStart = text.LastIndexOfAny(Boundaries) + 1;
+        beforeWord = text[..wordStart];
+        return text[wordStart..];
+    }
+
+    /// <summary>A word's last path segment, so <c>~/.cargo/bin/rtk</c> names <c>rtk</c>.</summary>
+    /// <param name="word">A word of the command.</param>
+    private static ReadOnlySpan<char> ProgramName(ReadOnlySpan<char> word) =>
+        word[(word.LastIndexOfAny('/', '\\') + 1)..];
+
+    /// <summary>
+    /// Whether <paramref name="word"/> is a <c>DTK_RAW=</c> assignment whose plain value turns raw output on. A
+    /// quoted or expanded value is not read here: the command is then rewritten, and dtk honours the variable when
+    /// it runs.
+    /// </summary>
+    /// <param name="word">A word of the command.</param>
+    private static bool IsRawOutputAssignment(ReadOnlySpan<char> word)
+    {
+        const string assignment = RawOutputSwitch.EnvironmentVariable + "=";
+        if (!word.StartsWith(assignment, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var value = word[assignment.Length..];
+        return !value.ContainsAny(ShellValueCharacters) && RawOutputSwitch.IsOnFor(value.ToString());
     }
 
     private static int SkipSpaces(string command, int index)

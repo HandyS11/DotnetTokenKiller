@@ -55,13 +55,59 @@ public class DotnetCleanFilterTests
                              """;
         var result = _sut.Apply(input, exitCode: 1);
         var outputLines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        var errorLines = outputLines.Where(l =>
+        var errorLines = outputLines[..^1].Where(l =>
                 l.Contains("error", StringComparison.OrdinalIgnoreCase) &&
                 !l.StartsWith("...", StringComparison.Ordinal))
             .ToArray();
         errorLines.Length.Should().BeLessThanOrEqualTo(5, "only up to 5 error lines should be shown");
         result.Should().Contain("error MSB4057");
-        result.Should().Contain("... and 1 more error");
+        outputLines[^2].Should().Be("... and 1 more error");
+        outputLines[^1].Should().Be("✗ dotnet clean: 6 errors", "the status line counts every error, shown or not");
+    }
+
+    [Fact]
+    public void Apply_SingleError_EndsWithTheSingularStatusLine()
+    {
+        const string input = "error MSB4019: The imported project \"/missing/file.targets\" was not found.\n" +
+                             "Build FAILED.\n    1 Error(s)";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            """
+            error MSB4019: The imported project "/missing/file.targets" was not found.
+            ✗ dotnet clean: 1 error
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_ErrorLines_ShortenOnlyTheRootPrefixAndKeepTheRestAsPrinted()
+    {
+        // A root that is not the current directory: treating the whole line as a path used to resolve it against
+        // the current directory ("../../…/error MSB4019: …"), and Windows path normalisation dropped the final '.'.
+        var filter = new DotnetCleanFilter("/test/project/root");
+        const string input =
+            "error MSB4019: The imported project \"/missing/file.targets\" was not found.\n" +
+            "/test/project/root/src/App/App.csproj : error MSB4057: The target \"Clean\" does not exist in the project.\n" +
+            "Build FAILED.\n    2 Error(s)";
+
+        var result = filter.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            """
+            error MSB4019: The imported project "/missing/file.targets" was not found.
+            src/App/App.csproj : error MSB4057: The target "Clean" does not exist in the project.
+            ✗ dotnet clean: 2 errors
+
+            """);
+    }
+
+    [Fact]
+    public void Apply_FailedRunWithNoErrorLines_ReturnsEmptyForRawTailFallback()
+    {
+        // Nothing was parsed, so no count can be given; blank output hands the decision to the raw-tail fallback.
+        _sut.Apply("Build FAILED.\n    0 Warning(s)\n    0 Error(s)", exitCode: 1).Should().BeEmpty();
     }
 
     [Fact]
@@ -77,6 +123,7 @@ public class DotnetCleanFilterTests
         var result = _sut.Apply(input, exitCode: 1);
         result.Should().Contain("error MSB4019");
         result.Should().NotStartWith("✓");
+        result.TrimEnd('\n').Split('\n')[^1].Should().Be("✗ dotnet clean: 1 error");
     }
 
     [Fact]
@@ -142,6 +189,7 @@ public class DotnetCleanFilterTests
         result.Should().NotContain("... and");
         result.Should().Contain("error MSB4001");
         result.Should().Contain("error MSB4005");
+        result.Should().EndWith("✗ dotnet clean: 5 errors\n");
     }
 
     [Fact]
@@ -156,6 +204,7 @@ public class DotnetCleanFilterTests
 
         result.Should().Contain("... and 1 more error");
         result.Should().NotContain("more errors");
+        result.Should().EndWith("✗ dotnet clean: 6 errors\n");
     }
 
     [Fact]
@@ -169,6 +218,7 @@ public class DotnetCleanFilterTests
         var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().Contain("... and 2 more errors");
+        result.Should().EndWith("... and 2 more errors\n✗ dotnet clean: 7 errors\n");
     }
 
     [Fact]
@@ -198,6 +248,7 @@ public class DotnetCleanFilterTests
 
         result.Should().Contain("MSB3231");
         result.Should().NotContain("6 Error(s)");
+        result.TrimEnd('\n').Split('\n')[^1].Should().Be("✗ dotnet clean: 1 error");
     }
 
     private static string LoadFixture(string resourceName)

@@ -12,9 +12,11 @@ public sealed class FileTeeLogStore(IConfigProvider configProvider, string? teeD
     /// <summary>
     /// How many bytes of each file to read when building the index. Large enough to contain a
     /// complete header including a long path and command line; a header cut short by this limit
-    /// fails to parse and the log lists as project-unknown rather than being misread.
+    /// fails to parse and the log lists as project-unknown rather than being misread. Pruning
+    /// (<see cref="FileTeeService.PruneSuperseded"/>) reads the same amount, so it never judges a log
+    /// by a header this index cannot read.
     /// </summary>
-    private const int HeadBytes = 4096;
+    internal const int HeadBytes = 4096;
 
     /// <summary>Initializes a new instance using the resolved tee directory.</summary>
     /// <param name="configProvider">The configuration provider.</param>

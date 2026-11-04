@@ -84,6 +84,19 @@ internal static class IntegrationTestHelper
         return (output, exitCode, dbPath);
     }
 
+    /// <summary>As <see cref="RunDtkWithDbAsync(string[])"/>, with extra environment variables set for dtk.</summary>
+    /// <param name="environment">The variables to set, on top of the isolation ones.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    internal static async Task<(string Output, int ExitCode, string DbPath)> RunDtkWithDbAsync(
+        IReadOnlyDictionary<string, string> environment, params string[] args)
+    {
+        var isolatedDir = Path.Combine(TestDataRoot, Guid.NewGuid().ToString("N"));
+        var dbPath = Path.Combine(isolatedDir, "tracking.db");
+        var (output, exitCode) = await RunProcessAsync(
+            Launcher.Executable, [.. Launcher.PrefixArguments, .. args], isolatedDir, environment: environment);
+        return (output, exitCode, dbPath);
+    }
+
     /// <summary>Runs dtk with <paramref name="stdin"/> piped into its standard input, and returns
     /// the isolated tracking-database path so a test can assert on what was recorded.</summary>
     /// <param name="stdin">The text to write to the process's standard input.</param>
@@ -98,8 +111,10 @@ internal static class IntegrationTestHelper
     }
 
     /// <summary>Reads the <c>command</c> column from the isolated tracking database written by a
-    /// <see cref="RunDtkWithDbAsync"/> invocation, so a test can assert on what was recorded.</summary>
-    /// <param name="dbPath">The isolated tracking-database path returned by <see cref="RunDtkWithDbAsync"/>.</param>
+    /// <see cref="RunDtkWithDbAsync(string[])"/> invocation, so a test can assert on what was recorded.</summary>
+    /// <param name="dbPath">
+    /// The isolated tracking-database path returned by <see cref="RunDtkWithDbAsync(string[])"/>.
+    /// </param>
     internal static async Task<IReadOnlyList<string>> ReadTrackedCommandsAsync(string dbPath)
     {
         await FoldTrackingJournalAsync(dbPath).ConfigureAwait(false);
@@ -283,7 +298,7 @@ internal static class IntegrationTestHelper
 
     private static async Task<(string Output, int ExitCode)> RunProcessAsync(
         string executable, IEnumerable<string> args, string isolatedDir, string? stdin = null,
-        bool isolateHome = false)
+        bool isolateHome = false, IReadOnlyDictionary<string, string>? environment = null)
     {
         var psi = new ProcessStartInfo(executable)
         {
@@ -322,6 +337,14 @@ internal static class IntegrationTestHelper
             Directory.CreateDirectory(isolatedDir);
             psi.Environment["HOME"] = isolatedDir;
             psi.Environment["USERPROFILE"] = isolatedDir;
+        }
+
+        if (environment is not null)
+        {
+            foreach (var (name, value) in environment)
+            {
+                psi.Environment[name] = value;
+            }
         }
 
         if (stdin is not null)

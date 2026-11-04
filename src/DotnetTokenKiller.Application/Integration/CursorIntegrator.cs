@@ -127,7 +127,11 @@ internal sealed class CursorIntegrator(RtkHookCoexistence rtk, HomePaths home)
         var hook = DescribeHooks(root, scope)[0];
         await CursorHooksFile.RemoveAsync(hook.RegistrationPath, hook.Command, context, cancellationToken).ConfigureAwait(false);
 
-        rtk.NoteRemainingExclusion(context, RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(root)));
+        await rtk.NoteRemainingExclusionAsync(
+                context,
+                RtkHookCoexistence.IsRtkRewriteReferencedIn(RtkCandidates(root)),
+                cancellationToken)
+            .ConfigureAwait(false);
 
         return context.ToResult();
     }

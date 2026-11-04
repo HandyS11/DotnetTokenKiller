@@ -1,0 +1,8 @@
+  Determining projects to restore...
+  Restored /test/project/root/C.NoAdapter/C.NoAdapter.csproj (in 200 ms).
+  C.NoAdapter -> /test/project/root/C.NoAdapter/bin/Debug/net10.0/C.NoAdapter.dll
+Test run for /test/project/root/C.NoAdapter/bin/Debug/net10.0/C.NoAdapter.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+No test is available in /test/project/root/C.NoAdapter/bin/Debug/net10.0/C.NoAdapter.dll. Make sure that test discoverer & executors are registered and platform & framework version settings are appropriate and try again.
+
+Additionally, path to test adapters can be specified using /TestAdapterPath command. Example  /TestAdapterPath:<pathToCustomAdapters>.

@@ -53,8 +53,15 @@ public sealed partial class DotnetCleanFilter(string? rootPath = null) : IOutput
                 continue;
             }
 
-            sb.AppendLine(TextHelpers.ShortenPath(line, RootPath));
+            sb.AppendLine(TextHelpers.ShortenPathsInLine(line, RootPath));
             count++;
+        }
+
+        if (totalErrors == 0)
+        {
+            // Failed run with no error line found (localized SDK, crashed process): degrade to blank so
+            // FilteredOutputPipeline's raw-tail fallback surfaces the real output and the failure status.
+            return string.Empty;
         }
 
         if (totalErrors > MaxErrorLines)
@@ -62,6 +69,9 @@ public sealed partial class DotnetCleanFilter(string? rootPath = null) : IOutput
             sb.AppendLine(CultureInfo.InvariantCulture,
                 $"... and {totalErrors - MaxErrorLines} more error{(totalErrors - MaxErrorLines == 1 ? "" : "s")}");
         }
+
+        // The status line is last and counts every error, shown or not.
+        sb.AppendLine(CultureInfo.InvariantCulture, $"✗ dotnet clean: {totalErrors} error{(totalErrors == 1 ? "" : "s")}");
 
         // Normalize to '\n' so output stays identical across platforms; AppendLine emits '\r\n' on Windows.
         return sb.ToString().ReplaceLineEndings("\n");

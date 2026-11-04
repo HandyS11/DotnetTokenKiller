@@ -59,7 +59,8 @@ public sealed class SqliteLoaderTests
             await File.ReadAllTextAsync(ParityRunner.FixturePath("dotnet_build_errors.txt")));
 
         output.ExitCode.Should().Be(1, output.Stdout + output.Stderr);
-        output.Stdout.Should().StartWith("dotnet build: 3 errors");
+        // Glyph-free: the parity sandbox sets NO_COLOR, which prints the failure glyph as "FAIL:".
+        output.Stdout.TrimEnd().Split('\n')[^1].Should().Contain("dotnet build failed (exit 1): 3 errors");
         return output;
     }
 

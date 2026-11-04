@@ -16,12 +16,14 @@ public interface ITeeSession : IAsyncDisposable
     /// </summary>
     TextWriter Writer { get; }
 
-    /// <summary>Records the exit code and applies the retention rules.</summary>
+    /// <summary>
+    /// Records the exit code and applies the retention rules to the older logs this run supersedes.
+    /// </summary>
     /// <param name="exitCode">The producing command's exit code.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// A hint naming the log file, or <see langword="null"/> when no log was kept — either because
-    /// the retention rules discarded it, or because writing it failed.
+    /// A hint naming the log file, or <see langword="null"/> when no log was kept: tee is off, or
+    /// writing it failed. The latest run of each kind is always kept, whatever its exit code.
     /// </returns>
     Task<string?> FinalizeAsync(int exitCode, CancellationToken cancellationToken = default);
 }

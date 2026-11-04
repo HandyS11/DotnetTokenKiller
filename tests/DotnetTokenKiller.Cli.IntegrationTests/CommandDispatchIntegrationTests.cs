@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 using Xunit;
 
@@ -26,6 +27,52 @@ public sealed class CommandDispatchIntegrationTests
 
         exitCode.Should().Be(0);
         output.Should().Contain("dotnet SDK");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Doctor_RedirectedOutput_KeepsALongPathOnOneLineAsync()
+    {
+        // The harness captures stdout through a pipe, where Spectre assumes 80 columns and hard-wraps
+        // the line mid-path. A path over 150 characters would break across lines without the wider profile.
+        var dir = Path.Combine(IntegrationTestHelper.NewIsolatedDir(), new string('d', 100));
+
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, isolateHome: true, "doctor");
+
+        exitCode.Should().Be(0);
+        var dbPath = Path.Combine(dir, "tracking.db");
+        dbPath.Length.Should().BeGreaterThan(150);
+        output.Should().Contain($"will be created at {dbPath}");
+        output.Should().Contain($"will be created at {Path.Combine(dir, "tee")}");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Gain_RedirectedOutput_KeepsItsRulesAndTableAtTheirOwnWidthAsync()
+    {
+        // The wider profile for piped output must not stretch gain's header rule or its table to it.
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        await IntegrationTestHelper.RunDtkWithStdinInDirAsync(
+            dir, "/src/App.cs(12,20): error CS1002: ; expected [/src/App.csproj]\nBuild FAILED.\n", "pipe", "build");
+
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "gain");
+
+        exitCode.Should().Be(0, output);
+        output.Should().Contain("By Command");
+        // Measured as the reader sees it: on CI (GITHUB_ACTIONS and the like) Spectre colours redirected output, and
+        // the escape codes are not columns. The table's natural width depends on its numbers (79 to 85 characters
+        // seen), so the bound only has to catch a rule or table stretched towards the 4096-column profile.
+        AnsiStrip.Strip(output).ReplaceLineEndings("\n").Split('\n')
+            .Should().OnlyContain(line => line.Length <= 120, output);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Config_WithoutSubcommand_ShowsTheConfigurationAsync()
+    {
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+
+        var (output, exitCode) = await IntegrationTestHelper.RunDtkInDirAsync(dir, "config");
+
+        exitCode.Should().Be(0, output);
+        output.Should().Contain("tracking.enabled").And.Contain("tee.mode");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

@@ -43,12 +43,12 @@ public class DotnetRestoreIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Restore_SampleAppBadPackage_Failure_OutputStartsWith1Error()
+    public async Task Restore_SampleAppBadPackage_Failure_OutputEndsWith1Error()
     {
         var (output, exitCode) = await IntegrationTestHelper.RunDtkAsync("dotnet", "restore", SampleAppBadPackage);
 
         exitCode.Should().NotBe(0);
-        output.Trim().Should().StartWith("dotnet restore: 1 error");
+        output.Trim().Split('\n')[^1].Trim().Should().Be("✗ dotnet restore: 1 error");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

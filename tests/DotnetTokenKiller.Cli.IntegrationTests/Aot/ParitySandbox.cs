@@ -27,6 +27,16 @@ internal sealed class ParitySandbox
 
     internal string DatabasePath => Path.Combine(Home, "tracking.db");
 
+    /// <summary>What <c>XDG_CONFIG_HOME</c> is set to in the sandbox: where Linux programs, rtk among them, keep config.</summary>
+    internal string XdgConfigHome => Path.Combine(Home, ".config");
+
+    /// <summary>
+    /// What <c>APPDATA</c> is set to in the sandbox. On Windows <c>USERPROFILE</c> does not move
+    /// <c>Environment.SpecialFolder.UserProfile</c>, but dtk honors this variable when it places rtk's config, so a run
+    /// stays out of the runner's real roaming profile.
+    /// </summary>
+    internal string AppData => Path.Combine(Home, "AppData", "Roaming");
+
     /// <summary>The directory holding a fake <c>dotnet</c>, or <see langword="null"/> when none was made.</summary>
     internal string? FakeDotnetDirectory { get; private set; }
 

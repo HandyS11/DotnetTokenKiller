@@ -83,6 +83,10 @@ jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Synt
 uses — via `DotnetPublishFilter`/`DotnetPackFilter`, which each add their own success line (`project -> publish dir`,
 `Successfully created package '…'`). Either run with `--interactive` (used to prompt for private-feed credentials) is
 passed through unfiltered with the terminal attached, never captured, via `PassthroughSubcommands.IsInteractiveFilteredRun`.
+`PassthroughSubcommands.IsMachineReadableRun` (`list package --format json`; MSBuild's `-getProperty`, `-getItem` and
+`-getTargetResult` on build, test, restore, clean, publish and pack) takes the same route, so a reader gets dotnet's own
+bytes; `ArgumentPreprocessor.PassthroughArguments` drops dtk's output options from any filtered subcommand that gets
+there, as `DTK_RAW=1` does.
 
 `dtk init copilot-cli` (alias `dtk integrate`) installs a GitHub Copilot CLI `preToolUse` hook (`.github/hooks/`)
 that runs `dtk hook copilot-cli`, rewriting `dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`).
@@ -165,8 +169,10 @@ grace period (`RunCancellation.LeaveInterruptToChild`), since the child owns the
 longer to shut down, or never exit.
 
 `DotnetTestFilterTests`' `dotnet_test_mtp_*` fixtures are real `dotnet test` output, not hand-written: a .NET 10 SDK
-run of an MSTest 4.0.2 project under Microsoft.Testing.Platform (`"test": {"runner": "Microsoft.Testing.Platform"}`
-in `global.json`), with the machine path replaced by `/test/project/root`.
+run of an MSTest 4.0.2 project (the `dotnet_test_mtp_xunit3_*` ones: an xunit.v3.mtp-v2 4.0.2 project) under
+Microsoft.Testing.Platform (`"test": {"runner": "Microsoft.Testing.Platform"}` in `global.json`), with the machine path
+replaced by `/test/project/root`. The two shapes differ: MSTest prints the message before the `from <assembly>` line,
+xUnit v3 after it.
 
 ## Git Hooks
 
@@ -322,3 +328,7 @@ Enforced via `.editorconfig` and build-time analyzers (Roslynator, SonarAnalyzer
 - Private fields: `_camelCase`; async methods must end in `Async`
 - Interfaces: `IPascalCase`; type parameters: `TPascalCase`
 - Line endings: LF only; no trailing whitespace; no BOM; 4-space indent for `.cs`, 2-space for XML/JSON/YAML
+- Every number a filter prints uses `CultureInfo.InvariantCulture` (a French locale must not turn `0.34s` into
+  `0,34s`). Durations go through `DurationFormat.Format(ms, exact)`: pass `exact` only when the source gave the figure
+  below the second (milliseconds, a decimal point, `Time Elapsed 00:00:02.34`); VSTest's whole-unit `Duration: 1 s`
+  is not, and renders as `1s`, never `1.00s`. A total over several sources is exact only if every part was.

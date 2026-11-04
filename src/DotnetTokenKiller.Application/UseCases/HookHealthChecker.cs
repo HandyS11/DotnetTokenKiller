@@ -57,10 +57,20 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
 
         foreach (var integrator in integrators)
         {
+            // With the project directory at home, the project and global installs name one file; it is
+            // checked once, as the project's, rather than listed under both scopes.
+            var checkedFiles = new HashSet<string>(
+                OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
             foreach (var scope in new[] { HookScope.Project, HookScope.Global })
             {
                 foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
                 {
+                    if (!checkedFiles.Add(Path.TrimEndingDirectorySeparator(Path.GetFullPath(installation.RegistrationPath))))
+                    {
+                        continue;
+                    }
+
                     var registration = await ReadRegistrationAsync(installation, cancellationToken).ConfigureAwait(false);
                     if (registration.Kind == RegistrationKind.Absent
                         && (installation.LegacyScriptPath is null || !File.Exists(installation.LegacyScriptPath)))

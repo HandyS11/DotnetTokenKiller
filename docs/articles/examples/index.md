@@ -26,9 +26,9 @@ Line counts below are the ones rendered on each page, counting non-blank raw lin
 |---------|-----|-----|
 | build success (1 project) | 7 lines | 1 line |
 | build success (2 projects) | 9 lines | 1 line |
-| build, single error | 8 lines | 5 lines |
-| build, 22 errors across 5 files | 50 lines | 30 lines |
-| build, 34 warnings | 75 lines | 54 lines |
+| build, single error | 8 lines | 2 lines |
+| build, 22 errors across 5 files | 50 lines | 26 lines |
+| build, 34 warnings | 75 lines | 32 lines |
 | clean | 25 lines | 1 line |
 | test, 1 failure (xUnit) | 14 lines | 5 lines |
 | test, 12 failures (xUnit) | 118 lines | 38 lines |
@@ -36,4 +36,4 @@ Line counts below are the ones rendered on each page, counting non-blank raw lin
 | test, 3 failures (MSTest) | 27 lines | 11 lines |
 | test, 2 failures (Reqnroll) | 64 lines | 8 lines |
 | restore, missing package | 3 lines | 2 lines |
-| format, 33 violations | 33 lines | 12 lines |
+| format, 30 violations (3 reported twice) | 33 lines | 24 lines |

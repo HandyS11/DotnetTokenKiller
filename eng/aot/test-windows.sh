@@ -97,7 +97,7 @@ export DTK_CONFIG_PATH DTK_DB_PATH DTK_TEE_DIR
 status=0
 "$shim" pipe build --exit-code 1 < "$fixture" > "$state/pipe.txt" 2>&1 || status=$?
 [ "$status" -eq 1 ] || { cat "$state/pipe.txt"; fail "pipe build exited $status, expected 1"; }
-grep -q "dotnet build: 3 errors" "$state/pipe.txt" || { cat "$state/pipe.txt"; fail "pipe build did not print the filtered summary"; }
+tail -n 1 "$state/pipe.txt" | grep -q "dotnet build failed (exit 1): 3 errors" || { cat "$state/pipe.txt"; fail "pipe build did not print the filtered summary"; }
 "$shim" gain --json > "$state/gain.json" || { cat "$state/gain.json"; fail "gain failed"; }
 grep -q '"TotalCommands":1' "$state/gain.json" || { cat "$state/gain.json"; fail "gain did not report the tracked run: SQLite is not working"; }
 
@@ -117,7 +117,7 @@ DTK_TEE_DIR=$(cygpath -w "$managed_state/logs")
 status=0
 dotnet "$store/dtk.dll" pipe build --exit-code 1 < "$fixture" > "$managed_state/pipe.txt" 2>&1 || status=$?
 [ "$status" -eq 1 ] || { cat "$managed_state/pipe.txt"; fail "pipe build through dtk.dll exited $status, expected 1"; }
-grep -q "dotnet build: 3 errors" "$managed_state/pipe.txt" || { cat "$managed_state/pipe.txt"; fail "pipe build through dtk.dll did not print the filtered summary"; }
+tail -n 1 "$managed_state/pipe.txt" | grep -q "dotnet build failed (exit 1): 3 errors" || { cat "$managed_state/pipe.txt"; fail "pipe build through dtk.dll did not print the filtered summary"; }
 dotnet "$store/dtk.dll" gain --json > "$managed_state/gain.json" || { cat "$managed_state/gain.json"; fail "gain through dtk.dll failed"; }
 grep -Eq '"TotalCommands": ?1[,}]' "$managed_state/gain.json" || { cat "$managed_state/gain.json"; fail "gain through dtk.dll did not report exactly one tracked run: its e_sqlite3 is not working"; }
 DTK_CONFIG_PATH=$shim_config_path

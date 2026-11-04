@@ -1,0 +1,17 @@
+  Determining projects to restore...
+  Restored /test/project/root/SkippedOnly.Tests/SkippedOnly.Tests.csproj (in 222 ms).
+  Restored /test/project/root/Passing.Tests/Passing.Tests.csproj (in 222 ms).
+  SkippedOnly.Tests -> /test/project/root/SkippedOnly.Tests/bin/Debug/net10.0/SkippedOnly.Tests.dll
+Test run for /test/project/root/SkippedOnly.Tests/bin/Debug/net10.0/SkippedOnly.Tests.dll (.NETCoreApp,Version=v10.0)
+  Passing.Tests -> /test/project/root/Passing.Tests/bin/Debug/net10.0/Passing.Tests.dll
+Test run for /test/project/root/Passing.Tests/bin/Debug/net10.0/Passing.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.15]     SkippedOnly.Tests.SkippedTests.First [SKIP]
+[xUnit.net 00:00:00.16]     SkippedOnly.Tests.SkippedTests.Second [SKIP]
+  Skipped SkippedOnly.Tests.SkippedTests.First [1 ms]
+  Skipped SkippedOnly.Tests.SkippedTests.Second [1 ms]
+
+Skipped! - Failed:     0, Passed:     0, Skipped:     2, Total:     2, Duration: 9 ms - SkippedOnly.Tests.dll (net10.0)
+
+Passed!  - Failed:     0, Passed:     3, Skipped:     0, Total:     3, Duration: 17 ms - Passing.Tests.dll (net10.0)

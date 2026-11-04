@@ -160,9 +160,9 @@ internal sealed class LogCommand(
     }
 
     /// <summary>
-    /// Explains why nothing was found. The reason matters more than the fact: with the default
-    /// settings a successful or small run leaves no log at all, and a bare "not found" reads as a
-    /// broken feature rather than as configuration.
+    /// Explains why nothing was found. The reason matters more than the fact: a bare "not found"
+    /// reads as a broken feature rather than as configuration (tee off, or which runs are kept) or
+    /// scope (logs filed under another project).
     /// </summary>
     /// <param name="selection">The empty selection, carrying the excluded-legacy count.</param>
     /// <param name="settings">The parsed settings, for tailoring the message.</param>
@@ -186,13 +186,15 @@ internal sealed class LogCommand(
         else if (config.Tee.Mode == TeeMode.Failures)
         {
             console.MarkupLine(
-                "[bold]tee.mode[/] is [bold]Failures[/], so only failed runs are saved, and output "
-                + "under 500 characters is never saved. Use [bold]dtk config set tee.mode Always[/] "
-                + "to keep every run.");
+                "[bold]tee.mode[/] is [bold]Failures[/]: the latest run of each kind is saved, and "
+                + "older runs only when they failed with 500 bytes of output or more. Use "
+                + "[bold]dtk config set tee.mode Always[/] to keep older passing runs too.");
         }
         else
         {
-            console.MarkupLine("Output under 500 characters is never saved.");
+            console.MarkupLine(
+                "The latest run of each kind is saved, and older runs only with 500 bytes of output "
+                + "or more.");
         }
 
         if (selection.LegacyExcluded > 0)
