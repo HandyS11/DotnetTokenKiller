@@ -1,0 +1,23 @@
+Running tests from /test/project/root/Skipped/bin/Debug/net10.0/Skipped.dll (net10.0|x64)
+skipped TestMethod1
+  from /test/project/root/Skipped/bin/Debug/net10.0/Skipped.dll (net10.0|x64)
+/test/project/root/Skipped/bin/Debug/net10.0/Skipped.dll (net10.0|x64) failed (142ms)
+Exit code: 8
+  Standard output: MSTest v4.0.2 (UTC 11/11/2025) [linux-x64 - .NET 10.0.14]
+  Telemetry
+  ---------
+  Microsoft Testing Platform collects usage data in order to help us improve your experience. The data is collected by Microsoft and are not shared with anyone.
+  You can opt-out of telemetry by setting the TESTINGPLATFORM_TELEMETRY_OPTOUT or DOTNET_CLI_TELEMETRY_OPTOUT environment variable to '1' or 'true' using your favorite shell.
+  
+  Read more about Microsoft Testing Platform telemetry: https://aka.ms/testingplatform/telemetry
+  Test Parallelization enabled for /test/project/root/Skipped/bin/Debug/net10.0/Skipped.dll (Workers: 10, Scope: MethodLevel)
+
+Test run summary: Zero tests ran
+  error: 1
+
+  total: 1
+  failed: 0
+  succeeded: 0
+  skipped: 1
+  duration: 304ms
+Test run completed with non-success exit code: 8 (see: https://aka.ms/testingplatform/exitcodes)

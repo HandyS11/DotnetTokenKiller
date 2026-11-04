@@ -12,7 +12,7 @@ namespace DotnetTokenKiller.Application.Filters;
 /// and the status line of a run that compiled with warnings ends in their count and top codes.
 /// </summary>
 /// <param name="rootPath">Optional root path used to shorten file paths in stack traces and diagnostics.</param>
-public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputFilter
+public sealed partial class DotnetTestFilter(string? rootPath = null) : IContextualOutputFilter
 {
     private const int MaxFailures = 15;
     private const int MessageMaxLen = 300;
@@ -40,11 +40,22 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// The process exit code; the sole source of truth for the success/failure verdict, except that
     /// Microsoft.Testing.Platform's exit code 8 with its "Zero tests ran" verdict reads as a zero-tests warning.
     /// </param>
-    public string Apply(string strippedOutput, int exitCode)
+    public string Apply(string strippedOutput, int exitCode) =>
+        Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;
+
+    /// <summary>
+    /// Applies the filter to the test output and says whether the run was a "no test matched" verdict, which
+    /// <c>--fail-on-empty</c> in <paramref name="context"/> turns into a failure line.
+    /// </summary>
+    /// <param name="strippedOutput">The test output to filter, with ANSI escape sequences already stripped.</param>
+    /// <param name="exitCode">The process exit code, as for <see cref="Apply(string, int)"/>.</param>
+    /// <param name="context">The run's context; only its test options are read.</param>
+    public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
         if (string.IsNullOrEmpty(strippedOutput))
         {
-            return string.Empty;
+            return new FilterResult(string.Empty);
         }
 
         var lines = strippedOutput.Split('\n');
@@ -53,7 +64,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
         // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
         var buildReport = MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
-        return FormatOutput(state, exitCode, buildReport);
+        return FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty);
     }
 
     /// <summary>
@@ -623,7 +634,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.ProjectCount = Math.Max(1, state.ProjectCount);
     }
 
-    private static string FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport)
+    private static FilterResult FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport,
+        bool failOnEmpty)
     {
         var elapsed = DurationFormat.Format(state.TotalDurationMs, state.DurationExact);
         var warnings = DescribeBuildWarnings(buildReport);
@@ -636,7 +648,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // nothing else to report, yields to the raw tail.
         if (exitCode != 0 && buildReport.ParsedErrorCount > 0)
         {
-            return FormatBuildFailure(state, buildReport, elapsed, warnings);
+            return new FilterResult(FormatBuildFailure(state, buildReport, elapsed, warnings));
         }
 
         // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
@@ -646,41 +658,41 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // because a stray line happened to match a failure-shaped pattern.
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
-            return FormatFailures(state, elapsed, warnings: warnings);
+            return new FilterResult(FormatFailures(state, elapsed, warnings: warnings));
         }
 
         // A listing that found names wins even beside a "No test matches" line: that one is another
         // project's, and says nothing about the names that were listed.
         if (exitCode == 0 && state.ListedTests.Count > 0)
         {
-            return FormatTestList(state);
+            return new FilterResult(FormatTestList(state));
         }
 
-        if (FormatZeroTests(state, exitCode) is { } zeroTests)
+        if (FormatZeroTests(state, exitCode, failOnEmpty) is { } zeroTests)
         {
-            return zeroTests;
+            return new FilterResult(zeroTests, NoTestsMatched: true);
         }
 
         if (state.ProjectCount == 0)
         {
             // No summary and no failures parsed: nothing meaningful to condense. A non-zero exit
             // degrades to blank so FilteredRunUseCase's raw-tail fallback surfaces the real reason.
-            return string.Empty;
+            return new FilterResult(string.Empty);
         }
 
         if (exitCode != 0)
         {
             // Non-zero exit but the summary reported zero failures (e.g. crash after a pass summary):
             // blank so the raw-tail fallback fires instead of printing a clean-looking report.
-            return string.Empty;
+            return new FilterResult(string.Empty);
         }
 
         // A skipped-only run (VSTest's "Skipped!" summary) lands here too: "0 passed, N skipped".
         var skippedSuffix = state.TotalSkipped > 0
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
-        return
-            $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n";
+        return new FilterResult(
+            $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n");
     }
 
     /// <summary>
@@ -734,7 +746,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// <summary>The "0 tests found" verdict, or <see langword="null"/> when the run is not one.</summary>
     /// <param name="state">The parsed run.</param>
     /// <param name="exitCode">The run's exit code.</param>
-    private static string? FormatZeroTests(ParseState state, int exitCode)
+    /// <param name="failOnEmpty">Whether <c>--fail-on-empty</c> asked for the verdict to read as a failure.</param>
+    private static string? FormatZeroTests(ParseState state, int exitCode, bool failOnEmpty)
     {
         // A "nothing ran" verdict requires that no assembly produced evidence of a test.
         // ZeroTestsFound is per-assembly: in a multi-project run, one assembly matching nothing must
@@ -753,9 +766,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return null;
         }
 
-        return state.ZeroTestsFound
-            ? $"⚠ dotnet test: {DescribeNoTests(state)}\n"
-            : "⚠ dotnet test: 0 tests found\n";
+        var description = state.ZeroTestsFound ? DescribeNoTests(state) : "0 tests found";
+        return failOnEmpty
+            ? $"\u2717 dotnet test: {description} \u2014 --fail-on-empty\n"
+            : $"\u26a0 dotnet test: {description}\n";
     }
 
     /// <summary>

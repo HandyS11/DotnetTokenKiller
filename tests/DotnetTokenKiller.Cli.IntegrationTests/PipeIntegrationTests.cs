@@ -105,4 +105,16 @@ public class PipeIntegrationTests
         var source = (string?)await cmd.ExecuteScalarAsync();
         source.Should().Be("Pipe");
     }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeTest_FailOnEmpty_ExitsEightAsync()
+    {
+        var log = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "dotnet_test_zero.txt"));
+
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--exit-code", "0", "--fail-on-empty");
+
+        exitCode.Should().Be(8);
+        output.TrimEnd().Split('\n')[^1].Should().StartWith("\u2717");
+    }
 }

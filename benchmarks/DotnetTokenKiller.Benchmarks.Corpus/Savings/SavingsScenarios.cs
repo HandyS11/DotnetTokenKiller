@@ -64,6 +64,7 @@ public static class SavingsScenarios
         new("test/logger-normal-terminal-logger", "dotnet_test_logger_normal_terminal_logger.txt", FilterKeys.Test, 0),
         new("test/missing-project", "dotnet_test_missing_project.txt", FilterKeys.Test, 1),
         new("test/mtp-all-pass", "dotnet_test_mtp_all_pass.txt", FilterKeys.Test, 0),
+        new("test/mtp-all-skipped", "dotnet_test_mtp_all_skipped.txt", FilterKeys.Test, 8),
         new("test/mtp-failures", "dotnet_test_mtp_failures.txt", FilterKeys.Test, 2),
         new("test/mtp-multiproject", "dotnet_test_mtp_multiproject.txt", FilterKeys.Test, 2),
         new("test/mtp-xunit3-failures", "dotnet_test_mtp_xunit3_failures.txt", FilterKeys.Test, 2),

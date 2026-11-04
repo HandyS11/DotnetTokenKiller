@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Tests.Helpers;
+using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
@@ -1480,6 +1481,68 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(input, exitCode: 2);
 
         MessageLine(result).Should().Be("Line one of the message Line two of the message");
+    }
+
+    private static FilterContext FailOnEmpty { get; } = new()
+    {
+        Test = new TestOptions(Names: false, ShowOutput: false, FailOnEmpty: true)
+    };
+
+    [Fact]
+    public void Apply_FailOnEmpty_VsTestNoMatch_ReportsFailureAndVerdict()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0, FailOnEmpty);
+
+        result.Output.Should().EndWith(
+            "\u2717 dotnet test: no test matched filter FullyQualifiedName~NonExistentTest (DotnetTokenKiller.Domain.Tests.dll) \u2014 --fail-on-empty\n");
+        result.NoTestsMatched.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Apply_FailOnEmpty_MtpZero_ReportsFailure()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_zero.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 8, FailOnEmpty);
+
+        result.Output.Should().Be("\u2717 dotnet test: no test found (Alpha.Tests.dll) \u2014 --fail-on-empty\n");
+        result.NoTestsMatched.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Apply_NoFlag_StillReportsVerdict_KeepsWarning()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0, FilterContext.Unknown);
+
+        result.Output.Should().StartWith("\u26a0 dotnet test: no test matched filter").And.NotContain("--fail-on-empty");
+        result.NoTestsMatched.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_skipped_only.txt", 0)]
+    [InlineData("dotnet_test_mtp_all_skipped.txt", 8)]
+    public void Apply_FailOnEmpty_AllSkipped_IsNotEmpty(string name, int exitCode)
+    {
+        // Tests matched and were skipped. Real MTP (MSTest 4.0.2, every test [Ignore]) exits 8 with its
+        // "Zero tests ran" verdict even so; dtk keeps whatever it printed for the run before the flag existed.
+        var fixture = LoadFixture(name);
+
+        var withFlag = _sut.Apply(fixture, exitCode, FailOnEmpty);
+
+        withFlag.NoTestsMatched.Should().BeFalse();
+        withFlag.Output.Should().Be(_sut.Apply(fixture, exitCode)).And.NotContain("--fail-on-empty");
+    }
+
+    [Fact]
+    public void Apply_TwoArguments_IsTheThreeArgumentOneWithAnUnknownContext()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+
+        _sut.Apply(fixture, exitCode: 0).Should().Be(_sut.Apply(fixture, 0, FilterContext.Unknown).Output);
     }
 
     [Fact]

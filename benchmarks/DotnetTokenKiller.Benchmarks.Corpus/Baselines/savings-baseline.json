@@ -465,6 +465,17 @@
       "savingsPercent": 89.3
     },
     {
+      "id": "test/mtp-all-skipped",
+      "fixture": "dotnet_test_mtp_all_skipped.txt",
+      "filterKey": "test",
+      "exitCode": 8,
+      "rawBytes": 1162,
+      "rawTokens": 338,
+      "filteredTokens": 0,
+      "savedTokens": 338,
+      "savingsPercent": 100
+    },
+    {
       "id": "test/mtp-failures",
       "fixture": "dotnet_test_mtp_failures.txt",
       "filterKey": "test",
