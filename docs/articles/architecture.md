@@ -68,7 +68,6 @@ Each supported `dotnet` subcommand has a dedicated filter implementing `IOutputF
 | `DotnetListPackageFilter` | `dotnet list package` |
 | `DotnetPublishFilter` | `dotnet publish` |
 | `DotnetPackFilter` | `dotnet pack` |
-
 | `DotnetToolRestoreFilter` | `dotnet tool restore` |
 | `DotnetEfFilter` | `dotnet ef migrations`, `dotnet ef database` |
 | `DotnetStrykerFilter` | `dotnet stryker` |

@@ -225,9 +225,12 @@ Run `dotnet tool restore` with filtered output:
 dtk dotnet tool restore
 ```
 
-On success one line names the commands the restored tools provide (`✓ dotnet tool restore: 2 tools (dotnet-ef, jb)`). On failure each distinct error line is kept once, with paths shortened, and the status line counts what failed (`✗ dotnet tool restore failed (exit 1): 1 of 3 tools not restored`, or `N errors` when no tool line was read). dtk's options work as they do on the other dotnet verbs. Like `publish` and `pack`, `dtk dotnet tool restore
---interactive` is not filtered, so a credential provider can prompt for a private feed. The other `dotnet tool`
-commands (`run`, `install`, `list`, …) pass through unchanged.
+On success one line names the commands the restored tools provide
+(`✓ dotnet tool restore: 2 tools (dotnet-ef, jb)`). On failure each distinct error line is kept once, with paths
+shortened, and the status line counts what failed (`✗ dotnet tool restore failed (exit 1): 1 of 3 tools not
+restored`, or `N errors` when no tool line was read). dtk's options work as they do on the other dotnet verbs. Like
+`publish` and `pack`, `dtk dotnet tool restore --interactive` is not filtered, so a credential provider can prompt for
+a private feed. The other `dotnet tool` commands (`run`, `install`, `list`, …) pass through unchanged.
 
 ### `dtk dotnet ef migrations` and `dtk dotnet ef database`
 

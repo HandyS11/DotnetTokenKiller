@@ -45,7 +45,7 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
         "`--list`",
         "`dtk pipe <subcommand>`",
         "`-q`",
-        "`--tee <path>`",
+        "`--tee <file>`",
         "`--fail-on-empty`",
         "DTK_RAW=1",
         "`\\dotnet …`",
@@ -69,8 +69,9 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
     {
         // Loaded into every agent session, often next to the skill: every added sentence is paid for each time. The
         // bound was 1200 for 0.10's eight subcommands (1120 bytes); 0.11's five more add 183 bytes of names and examples,
-        // and its five new options one more line of about 230 bytes: 1700 holds them with a little room.
-        System.Text.Encoding.UTF8.GetByteCount(SharedInstructionArtifacts.Section).Should().BeLessThan(1700);
+        // and the options line (one line for five options, 1431 bytes in all) cannot be cut further without losing an option:
+        // the bound is the size plus a little room.
+        System.Text.Encoding.UTF8.GetByteCount(SharedInstructionArtifacts.Section).Should().BeLessThan(1450);
 
         // Only publish, pack and tool restore pass --interactive through; build and restore still filter it.
         SharedInstructionArtifacts.Section.Should().NotContain("--interactive");

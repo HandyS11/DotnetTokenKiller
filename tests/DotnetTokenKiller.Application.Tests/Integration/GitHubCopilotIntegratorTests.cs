@@ -179,8 +179,8 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
             - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
             - Don't pipe dtk output into tail or grep: its last line is the status.
             - `dtk log [build|test]` prints the latest run's raw output instead of re-running: last 100 lines, `--full` for all, `--list`.
-            - `dtk pipe <subcommand>` filters stdin. `-q` on dotnet's own subcommands prints only the filtered output.
-            - Options on filtered runs: `--tee <path>` keeps the raw output as evidence, `--max-lines N` caps the body; `test` also takes `--names` (passed tests), `--show-output` (failing tests' output) and `--fail-on-empty` (exit 8 if no test ran).
+            - `dtk pipe <subcommand>` filters stdin. `-q` (dotnet subcommands) prints only the filtered output.
+            - `--tee <file>` keeps raw output as evidence; `--max-lines N`; for test: `--names`, `--show-output`, `--fail-on-empty`.
             - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
             <!-- /dtk -->
             """);
