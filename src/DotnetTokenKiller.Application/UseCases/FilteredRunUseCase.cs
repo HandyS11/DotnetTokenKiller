@@ -23,23 +23,20 @@ public sealed class FilteredRunUseCase(
     /// <param name="filter">The output filter to apply.</param>
     /// <param name="command">The executable to run.</param>
     /// <param name="args">Arguments to pass to the executable.</param>
-    /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
-    /// <param name="showLogHint">When <see langword="true"/>, prints the path to the full log file if one was written.</param>
-    /// <param name="quiet">When <see langword="true"/>, suppresses all DTK meta-output; overrides <paramref name="verbosityLevel"/> and <paramref name="showLogHint"/>.</param>
+    /// <param name="options">Display flags; <see cref="OutputOptions.Normalized"/> is applied here.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<int> RunAsync(
         IOutputFilter filter,
         string command,
         IReadOnlyList<string> args,
-        int verbosityLevel,
-        bool showLogHint = false,
-        bool quiet = false,
+        OutputOptions options,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(options);
 
-        var options = new OutputOptions(verbosityLevel, showLogHint, quiet).Normalized();
+        options = options.Normalized();
         var startTimestamp = Stopwatch.GetTimestamp();
 
         // Before the tee session and the child, so the tokenizer load and the SQLite setup run while
