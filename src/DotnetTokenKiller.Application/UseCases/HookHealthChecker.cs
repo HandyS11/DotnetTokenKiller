@@ -57,31 +57,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
 
         foreach (var integrator in integrators)
         {
-            // With the project directory at home, the project and global installs name one file; it is
-            // checked once, as the project's, rather than listed under both scopes.
-            var checkedFiles = new HashSet<string>(
-                OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-
-            foreach (var scope in new[] { HookScope.Project, HookScope.Global })
-            {
-                foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
-                {
-                    if (!checkedFiles.Add(Path.TrimEndingDirectorySeparator(Path.GetFullPath(installation.RegistrationPath))))
-                    {
-                        continue;
-                    }
-
-                    var registration = await ReadRegistrationAsync(installation, cancellationToken).ConfigureAwait(false);
-                    if (registration.Kind == RegistrationKind.Absent
-                        && (installation.LegacyScriptPath is null || !File.Exists(installation.LegacyScriptPath)))
-                    {
-                        continue;
-                    }
-
-                    checks.AddRange(await CheckAsync(integrator, installation, registration, projectDirectory, cancellationToken)
-                        .ConfigureAwait(false));
-                }
-            }
+            checks.AddRange(await CheckIntegratorAsync(integrator, projectDirectory, cancellationToken).ConfigureAwait(false));
         }
 
         if (checks.Count == 0)
@@ -91,6 +67,44 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
                 true,
                 "No rewrite hook found in this directory or your home config. "
                 + "Run 'dtk init <provider>' to install one."));
+        }
+
+        return checks;
+    }
+
+    /// <summary>Runs the status check and probe for every hook one provider installed, in either scope.</summary>
+    /// <param name="integrator">The hook-installing provider to inspect.</param>
+    /// <param name="projectDirectory">The directory to treat as the project root.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<IReadOnlyList<DiagnosticCheck>> CheckIntegratorAsync(
+        IHookIntegrator integrator, string projectDirectory, CancellationToken cancellationToken)
+    {
+        var checks = new List<DiagnosticCheck>();
+
+        // With the project directory at home, the project and global installs name one file; it is
+        // checked once, as the project's, rather than listed under both scopes.
+        var checkedFiles = new HashSet<string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+        foreach (var scope in new[] { HookScope.Project, HookScope.Global })
+        {
+            foreach (var installation in integrator.DescribeHooks(projectDirectory, scope))
+            {
+                if (!checkedFiles.Add(Path.TrimEndingDirectorySeparator(Path.GetFullPath(installation.RegistrationPath))))
+                {
+                    continue;
+                }
+
+                var registration = await ReadRegistrationAsync(installation, cancellationToken).ConfigureAwait(false);
+                if (registration.Kind == RegistrationKind.Absent
+                    && (installation.LegacyScriptPath is null || !File.Exists(installation.LegacyScriptPath)))
+                {
+                    continue;
+                }
+
+                checks.AddRange(await CheckAsync(integrator, installation, registration, projectDirectory, cancellationToken)
+                    .ConfigureAwait(false));
+            }
         }
 
         return checks;

@@ -369,13 +369,14 @@ internal sealed partial class MsBuildDiagnosticReport
             rawMessage = $"{rawMessage} {continuation.Value.Trim()}";
         }
 
+        var level = simpleDiagMatch.Groups["level"].Value;
         var simpleDiagnostic = new Diagnostic(
             string.Empty,
             string.Empty,
             string.Empty,
-            simpleDiagMatch.Groups["level"].Value,
+            level,
             simpleDiagMatch.Groups["code"].Value,
-            RenderMessage(rawMessage, simpleDiagMatch.Groups["level"].Value),
+            RenderMessage(rawMessage, level),
             ProjectName(DropProperties(simpleDiagMatch.Groups["project"].Value)));
 
         // Keyed off the message as printed for the same reason as the file-anchored diagnostics.
@@ -405,13 +406,14 @@ internal sealed partial class MsBuildDiagnosticReport
         var projectPath = DropProperties(diagMatch.Groups["project"].Value);
 
         var rawMessage = diagMatch.Groups["message"].Value.Trim();
+        var level = diagMatch.Groups["level"].Value;
         var diagnostic = new Diagnostic(
             TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), rootPath),
             diagMatch.Groups["line"].Value,
             diagMatch.Groups["col"].Value,
-            diagMatch.Groups["level"].Value,
+            level,
             diagMatch.Groups["code"].Value,
-            RenderMessage(rawMessage, diagMatch.Groups["level"].Value),
+            RenderMessage(rawMessage, level),
             ProjectName(projectPath));
 
         // Key off the message as MSBuild printed it, not as it is rendered. What collapses here is one
