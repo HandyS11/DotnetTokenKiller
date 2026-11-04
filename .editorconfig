@@ -401,7 +401,8 @@ dotnet_diagnostic.CA1806.severity = none # Ignore method results (not working pr
 
 dotnet_diagnostic.IDE0058.severity = none # Expression not used (boring with extension methods) _ = Foo()
 
-# SonarQube parity: fail the build on what the SonarQube run would report.
+# SonarQube parity: fail the build on the rules below, which SonarQube reports but the analyzers leave off by default.
+# Not a full guarantee: SonarQube also imports any other Info-level analyzer diagnostic, which the build lets through.
 # These Sonar way rules take a threshold, so the SonarAnalyzer.CSharp package ships them disabled and only the
 # server's quality profile turns them on. Their default thresholds are the server's: the build reports SonarQube's
 # exact messages ("from 19 to the 15 allowed").
