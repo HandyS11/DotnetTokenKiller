@@ -159,7 +159,8 @@ internal static class DotnetCommandRewriter
     /// <summary>
     /// Whether Copilot CLI may run <paramref name="command"/>'s rewrite without asking: it is
     /// <see cref="IsSimpleCommand">simple</see>, its subcommand is one of <see cref="AutoApprovableSubcommands"/>,
-    /// and the shell could not hand dtk a <c>--tee</c> option from it (<see cref="MayPassTeeOption"/>).
+    /// and the shell expands nothing in it and could not hand dtk a <c>--tee</c> option from it
+    /// (<see cref="MayPassTeeOption"/>).
     /// <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they write artifacts (and a publish
     /// profile can deploy), so they are left to the user's own approval.
     /// </summary>
@@ -185,29 +186,35 @@ internal static class DotnetCommandRewriter
     }
 
     /// <summary>
-    /// Whether the shell might turn <paramref name="command"/> into one that passes dtk a <c>--tee</c> option, in any
-    /// form (<c>--tee x</c>, <c>--tee=x</c>, <c>--tee:x</c>).
+    /// Whether the shell might hand dtk a <c>--tee</c> option, in any form (<c>--tee x</c>, <c>--tee=x</c>,
+    /// <c>--tee:x</c>), from <paramref name="command"/>.
     /// </summary>
     /// <remarks>
     /// <para>
     /// <c>--tee &lt;path&gt;</c> writes dtk's copy of the raw output wherever its value points, so
     /// <c>dotnet test --tee ~/.bashrc</c> is the file write <see cref="IsSimpleCommand"/> refuses as
-    /// <c>dotnet test &gt; ~/.bashrc</c>. The shell assembles the word dtk sees, so this is fail-closed against each
-    /// way it does: <c>true</c> when the command, with every <c>'</c>, <c>"</c> and <c>\</c> removed (quote removal:
-    /// <c>--"tee"</c>, <c>--t\ee</c>, <c>--te''e</c>), contains <c>--tee</c>; when it contains a <c>{</c> anywhere
-    /// (brace expansion: <c>{--te,x}e</c> is <c>--tee xe</c>); and when a word of that quote-stripped command starts
-    /// with <c>--t</c> and contains <c>*</c>, <c>?</c> or <c>[</c> (globbing: <c>--te[e]</c> matches a file named
-    /// <c>--tee</c>).
+    /// <c>dotnet test &gt; ~/.bashrc</c>.
+    /// </para>
+    /// <para>
+    /// Auto-approval never covers a command the shell expands (<c>$</c> parameters, globs, braces), because expansion
+    /// can assemble a <c>--tee</c> the text does not show: <c>--te$9e</c> is <c>--tee</c> (an unset parameter expands
+    /// to nothing), <c>{--te,x}e</c> is <c>--tee xe</c>, and <c>--te[e]</c> matches a file named <c>--tee</c>. See
+    /// <see cref="ShellExpands"/> for what counts.
+    /// </para>
+    /// <para>
+    /// Nor does it cover a command that contains <c>--tee</c> once quote removal is done, with every <c>'</c>,
+    /// <c>"</c> and <c>\</c> removed (<c>--"tee"</c>, <c>--t\ee</c>, <c>--te''e</c>), or in which a word of that
+    /// quote-stripped text starts with <c>--t</c> and holds <c>*</c>, <c>?</c> or <c>[</c>.
     /// </para>
     /// <para>
     /// None of these parses the command, and each matches far more than an option (a quoted <c>--filter "A{B}"</c>,
-    /// a test named <c>--tee</c>): a false match costs an approval prompt, never an approval.
+    /// an unquoted <c>Foo*</c>, a test named <c>--tee</c>): a false match costs an approval prompt, never an approval.
     /// </para>
     /// </remarks>
     /// <param name="command">A <see cref="IsSimpleCommand">simple</see> command.</param>
     private static bool MayPassTeeOption(string command)
     {
-        if (command.Contains('{', StringComparison.Ordinal))
+        if (ShellExpands(command))
         {
             return true;
         }
@@ -217,6 +224,57 @@ internal static class DotnetCommandRewriter
         return unquoted.Contains(TeeOption, StringComparison.Ordinal)
                || unquoted.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries).Any(word =>
                    word.StartsWith(TeeGlobPrefix, StringComparison.Ordinal) && word.AsSpan().ContainsAny(GlobCharacters));
+    }
+
+    /// <summary>
+    /// Whether the shell would expand anything in <paramref name="command"/>: a <c>{</c> anywhere (brace expansion),
+    /// a <c>$</c> anywhere outside single quotes (a parameter; double-quoted and backslash-escaped ones included,
+    /// fail-closed), or a <c>*</c>, <c>?</c> or <c>[</c> outside quotes and unescaped (a glob).
+    /// </summary>
+    /// <remarks>
+    /// A walk of its own rather than <see cref="ShellScanner"/>'s, which reports no character inside double quotes,
+    /// where a <c>$</c> still expands. A simple command has no <c>$'…'</c>, <c>$"…"</c>, here-document or
+    /// substitution, so its quotes and backslashes are all this has to follow.
+    /// </remarks>
+    /// <param name="command">A <see cref="IsSimpleCommand">simple</see> command.</param>
+    private static bool ShellExpands(string command)
+    {
+        if (command.Contains('{', StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var inDoubleQuotes = false;
+        var position = 0;
+        while (position < command.Length)
+        {
+            switch (command[position++])
+            {
+                case '$':
+                    return true;
+                case '\\' when position < command.Length && command[position] != '$':
+                    // The escaped character is literal. An escaped `$` is not skipped, so it is refused like any other.
+                    position++;
+                    break;
+                case '"':
+                    inDoubleQuotes = !inDoubleQuotes;
+                    break;
+                case '\'' when !inDoubleQuotes:
+                    // Nothing inside single quotes expands. Unterminated, which a simple command never is: refused.
+                    var close = command.IndexOf('\'', position);
+                    if (close < 0)
+                    {
+                        return true;
+                    }
+
+                    position = close + 1;
+                    break;
+                case '*' or '?' or '[' when !inDoubleQuotes:
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool TryMatchSubcommand(string command, int position, out int subcommandStart, out int end)

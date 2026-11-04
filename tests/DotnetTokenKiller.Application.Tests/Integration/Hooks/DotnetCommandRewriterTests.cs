@@ -276,13 +276,6 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet test --t\\ee ~/.bashrc")]
     [InlineData("dotnet test --te''e ~/.bashrc")]
     [InlineData("dotnet build --t\"ee\"=/home/u/.bashrc")]
-    // Brace expansion assembles it: `{--te,/home/u/.profil}e` becomes `--tee /home/u/.profile`.
-    [InlineData("dotnet test {--te,/home/u/.profil}e")]
-    // Globbing can match a file named `--tee` that the shell then hands over as the option.
-    [InlineData("dotnet test --te[e] x")]
-    // Fail-closed: a brace anywhere could be an expansion that assembles `--tee`, so none is approved.
-    [InlineData("dotnet test --filter \"A{B}\"")]
-    [InlineData("dotnet build {a,b}")]
     public void IsAutoApprovable_IsFalse_WhenTheCommandWritesATeeFile(string command)
     {
         // `--tee` writes wherever its value points, so approving it would approve a file write that
@@ -292,10 +285,39 @@ public sealed class DotnetCommandRewriterTests
     }
 
     [Theory]
+    // Brace expansion assembles it: `{--te,/home/u/.profil}e` becomes `--tee /home/u/.profile`.
+    [InlineData("dotnet test {--te,/home/u/.profil}e")]
+    [InlineData("dotnet test --filter \"A{B}\"")]
+    [InlineData("dotnet build {a,b}")]
+    // Globbing can match a file named `--tee` that the shell then hands over as the option.
+    [InlineData("dotnet test --te[e] x")]
+    [InlineData("dotnet test --filter Name~Foo*")]
+    [InlineData("dotnet test x?")]
+    // An unset parameter expands to nothing: `--te$9e` reaches dtk as `--tee`, with no variable set beforehand.
+    [InlineData("dotnet test --te$9e ~/.bashrc")]
+    [InlineData("dotnet test -$9-tee x")]
+    [InlineData("dotnet test $X-tee x")]
+    [InlineData("dotnet test \"$OPTS\"")]
+    [InlineData("dotnet build $$")]
+    // Fail-closed: an escaped `$` is refused too, rather than trusted to stay literal.
+    [InlineData("dotnet test \\$X")]
+    public void IsAutoApprovable_IsFalse_WhenTheShellExpandsTheCommand(string command)
+    {
+        // Expansion can assemble a `--tee` the text does not show, so no expanded command is auto-approved.
+        DotnetCommandRewriter.IsSimpleCommand(command).Should().BeTrue("only the expansion rule refuses it");
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData("dotnet test")]
     [InlineData("dotnet build --tl:off")]
     [InlineData("dotnet test --filter \"FullyQualifiedName~Foo\"")]
     [InlineData("dotnet test --filter 'Name=A|B' --no-build")]
+    // Quoted or escaped, a glob character or a `$` is literal: the shell expands nothing.
+    [InlineData("dotnet test --filter 'Name~Foo*'")]
+    [InlineData("dotnet test --filter 'A$B'")]
+    [InlineData("dotnet test --filter \"Name~Foo*\"")]
+    [InlineData("dotnet test --filter Name~Foo\\*")]
     public void IsAutoApprovable_StaysTrue_WithoutATeeOption(string command)
     {
         DotnetCommandRewriter.IsAutoApprovable(command).Should().BeTrue();
