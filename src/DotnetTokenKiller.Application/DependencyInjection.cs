@@ -2,6 +2,7 @@ using System.Text;
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Integration;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,7 +37,8 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetToolRestoreFilter>(FilterKeys.ToolRestore);
         services.AddKeyedTransient<IOutputFilter, DotnetEfFilter>(FilterKeys.EfMigrations);
         services.AddKeyedTransient<IOutputFilter, DotnetEfFilter>(FilterKeys.EfDatabase);
-        services.AddKeyedTransient<IOutputFilter, DotnetStrykerFilter>(FilterKeys.Stryker);
+        services.AddKeyedTransient<IOutputFilter>(FilterKeys.Stryker,
+            (sp, _) => new DotnetStrykerFilter(sp.GetService<IArtifactFileReader>()));
         services.AddKeyedTransient<IOutputFilter, DotnetJbCleanupCodeFilter>(FilterKeys.JbCleanupCode);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 

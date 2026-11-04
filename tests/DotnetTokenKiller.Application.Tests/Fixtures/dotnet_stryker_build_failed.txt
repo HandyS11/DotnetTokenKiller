@@ -1,0 +1,56 @@
+
+   _____ _              _               _   _ ______ _______  
+  / ____| |            | |             | \ | |  ____|__   __| 
+ | (___ | |_ _ __ _   _| | _____ _ __  |  \| | |__     | |    
+  \___ \| __| '__| | | | |/ / _ \ '__| | . ` |  __|    | |    
+  ____) | |_| |  | |_| |   <  __/ |    | |\  | |____   | |    
+ |_____/ \__|_|   \__, |_|\_\___|_| (_)|_| \_|______|  |_|    
+                   __/ |                                      
+                  |___/                                       
+
+
+Version: 5.0.0
+
+[23:40:56 INF] Analysis starting.
+[23:40:56 INF] Analyzing 1 test project(s).
+[23:40:57 INF] Picking net10.0 for project /test/project/root/Calc/Calc.csproj. 
+[23:40:57 INF] Found project /test/project/root/Calc/Calc.csproj to mutate.
+[23:40:57 INF] Analysis complete.
+[23:40:57 INF] Building test project /test/project/root/Calc.Tests/Calc.Tests.csproj (1/1)
+[23:40:57 INF] Building project Calc.Tests.csproj using dotnet build Calc.Tests.csproj -c Debug --property:Platform=AnyCPU (directory /test/project/root/Calc.Tests.)
+[23:40:59 ERR] Initial build failed. Command was [dotnet build Calc.Tests.csproj -c Debug --property:Platform=AnyCPU] (in folder '/test/project/root/Calc.Tests/Calc.Tests.csproj'). Result:   Determining projects to restore...
+  All projects are up-to-date for restore.
+/test/project/root/Calc/Broken.cs(5,36): error CS1525: Invalid expression term ';' [/test/project/root/Calc/Calc.csproj]
+
+Build FAILED.
+
+/test/project/root/Calc/Broken.cs(5,36): error CS1525: Invalid expression term ';' [/test/project/root/Calc/Calc.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:00.88
+
+[23:40:59 INF] Time Elapsed 00:00:02.9530044
+Stryker.NET failed to mutate your project. For more information see the logs 
+below:
+
+
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/test/project/root/Calc/Broken.cs(5,36): error CS1525: Invalid expression term 
+';' [/test/project/root/Calc/Calc.csproj]
+
+Build FAILED.
+
+/test/project/root/Calc/Broken.cs(5,36): error CS1525: Invalid expression term 
+';' [/test/project/root/Calc/Calc.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:00.88
+
+
+Initial build of targeted project failed. Please make sure the targeted project 
+is buildable. You can reproduce this error yourself using: "dotnet build 
+Calc.Tests.csproj -c Debug --property:Platform=AnyCPU"
+

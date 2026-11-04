@@ -52,6 +52,12 @@ public static class SavingsScenarios
         new("jb-cleanupcode/load-error", "dotnet_jb_cleanupcode_load_error.txt", FilterKeys.JbCleanupCode, 4),
         new("jb-cleanupcode/missing-path", "dotnet_jb_cleanupcode_missing_path.txt", FilterKeys.JbCleanupCode, 3),
         new("jb-cleanupcode/success", "dotnet_jb_cleanupcode_success.txt", FilterKeys.JbCleanupCode, 0),
+        new("stryker/break-at", "dotnet_stryker_break_at.txt", FilterKeys.Stryker, 2),
+        new("stryker/build-failed", "dotnet_stryker_build_failed.txt", FilterKeys.Stryker, 1),
+        new("stryker/default", "dotnet_stryker_default.txt", FilterKeys.Stryker, 0),
+        new("stryker/json-only", "dotnet_stryker_json_only.txt", FilterKeys.Stryker, 0),
+        new("stryker/json-reporter", "dotnet_stryker_json_reporter.txt", FilterKeys.Stryker, 0),
+        new("stryker/solution", "dotnet_stryker_solution.txt", FilterKeys.Stryker, 0),
         new("tool-restore/missing-package", "dotnet_tool_restore_missing_package.txt", FilterKeys.ToolRestore, 1),
         new("tool-restore/success", "dotnet_tool_restore_success.txt", FilterKeys.ToolRestore, 0),
         new("tool-restore/unreachable-feed", "dotnet_tool_restore_unreachable_feed.txt", FilterKeys.ToolRestore, 1),
@@ -115,7 +121,7 @@ public static class SavingsScenarios
         FilterKeys.Pack => new DotnetPackFilter(PinnedRoot),
         FilterKeys.ToolRestore => new DotnetToolRestoreFilter(PinnedRoot),
         FilterKeys.EfMigrations or FilterKeys.EfDatabase => new DotnetEfFilter(PinnedRoot),
-        FilterKeys.Stryker => new DotnetStrykerFilter(PinnedRoot),
+        FilterKeys.Stryker => new DotnetStrykerFilter(null, PinnedRoot),
         FilterKeys.JbCleanupCode => new DotnetJbCleanupCodeFilter(PinnedRoot),
 
         // Takes no root: it reports package names, not file paths.

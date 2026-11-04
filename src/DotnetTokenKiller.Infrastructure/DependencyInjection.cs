@@ -32,6 +32,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITeeLogStore, FileTeeLogStore>();
         services.AddSingleton<IRawOutputCopyFactory, RawOutputCopyFactory>();
         services.AddSingleton<IFileContentSnapshotter, FileContentSnapshotter>();
+        services.AddSingleton<IArtifactFileReader, ArtifactFileReader>();
         services.AddSingleton<ITestRunnerDetector, GlobalJsonTestRunnerDetector>();
         return services;
     }

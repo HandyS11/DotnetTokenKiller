@@ -355,6 +355,72 @@
       "savingsPercent": 97
     },
     {
+      "id": "stryker/break-at",
+      "fixture": "dotnet_stryker_break_at.txt",
+      "filterKey": "stryker",
+      "exitCode": 2,
+      "rawBytes": 2226,
+      "rawTokens": 672,
+      "filteredTokens": 101,
+      "savedTokens": 571,
+      "savingsPercent": 85
+    },
+    {
+      "id": "stryker/build-failed",
+      "fixture": "dotnet_stryker_build_failed.txt",
+      "filterKey": "stryker",
+      "exitCode": 1,
+      "rawBytes": 2386,
+      "rawTokens": 690,
+      "filteredTokens": 44,
+      "savedTokens": 646,
+      "savingsPercent": 93.6
+    },
+    {
+      "id": "stryker/default",
+      "fixture": "dotnet_stryker_default.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 2199,
+      "rawTokens": 669,
+      "filteredTokens": 116,
+      "savedTokens": 553,
+      "savingsPercent": 82.7
+    },
+    {
+      "id": "stryker/json-only",
+      "fixture": "dotnet_stryker_json_only.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 1833,
+      "rawTokens": 565,
+      "filteredTokens": 69,
+      "savedTokens": 496,
+      "savingsPercent": 87.8
+    },
+    {
+      "id": "stryker/json-reporter",
+      "fixture": "dotnet_stryker_json_reporter.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 2177,
+      "rawTokens": 666,
+      "filteredTokens": 86,
+      "savedTokens": 580,
+      "savingsPercent": 87.1
+    },
+    {
+      "id": "stryker/solution",
+      "fixture": "dotnet_stryker_solution.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 1904,
+      "rawTokens": 601,
+      "filteredTokens": 83,
+      "savedTokens": 518,
+      "savingsPercent": 86.2
+    },
+    {
       "id": "test/all-pass",
       "fixture": "dotnet_test_all_pass.txt",
       "filterKey": "test",
