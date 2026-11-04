@@ -471,9 +471,9 @@
       "exitCode": 8,
       "rawBytes": 1162,
       "rawTokens": 338,
-      "filteredTokens": 0,
-      "savedTokens": 338,
-      "savingsPercent": 100
+      "filteredTokens": 33,
+      "savedTokens": 305,
+      "savingsPercent": 90.2
     },
     {
       "id": "test/mtp-failures",

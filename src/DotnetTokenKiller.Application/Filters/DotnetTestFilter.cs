@@ -680,6 +680,11 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             return new FilterResult(string.Empty);
         }
 
+        if (FormatMtpAllSkipped(state, exitCode, elapsed, warnings) is { } allSkipped)
+        {
+            return new FilterResult(allSkipped);
+        }
+
         if (exitCode != 0)
         {
             // Non-zero exit but the summary reported zero failures (e.g. crash after a pass summary):
@@ -741,6 +746,27 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         return sb.Append(CultureInfo.InvariantCulture,
                 $"\u2713 dotnet test --list-tests: {state.ListedTests.Count} test{(state.ListedTests.Count == 1 ? "" : "s")} ({state.ListedProjects} project{(state.ListedProjects == 1 ? "" : "s")})\n")
             .ToString();
+    }
+
+    /// <summary>
+    /// The report of an MTP session in which every test was skipped: MTP exits 8 with "Zero tests ran" although
+    /// the tests were found, so dtk reports the skips as for VSTest's skipped-only run and keeps the exit code.
+    /// Such a run is not empty and never sets <c>NoTestsMatched</c>. <see langword="null"/> for any other run.
+    /// </summary>
+    /// <param name="state">The parsed run.</param>
+    /// <param name="exitCode">The run's exit code.</param>
+    /// <param name="elapsed">The run's duration.</param>
+    /// <param name="warnings">What the status line says of the build's warnings.</param>
+    private static string? FormatMtpAllSkipped(ParseState state, int exitCode, string elapsed, string warnings)
+    {
+        if (exitCode != MtpZeroTestsExitCode
+            || state is not { MtpZeroTestsVerdict: true, TotalPassed: 0, TotalFailed: 0, TotalSkipped: > 0 })
+        {
+            return null;
+        }
+
+        return
+            $"\u26a0 dotnet test: 0 passed, {state.TotalSkipped} skipped ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings} \u00b7 no test ran (exit {MtpZeroTestsExitCode})\n";
     }
 
     /// <summary>The "0 tests found" verdict, or <see langword="null"/> when the run is not one.</summary>

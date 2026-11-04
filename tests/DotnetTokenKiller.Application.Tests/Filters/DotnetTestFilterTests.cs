@@ -1538,6 +1538,19 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_MtpAllSkipped_ReportsSkippedLine()
+    {
+        // Real MTP exits 8 ("Zero tests ran") for a session whose only test is [Ignore]d: the test was found.
+        var fixture = LoadFixture("dotnet_test_mtp_all_skipped.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 8, FailOnEmpty);
+
+        result.Output.Should().Be("\u26a0 dotnet test: 0 passed, 1 skipped (1 project, 0.30s) \u00b7 no test ran (exit 8)\n");
+        result.NoTestsMatched.Should().BeFalse();
+        _sut.Apply(fixture, exitCode: 8, FilterContext.Unknown).Output.Should().Be(result.Output);
+    }
+
+    [Fact]
     public void Apply_TwoArguments_IsTheThreeArgumentOneWithAnUnknownContext()
     {
         var fixture = LoadFixture("dotnet_test_zero.txt");
