@@ -17,6 +17,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     private const int MaxFailures = 15;
     private const int MessageMaxLen = 300;
 
+    /// <summary>How many lines of a failing test's own output <c>--show-output</c> prints per test.</summary>
+    private const int MaxOutputLines = 20;
+
     /// <summary>How many warning codes the status line names before it trails off.</summary>
     private const int MaxWarningCodes = 3;
 
@@ -60,6 +63,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
 
         var lines = strippedOutput.Split('\n');
         var state = ParseLines(lines);
+        state.ShowOutput = context.Test.ShowOutput;
 
         // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
         // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
@@ -309,7 +313,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         i = afterStack;
 
         var message = ReqnrollPendingMessage(msgLines, lines, detailStart, afterStack) ?? CompactMessage(msgLines);
-        state.Failures.Add(new FailureInfo(testName, duration, message, sourceRef));
+        var output = CollectVsTestOutput(lines, detailStart, afterStack);
+        state.Failures.Add(new FailureInfo(testName, duration, message, sourceRef, output));
         return i;
     }
 
@@ -329,6 +334,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // marker or the test's captured "Standard output"/"Error output" (a timed-out test has no frame).
         var msgLines = new List<string>();
         var sourceRef = string.Empty;
+        var output = new List<string>();
+        var inOutput = false;
         var messageEnded = false;
         var messageFollowsFrom = false;
         while (i < lines.Length)
@@ -341,6 +348,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
                                     || SummaryPattern().IsMatch(current))
             {
                 break;
+            }
+
+            if (TryCollectMtpOutput(current, output, ref inOutput))
+            {
+                i++;
+                continue;
             }
 
             if (string.IsNullOrEmpty(sourceRef))
@@ -367,8 +380,59 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             i++;
         }
 
-        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef));
+        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef, output));
         return i;
+    }
+
+    /// <summary>
+    /// Takes the line of an MTP failure that belongs to the test's captured output: the header of a
+    /// "Standard output"/"Error output" section, and every line after one. Blank lines are dropped.
+    /// </summary>
+    /// <param name="current">The failure's line, without its carriage return.</param>
+    /// <param name="output">The output lines collected so far.</param>
+    /// <param name="inOutput">Whether a section header was already seen.</param>
+    /// <returns>Whether the line was part of the output section, and so is not a message or a stack frame.</returns>
+    private static bool TryCollectMtpOutput(string current, List<string> output, ref bool inOutput)
+    {
+        if (!inOutput)
+        {
+            inOutput = MtpOutputHeaderPattern().IsMatch(current);
+            return inOutput;
+        }
+
+        if (!MtpOutputHeaderPattern().IsMatch(current) && !string.IsNullOrWhiteSpace(current))
+        {
+            output.Add(current.Trim());
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the "Standard Output Messages:" section of a VSTest failure, the test's own output, without its
+    /// blank lines.
+    /// </summary>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="from">The index of the first line after the failure's message.</param>
+    /// <param name="to">The index of the first line after the failure.</param>
+    private static List<string> CollectVsTestOutput(string[] lines, int from, int to)
+    {
+        var output = new List<string>();
+        var inOutput = false;
+        for (var i = from; i < to; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (!inOutput)
+            {
+                inOutput = StandardOutputLabelPattern().IsMatch(line);
+            }
+            else if (!string.IsNullOrWhiteSpace(line))
+            {
+                output.Add(line.Trim());
+            }
+        }
+
+        return output;
     }
 
     private static (List<string> Lines, int NextIndex) CollectMessageLines(string[] lines, int i)
@@ -377,7 +441,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         while (i < lines.Length)
         {
             var current = lines[i].TrimEnd('\r');
-            if (StackTraceLabelPattern().IsMatch(current) || EndsVsTestFailure(current))
+            if (StackTraceLabelPattern().IsMatch(current) || StandardOutputLabelPattern().IsMatch(current)
+                                                          || EndsVsTestFailure(current))
             {
                 break;
             }
@@ -908,11 +973,32 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"    at {f.SourceRef}");
             }
+
+            if (state.ShowOutput && f.Output.Count > 0)
+            {
+                AppendOutput(sb, f.Output);
+            }
         }
 
         if (state.Failures.Count > MaxFailures)
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"+{state.Failures.Count - MaxFailures} more failures");
+        }
+    }
+
+    private static void AppendOutput(StringBuilder sb, IReadOnlyList<string> output)
+    {
+        sb.AppendLine("    output:");
+        foreach (var line in output.Take(MaxOutputLines))
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"      {line}");
+        }
+
+        var hidden = output.Count - MaxOutputLines;
+        if (hidden > 0)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                $"      \u2026 {hidden} more {(hidden == 1 ? "line" : "lines")} (dtk log)");
         }
     }
 
@@ -1084,6 +1170,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     [GeneratedRegex(@"^\s+(?:--- End of .+ ---|(?:Standard|Error) output)\s*$")]
     private static partial Regex MtpMessageEndPattern();
 
+    // MTP: the "Standard output" / "Error output" section headers of a failure's captured output.
+    [GeneratedRegex(@"^\s+(?:Standard|Error) output\s*$")]
+    private static partial Regex MtpOutputHeaderPattern();
+
     // MTP: "Running tests from /path/Tests.dll (net10.0|x64)", one per test assembly run.
     [GeneratedRegex(@"^Running tests from\s")]
     private static partial Regex MtpRunningTestsPattern();
@@ -1192,6 +1282,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     private sealed class ParseState
     {
         public List<FailureInfo> Failures { get; } = [];
+
+        /// <summary>Whether <c>--show-output</c> asked for each failure's captured output.</summary>
+        public bool ShowOutput { get; set; }
         public int TotalPassed { get; set; }
         public int TotalFailed { get; set; }
         public int TotalSkipped { get; set; }
@@ -1247,5 +1340,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         public bool DurationExact { get; set; } = true;
     }
 
-    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);
+    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef,
+        IReadOnlyList<string> Output);
 }

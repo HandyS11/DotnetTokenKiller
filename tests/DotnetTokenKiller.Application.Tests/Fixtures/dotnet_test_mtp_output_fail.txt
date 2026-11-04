@@ -1,0 +1,35 @@
+/test/project/root/Test1.cs(13,9): warning MSTEST0025: Use 'Assert.Fail' instead of an always-failing 'Assert.AreEqual' assert (https://learn.microsoft.com/dotnet/core/testing/mstest-analyzers/mstest0025) [/test/project/root/Probe.csproj]
+/test/project/root/Test1.cs(17,29): warning MSTEST0032: Review or remove the assertion as its condition is known to be always true (https://learn.microsoft.com/dotnet/core/testing/mstest-analyzers/mstest0032) [/test/project/root/Probe.csproj]
+Running tests from /test/project/root/bin/Debug/net10.0/Probe.dll (net10.0|x64)
+failed Writes_output_then_fails (14ms)
+  Assert.AreEqual failed. Expected:<4>. Actual:<5>. 'expected' expression: '4', 'actual' expression: '2 + 2 + 1'.
+  from /test/project/root/bin/Debug/net10.0/Probe.dll (net10.0|x64)
+  Assert.AreEqual failed. Expected:<4>. Actual:<5>. 'expected' expression: '4', 'actual' expression: '2 + 2 + 1'.
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowAssertAreEqualFailed(Object expected, Object actual, String userMessage) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:665
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, IEqualityComparer`1 comparer, String message, String expectedExpression, String actualExpression) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:492
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, String message, String expectedExpression, String actualExpression) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:405
+    at Probe.Test1.Writes_output_then_fails() in /test/project/root/Test1.cs:13
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Standard output
+    console line one
+    console line two
+    
+    
+    
+    TestContext Messages:
+    context line three
+    
+  Error output
+/test/project/root/bin/Debug/net10.0/Probe.dll (net10.0|x64) failed with 1 error(s) (156ms)
+Exit code: 2
+  Standard output: MSTest v4.0.2 (UTC 11/11/2025) [linux-x64 - .NET 10.0.14]
+  Test Parallelization enabled for /test/project/root/bin/Debug/net10.0/Probe.dll (Workers: 10, Scope: MethodLevel)
+
+Test run summary: Failed!
+  total: 2
+  failed: 1
+  succeeded: 1
+  skipped: 0
+  duration: 317ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

@@ -2354,6 +2354,103 @@ public class DotnetTestFilterTests
             "\n    No matching step definition: When the following users exist; Then the payload is\n");
     }
 
+    private static FilterContext ShowOutput { get; } = new()
+    {
+        Test = new TestOptions(Names: false, ShowOutput: true, FailOnEmpty: false)
+    };
+
+    [Fact]
+    public void Apply_ShowOutput_VsTest_ListsOutputUnderFailure()
+    {
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, ShowOutput).Output;
+
+        result.Should().Contain(
+            "    at UnitTest1.cs:line 14\n" +
+            "    output:\n" +
+            "      first line of output\n" +
+            "      second line of output\n" +
+            "      third line of output\n" +
+            "✗ dotnet test: 1 failed, 1 passed");
+        result.TrimEnd('\n').Split('\n')[^1].Should().StartWith("✗ dotnet test: 1 failed");
+        _sut.Apply(fixture, exitCode: 1).Should().NotContain("output:").And.NotContain("first line");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_Mtp_ListsOutputUnderFailure()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_output_fail.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2, ShowOutput).Output;
+
+        result.Should().Contain(
+            "    output:\n" +
+            "      console line one\n" +
+            "      console line two\n" +
+            "      TestContext Messages:\n" +
+            "      context line three\n" +
+            "✗ dotnet test: 1 failed, 1 passed");
+        _sut.Apply(fixture, exitCode: 2).Should().NotContain("console line").And.NotContain("output:");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_CapsAt20Lines()
+    {
+        var many = string.Join('\n', Enumerable.Range(1, 25).Select(n => $" output line {n}"));
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt")
+            .Replace(" first line of output\n second line of output\n third line of output", many,
+                StringComparison.Ordinal);
+
+        var result = _sut.Apply(fixture, exitCode: 1, ShowOutput).Output;
+
+        result.Should().Contain("      output line 20\n      … 5 more lines (dtk log)\n")
+            .And.NotContain("output line 21");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_CapSingular()
+    {
+        var many = string.Join('\n', Enumerable.Range(1, 21).Select(n => $" output line {n}"));
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt")
+            .Replace(" first line of output\n second line of output\n third line of output", many,
+                StringComparison.Ordinal);
+
+        _sut.Apply(fixture, exitCode: 1, ShowOutput).Output.Should().Contain("… 1 more line (dtk log)\n");
+    }
+
+    [Fact]
+    public void Apply_NoStackTrace_DoesNotFoldOutputIntoMessage()
+    {
+        // A failure whose report has no stack trace: the test's output must not become part of its message.
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt");
+        var start = fixture.IndexOf("  Stack Trace:", StringComparison.Ordinal);
+        var end = fixture.IndexOf("  Standard Output Messages:", StringComparison.Ordinal);
+        var noTrace = fixture.Remove(start, end - start)
+            .Replace("Assert.Equal() Failure: Values differ\nExpected: 4\nActual:   5", "Boom: plain message",
+                StringComparison.Ordinal);
+
+        var plain = _sut.Apply(noTrace, exitCode: 1);
+        var shown = _sut.Apply(noTrace, exitCode: 1, ShowOutput).Output;
+
+        MessageLine(plain).Should().Be("Boom: plain message");
+        plain.Should().NotContain("output:");
+        shown.Should().Contain("    output:\n      first line of output\n      second line of output\n");
+        MessageLine(shown).Should().Be(MessageLine(plain));
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_output_vstest_fail.txt", 1)]
+    [InlineData("dotnet_test_mtp_output_fail.txt", 2)]
+    public void Apply_ShowOutput_Crlf(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture.ReplaceLineEndings("\r\n"), exitCode, ShowOutput).Output;
+
+        result.Should().NotContain("\r").And.Be(_sut.Apply(fixture, exitCode, ShowOutput).Output);
+    }
+
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>
     /// <param name="output">The filtered output.</param>
     private static string MessageLine(string output) =>

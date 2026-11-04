@@ -498,6 +498,17 @@
       "savingsPercent": 86.5
     },
     {
+      "id": "test/mtp-output-fail",
+      "fixture": "dotnet_test_mtp_output_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2508,
+      "rawTokens": 645,
+      "filteredTokens": 104,
+      "savedTokens": 541,
+      "savingsPercent": 83.9
+    },
+    {
       "id": "test/mtp-xunit3-failures",
       "fixture": "dotnet_test_mtp_xunit3_failures.txt",
       "filterKey": "test",
@@ -584,6 +595,17 @@
       "filteredTokens": 16,
       "savedTokens": 156,
       "savingsPercent": 90.7
+    },
+    {
+      "id": "test/output-vstest-fail",
+      "fixture": "dotnet_test_output_vstest_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1001,
+      "rawTokens": 272,
+      "filteredTokens": 77,
+      "savedTokens": 195,
+      "savingsPercent": 71.7
     },
     {
       "id": "test/pass-with-warnings",

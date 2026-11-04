@@ -1,0 +1,23 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Probe -> /test/project/root/bin/Debug/net10.0/Probe.dll
+Test run for /test/project/root/bin/Debug/net10.0/Probe.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.13]     Probe.UnitTest1.Writes_output_then_fails [FAIL]
+  Failed Probe.UnitTest1.Writes_output_then_fails [5 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: 4
+Actual:   5
+  Stack Trace:
+     at Probe.UnitTest1.Writes_output_then_fails() in /test/project/root/UnitTest1.cs:line 14
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Standard Output Messages:
+ first line of output
+ second line of output
+ third line of output
+
+
+
+Failed!  - Failed:     1, Passed:     1, Skipped:     0, Total:     2, Duration: 27 ms - Probe.dll (net10.0)
