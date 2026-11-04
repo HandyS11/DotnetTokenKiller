@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
+using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 using Xunit;
 
@@ -56,9 +57,11 @@ public sealed class CommandDispatchIntegrationTests
 
         exitCode.Should().Be(0, output);
         output.Should().Contain("By Command");
-        // The table's natural width depends on its numbers (79 to 85 characters seen), so the bound only has to
-        // catch a rule or table stretched towards the 4096-column profile used for redirected output.
-        output.ReplaceLineEndings("\n").Split('\n').Should().OnlyContain(line => line.Length <= 120, output);
+        // Measured as the reader sees it: on CI (GITHUB_ACTIONS and the like) Spectre colours redirected output, and
+        // the escape codes are not columns. The table's natural width depends on its numbers (79 to 85 characters
+        // seen), so the bound only has to catch a rule or table stretched towards the 4096-column profile.
+        AnsiStrip.Strip(output).ReplaceLineEndings("\n").Split('\n')
+            .Should().OnlyContain(line => line.Length <= 120, output);
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
