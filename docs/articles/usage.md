@@ -49,6 +49,8 @@ dtk dotnet test -q                   # quiet mode
 
 Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths; the status line of a failing run opens with `✗` (`✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`). xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
 
+Three options belong to `dtk dotnet test` (and `dtk pipe test`) alone; see [Test options](#test-options) for `--names`, `--show-output` and `--fail-on-empty`. `--list-tests` prints the test names as before.
+
 ### `dtk dotnet restore`
 
 Run `dotnet restore` with filtered output:
@@ -223,7 +225,7 @@ Run `dotnet tool restore` with filtered output:
 dtk dotnet tool restore
 ```
 
-dtk's options work as they do on the other dotnet verbs. Like `publish` and `pack`, `dtk dotnet tool restore
+On success one line names the commands the restored tools provide (`✓ dotnet tool restore: 2 tools (dotnet-ef, jb)`). On failure each distinct error line is kept once, with paths shortened, and the status line counts what failed (`✗ dotnet tool restore failed (exit 1): 1 of 3 tools not restored`, or `N errors` when no tool line was read). dtk's options work as they do on the other dotnet verbs. Like `publish` and `pack`, `dtk dotnet tool restore
 --interactive` is not filtered, so a credential provider can prompt for a private feed. The other `dotnet tool`
 commands (`run`, `install`, `list`, …) pass through unchanged.
 
@@ -235,6 +237,8 @@ Run the Entity Framework Core tool's `migrations` and `database` commands with f
 dtk dotnet ef migrations add Initial
 dtk dotnet ef database update
 ```
+
+The `Build started...` and `Build succeeded.` lines are dropped, and so are the application's own `info`, `dbug` and `trce` log blocks, replaced by one `(N log messages hidden — dtk log)` line; `warn`, `fail` and `crit` blocks stay. With ef's own `--verbose` only the build lines are dropped. Every result line stays (`Done.`, `Applying migration '…'.`, the migration list, error and exception messages), above a status line: `✓ dotnet ef migrations add: done`, `✓ dotnet ef migrations list: 3 migrations`. ef never prints the compile errors of a failed build, so the status line says where to get them: `✗ dotnet ef migrations add failed (exit 1): build failed — run dtk dotnet build <project> to see the errors` (with the `--project`/`-p` value when one was given). dtk does not build for you.
 
 Three kinds of `ef` run are not filtered, and keep the terminal attached: `dtk dotnet ef database drop` without
 `-f`/`--force`, which asks for confirmation; any `ef` command with `--json`, which prints a document; and
@@ -249,6 +253,29 @@ Run Stryker.NET's mutation testing and the ReSharper command-line tools' code cl
 dtk dotnet stryker
 dtk dotnet jb cleanupcode MyApp.slnx
 ```
+
+Both commands print nothing useful until they end, so dtk waits and prints the result in one piece, as it does for `build` and `test`.
+
+**Stryker** is reduced to the mutation score, the counts and the survivors, with the banner, `INF` lines, hints and the 80-column report-path wrap removed (`WRN` and `ERR` lines stay, once each):
+
+```text
+Survived (3):
+  Calc/Calculator.cs: (6,45) Equality → a >= 0 · (8,58) Equality → v <= lo · (8,81) Equality → v >= hi
+No coverage: 7 (Calc/Calculator.cs ×7)
+✓ dotnet stryker: mutation score 37.50% · 6 killed, 3 survived, 0 timeout, 7 no coverage (12.36s) · report StrykerOutput/2026-11-04.19-31-59/reports/mutation-report.html
+```
+
+Stryker prints the survivors to no stream; dtk reads them from the json report, at the path Stryker names (`Your json report has been generated at:`), else the newest `mutation-report.json` under `StrykerOutput` written after the run started. With `-O`/`--output <dir>` the report is searched under `<dir>`. Without the json reporter the survivors are not listed, and dtk says so (`survivors: enable the json reporter to list them here`). At most 20 survivors are listed, grouped by file, then `… N more (report)`. A score below `--break-at` ends `✗ dotnet stryker: mutation score 37.50% below break threshold 90% (exit 2) …`; a failed initial build shows the build's diagnostics grouped as `dtk dotnet build` groups them, then `✗ dotnet stryker failed (exit 1): initial build failed · 1 error`.
+
+**`jb cleanupcode`** prints every file it processed, changed or not, and rewrites them all, so neither its output nor file times say what changed. dtk hashes the files under the target's directory (the solution or project argument's directory, else the working directory) before the run and again after it, skipping `bin`, `obj`, hidden directories, `node_modules`, `artifacts` and `StrykerOutput`, and lists the files whose content changed:
+
+```text
+src/DotnetTokenKiller.Domain/DotnetSubcommands.cs
+src/DotnetTokenKiller.Infrastructure/Tracking/TrackerFactory.cs
+✓ dotnet jb cleanupcode: 2 files changed (356 processed, 314 skipped)
+```
+
+At most 30 files are listed, then `… N more (git status)`; no change reads `✓ dotnet jb cleanupcode: no changes (356 processed, 314 skipped)`. A tree of more than 20,000 files or 256 MiB is not snapshotted, and the status line says `changed files not computed (tree too large)`. Under `dtk pipe` there is no before-state: only the counts are printed, with `changed files unknown (piped)`. A failure (exit 3 or 4) keeps the `Warning:` and `[MsBuild]` lines and ends `✗ dotnet jb cleanupcode failed (exit 4): 1 project load error`.
 
 ### Options the tool owns
 
@@ -276,8 +303,10 @@ dotnet build 2>&1 | dtk pipe build
 dotnet list package --outdated 2>&1 | dtk pipe list package
 ```
 
+Wrapped runs force English output, but piped text cannot. When `dtk pipe test` recognises nothing and finds a test summary line in another language (any the .NET SDK ships), it keeps the raw tail and names the cause and the remedy instead of the generic "not recognized" line: `⚠ dotnet test: output is localized (fr) — run it through dtk dotnet test, or set DOTNET_CLI_UI_LANGUAGE=en`. The glyph follows `--exit-code`: dtk does not guess a verdict from text it cannot read.
+
 `dtk pipe` takes the same `-q`, `-v` and `--show-log` options as `dtk dotnet` and exits with whatever
-`--exit-code` it was given, so a CI step wrapping a failed build still fails. Piped runs are tracked separately from runs dtk executed itself under a `Source`
+`--exit-code` it was given, so a CI step wrapping a failed build still fails. `dtk pipe test` also accepts the [test options](#test-options), and `--tee` and `--max-lines` work as they do on a wrapped run; `dtk pipe build --names` is a usage error. Piped text cannot be changed, so `--names` and `--show-output` use whatever it contains. Piped runs are tracked separately from runs dtk executed itself under a `Source`
 column in `dtk gain --coverage`.
 
 ### `dtk init`
@@ -435,9 +464,52 @@ dtk completion fish > ~/.config/fish/completions/dtk.fish
 dtk completion powershell >> $PROFILE
 ```
 
+## Output Options
+
+Two options work on every filtered subcommand and on `dtk pipe`. Both take a value, which must follow the option as the next token (or after `=`): `dtk dotnet test --tee out.log`, `--max-lines=40`. A missing value is a dtk usage error, never a project path for dotnet.
+
+### `--tee <path>`
+
+Keeps the run's raw output in `<path>`, in addition to the normal filtered output, as evidence of the run: both streams in arrival order, ANSI escapes stripped, no header, no size cap.
+
+```sh
+dtk dotnet test --tee artifacts/test-raw.log
+```
+
+The file is created, or truncated, before `dotnet` starts: a new file is owner-only on Linux and macOS; an existing one keeps its mode, as with `>`. Parent directories are not created. If the file cannot be created, dtk prints one line (`✗ dtk: --tee cannot create <path>: <reason>`) and exits with the usage-error code (1) without running `dotnet`, so evidence is never believed saved when it was not. A failure writing it mid-run (a full disk) does not fail the run or cut the filtered output: one `⚠ --tee: could not write …` line comes before the status line. `--tee` does not depend on `tee.mode`, so it works with `Never`.
+
+A command containing `--tee` is never auto-approved by an agent hook; see [AI Agent Setup](ai-agent-setup.md).
+
+### `--max-lines <n>`
+
+Caps the filtered output at `n` lines, keeping the first ones: dtk lists the most important item first, the first failure or the first error file. `0`, the default, turns the cap off. The status line and the `--show-log` hint are never counted and never cut; a footer goes right before them: `… 42 more lines (dtk log)`, or `… 42 more lines (rerun without --max-lines)` when `tee.mode` is `Never` and there is no log to point to. The cap applies to every output dtk prints, the raw-tail fallback included. Only an integer is read as the value (`dtk: --max-lines needs a number` otherwise), so `--max-lines --filter X` is an error and `X` is never taken as a number.
+
+## Test options
+
+These three options belong to `dtk dotnet test` and `dtk pipe test`. On any other subcommand they are a dtk usage error (`dtk: --names applies only to dotnet test`), not a token passed to dotnet.
+
+### `--names`
+
+Lists the tests that passed, grouped by class, after the failures and before the status line:
+
+```text
+✓ SampleApp.Tests.SampleTests (3): Addition_ReturnsCorrectResult, List_ContainsExpectedItems, String_IsNotEmpty
+✓ SampleApp.Tests.ParserTests (2): Parses_Empty, Parses_Unicode ×4
+```
+
+A theory's cases are grouped under the method name with a `×N` count. MSTest under Microsoft.Testing.Platform prints no class, so those tests group under their assembly (`✓ Alpha.Tests.dll (12): …`). Passed names appear in the output only at a higher verbosity, so dtk adds the argument for the runner in use: `--logger "console;verbosity=normal"` for VSTest, or `--output Detailed` for Microsoft.Testing.Platform, unless you already pass a console logger or `--output`. It decides the runner from the nearest `global.json` above the working directory (`"test": {"runner": "Microsoft.Testing.Platform"}` means Microsoft.Testing.Platform, no such entry means VSTest) and adds nothing when that file cannot be read, since the wrong argument would fail the run. When no names could be read, dtk prints `⚠ --names: passed test names not in the output` rather than nothing. The list has no cap of its own: use `--max-lines`.
+
+### `--show-output`
+
+Adds each failing test's captured console output (VSTest's `Standard Output Messages:`, Microsoft.Testing.Platform's standard and error output sections) beneath its failure, indented, at most 20 lines per test and then `… N more lines (dtk log)` (`… 1 more line` for one). Without the option that output stays dropped. (It is not called `--output`, which is `-o <dir>` to VSTest and `--output <Normal|Detailed>` to Microsoft.Testing.Platform.)
+
+### `--fail-on-empty`
+
+Fails a run in which no test matched: no assembly reported a single test, passed, failed or skipped. dtk exits **8**, the code Microsoft.Testing.Platform itself uses for "zero tests ran", and the status line reads `✗ dotnet test: no test matched filter FullyQualifiedName~X (Probe.dll) — --fail-on-empty`. The exit code, the tee log header and the recorded success all say 8. Without the option dtk returns dotnet's own code, as always. A run in which every test was skipped is not empty; under Microsoft.Testing.Platform, which exits 8 for it, the status line says so without claiming a failure of matching: `⚠ dotnet test: 0 passed, 3 skipped (1 project, 0.5s) · no test ran (exit 8)`.
+
 ## Verbosity
 
-Add `-v` / `--verbose` to any `dtk dotnet` (or `dtk pipe`) command to echo the resolved command line before running it. Add `--vv` instead to also dump the raw, unfiltered `dotnet` output and the elapsed time — useful when the filtered result looks wrong and you need to see what dtk actually saw. It prints all of that output, so to read the raw output of a run you already made, prefer [`dtk log`](#dtk-log):
+Add `-v` / `--verbose` to a dotnet subcommand (or `dtk pipe`) to echo the resolved command line before running it. Add `--vv` instead to also dump the raw, unfiltered `dotnet` output and the elapsed time — useful when the filtered result looks wrong and you need to see what dtk actually saw. It prints all of that output, so to read the raw output of a run you already made, prefer [`dtk log`](#dtk-log):
 
 ```sh
 dtk dotnet build --verbose
@@ -448,7 +520,7 @@ dtk dotnet test --vv
 
 ## Quiet Mode
 
-Add `-q` / `--quiet` to any `dtk dotnet` (or `dtk pipe`) command to suppress DTK meta-output and forward only the filtered content. This is useful when writing output to a file or handing it to another tool:
+Add `-q` / `--quiet` to `dtk dotnet build`, `test`, `restore` and the other dotnet subcommands (or `dtk pipe`) to suppress DTK meta-output and forward only the filtered content. This is useful when writing output to a file or handing it to another tool:
 
 ```sh
 dtk dotnet test -q > test-results.txt

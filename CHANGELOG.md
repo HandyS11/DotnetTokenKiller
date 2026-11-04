@@ -7,6 +7,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Five options, documented in the usage guide. `--tee <path>` keeps the run's raw output in a file you choose, as
+  evidence, next to the normal filtered output (fails before `dotnet` starts when the file cannot be created).
+  `--max-lines N` caps the filtered body and ends with `… N more lines (dtk log)`; the status line is never cut.
+  On `dotnet test` and `dtk pipe test`, `--names` lists the tests that passed grouped by class, `--show-output` shows
+  each failing test's console output, and `--fail-on-empty` makes a run in which no test matched exit 8
+  (`✗ dotnet test: no test matched filter … — --fail-on-empty`).
+- `dotnet tool restore` reports `✓ dotnet tool restore: 2 tools (dotnet-ef, jb)`, and on failure each distinct error
+  once.
+- `dotnet ef migrations …` and `dotnet ef database …` drop the build and application log noise and keep the result; a
+  failed build says to run `dtk dotnet build` for the errors, which ef never prints.
+- `dotnet stryker` reports the mutation score, the counts and up to 20 survivors read from the json report.
+- `dotnet jb cleanupcode` lists the files it changed, found by hashing the tree before and after, instead of every
+  file it processed.
+- `dtk pipe test` recognises test output in another language and says so, with the remedy (`run it through dtk dotnet
+  test, or set DOTNET_CLI_UI_LANGUAGE=en`), instead of the generic "not recognized" line.
+
+### Changed
+
+- `dotnet stryker` and `dotnet jb cleanupcode` are no longer attached passthrough: they run filtered, print once they
+  end, and are rewritten by the agent hooks. `dotnet tool restore` and `dotnet ef migrations`/`database` are no longer
+  unfiltered.
+- On `ef`, `stryker` and `jb cleanupcode` every short option and `--verbose`, `--quiet` and `--help` belong to the
+  tool, so `-v` and `-q` no longer mean dtk's there; `--help` passes through unfiltered.
+- A command containing `--tee`, or one the shell would expand (a `$` outside single quotes, an unquoted `*`, `?` or `[`,
+  any `{`), is no longer auto-approved by the Copilot CLI hook (`ask`) and is left as written by Cursor's. The new
+  subcommands are never auto-approved.
+- The generated skill and instruction text lists the new subcommands and options, and no longer says `-q` works on any
+  command.
+
+### Fixed
+
+- A failing test with no stack trace no longer folds the test's own console output into its failure message.
+
 ## [0.10.0] - 2026-11-04
 
 ### Added

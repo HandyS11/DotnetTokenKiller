@@ -93,7 +93,40 @@ that runs `dtk hook copilot-cli`, rewriting `dotnet …` to `dtk dotnet …`. Su
 Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is `dtk hook <provider>`. Its reply's
 `permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any
 command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
-rather than guess a command is safe.
+rather than guess a command is safe. `IsAutoApprovable` (also Cursor's gate, which rewrites only auto-approvable
+commands) is stricter still: it returns `false` for a `--tee` in any quoting, since an auto-approved `--tee <path>`
+would let the hook approve a file write, and for any command the shell would expand — a `$` outside single quotes, an
+unquoted `*`, `?` or `[`, or any `{` — because `--te$9e` defeats any narrower rule. Such commands stay plain `dotnet`
+under Cursor and get `"ask"` under Copilot CLI. The new subcommands (`tool restore`, `ef`, `stryker`, `jb cleanupcode`)
+are rewritten but never in `AutoApprovableSubcommands`.
+
+dtk's own options are `--tee <path>`, `--max-lines <n>` (value options: `ArgumentPreprocessor` moves the value with
+its flag ahead of the inserted `--`, and a missing value, or a `--max-lines` whose next token is not an integer, is a
+`dtk:` usage error) and, on `test` and `pipe test` only, `--names`, `--show-output` and `--fail-on-empty` (a usage
+error elsewhere). They are read only on filtered subcommands and `dtk pipe`; any other subcommand, `dotnet tool run x
+--tee y` included, gets its arguments verbatim. A filtered run passed through anyway (`DTK_RAW=1`, `--interactive`,
+machine-readable) refuses `--tee` and `--fail-on-empty` (exit 1 before the child starts) and drops the display
+options with a stderr warning. `--tee` is `IRawOutputCopy`: created or truncated before the child starts (an existing
+file keeps its mode, a new one is owner-only on POSIX), failing the run before it starts when it cannot be created,
+and a secondary writer, so a mid-run failure only adds a `⚠ --tee:` line. `--max-lines` is `OutputCap`, applied last in
+`FilteredOutputPipeline`, which never counts the status line. `--fail-on-empty` makes the run exit 8 (the filter
+reports the verdict in its `FilterResult`; the exit code is settled once, before the tee log header and the tracked
+`Success`); an MTP all-skipped session is reported `⚠ … no test ran (exit 8)`, not as empty. `--names` injects
+`--logger "console;verbosity=normal"` (VSTest) or `--output Detailed` (MTP) only when `GlobalJsonTestRunnerDetector`
+knows the runner. `--show-output` is not named `--output`, which dotnet owns.
+
+On `ef migrations`, `ef database`, `stryker` and `jb cleanupcode`, short options and `--verbose`/`--quiet`/`--help`
+belong to the tool (`--help` passes through unfiltered); dtk honours only `--vv`, `--show-log`, `--tee` and
+`--max-lines` there, and the test-only options are a usage error. Filters needing more than the text implement
+`IContextualOutputFilter` and get a `FilterContext` (`FilterContext.Unknown` under `dtk pipe`, where they say what they
+could not compute). `jb cleanupcode` is an `ISnapshotFilter`: `FileContentSnapshotter` hashes the target's tree before
+and after (skipping `bin`, `obj`, hidden directories, `node_modules`, `artifacts`, `StrykerOutput`; bounded to 20,000
+files and 256 MiB, else `changed files not computed`), because jb rewrites every file it processes. Stryker's survivors
+are not on stdout: `StrykerReport` reads `mutation-report.json` through `IArtifactFileReader` (the path Stryker prints,
+rejoined from its 80-column wrap, else the newest under `StrykerOutput`, or under `-O <dir>`); without the json
+reporter survivors are not listed. A localized `dtk pipe test` is recognised, not parsed: `LocalizedTestOutput` matches
+`LocalizedTestSummaryStrings`, generated from the SDK's satellite assemblies by `eng/localization/ExtractTestSummaryStrings.cs`
+(`dotnet run eng/localization/ExtractTestSummaryStrings.cs -- <sdk dir>`).
 
 `dtk init codex` writes a shared `AGENTS.md` section, the `.agents/skills/dotnet-token-killer` skill and a
 `PreToolUse` hook in `.codex/hooks.json` (`--global`: `$CODEX_HOME` or `~/.codex`, and `~/.agents/skills`). Codex runs

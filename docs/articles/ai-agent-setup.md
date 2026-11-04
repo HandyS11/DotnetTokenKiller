@@ -10,13 +10,14 @@ Each supported agent gets a hook that rewrites `dotnet …` to `dtk dotnet …` 
 
 The skill and instruction files `dtk init` writes carry the same short brief for every agent:
 
-- Use `dtk` for `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish` and `pack`; `dtk test`, `dtk build` and the like work without the `dotnet` word.
+- Use `dtk` for `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, `pack`, `tool restore`, `ef migrations`, `ef database`, `stryker` and `jb cleanupcode`; `dtk test`, `dtk build` and the like work without the `dotnet` word.
 - Every run ends with one status line, so read the whole output and do not pipe it into `tail` or `grep`.
 - `dtk log` prints the raw output of the latest run (`dtk log build` or `dtk log test` for one kind, `--list` to see what is kept); prefer it to `--vv`.
-- `dtk pipe <subcommand>` filters output the agent already has; `-q` (any command) prints only the filtered output.
+- `dtk pipe <subcommand>` filters output the agent already has; `-q` on dotnet's own subcommands prints only the filtered output (on `ef`, `stryker` and `jb cleanupcode` the short options belong to the tool).
+- `--tee <path>` keeps the raw output as evidence, `--max-lines N` caps the body; `dtk test` also takes `--names` (passed tests), `--show-output` (failing tests' output) and `--fail-on-empty` (exit 8 when no test ran).
 - `DTK_RAW=1` (environment or prefix) gives plain `dotnet` output. Where a hook rewrites plain `dotnet …` commands, it leaves `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …` alone.
 
-The skill adds that test status lines carry the count and top codes of the build warnings of the projects compiled in that run; an up-to-date build compiles nothing and reports none.
+The skill's flag table lists `--show-log` and `-v`, which echoes the resolved command line on dotnet's own subcommands. It also adds that test status lines carry the count and top codes of the build warnings of the projects compiled in that run; an up-to-date build compiles nothing and reports none.
 
 ## Installing globally
 
@@ -212,7 +213,13 @@ nothing but words, quoted text and blanks. Everything else it rewrites gets `ask
 - a redirection (`>`, `<`, here-documents), a command substitution (`$(…)` or backticks, even inside double
   quotes), a `${…}` expansion, a `!` outside single quotes (history expansion), a comment, or an unterminated quote.
 
-A command dtk does not rewrite gets no reply, which leaves it to your own Copilot CLI policy.
+- a command containing `--tee`, in any quoting, which would let an auto-approved command write a file of the agent's
+  choosing (`dotnet test --tee ~/.bashrc`);
+- a command the shell would expand: a `$` outside single quotes, an unquoted `*`, `?` or `[`, or any `{`, since the
+  words dtk sees are not the words that run (`--te$9e` could become `--tee`).
+
+A command dtk does not rewrite gets no reply, which leaves it to your own Copilot CLI policy. `tool restore`,
+`ef migrations`, `ef database`, `stryker` and `jb cleanupcode` are rewritten but never auto-approved.
 
 ### Manual Installation
 
@@ -559,7 +566,9 @@ When the hook fires, Cursor's `preToolUse` reply can carry `permission: "allow"`
 prompt for the command it rewrote. dtk only takes that shortcut for a command
 `DotnetCommandRewriter.IsAutoApprovable` accepts — a single, plain `dotnet build`, `test`, `restore`, `clean`,
 `format` or `list package` invocation, the same rule Copilot CLI's `allow` reply uses — so it never auto-approves
-something riskier on Cursor's behalf. A chained, piped or backgrounded command, and `dotnet publish`/`pack` (which
+something riskier on Cursor's behalf. So a command containing `--tee`, or one the shell would expand (a `$` outside
+single quotes, an unquoted `*`, `?` or `[`, any `{`), stays plain `dotnet`, as do `tool restore`, `ef`, `stryker` and
+`jb cleanupcode`, which are never auto-approvable. A chained, piped or backgrounded command, and `dotnet publish`/`pack` (which
 write artifacts and, with a publish profile, can deploy), run as written and are left to the rule instead. Every
 reply the hook does not rewrite is exactly `{}`, never nothing, because Cursor blocks the tool call on output that
 does not match its schema.

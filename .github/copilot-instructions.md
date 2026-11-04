@@ -24,7 +24,8 @@ dtk dotnet jb cleanupcode <solution>
 - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
 - Don't pipe dtk output into tail or grep: its last line is the status.
 - `dtk log [build|test]` prints the latest run's raw output instead of re-running: last 100 lines, `--full` for all, `--list`.
-- `dtk pipe <subcommand>` filters stdin. `-q` (any command) prints only the filtered output.
+- `dtk pipe <subcommand>` filters stdin. `-q` on dotnet's own subcommands prints only the filtered output.
+- Options on filtered runs: `--tee <path>` keeps the raw output as evidence, `--max-lines N` caps the body; `test` also takes `--names` (passed tests), `--show-output` (failing tests' output) and `--fail-on-empty` (exit 8 if no test ran).
 - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
 
 A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` runs `dtk hook copilot-cli`, which rewrites

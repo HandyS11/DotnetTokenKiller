@@ -63,10 +63,10 @@ internal static class SharedInstructionArtifacts
 
         ## Flags
 
-        | Flag         | Purpose                                           |
-        |--------------|---------------------------------------------------|
-        | `--show-log` | Print path to full unfiltered log after a run     |
-        | `-v`         | Echo the resolved command line before running     |
+        | Flag         | Purpose                                             |
+        |--------------|-----------------------------------------------------|
+        | `--show-log` | Print path to full unfiltered log after a run       |
+        | `-v`         | Echo the resolved command line (dotnet subcommands) |
 
         `--vv` also dumps all the raw output; prefer `dtk log`.
 

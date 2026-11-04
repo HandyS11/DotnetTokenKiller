@@ -37,9 +37,10 @@ The innermost layer defines core abstractions with no external dependencies.
 |--------|----------|
 | `Configuration/` | `DtkConfig` (configuration model), `IConfigProvider` (config loading interface) |
 | `Execution/` | `CommandResult` (return value from running a command), `ICommandRunner` (process execution interface) |
-| `Filters/` | `IOutputFilter` (contract for transforming raw output to filtered output) |
+| `Files/` | `IFileContentSnapshotter` and `FileContentSnapshot` (hash a tree before and after a run), `IArtifactFileReader` (read a report a tool writes beside its output) |
+| `Filters/` | `IOutputFilter` (contract for transforming raw output to filtered output), `IContextualOutputFilter` and `FilterContext` (what a filter may know of the run: source, arguments, working directory, start time, test options, changed files), `ISnapshotFilter` (names the directory to snapshot) |
 | `Tracking/` | `CommandRecord`, `CommandGainDetail`, `GainSummary` (tracking models), `ITracker` (persistence interface) |
-| `Tee/` | `ITeeService` (raw output logging interface) |
+| `Tee/` | `ITeeService` (raw output logging interface), `IRawOutputCopy` (the `--tee <path>` copy of the raw output) |
 
 ## Application
 
@@ -68,7 +69,16 @@ Each supported `dotnet` subcommand has a dedicated filter implementing `IOutputF
 | `DotnetPublishFilter` | `dotnet publish` |
 | `DotnetPackFilter` | `dotnet pack` |
 
+| `DotnetToolRestoreFilter` | `dotnet tool restore` |
+| `DotnetEfFilter` | `dotnet ef migrations`, `dotnet ef database` |
+| `DotnetStrykerFilter` | `dotnet stryker` |
+| `DotnetJbCleanupCodeFilter` | `dotnet jb cleanupcode` |
+
 These filters parse the raw `dotnet` output and produce compact, LLM-friendly summaries — stripping MSBuild noise, adapter banners, absolute paths, and duplicate information.
+
+A filter that needs more than the captured text implements `IContextualOutputFilter` and receives a `FilterContext`. `DotnetTestFilter` reads the test options and reports its "no test matched" verdict in its `FilterResult`, so the use case can decide `--fail-on-empty`'s exit code once, before the tee log is finalized and the run is tracked. `DotnetStrykerFilter` reads the json mutation report through `IArtifactFileReader`. `DotnetJbCleanupCodeFilter` is an `ISnapshotFilter`: `FilteredRunUseCase` hashes the tree under the directory it names with `IFileContentSnapshotter` before the child starts and again after it exits, and the difference reaches the filter as `FilterContext.Changes`. Under `dtk pipe` there is no context (`FilterContext.Unknown`), so each filter prints what the text alone supports and says what it could not compute.
+
+`FilteredOutputPipeline` applies `--max-lines` last (`OutputCap`), keeping the status line in place. Piped test output in another language, which `DotnetTestFilter` cannot read, is recognised by `LocalizedTestOutput` against `LocalizedTestSummaryStrings`, a table generated from the .NET SDK's satellite resource assemblies by `eng/localization/ExtractTestSummaryStrings.cs`.
 
 ## Infrastructure
 

@@ -2,7 +2,7 @@
 
 A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
 down to only what matters. Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`,
-`publish`, and `pack` with `dtk` for 60–90% fewer tokens — per-command filters, token analytics, and
+`publish`, `pack` and more with `dtk` for 60–90% fewer tokens — per-command filters, token analytics, and
 one-command setup for 17 AI coding agents.
 
 ## Why
@@ -57,9 +57,14 @@ dtk dotnet format
 dtk dotnet list package --outdated
 dtk dotnet publish -c Release
 dtk dotnet pack
+dtk dotnet tool restore
+dtk dotnet ef migrations add <Name>
+dtk dotnet stryker
+dtk dotnet jb cleanupcode <solution>
 ```
 
-Unknown subcommands pass through to `dotnet` unchanged.
+Unknown subcommands pass through to `dotnet` unchanged. Filtered runs also take `--tee <path>` (keep the raw output) and
+`--max-lines N` (cap the report); `dotnet test` takes `--names`, `--show-output` and `--fail-on-empty`.
 
 ## Features
 
@@ -71,6 +76,8 @@ Unknown subcommands pass through to `dotnet` unchanged.
   `--deprecated`, and `--vulnerable` (~80.9% savings)
 - Publish/Pack filtering — the build's error/warning summary, plus the publish directories or created
   packages on success
+- `tool restore`, `ef`, Stryker and `jb cleanupcode` filtering — restored tools, EF Core results, mutation score and
+  survivors, and the files a cleanup changed
 - 17 AI agent integrations — Claude Code, GitHub Copilot, GitHub Copilot CLI, Gemini CLI, Codex CLI, OpenCode, Antigravity CLI, pi, oh-my-pi, Cursor, Devin (formerly Windsurf), Factory Droid, Crush, Kilo Code, Amp, Aider, JetBrains AI
 - Token analytics — tracks per-command savings over time with `dtk gain`
 - Self-diagnostics — `dtk doctor` validates your setup in one command
