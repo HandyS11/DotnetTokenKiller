@@ -205,7 +205,8 @@ public class FilteredOutputPipelineTests
 
         await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
 
-        var text = writer.ToString();
+        // The --vv dump is written with WriteLineAsync, so its lines end in the platform newline (CRLF on Windows).
+        var text = writer.ToString().ReplaceLineEndings("\n");
         text.Should().StartWith("[raw output]\n");
         text.Should().EndWith("detail\n[full output: /x.log]\n✓ dotnet build (1 project)\n");
     }

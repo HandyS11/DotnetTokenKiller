@@ -53,7 +53,7 @@ public sealed partial class DotnetCleanFilter(string? rootPath = null) : IOutput
                 continue;
             }
 
-            sb.AppendLine(TextHelpers.ShortenPath(line, RootPath));
+            sb.AppendLine(TextHelpers.ShortenPathsInLine(line, RootPath));
             count++;
         }
 

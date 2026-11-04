@@ -24,7 +24,8 @@ public class MachineReadableOutputIntegrationTests
         var (output, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync(
             "dotnet", "build", SampleApp, "-getProperty:TargetFramework");
 
-        raw.Should().Be("net10.0\n", "the fixture is the SDK's own output");
+        // The SDK ends the value with the platform's newline (CRLF on Windows); only the bytes dtk passes on must match.
+        raw.ReplaceLineEndings("\n").Should().Be("net10.0\n", "the fixture is the SDK's own output");
         output.Should().Be(raw);
         exitCode.Should().Be(rawExit);
         var commands = await IntegrationTestHelper.ReadTrackedCommandsAsync(dbPath);

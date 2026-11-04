@@ -82,6 +82,28 @@ public class DotnetCleanFilterTests
     }
 
     [Fact]
+    public void Apply_ErrorLines_ShortenOnlyTheRootPrefixAndKeepTheRestAsPrinted()
+    {
+        // A root that is not the current directory: treating the whole line as a path used to resolve it against
+        // the current directory ("../../…/error MSB4019: …"), and Windows path normalisation dropped the final '.'.
+        var filter = new DotnetCleanFilter("/test/project/root");
+        const string input =
+            "error MSB4019: The imported project \"/missing/file.targets\" was not found.\n" +
+            "/test/project/root/src/App/App.csproj : error MSB4057: The target \"Clean\" does not exist in the project.\n" +
+            "Build FAILED.\n    2 Error(s)";
+
+        var result = filter.Apply(input, exitCode: 1);
+
+        result.Should().Be(
+            """
+            error MSB4019: The imported project "/missing/file.targets" was not found.
+            src/App/App.csproj : error MSB4057: The target "Clean" does not exist in the project.
+            ✗ dotnet clean: 2 errors
+
+            """);
+    }
+
+    [Fact]
     public void Apply_FailedRunWithNoErrorLines_ReturnsEmptyForRawTailFallback()
     {
         // Nothing was parsed, so no count can be given; blank output hands the decision to the raw-tail fallback.

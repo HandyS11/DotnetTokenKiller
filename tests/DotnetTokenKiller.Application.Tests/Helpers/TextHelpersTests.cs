@@ -46,6 +46,19 @@ public class TextHelpersTests
         TextHelpers.ShortenPath(abs, root).Should().Be("src/Foo/Bar.cs");
     }
 
+    [Theory]
+    [InlineData("/repo/src/A.csproj : error MSB4057: msg.", "/repo", "src/A.csproj : error MSB4057: msg.")]
+    [InlineData("/repo/src/A.csproj : error MSB4057: msg.", "/repo/", "src/A.csproj : error MSB4057: msg.")]
+    [InlineData("error MSB4019: project \"/missing/x.targets\" was not found.", "/repo",
+        "error MSB4019: project \"/missing/x.targets\" was not found.")]
+    [InlineData("/repository/A.csproj : error X: msg", "/repo", "/repository/A.csproj : error X: msg")]
+    [InlineData("C:\\repo\\src\\A.csproj : error X: msg...", "C:\\repo", "src\\A.csproj : error X: msg...")]
+    [InlineData("", "/repo", "")]
+    public void ShortenPathsInLine_DropsOnlyTheRootPrefix(string line, string root, string expected)
+    {
+        TextHelpers.ShortenPathsInLine(line, root).Should().Be(expected);
+    }
+
     [Fact]
     public void ShortenPath_EmptyInput_ReturnsEmpty()
     {

@@ -90,6 +90,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A failed `dotnet clean` prints its error lines as MSBuild wrote them, with only the project root shortened. dtk used
+  to treat each whole line as a path, so on Windows a line lost its final `.`.
 - A `dotnet test` run whose test project does not compile (the red step of TDD) shows its compile errors grouped like
   `dotnet build` does, ending with `✗ dotnet test: 1 project did not build (2 errors)`, instead of the last 40 raw
   MSBuild lines, which lost the first errors and the total. When other projects ran, their failures follow the errors
