@@ -323,9 +323,9 @@ To reset tracking data: `dtk reset` (or `dtk reset --force` to skip confirmation
 
 ### Filter Coverage
 
-`dtk gain --coverage` reports which commands run unfiltered (no filter exists, or the filter
-degraded to a fallback), ranked by how many raw tokens are at stake — a punch list for where the
-next filter would pay off most. It composes with `--days`, `--project`, `--command`, and `--json`,
+`dtk gain --coverage` reports which commands run unfiltered (no filter exists, the run bypassed it,
+or the filter degraded to a fallback), ranked by how many raw tokens are at stake — a punch list
+for where the next filter would pay off most. It composes with `--days`, `--project`, `--command`, and `--json`,
 but not with `--export`.
 
 Example:
