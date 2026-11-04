@@ -254,9 +254,11 @@ dtk dotnet jb cleanupcode MyApp.slnx
 
 On `dtk dotnet ef migrations`, `dtk dotnet ef database`, `dtk dotnet stryker` and `dtk dotnet jb cleanupcode`, every
 short option and `--verbose`, `--quiet` and `--help` belong to the tool, not to dtk: ef's `-v` is its verbose flag,
-Stryker's `-v <version>` names the dashboard version, and jb's `-v` prints its version. dtk reads only its long,
+Stryker's `-v <version>` names the dashboard version, and jb's `-v` prints its version. dtk honours only its long,
 dtk-only options there: `--vv`, `--show-log`, `--tee` and `--max-lines`. `-h`, `--help` or `-?` prints the tool's own
-help, unfiltered (`dtk dotnet stryker --help`).
+help, unfiltered (`dtk dotnet stryker --help`). The test options `--names`, `--show-output` and `--fail-on-empty` stay
+dtk's, so they never reach the tool: as on any subcommand but `dotnet test`, they stop the run before it starts
+(`dtk: --names applies only to dotnet test`).
 
 ### `dtk pipe`
 

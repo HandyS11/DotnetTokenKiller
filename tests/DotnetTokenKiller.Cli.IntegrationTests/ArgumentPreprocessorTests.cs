@@ -504,15 +504,15 @@ public sealed class ArgumentPreprocessorTests
         "dotnet jb cleanupcode --vv --tee=x.log -- App.slnx -v -q --verbose --quiet",
         "jb cleanupcode App.slnx -v -q --verbose --quiet")]
     [InlineData(
-        "dotnet ef database update -v d --names",
-        "dotnet ef database -- update -v d --names",
-        "ef database update -v d --names")]
+        "dotnet ef database update -v d --names --show-output=true",
+        "dotnet ef database --names --show-output=true -- update -v d",
+        "ef database update -v d")]
     [InlineData("dotnet stryker -- --max-lines 5", "dotnet stryker -- -- --max-lines 5", "stryker -- --max-lines 5")]
     public void InsertSeparator_ToolBacked_LeavesShortOptionsToTool(string input, string expected, string rawArguments)
     {
         // ef's -v is --verbose, Stryker's -v takes a version and jb's prints one: on these, dtk keeps only its long,
-        // dtk-only options, and the 0.10 `-v <level>` exemption has nothing to exempt. A raw run hands the tool the
-        // same tokens.
+        // dtk-only options, and the 0.10 `-v <level>` exemption has nothing to exempt. The test options stay dtk's (a
+        // usage error, never the tool's). A raw run hands the tool the same tokens.
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(expected);
         ArgumentNullException.ThrowIfNull(rawArguments);
@@ -622,8 +622,10 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet build -- --names", null)]
     [InlineData("dotnet tool run x --names", null)]
     [InlineData("dotnet tool restore --names", "--names")]
-    [InlineData("dotnet stryker --names", null)]
-    [InlineData("dotnet ef database update --fail-on-empty", null)]
+    [InlineData("dotnet stryker --names", "--names")]
+    [InlineData("dotnet ef database update --fail-on-empty", "--fail-on-empty")]
+    [InlineData("dotnet jb cleanupcode App.slnx --show-output:true", "--show-output")]
+    [InlineData("dotnet stryker -- --names", null)]
     public void MisplacedTestOption_Detects(string input, string? expected)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -691,7 +693,7 @@ public sealed class ArgumentPreprocessorTests
         "dtk: --tee needs a filtered run, but the tool prints its own help")]
     [InlineData("dotnet stryker --help --max-lines 5", null, false,
         "dtk: --max-lines ignored: the tool prints its own help")]
-    [InlineData("dotnet stryker --names --max-lines 5", null, false, "")]
+    [InlineData("dotnet stryker --names --max-lines 5", null, true, "dtk: --names applies only to dotnet test")]
     [InlineData("gain --days 7", "1", false, "")]
     public void CheckOptions_ReportsUsageErrorsRefusalsAndDroppedOptions(
         string input, string? dtkRawValue, bool isUsageError, string messages)
@@ -886,6 +888,32 @@ public sealed class ArgumentPreprocessorTests
         exitCode.Should().Be(0, stdErr);
         childArguments.Should().Equal(expectedChildArguments.Split(' '));
         stdOut.TrimEnd().Split('\n')[^1].Should().StartWith("\u2713 dotnet ", "a filtered run ends in its status line");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task ToolSubcommand_TestOption_IsUsageErrorWithoutRunningTheChild()
+    {
+        // The test options are dtk's on every subcommand, so a tool never receives one: the same verdict as
+        // `dtk pipe stryker --names`.
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "stryker", "--names");
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: --names applies only to dotnet test{Environment.NewLine}");
+        childArguments.Should().BeNull("a usage error never runs the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_ToolSubcommand_NeverHandsATestOptionToTheTool()
+    {
+        // Raw output strips dtk's tokens, but a misplaced test option stops the run before that: the child never
+        // receives --show-output, because it never starts.
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            RawOutput, "dotnet", "ef", "migrations", "list", "--show-output");
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: --show-output applies only to dotnet test{Environment.NewLine}");
+        childArguments.Should().BeNull("a dtk-only token never reaches the child");
     }
 
     [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

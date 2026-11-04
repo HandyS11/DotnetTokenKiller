@@ -27,9 +27,10 @@ namespace DotnetTokenKiller.Cli;
 /// dtk reads its options only on the subcommands it filters, and only before the user's own <c>--</c>: any other
 /// subcommand (<c>tool run</c>, <c>run</c>, <c>watch</c>, …) gets its arguments verbatim, so
 /// <c>dotnet tool run x --tee y</c> hands <c>--tee y</c> to <c>x</c>. On a subcommand that runs a tool
-/// (<see cref="DotnetSubcommands.ToolBacked"/>: <c>ef</c>, <c>stryker</c>, <c>jb cleanupcode</c>) dtk reads only its
+/// (<see cref="DotnetSubcommands.ToolBacked"/>: <c>ef</c>, <c>stryker</c>, <c>jb cleanupcode</c>) dtk honours only its
 /// long, dtk-only options, <c>--vv</c>, <c>--show-log</c>, <c>--tee</c> and <c>--max-lines</c>: the tool owns every
-/// short option and <c>--verbose</c>, <c>--quiet</c>, <c>--help</c> and the test options, and prints its own help.
+/// short option and <c>--verbose</c>, <c>--quiet</c> and <c>--help</c>, and prints its own help. The test options stay
+/// dtk's there too, so they are its usage error, as on any subcommand but <c>dotnet test</c>, and never reach the tool.
 /// </remarks>
 internal static class ArgumentPreprocessor
 {
@@ -88,14 +89,11 @@ internal static class ArgumentPreprocessor
 
     /// <summary>
     /// The flags dtk reads on a subcommand whose tool owns the others (<see cref="DotnetSubcommands.ToolBacked"/>): its
-    /// long, dtk-only output flags. Its <see cref="ValueOptions"/> are dtk's there too.
+    /// long, dtk-only output flags, and the test options, which it reports as misplaced rather than hand to the tool.
+    /// Its <see cref="ValueOptions"/> are dtk's there too.
     /// </summary>
     private static readonly HashSet<string> ToolBackedOptions =
-        new(StringComparer.Ordinal)
-        {
-            "--vv",
-            "--show-log"
-        };
+        new(new[] { "--vv", "--show-log" }.Concat(TestOnlyOptions), StringComparer.Ordinal);
 
     /// <summary>
     /// The options a filtered subcommand passed through anyway cannot honour, because one promises a file and the
@@ -233,7 +231,7 @@ internal static class ArgumentPreprocessor
     /// the test options, and <c>--tee</c> and <c>--max-lines</c> with their values) from arguments a raw run passes to
     /// dotnet, which would reject them. A <c>-v</c> followed by a dotnet verbosity level is dotnet's own and stays, as
     /// does help, which dotnet then prints; the user's own <c>--</c> and everything after it are forwarded verbatim. A
-    /// tool-backed subcommand loses only <c>--vv</c>, <c>--show-log</c>, <c>--tee</c> and <c>--max-lines</c>.
+    /// tool-backed subcommand keeps its tool's short options and <c>--verbose</c>, <c>--quiet</c> and help.
     /// </summary>
     /// <param name="dotnetArgs">The arguments for dotnet, starting at the subcommand.</param>
     internal static string[] StripDtkOptions(string[] dotnetArgs)
@@ -269,8 +267,8 @@ internal static class ArgumentPreprocessor
 
     /// <summary>
     /// Returns the first test option (<c>--names</c>, <c>--show-output</c>, <c>--fail-on-empty</c>) on a filtered
-    /// subcommand other than <c>dotnet test</c>, which is dtk's usage error rather than a token passed to dotnet. On a
-    /// tool-backed subcommand the token is the tool's.
+    /// subcommand other than <c>dotnet test</c>, which is dtk's usage error rather than a token passed to dotnet or, on
+    /// a tool-backed subcommand, to the tool.
     /// </summary>
     /// <param name="args">The raw CLI arguments, after <see cref="Normalize"/>.</param>
     /// <returns>The option's name, or <see langword="null"/> when there is none.</returns>
@@ -489,7 +487,8 @@ internal static class ArgumentPreprocessor
     /// Finds dtk's options from <paramref name="start"/> up to the user's own <c>--</c>, after which nothing is dtk's.
     /// A value option spans its value too when the next token can be one (see <see cref="IsOptionValue"/>); a
     /// <c>-v</c> that names a dotnet verbosity level is dotnet's, and its level is never a dtk option either. On a
-    /// tool-backed subcommand only <see cref="ToolBackedOptions"/> and the value options are dtk's.
+    /// tool-backed subcommand only <see cref="ToolBackedOptions"/>, the joined test options and the value options are
+    /// dtk's.
     /// </summary>
     /// <param name="args">The arguments to scan.</param>
     /// <param name="start">The index of the first argument after the subcommand.</param>
@@ -510,7 +509,7 @@ internal static class ArgumentPreprocessor
                 continue;
             }
 
-            if (!toolBacked && JoinedTestOptionName(args[i]) is { } joined)
+            if (JoinedTestOptionName(args[i]) is { } joined)
             {
                 yield return new DtkOption(joined, i, 1, MissingValue: false);
             }
