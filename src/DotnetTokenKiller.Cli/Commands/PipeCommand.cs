@@ -62,6 +62,6 @@ internal sealed class PipeCommand(
         var filter = services.GetRequiredKeyedService<IOutputFilter>(match.Name);
 
         return pipeFilter
-            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), cancellationToken);
+            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), cancellationToken: cancellationToken);
     }
 }

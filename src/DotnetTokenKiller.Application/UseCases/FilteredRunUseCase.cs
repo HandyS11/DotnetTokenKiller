@@ -24,12 +24,14 @@ public sealed class FilteredRunUseCase(
     /// <param name="command">The executable to run.</param>
     /// <param name="args">Arguments to pass to the executable.</param>
     /// <param name="options">Display flags; <see cref="OutputOptions.Normalized"/> is applied here.</param>
+    /// <param name="test">Test display options handed to the filter; none when <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<int> RunAsync(
         IOutputFilter filter,
         string command,
         IReadOnlyList<string> args,
         OutputOptions options,
+        TestOptions? test = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
@@ -38,6 +40,7 @@ public sealed class FilteredRunUseCase(
 
         options = options.Normalized();
         var startTimestamp = Stopwatch.GetTimestamp();
+        var startedUtc = DateTimeOffset.UtcNow;
 
         // Before the tee session and the child, so the tokenizer load and the SQLite setup run while
         // the child does rather than after it exits. After the timestamp, so the recorded elapsed
@@ -108,12 +111,28 @@ public sealed class FilteredRunUseCase(
             options,
             startTimestamp)
         {
-            InputTokenCounter = counter
+            InputTokenCounter = counter,
+            Context = new FilterContext
+            {
+                Source = RunSource.Run,
+                Arguments = ArgumentsAfterSubcommand(args),
+                WorkingDirectory = Environment.CurrentDirectory,
+                StartedUtc = startedUtc,
+                Test = test ?? TestOptions.None
+            }
         };
 
         // None: the child has exited, and a cancellation landing now (Ctrl+C's grace period elapsing)
         // must not drop the filtered output, the log or the record of a run that finished on its own.
         return await pipeline.ProcessAsync(request, session, prepared, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>The arguments after the subcommand's tokens, or after the first one when none matches.</summary>
+    /// <param name="args">Arguments passed to the executable, starting at the subcommand.</param>
+    private static string[] ArgumentsAfterSubcommand(IReadOnlyList<string> args)
+    {
+        var skip = DotnetSubcommands.TryMatch(args, out var subcommand) ? subcommand.TokenCount : 1;
+        return [.. args.Skip(skip)];
     }
 
     /// <summary>Resolves the name a run is recorded and tee'd under.</summary>

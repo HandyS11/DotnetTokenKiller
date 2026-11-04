@@ -43,6 +43,68 @@ public class FilteredOutputPipelineTests
         return session;
     }
 
+    private sealed class FakeContextualFilter(FilterResult result) : IContextualOutputFilter
+    {
+        public FilterContext? ReceivedContext { get; private set; }
+
+        public int? ReceivedExitCode { get; private set; }
+
+        public string Apply(string strippedOutput, int exitCode) =>
+            Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;
+
+        public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
+        {
+            ReceivedContext = context;
+            ReceivedExitCode = exitCode;
+            return result;
+        }
+    }
+
+    private static FilteredOutputRequest ContextualRequest(IOutputFilter filter, TestOptions test, int exitCode = 0) =>
+        new(filter, "raw output", exitCode, "test", "dotnet test", RunSource.Run, new OutputOptions(),
+            Stopwatch.GetTimestamp())
+        {
+            Context = new FilterContext { Arguments = ["--filter", "X"], Test = test }
+        };
+
+    [Fact]
+    public async Task ProcessAsync_PassesContextToContextualFilter()
+    {
+        var filter = new FakeContextualFilter(new FilterResult("ok"));
+
+        await _sut.ProcessAsync(ContextualRequest(filter, TestOptions.None), NullTeeSession.Instance);
+
+        filter.ReceivedContext!.Arguments.Should().Equal("--filter", "X");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReturnsNoTestsMatchedExitCode_WhenFailOnEmptyAndVerdictEmpty()
+    {
+        var filter = new FakeContextualFilter(new FilterResult("no tests", NoTestsMatched: true));
+        var session = SessionWithHint("hint");
+
+        var exitCode = await _sut.ProcessAsync(
+            ContextualRequest(filter, new TestOptions(FailOnEmpty: true)), session);
+
+        exitCode.Should().Be(8);
+        filter.ReceivedExitCode.Should().Be(0);
+        await session.Received(1).FinalizeAsync(8, Arg.Any<CancellationToken>());
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => !r.Success), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_KeepsChildExitCode_WhenVerdictEmptyWithoutFailOnEmpty()
+    {
+        var filter = new FakeContextualFilter(new FilterResult("no tests", NoTestsMatched: true));
+        var session = SessionWithHint("hint");
+
+        var exitCode = await _sut.ProcessAsync(ContextualRequest(filter, TestOptions.None), session);
+
+        exitCode.Should().Be(0);
+        await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ProcessAsync_ReturnsSuppliedExitCode()
     {

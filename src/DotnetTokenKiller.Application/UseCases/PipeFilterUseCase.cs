@@ -21,6 +21,7 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
     /// it is passed explicitly by the caller and defaults to success at the CLI boundary.
     /// </param>
     /// <param name="options">Display flags.</param>
+    /// <param name="test">Test display options handed to the filter; none when <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><paramref name="exitCode"/>, so a CI step wrapping a failed build still fails.</returns>
     public async Task<int> RunAsync(
@@ -28,6 +29,7 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
         string commandSlug,
         int exitCode,
         OutputOptions options,
+        TestOptions? test = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
@@ -71,7 +73,13 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             options.Normalized(),
             startTimestamp)
         {
-            InputTokenCounter = counter
+            InputTokenCounter = counter,
+            Context = new FilterContext
+            {
+                Source = RunSource.Pipe,
+                WorkingDirectory = Environment.CurrentDirectory,
+                Test = test ?? TestOptions.None
+            }
         };
 
         return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);

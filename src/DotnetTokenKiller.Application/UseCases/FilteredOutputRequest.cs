@@ -39,4 +39,7 @@ public sealed record FilteredOutputRequest(
     /// is the count of the stripped <see cref="RawOutput"/>, computed mostly while the child ran.
     /// </summary>
     public ChunkedTokenCounter? InputTokenCounter { get; init; }
+
+    /// <summary>What a contextual filter may know about the run.</summary>
+    public FilterContext Context { get; init; } = FilterContext.Unknown;
 }

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Text;
@@ -55,7 +56,10 @@ public sealed class FilteredOutputPipeline(
     /// <see cref="NullTeeSession.Instance"/>.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The request's exit code, unchanged.</returns>
+    /// <returns>
+    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the filter reports that no test
+    /// matched and the context asks to fail on that.
+    /// </returns>
     public async Task<int> ProcessAsync(
         FilteredOutputRequest request,
         ITeeSession session,
@@ -76,7 +80,10 @@ public sealed class FilteredOutputPipeline(
     /// </param>
     /// <param name="prepared">What <see cref="BeginAsync"/> returned when this run started.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The request's exit code, unchanged.</returns>
+    /// <returns>
+    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the filter reports that no test
+    /// matched and the context asks to fail on that.
+    /// </returns>
     public async Task<int> ProcessAsync(
         FilteredOutputRequest request,
         ITeeSession session,
@@ -91,12 +98,18 @@ public sealed class FilteredOutputPipeline(
         var options = request.Options.Normalized();
         var stripped = AnsiStrip.Strip(request.RawOutput);
 
-        var (filtered, filterFaulted) =
-            await ApplyFilterSafelyAsync(request.Filter, stripped, request.ExitCode, options.VerbosityLevel)
-                .ConfigureAwait(false);
+        var (result, filterFaulted) =
+            await ApplyFilterSafelyAsync(request, stripped, options.VerbosityLevel).ConfigureAwait(false);
+        var filtered = result.Output;
+
+        // The filter saw the child's exit code; the run's own code may differ when no test matched and
+        // --fail-on-empty is set. The log, the record and the return value all use this one.
+        var exitCode = result.NoTestsMatched && request.Context.Test.FailOnEmpty
+            ? ExitCodes.NoTestsMatched
+            : request.ExitCode;
 
         // Finalized before the raw-tail fallback is built, because the fallback embeds this hint.
-        var logHint = await FinalizeTeeAsync(session, request.ExitCode, cancellationToken).ConfigureAwait(false);
+        var logHint = await FinalizeTeeAsync(session, exitCode, cancellationToken).ConfigureAwait(false);
 
         var shownLogHint = options.ShowLogHint ? logHint : null;
 
@@ -108,13 +121,13 @@ public sealed class FilteredOutputPipeline(
         RunOutcome outcome;
         if (filterFaulted)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: false,
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false,
                 shownLogHint);
             outcome = RunOutcome.FilterFaulted;
         }
         else if (string.IsNullOrWhiteSpace(filtered))
         {
-            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: true,
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true,
                 shownLogHint);
             outcome = RunOutcome.RawTailFallback;
         }
@@ -140,31 +153,33 @@ public sealed class FilteredOutputPipeline(
 
         await output.WriteAsync(filtered).ConfigureAwait(false);
 
-        await TrackIfEnabledAsync(prepared, request, stripped, filtered,
+        // The record carries the run's own exit code, so it agrees with the log and the return value.
+        await TrackIfEnabledAsync(prepared, request with { ExitCode = exitCode }, stripped, filtered,
                 Stopwatch.GetElapsedTime(request.StartTimestamp), outcome, cancellationToken)
             .ConfigureAwait(false);
 
-        return request.ExitCode;
+        return exitCode;
     }
 
     /// <summary>Applies the filter, falling back to raw output if the filter throws (never breaks the workflow).</summary>
-    /// <param name="filter">The output filter to apply.</param>
+    /// <param name="request">The request whose filter, exit code and context are used.</param>
     /// <param name="stripped">The ANSI-stripped command output.</param>
-    /// <param name="exitCode">The process exit code.</param>
     /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
     /// <returns>
     /// The filtered output and whether the filter threw. A faulted filter yields the stripped
     /// output unchanged.
     /// </returns>
-    private async Task<(string Output, bool Faulted)> ApplyFilterSafelyAsync(
-        IOutputFilter filter,
+    private async Task<(FilterResult Result, bool Faulted)> ApplyFilterSafelyAsync(
+        FilteredOutputRequest request,
         string stripped,
-        int exitCode,
         int verbosityLevel)
     {
         try
         {
-            return (filter.Apply(stripped, exitCode), false);
+            var result = request.Filter is IContextualOutputFilter contextual
+                ? contextual.Apply(stripped, request.ExitCode, request.Context)
+                : new FilterResult(request.Filter.Apply(stripped, request.ExitCode));
+            return (result, false);
         }
         catch
         {
@@ -174,7 +189,7 @@ public sealed class FilteredOutputPipeline(
                 await output.WriteLineAsync("[filter error — using raw output]").ConfigureAwait(false);
             }
 
-            return (stripped, true);
+            return (new FilterResult(stripped), true);
         }
     }
 
