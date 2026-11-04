@@ -20,8 +20,8 @@ public enum RunOutcome
 
     /// <summary>
     /// The output was not captured, so its size is unknown, whether or not a filter exists for the subcommand: a
-    /// run that keeps the terminal attached (<c>dotnet run</c>, <c>watch</c>, an <c>--interactive</c> or prompting
-    /// run), a filtered subcommand under <c>DTK_RAW</c>, and a machine-readable run
+    /// run that keeps the terminal attached (<c>dotnet run</c>, <c>dotnet watch</c>, an <c>--interactive</c> or
+    /// prompting run), a filtered subcommand under <c>DTK_RAW</c>, and a machine-readable run
     /// (<c>list package --format json</c>, an MSBuild <c>-getProperty</c> query) whose reader wants dotnet's own bytes.
     /// </summary>
     PassthroughUnmeasured = 4

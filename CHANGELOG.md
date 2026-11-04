@@ -54,7 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (20). The next run of that kind in that project replaces the previous passing log, and any older log under 500
   bytes; failing logs of 500 bytes or more stay until `tee.maxFiles` rotates them out. A passing run's raw output,
   test stdout included, is therefore now kept on disk by default (readable by its owner only on Linux and macOS; on
-  Windows a log takes the permissions of its folder, by default `%LOCALAPPDATA%\dtk\tee`); set `tee.mode` to
+  Windows a log takes the permissions of its folder, by default `%LOCALAPPDATA%/dtk/tee`); set `tee.mode` to
   `Never` (`dtk config set tee.mode Never`) to turn the logs off.
 - `-v <level>` now goes to `dotnet`: `dtk dotnet build -v q` used to take `-v` for dtk's `--verbose` and pass `q` on as
   a project path (MSB1009). Only a `-v` followed by `q`, `quiet`, `m`, `minimal`, `n`, `normal`, `d`, `detailed`,
