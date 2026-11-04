@@ -323,6 +323,10 @@ log was truncated.
 Enforced via `.editorconfig` and build-time analyzers (Roslynator, SonarAnalyzer, Microsoft.CodeAnalysis.NetAnalyzers):
 
 - `TreatWarningsAsErrors` is enabled — all analyzer warnings must be resolved
+- `.editorconfig`'s "SonarQube parity" block raises to `warning` the Sonar way rules SonarAnalyzer.CSharp ships
+  disabled (S107, S110, S1192, S1479, S2342, S2436, S3776, S6664, S6669) and the Info-level VSTHRD202, so the build
+  fails on what the SonarQube run reports. They stay off in tests (except VSTHRD202) and `benchmarks/`, where the
+  SonarQube run raises none of them
 - File-scoped namespaces (`namespace Foo;`)
 - `var` preferred throughout
 - Private fields: `_camelCase`; async methods must end in `Async`

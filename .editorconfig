@@ -401,6 +401,22 @@ dotnet_diagnostic.CA1806.severity = none # Ignore method results (not working pr
 
 dotnet_diagnostic.IDE0058.severity = none # Expression not used (boring with extension methods) _ = Foo()
 
+# SonarQube parity: fail the build on what the SonarQube run would report.
+# These Sonar way rules take a threshold, so the SonarAnalyzer.CSharp package ships them disabled and only the
+# server's quality profile turns them on. Their default thresholds are the server's: the build reports SonarQube's
+# exact messages ("from 19 to the 15 allowed").
+dotnet_diagnostic.S107.severity = warning # Methods should not have too many parameters
+dotnet_diagnostic.S110.severity = warning # Inheritance tree of classes should not be too deep
+dotnet_diagnostic.S1192.severity = warning # String literals should not be duplicated
+dotnet_diagnostic.S1479.severity = warning # "switch" statements with many "case" clauses should have only one statement
+dotnet_diagnostic.S2342.severity = warning # Enumeration types should comply with a naming convention
+dotnet_diagnostic.S2436.severity = warning # Types and methods should not have too many generic parameters
+dotnet_diagnostic.S3776.severity = warning # Cognitive Complexity of methods should not be too high
+dotnet_diagnostic.S6664.severity = warning # The code block contains too many logging calls
+dotnet_diagnostic.S6669.severity = warning # Logger field or property name should comply with a naming convention
+# Info by default, which TreatWarningsAsErrors leaves alone, but SonarQube imports it as an issue.
+dotnet_diagnostic.VSTHRD202.severity = warning # Avoid unnecessary async/await: return the Task directly
+
 dotnet_diagnostic.Moq1203.severity = none # Method setup should specify a return value
 dotnet_diagnostic.Moq1400.severity = none # Choose a mock behaviour (strict, loose)
 dotnet_diagnostic.Moq1410.severity = none # Set behaviour to Strict
@@ -449,6 +465,18 @@ dotnet_diagnostic.CA2007.severity = none # Consider calling ConfigureAwait on th
 dotnet_diagnostic.IDE1006.severity = none # Naming rule for test classes
 
 dotnet_diagnostic.S3220.severity = none # Partial match for parameters (params)
+# The SonarQube run raises none of its parity rules on test code: SqliteTrackerTests.MakeRecord (S107) and
+# ChunkedTokenCounterTests.EverySafeCut_SplitsTheCountExactly (S3776) have long gone unflagged. It does import
+# VSTHRD202 from tests, so that one stays on.
+dotnet_diagnostic.S107.severity = none
+dotnet_diagnostic.S110.severity = none
+dotnet_diagnostic.S1192.severity = none
+dotnet_diagnostic.S1479.severity = none
+dotnet_diagnostic.S2342.severity = none
+dotnet_diagnostic.S2436.severity = none
+dotnet_diagnostic.S3776.severity = none
+dotnet_diagnostic.S6664.severity = none
+dotnet_diagnostic.S6669.severity = none
 
 dotnet_diagnostic.xUnit1042.severity = none # object[] are okay for MemberData
 dotnet_diagnostic.xUnit1044.severity = none # Object might be serializable (bullshit)
@@ -456,6 +484,19 @@ dotnet_diagnostic.xUnit1045.severity = none # Object might be serializable (bull
 
 [**/samples/*/**.cs]
 generated_code = true
+
+# The SonarQube run excludes benchmarks/ (sonar.exclusions in sonarqube.yml), so its parity rules stay off here.
+[benchmarks/**.cs]
+dotnet_diagnostic.S107.severity = none
+dotnet_diagnostic.S110.severity = none
+dotnet_diagnostic.S1192.severity = none
+dotnet_diagnostic.S1479.severity = none
+dotnet_diagnostic.S2342.severity = none
+dotnet_diagnostic.S2436.severity = none
+dotnet_diagnostic.S3776.severity = none
+dotnet_diagnostic.S6664.severity = none
+dotnet_diagnostic.S6669.severity = none
+dotnet_diagnostic.VSTHRD202.severity = none
 
 # BenchmarkDotNet requires benchmark methods to be instance methods so it can bind them to a
 # per-instance [Params] / [GlobalSetup] lifecycle. Methods that happen not to read instance state
