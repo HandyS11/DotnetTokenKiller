@@ -17,7 +17,7 @@ dtk [OPTIONS] <COMMAND>
 
 ## Commands
 
-The `dotnet` word is optional for the filtered subcommands: `dtk test --filter "Category=Unit"` runs `dtk dotnet test --filter "Category=Unit"`, and `dtk build`, `dtk restore`, `dtk clean`, `dtk format`, `dtk list package`, `dtk publish` and `dtk pack` work the same way. They are not listed in `dtk --help` or in shell completion.
+The `dotnet` word is optional for the filtered subcommands: `dtk test --filter "Category=Unit"` runs `dtk dotnet test --filter "Category=Unit"`, and `dtk build`, `dtk restore`, `dtk clean`, `dtk format`, `dtk list package`, `dtk publish`, `dtk pack`, `dtk tool restore`, `dtk ef migrations`, `dtk ef database`, `dtk stryker` and `dtk jb cleanupcode` work the same way. They are not listed in `dtk --help` or in shell completion.
 
 ### `dtk dotnet build`
 
@@ -214,6 +214,49 @@ dtk: --tee needs a filtered run, but the output is machine-readable
 
 The display options `--max-lines`, `--names` and `--show-output` are dropped instead, with one warning each on stderr
 (`dtk: --max-lines ignored: --interactive is set`), and the run goes ahead.
+
+### `dtk dotnet tool restore`
+
+Run `dotnet tool restore` with filtered output:
+
+```sh
+dtk dotnet tool restore
+```
+
+dtk's options work as they do on the other dotnet verbs. Like `publish` and `pack`, `dtk dotnet tool restore
+--interactive` is not filtered, so a credential provider can prompt for a private feed. The other `dotnet tool`
+commands (`run`, `install`, `list`, …) pass through unchanged.
+
+### `dtk dotnet ef migrations` and `dtk dotnet ef database`
+
+Run the Entity Framework Core tool's `migrations` and `database` commands with filtered output:
+
+```sh
+dtk dotnet ef migrations add Initial
+dtk dotnet ef database update
+```
+
+Three kinds of `ef` run are not filtered, and keep the terminal attached: `dtk dotnet ef database drop` without
+`-f`/`--force`, which asks for confirmation; any `ef` command with `--json`, which prints a document; and
+`dtk dotnet ef migrations script` without `-o`/`--output`, which prints the SQL itself. Arguments after `--` are the
+application's, so they count for none of these. The other `ef` commands (`dbcontext`, …) pass through unchanged.
+
+### `dtk dotnet stryker` and `dtk dotnet jb cleanupcode`
+
+Run Stryker.NET's mutation testing and the ReSharper command-line tools' code cleanup with filtered output:
+
+```sh
+dtk dotnet stryker
+dtk dotnet jb cleanupcode MyApp.slnx
+```
+
+### Options the tool owns
+
+On `dtk dotnet ef migrations`, `dtk dotnet ef database`, `dtk dotnet stryker` and `dtk dotnet jb cleanupcode`, every
+short option and `--verbose`, `--quiet` and `--help` belong to the tool, not to dtk: ef's `-v` is its verbose flag,
+Stryker's `-v <version>` names the dashboard version, and jb's `-v` prints its version. dtk reads only its long,
+dtk-only options there: `--vv`, `--show-log`, `--tee` and `--max-lines`. `-h`, `--help` or `-?` prints the tool's own
+help, unfiltered (`dtk dotnet stryker --help`).
 
 ### `dtk pipe`
 
@@ -415,7 +458,7 @@ In quiet mode, verbosity flags (`-v`/`--verbose`, `--vv`) and `--show-log` are i
 
 ## Passthrough Behavior
 
-Any `dotnet` subcommand not in the supported list (build, test, restore, clean, format, list package, publish, pack) is passed through to `dotnet` unchanged:
+Any `dotnet` subcommand not in the supported list (build, test, restore, clean, format, list package, publish, pack, tool restore, ef migrations, ef database, stryker, jb cleanupcode) is passed through to `dotnet` unchanged:
 
 ```sh
 dtk dotnet run        # runs: dotnet run

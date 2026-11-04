@@ -149,11 +149,17 @@ dtk dotnet format --verify-no-changes
 dtk dotnet list package --outdated
 dtk dotnet publish -c Release
 dtk dotnet pack
+dtk dotnet tool restore
+dtk dotnet ef migrations add <Name>
+dtk dotnet stryker
+dtk dotnet jb cleanupcode <solution>
 ```
 
-Unknown subcommands pass through to `dotnet` unchanged, as do `dotnet publish --interactive` and
-`dotnet pack --interactive`, which keep the terminal so a credential provider can prompt, and the runs whose output a
-program reads: `dotnet list package --format json` and MSBuild's `-getProperty`, `-getItem` and `-getTargetResult`.
+Unknown subcommands pass through to `dotnet` unchanged, as do `dotnet publish --interactive`,
+`dotnet pack --interactive` and `dotnet tool restore --interactive`, which keep the terminal so a credential provider
+can prompt, `dotnet ef database drop` without `-f`, which asks for confirmation, a tool's own `--help`, and the runs
+whose output a program reads: `dotnet list package --format json`, MSBuild's `-getProperty`, `-getItem` and
+`-getTargetResult`, and `dotnet ef` with `--json` or a `migrations script` without `-o`.
 
 ### Filtering output dtk did not produce
 

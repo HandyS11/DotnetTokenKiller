@@ -156,7 +156,7 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
             <!-- dtk -->
             ## DotnetTokenKiller (dtk)
 
-            Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
+            Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, pack, tool restore, ef migrations, ef database, stryker, and jb cleanupcode commands.
 
             ```sh
             dtk dotnet build MyProject.slnx
@@ -168,6 +168,10 @@ public sealed class GitHubCopilotIntegratorTests : IDisposable
             dtk dotnet list package --outdated
             dtk dotnet publish -c Release
             dtk dotnet pack
+            dtk dotnet tool restore
+            dtk dotnet ef migrations add <Name>
+            dtk dotnet stryker
+            dtk dotnet jb cleanupcode <solution>
             ```
 
             - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.

@@ -76,6 +76,28 @@ public sealed class SavingsEngineTests
         }
     }
 
+    [Theory]
+    [InlineData(FilterKeys.ToolRestore)]
+    [InlineData(FilterKeys.EfMigrations)]
+    [InlineData(FilterKeys.EfDatabase)]
+    [InlineData(FilterKeys.Stryker)]
+    [InlineData(FilterKeys.JbCleanupCode)]
+    public void FilterFor_PinsTheRootOfTheFiltersWithNoScenarioYet(string filterKey)
+    {
+        // These filters have no fixture yet, so no measured scenario can show that their arm pins the root.
+        var filter = SavingsScenarios.FilterFor(filterKey);
+
+        var rootPath = filter switch
+        {
+            DotnetToolRestoreFilter toolRestore => toolRestore.RootPath,
+            DotnetEfFilter ef => ef.RootPath,
+            DotnetStrykerFilter stryker => stryker.RootPath,
+            DotnetJbCleanupCodeFilter cleanupCode => cleanupCode.RootPath,
+            _ => throw new InvalidOperationException($"No root check for {filter.GetType().Name}.")
+        };
+        rootPath.Should().Be(SavingsScenarios.PinnedRoot);
+    }
+
     [Fact]
     public void Measure_RelativisesPathsAgainstThePinnedRootAlone()
     {

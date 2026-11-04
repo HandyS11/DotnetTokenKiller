@@ -26,7 +26,10 @@ namespace DotnetTokenKiller.Cli;
 /// </list>
 /// dtk reads its options only on the subcommands it filters, and only before the user's own <c>--</c>: any other
 /// subcommand (<c>tool run</c>, <c>run</c>, <c>watch</c>, …) gets its arguments verbatim, so
-/// <c>dotnet tool run x --tee y</c> hands <c>--tee y</c> to <c>x</c>.
+/// <c>dotnet tool run x --tee y</c> hands <c>--tee y</c> to <c>x</c>. On a subcommand that runs a tool
+/// (<see cref="DotnetSubcommands.ToolBacked"/>: <c>ef</c>, <c>stryker</c>, <c>jb cleanupcode</c>) dtk reads only its
+/// long, dtk-only options, <c>--vv</c>, <c>--show-log</c>, <c>--tee</c> and <c>--max-lines</c>: the tool owns every
+/// short option and <c>--verbose</c>, <c>--quiet</c>, <c>--help</c> and the test options, and prints its own help.
 /// </remarks>
 internal static class ArgumentPreprocessor
 {
@@ -82,6 +85,17 @@ internal static class ArgumentPreprocessor
     /// <summary>Every flag Spectre must see before the inserted <c>--</c>: the output and test options, and help.</summary>
     private static readonly HashSet<string> DtkOptions =
         new(OutputOptions.Concat(TestOnlyOptions).Concat(HelpOptions), StringComparer.Ordinal);
+
+    /// <summary>
+    /// The flags dtk reads on a subcommand whose tool owns the others (<see cref="DotnetSubcommands.ToolBacked"/>): its
+    /// long, dtk-only output flags. Its <see cref="ValueOptions"/> are dtk's there too.
+    /// </summary>
+    private static readonly HashSet<string> ToolBackedOptions =
+        new(StringComparer.Ordinal)
+        {
+            "--vv",
+            "--show-log"
+        };
 
     /// <summary>
     /// The options a filtered subcommand passed through anyway cannot honour, because one promises a file and the
@@ -170,8 +184,9 @@ internal static class ArgumentPreprocessor
     /// Returns <see langword="true"/> when the invocation should bypass the Spectre app
     /// and forward directly to <c>dotnet</c>: a subcommand dtk does not filter, or a filtered one whose run must
     /// stay unfiltered with the terminal attached, because it prompts
-    /// (<see cref="PassthroughSubcommands.IsInteractiveFilteredRun"/>) or prints output for a program to parse
-    /// (<see cref="PassthroughSubcommands.IsMachineReadableRun"/>).
+    /// (<see cref="PassthroughSubcommands.IsInteractiveFilteredRun"/>), prints output for a program to parse
+    /// (<see cref="PassthroughSubcommands.IsMachineReadableRun"/>) or asks a tool for its own help
+    /// (<see cref="PassthroughSubcommands.IsToolHelpRun"/>).
     /// </summary>
     /// <param name="args">The raw CLI arguments.</param>
     internal static bool IsPassthrough(string[] args)
@@ -184,7 +199,8 @@ internal static class ArgumentPreprocessor
         var dotnetArgs = args[1..];
         return !DotnetSubcommands.TryMatch(dotnetArgs, out _) ||
                PassthroughSubcommands.IsInteractiveFilteredRun(dotnetArgs) ||
-               PassthroughSubcommands.IsMachineReadableRun(dotnetArgs);
+               PassthroughSubcommands.IsMachineReadableRun(dotnetArgs) ||
+               PassthroughSubcommands.IsToolHelpRun(dotnetArgs);
     }
 
     /// <summary>
@@ -216,13 +232,16 @@ internal static class ArgumentPreprocessor
     /// Removes dtk's options (<c>-v</c>, <c>--verbose</c>, <c>--vv</c>, <c>--show-log</c>, <c>-q</c>, <c>--quiet</c>,
     /// the test options, and <c>--tee</c> and <c>--max-lines</c> with their values) from arguments a raw run passes to
     /// dotnet, which would reject them. A <c>-v</c> followed by a dotnet verbosity level is dotnet's own and stays, as
-    /// does help, which dotnet then prints; the user's own <c>--</c> and everything after it are forwarded verbatim.
+    /// does help, which dotnet then prints; the user's own <c>--</c> and everything after it are forwarded verbatim. A
+    /// tool-backed subcommand loses only <c>--vv</c>, <c>--show-log</c>, <c>--tee</c> and <c>--max-lines</c>.
     /// </summary>
     /// <param name="dotnetArgs">The arguments for dotnet, starting at the subcommand.</param>
     internal static string[] StripDtkOptions(string[] dotnetArgs)
     {
+        var toolBacked = DotnetSubcommands.TryMatch(dotnetArgs, out var match) && IsToolBacked(match);
         var isStripped = new bool[dotnetArgs.Length];
-        foreach (var option in FindDtkOptions(dotnetArgs, 0).Where(option => !HelpOptions.Contains(option.Name)))
+        foreach (var option in FindDtkOptions(dotnetArgs, 0, toolBacked)
+                     .Where(option => !HelpOptions.Contains(option.Name)))
         {
             Array.Fill(isStripped, true, option.Index, option.Length);
         }
@@ -242,7 +261,7 @@ internal static class ArgumentPreprocessor
     /// <returns>The option's name, or <see langword="null"/> when every value option has its value.</returns>
     internal static string? MissingOptionValue(string[] args) =>
         TryMatchFilteredRun(args, out var match)
-            ? FindDtkOptions(args, 1 + match.TokenCount)
+            ? FindDtkOptions(args, 1 + match.TokenCount, IsToolBacked(match))
                 .Where(option => option.MissingValue)
                 .Select(option => option.Name)
                 .FirstOrDefault()
@@ -250,21 +269,22 @@ internal static class ArgumentPreprocessor
 
     /// <summary>
     /// Returns the first test option (<c>--names</c>, <c>--show-output</c>, <c>--fail-on-empty</c>) on a filtered
-    /// subcommand other than <c>dotnet test</c>, which is dtk's usage error rather than a token passed to dotnet.
+    /// subcommand other than <c>dotnet test</c>, which is dtk's usage error rather than a token passed to dotnet. On a
+    /// tool-backed subcommand the token is the tool's.
     /// </summary>
     /// <param name="args">The raw CLI arguments, after <see cref="Normalize"/>.</param>
     /// <returns>The option's name, or <see langword="null"/> when there is none.</returns>
     internal static string? MisplacedTestOption(string[] args) =>
         TryMatchFilteredRun(args, out var match) &&
         !string.Equals(match.Name, DotnetSubcommands.Test, StringComparison.Ordinal)
-            ? FindDtkOptions(args, 1 + match.TokenCount)
+            ? FindDtkOptions(args, 1 + match.TokenCount, IsToolBacked(match))
                 .Select(option => option.Name)
                 .FirstOrDefault(TestOnlyOptions.Contains)
             : null;
 
     /// <summary>
-    /// Returns the first option a filtered subcommand passed through anyway (<c>DTK_RAW=1</c>, <c>--interactive</c>, a
-    /// machine-readable run) cannot honour: <c>--tee</c>, in any form, which promises a file, or
+    /// Returns the first option a filtered subcommand passed through anyway (<c>DTK_RAW=1</c>, a prompt, a
+    /// machine-readable run, a tool's help) cannot honour: <c>--tee</c>, in any form, which promises a file, or
     /// <c>--fail-on-empty</c>, which changes the verdict. Running without it would be a false green, so the run is
     /// refused.
     /// </summary>
@@ -289,8 +309,8 @@ internal static class ArgumentPreprocessor
     /// <summary>
     /// Checks dtk's options before anything runs. A value option without its value
     /// (<see cref="MissingOptionValue"/>) or a test option on another subcommand (<see cref="MisplacedTestOption"/>) is
-    /// a usage error. A filtered subcommand passed through anyway — for <c>--interactive</c>, machine-readable output
-    /// or <c>DTK_RAW=1</c>, in the order <c>Program</c> tests them — is refused for an option it cannot honour
+    /// a usage error. A filtered subcommand passed through anyway — for a prompt, machine-readable output, a tool's
+    /// help or <c>DTK_RAW=1</c>, in the order <c>Program</c> tests them — is refused for an option it cannot honour
     /// (<see cref="OptionRefusedOnPassthrough"/>), and warns once for each display option it drops.
     /// </summary>
     /// <param name="args">The raw CLI arguments, after <see cref="Normalize"/>.</param>
@@ -374,7 +394,7 @@ internal static class ArgumentPreprocessor
         }
 
         var isDtkToken = new bool[args.Length];
-        foreach (var option in FindDtkOptions(args, firstArgIndex))
+        foreach (var option in FindDtkOptions(args, firstArgIndex, IsToolBacked(match)))
         {
             Array.Fill(isDtkToken, true, option.Index, option.Length);
         }
@@ -430,6 +450,11 @@ internal static class ArgumentPreprocessor
         }
 
         var dotnetArgs = args[1..];
+        if (PassthroughSubcommands.PromptsForConfirmation(dotnetArgs))
+        {
+            return "the command asks for confirmation";
+        }
+
         if (PassthroughSubcommands.IsInteractiveFilteredRun(dotnetArgs))
         {
             return "--interactive is set";
@@ -440,6 +465,11 @@ internal static class ArgumentPreprocessor
             return "the output is machine-readable";
         }
 
+        if (PassthroughSubcommands.IsToolHelpRun(dotnetArgs))
+        {
+            return "the tool prints its own help";
+        }
+
         return IsRawRequested(args, dtkRawValue) ? "DTK_RAW=1 is set" : null;
     }
 
@@ -447,18 +477,26 @@ internal static class ArgumentPreprocessor
     /// <param name="dotnetArgs">The arguments for dotnet, starting at the subcommand.</param>
     private static IEnumerable<string> FilteredSubcommandOptionNames(string[] dotnetArgs) =>
         DotnetSubcommands.TryMatch(dotnetArgs, out var match)
-            ? FindDtkOptions(dotnetArgs, match.TokenCount).Select(option => option.Name)
+            ? FindDtkOptions(dotnetArgs, match.TokenCount, IsToolBacked(match)).Select(option => option.Name)
             : [];
+
+    /// <summary>Whether <paramref name="subcommand"/> runs a tool that owns the options dtk does not need.</summary>
+    /// <param name="subcommand">A matched filtered subcommand.</param>
+    private static bool IsToolBacked(SubcommandMatch subcommand) =>
+        subcommand.Name is { } name && DotnetSubcommands.ToolBacked.Contains(name);
 
     /// <summary>
     /// Finds dtk's options from <paramref name="start"/> up to the user's own <c>--</c>, after which nothing is dtk's.
     /// A value option spans its value too when the next token can be one (see <see cref="IsOptionValue"/>); a
-    /// <c>-v</c> that names a dotnet verbosity level is dotnet's, and its level is never a dtk option either.
+    /// <c>-v</c> that names a dotnet verbosity level is dotnet's, and its level is never a dtk option either. On a
+    /// tool-backed subcommand only <see cref="ToolBackedOptions"/> and the value options are dtk's.
     /// </summary>
     /// <param name="args">The arguments to scan.</param>
     /// <param name="start">The index of the first argument after the subcommand.</param>
-    private static IEnumerable<DtkOption> FindDtkOptions(string[] args, int start)
+    /// <param name="toolBacked">Whether the subcommand is in <see cref="DotnetSubcommands.ToolBacked"/>.</param>
+    private static IEnumerable<DtkOption> FindDtkOptions(string[] args, int start, bool toolBacked)
     {
+        var flags = toolBacked ? ToolBackedOptions : DtkOptions;
         var i = start;
         while (i < args.Length && !string.Equals(args[i], "--", StringComparison.Ordinal))
         {
@@ -472,11 +510,11 @@ internal static class ArgumentPreprocessor
                 continue;
             }
 
-            if (JoinedTestOptionName(args[i]) is { } joined)
+            if (!toolBacked && JoinedTestOptionName(args[i]) is { } joined)
             {
                 yield return new DtkOption(joined, i, 1, MissingValue: false);
             }
-            else if (DtkOptions.Contains(args[i]) && !IsDotnetVerbosityFlag(args, i))
+            else if (flags.Contains(args[i]) && !IsDotnetVerbosityFlag(args, i))
             {
                 yield return new DtkOption(args[i], i, 1, MissingValue: false);
             }

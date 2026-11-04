@@ -1,7 +1,7 @@
 <!-- dtk -->
 ## DotnetTokenKiller (dtk)
 
-Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
+Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, pack, tool restore, ef migrations, ef database, stryker, and jb cleanupcode commands.
 
 ```sh
 dtk dotnet build MyProject.slnx
@@ -13,6 +13,10 @@ dtk dotnet format --verify-no-changes
 dtk dotnet list package --outdated
 dtk dotnet publish -c Release
 dtk dotnet pack
+dtk dotnet tool restore
+dtk dotnet ef migrations add <Name>
+dtk dotnet stryker
+dtk dotnet jb cleanupcode <solution>
 ```
 
 - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
@@ -24,5 +28,5 @@ dtk dotnet pack
 - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
 
 A `preToolUse` hook in `.github/hooks/dtk-dotnet.json` runs `dtk hook copilot-cli`, which rewrites
-`dotnet build|test|restore|clean|format|list package|publish|pack` to `dtk dotnet ...` automatically.
+`dotnet build|test|restore|clean|format|list package|publish|pack|tool restore|ef migrations|ef database|stryker|jb cleanupcode` to `dtk dotnet ...` automatically.
 <!-- /dtk -->

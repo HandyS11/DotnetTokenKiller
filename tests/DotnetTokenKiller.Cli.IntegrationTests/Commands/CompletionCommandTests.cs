@@ -201,6 +201,15 @@ public sealed class CompletionCommandTests
     }
 
     [Fact]
+    public void CompletionCandidates_ForTheCanonicalSubcommands_OfferEachFirstTokenOnce()
+    {
+        // Pinned: `ef migrations` and `ef database` share `ef`, and no other list in the scripts offers `tool`, `ef`,
+        // `stryker` or `jb`.
+        CompletionCommand.CompletionCandidates(DotnetSubcommands.Ordered).Should().Equal(
+            "build", "test", "restore", "clean", "format", "list", "publish", "pack", "tool", "ef", "stryker", "jb");
+    }
+
+    [Fact]
     public void CompletionCandidates_TwoSubcommandsSharingAFirstToken_AreDeduplicated()
     {
         CompletionCommand.CompletionCandidates(["list package", "list reference"])

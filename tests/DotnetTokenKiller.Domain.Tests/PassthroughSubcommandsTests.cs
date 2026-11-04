@@ -165,6 +165,108 @@ public class PassthroughSubcommandsTests
     }
 
     [Theory]
+    [InlineData((object)new[] { "tool", "restore", "--interactive" })]
+    [InlineData((object)new[] { "TOOL", "RESTORE", "--add-source", "feed", "--INTERACTIVE" })]
+    public void IsInteractiveFilteredRun_IsTrue_ForAnInteractiveToolRestore(string[] args)
+    {
+        // Private-feed authentication needs the terminal, as for publish and pack.
+        PassthroughSubcommands.IsInteractiveFilteredRun(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "--connection", "Server=db" })]
+    [InlineData((object)new[] { "EF", "DATABASE", "DROP" })]
+    public void IsInteractiveFilteredRun_IsTrue_ForEfDatabaseDropWithoutForce(string[] args)
+    {
+        // It reads its confirmation from stdin, which a filtered run closes.
+        PassthroughSubcommands.IsInteractiveFilteredRun(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop", "-f" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "--force" })]
+    [InlineData((object)new[] { "ef", "database", "update" })]
+    [InlineData((object)new[] { "ef", "migrations", "remove" })]
+    [InlineData((object)new[] { "tool", "restore" })]
+    [InlineData((object)new[] { "tool", "install", "dotnet-ef", "--interactive" })]
+    [InlineData((object)new[] { "stryker", "--interactive" })]
+    public void IsInteractiveFilteredRun_IsFalse_ForToolRunsThatDoNotPrompt(string[] args)
+    {
+        // `tool install` is not filtered, so its --interactive run is an ordinary passthrough already.
+        PassthroughSubcommands.IsInteractiveFilteredRun(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop" })]
+    [InlineData((object)new[] { "ef", "database", "drop", "--dry-run" })]
+    public void PromptsForConfirmation_IsTrue_ForEfDatabaseDropWithoutForce(string[] args)
+    {
+        PassthroughSubcommands.PromptsForConfirmation(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "database", "drop", "-f" })]
+    [InlineData((object)new[] { "ef", "database", "update" })]
+    [InlineData((object)new[] { "tool", "restore", "--interactive" })]
+    [InlineData((object)new string[0])]
+    public void PromptsForConfirmation_IsFalse_Otherwise(string[] args)
+    {
+        PassthroughSubcommands.PromptsForConfirmation(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "migrations", "list", "--json" })]
+    [InlineData((object)new[] { "ef", "database", "update", "--JSON" })]
+    [InlineData((object)new[] { "ef", "dbcontext", "info", "--json" })]
+    [InlineData((object)new[] { "ef", "migrations", "script" })]
+    [InlineData((object)new[] { "ef", "migrations", "script", "Initial", "--idempotent" })]
+    [InlineData((object)new[] { "ef", "migrations", "script", "--", "-o", "x.sql" })]
+    public void IsMachineReadableRun_IsTrue_ForEfJsonAndSqlOnStdout(string[] args)
+    {
+        // `--json` prints a document; `migrations script` without an output file prints the SQL itself. Arguments
+        // after `--` go to the application, not to ef.
+        PassthroughSubcommands.IsMachineReadableRun(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "ef", "migrations", "script", "-o", "x.sql" })]
+    [InlineData((object)new[] { "ef", "migrations", "script", "--output", "x.sql" })]
+    [InlineData((object)new[] { "ef", "migrations", "script", "--output=x.sql" })]
+    [InlineData((object)new[] { "ef", "migrations", "list" })]
+    [InlineData((object)new[] { "ef", "migrations", "add", "Initial", "-o", "Data/Migrations" })]
+    [InlineData((object)new[] { "ef", "migrations", "list", "--", "--json" })]
+    [InlineData((object)new[] { "stryker", "--json" })]
+    public void IsMachineReadableRun_IsFalse_ForEfRunsThatPrintALog(string[] args)
+    {
+        PassthroughSubcommands.IsMachineReadableRun(args).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "stryker", "--help" })]
+    [InlineData((object)new[] { "jb", "cleanupcode", "-h" })]
+    [InlineData((object)new[] { "ef", "migrations", "add", "-?" })]
+    [InlineData((object)new[] { "EF", "DATABASE", "update", "--help" })]
+    public void IsToolHelpRun_IsTrue_ForAToolsOwnHelp(string[] args)
+    {
+        // The tool prints its own help, which dtk's filter would replace with a status line.
+        PassthroughSubcommands.IsToolHelpRun(args).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "test", "--help" })]
+    [InlineData((object)new[] { "tool", "restore", "--help" })]
+    [InlineData((object)new[] { "stryker" })]
+    [InlineData((object)new[] { "stryker", "--", "--help" })]
+    [InlineData((object)new[] { "ef", "--help" })]
+    [InlineData((object)new string[0])]
+    public void IsToolHelpRun_IsFalse_Otherwise(string[] args)
+    {
+        // Spectre answers help for dotnet's own verbs; after `--` the token is not the tool's option.
+        PassthroughSubcommands.IsToolHelpRun(args).Should().BeFalse();
+    }
+
+    [Theory]
     [InlineData((object)new[] { "list", "package", "--format", "json" })]
     [InlineData((object)new[] { "list", "package", "--format=json" })]
     [InlineData((object)new[] { "list", "package", "--format:json" })]

@@ -90,6 +90,35 @@ internal static class CliConfigurator
                 .WithDescription("Run dotnet pack with filtered output")
                 .WithExample(DotnetCommand, DotnetSubcommands.Pack)
                 .WithExample(DotnetCommand, DotnetSubcommands.Pack, "-o", "artifacts");
+            dotnet.AddBranch("tool", tool =>
+            {
+                tool.SetDescription("Run dotnet tool restore with filtered output");
+                tool.AddCommand<DotnetToolRestoreCommand>("restore")
+                    .WithDescription("Run dotnet tool restore with filtered output")
+                    .WithExample(DotnetCommand, "tool", "restore");
+            });
+
+            // The tools below own their short options and their help: `dtk dotnet ef migrations --help` prints ef's.
+            dotnet.AddBranch("ef", ef =>
+            {
+                ef.SetDescription("Run dotnet ef migrations and database with filtered output");
+                ef.AddCommand<DotnetEfMigrationsCommand>("migrations")
+                    .WithDescription("Run dotnet ef migrations with filtered output")
+                    .WithExample(DotnetCommand, "ef", "migrations", "add", "Initial");
+                ef.AddCommand<DotnetEfDatabaseCommand>("database")
+                    .WithDescription("Run dotnet ef database with filtered output")
+                    .WithExample(DotnetCommand, "ef", "database", "update");
+            });
+            dotnet.AddCommand<DotnetStrykerCommand>(DotnetSubcommands.Stryker)
+                .WithDescription("Run dotnet stryker with filtered output")
+                .WithExample(DotnetCommand, DotnetSubcommands.Stryker);
+            dotnet.AddBranch("jb", jb =>
+            {
+                jb.SetDescription("Run dotnet jb cleanupcode with filtered output");
+                jb.AddCommand<DotnetJbCleanupCodeCommand>("cleanupcode")
+                    .WithDescription("Run dotnet jb cleanupcode with filtered output")
+                    .WithExample(DotnetCommand, "jb", "cleanupcode", "MyApp.slnx");
+            });
         });
 
         config.AddCommand<Commands.PipeCommand>(PipeCommand)

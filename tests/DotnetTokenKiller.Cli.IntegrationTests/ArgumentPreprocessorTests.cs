@@ -74,6 +74,49 @@ public sealed class ArgumentPreprocessorTests
         ArgumentPreprocessor.IsPassthrough(args).Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("dotnet tool restore")]
+    [InlineData("dotnet tool restore --help")]
+    [InlineData("dotnet ef migrations add Initial -v")]
+    [InlineData("dotnet ef migrations script -o x.sql")]
+    [InlineData("dotnet ef database drop -f")]
+    [InlineData("dotnet ef database update")]
+    [InlineData("dotnet stryker -v 1.2")]
+    [InlineData("dotnet jb cleanupcode App.slnx")]
+    [InlineData("DOTNET JB CLEANUPCODE App.slnx")]
+    public void IsPassthrough_ReturnsFalse_ForAFilteredToolRun(string input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        ArgumentPreprocessor.IsPassthrough(ArgumentPreprocessor.Normalize(input.Split(' '))).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("dotnet tool restore --interactive")]
+    [InlineData("dotnet ef database drop")]
+    [InlineData("dotnet ef migrations list --json")]
+    [InlineData("dotnet ef migrations script")]
+    [InlineData("dotnet stryker --help")]
+    [InlineData("dotnet jb cleanupcode -h")]
+    [InlineData("dotnet ef database update -?")]
+    [InlineData("dotnet tool run x")]
+    [InlineData("dotnet ef dbcontext list")]
+    public void IsPassthrough_ReturnsTrue_ForAToolRunThatStaysUnfiltered(string input)
+    {
+        // A prompt, a document for a program, the tool's own help, or a verb dtk does not filter.
+        ArgumentNullException.ThrowIfNull(input);
+
+        ArgumentPreprocessor.IsPassthrough(input.Split(' ')).Should().BeTrue();
+    }
+
+    [Fact]
+    public void PassthroughArguments_ToolBacked_KeepsTheToolsShortOptions()
+    {
+        ArgumentPreprocessor.PassthroughArguments(
+                ["dotnet", "ef", "migrations", "list", "--json", "-v", "--show-log", "--tee", "x", "-q"])
+            .Should().Equal("ef", "migrations", "list", "--json", "-v", "-q");
+    }
+
     [Fact]
     public void PassthroughArguments_UnknownSubcommand_IsForwardedVerbatim()
     {
@@ -450,6 +493,45 @@ public sealed class ArgumentPreprocessorTests
         ArgumentPreprocessor.InsertSeparator(input.Split(' ')).Should().Equal(expected.Split(' '));
     }
 
+    [Theory]
+    [InlineData(
+        "dotnet ef migrations add X -v --show-log",
+        "dotnet ef migrations --show-log -- add X -v",
+        "ef migrations add X -v")]
+    [InlineData("dotnet stryker -v 1.2 --max-lines 5", "dotnet stryker --max-lines 5 -- -v 1.2", "stryker -v 1.2")]
+    [InlineData(
+        "dotnet jb cleanupcode App.slnx -v -q --verbose --quiet --vv --tee=x.log",
+        "dotnet jb cleanupcode --vv --tee=x.log -- App.slnx -v -q --verbose --quiet",
+        "jb cleanupcode App.slnx -v -q --verbose --quiet")]
+    [InlineData(
+        "dotnet ef database update -v d --names",
+        "dotnet ef database -- update -v d --names",
+        "ef database update -v d --names")]
+    [InlineData("dotnet stryker -- --max-lines 5", "dotnet stryker -- -- --max-lines 5", "stryker -- --max-lines 5")]
+    public void InsertSeparator_ToolBacked_LeavesShortOptionsToTool(string input, string expected, string rawArguments)
+    {
+        // ef's -v is --verbose, Stryker's -v takes a version and jb's prints one: on these, dtk keeps only its long,
+        // dtk-only options, and the 0.10 `-v <level>` exemption has nothing to exempt. A raw run hands the tool the
+        // same tokens.
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+        ArgumentNullException.ThrowIfNull(rawArguments);
+        var args = input.Split(' ');
+
+        ArgumentPreprocessor.InsertSeparator(args).Should().Equal(expected.Split(' '));
+        ArgumentPreprocessor.StripDtkOptions(args[1..]).Should().Equal(rawArguments.Split(' '));
+    }
+
+    [Fact]
+    public void InsertSeparator_ToolRestore_KeepsDotnetsRules()
+    {
+        // A dotnet verb: dtk's short options are dtk's, and `-v <level>` is dotnet's verbosity.
+        ArgumentPreprocessor.InsertSeparator(["dotnet", "tool", "restore", "-v", "-q", "--show-log"])
+            .Should().Equal("dotnet", "tool", "restore", "-v", "-q", "--show-log");
+        ArgumentPreprocessor.InsertSeparator(["dotnet", "tool", "restore", "-v", "d", "--tee", "x"])
+            .Should().Equal("dotnet", "tool", "restore", "--tee", "x", "--", "-v", "d");
+    }
+
     [Fact]
     public void InsertSeparator_ValueOptionWithoutValue_DoesNotTakeTheNextOption()
     {
@@ -519,6 +601,9 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet test --tee out.log --max-lines 5", null)]
     [InlineData("dotnet test -- --tee", null)]
     [InlineData("dotnet tool run x --tee", null)]
+    [InlineData("dotnet stryker --tee", "--tee")]
+    [InlineData("dotnet ef migrations add X --max-lines", "--max-lines")]
+    [InlineData("dotnet jb cleanupcode --max-lines -v", "--max-lines")]
     public void MissingOptionValue_Detects(string input, string? expected)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -536,6 +621,9 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet test --names --show-output --fail-on-empty", null)]
     [InlineData("dotnet build -- --names", null)]
     [InlineData("dotnet tool run x --names", null)]
+    [InlineData("dotnet tool restore --names", "--names")]
+    [InlineData("dotnet stryker --names", null)]
+    [InlineData("dotnet ef database update --fail-on-empty", null)]
     public void MisplacedTestOption_Detects(string input, string? expected)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -591,6 +679,19 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet test --max-lines 5 --tee x --fail-on-empty", null, false, "")]
     [InlineData("dotnet test --max-lines 5 --tee x", "0", false, "")]
     [InlineData("dotnet tool run x --tee", "1", false, "")]
+    [InlineData("dotnet tool restore --interactive --tee x", null, true,
+        "dtk: --tee needs a filtered run, but --interactive is set")]
+    [InlineData("dotnet ef database drop --tee x", null, true,
+        "dtk: --tee needs a filtered run, but the command asks for confirmation")]
+    [InlineData("dotnet ef database drop --max-lines 5", null, false,
+        "dtk: --max-lines ignored: the command asks for confirmation")]
+    [InlineData("dotnet ef migrations list --json --max-lines 5", null, false,
+        "dtk: --max-lines ignored: the output is machine-readable")]
+    [InlineData("dotnet stryker --help --tee x", null, true,
+        "dtk: --tee needs a filtered run, but the tool prints its own help")]
+    [InlineData("dotnet stryker --help --max-lines 5", null, false,
+        "dtk: --max-lines ignored: the tool prints its own help")]
+    [InlineData("dotnet stryker --names --max-lines 5", null, false, "")]
     [InlineData("gain --days 7", "1", false, "")]
     public void CheckOptions_ReportsUsageErrorsRefusalsAndDroppedOptions(
         string input, string? dtkRawValue, bool isUsageError, string messages)
@@ -759,6 +860,77 @@ public sealed class ArgumentPreprocessorTests
         exitCode.Should().Be(0);
         stdErr.Should().BeEmpty();
         childArguments.Should().Equal("tool", "run", "x", "--tee", "--fail-on-empty", "--names", "--max-lines");
+    }
+
+    // ── Tool subcommands, end to end ─────────────────────────────────────────
+    // Each runs its tool through a filtered run (the fake prints nothing, so the run's only line is a ✓ status line),
+    // with the tool's own short options handed to it and dtk's long ones kept back.
+
+    [UnixTheory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    [InlineData("dotnet tool restore", "tool restore")]
+    [InlineData("dotnet ef migrations add X -v --show-log", "ef migrations add X -v")]
+    [InlineData("dotnet ef database update -v --vv", "ef database update -v")]
+    [InlineData("dotnet stryker -v 1.2 --max-lines 5", "stryker -v 1.2")]
+    [InlineData("dotnet jb cleanupcode App.slnx -v --tee=raw.log", "jb cleanupcode App.slnx -v")]
+    public async Task ToolSubcommand_IsAFilteredRunOfItsTool(string input, string expectedChildArguments)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expectedChildArguments);
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        Directory.CreateDirectory(dir);
+        var args = input.Replace("raw.log", Path.Combine(dir, "raw.log"), StringComparison.Ordinal).Split(' ');
+
+        var (stdOut, stdErr, exitCode, childArguments) =
+            await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(NoEnvironment, args);
+
+        exitCode.Should().Be(0, stdErr);
+        childArguments.Should().Equal(expectedChildArguments.Split(' '));
+        stdOut.TrimEnd().Split('\n')[^1].Should().StartWith("\u2713 dotnet ", "a filtered run ends in its status line");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task EfDatabaseDrop_WithoutForce_RunsAttachedAndUnfiltered()
+    {
+        // It reads its confirmation from stdin, which a filtered run closes: the prompt must reach the user as is.
+        const string prompt = "Are you sure you want to drop the database 'app' on server 'db'? (y/N)";
+        var environment = new Dictionary<string, string> { [IntegrationTestHelper.FakeDotnetStdoutVariable] = prompt };
+
+        var (stdOut, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            environment, "dotnet", "ef", "database", "drop", "--show-log");
+
+        exitCode.Should().Be(0, stdErr);
+        childArguments.Should().Equal("ef", "database", "drop");
+        stdOut.Should().Be(prompt, "a passed-through run prints the child's bytes and no status line");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task EfDatabaseDrop_WithForce_IsFiltered()
+    {
+        var environment = new Dictionary<string, string>
+        {
+            [IntegrationTestHelper.FakeDotnetStdoutVariable] = "Dropping database 'app' on server 'db'.\nDone.\n"
+        };
+
+        var (stdOut, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            environment, "dotnet", "ef", "database", "drop", "-f");
+
+        exitCode.Should().Be(0, stdErr);
+        childArguments.Should().Equal("ef", "database", "drop", "-f");
+        stdOut.TrimEnd().Split('\n')[^1].Should().StartWith("\u26a0 dotnet ef database drop -f");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task ToolHelp_IsTheToolsOwnAndUnfiltered()
+    {
+        const string help = "Usage: Stryker [options]";
+        var environment = new Dictionary<string, string> { [IntegrationTestHelper.FakeDotnetStdoutVariable] = help };
+
+        var (stdOut, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            environment, "dotnet", "stryker", "--help", "--vv");
+
+        exitCode.Should().Be(0, stdErr);
+        childArguments.Should().Equal("stryker", "--help");
+        stdOut.Should().Be(help);
     }
 
     // ── --tee <path>, end to end ─────────────────────────────────────────────

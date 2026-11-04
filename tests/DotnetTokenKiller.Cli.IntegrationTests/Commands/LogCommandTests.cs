@@ -296,18 +296,19 @@ public sealed class LogCommandTests
     [Fact]
     public async Task Run_AcceptsAMultiTokenMeasurablePassthroughSubcommand()
     {
-        // PassthroughSubcommands.CommandName(["ef", "migrations"]) is "ef migrations", sanitised to
-        // "ef-migrations" by TeeLogFileName.Sanitize — the same slug the log was actually written under.
-        var entry = Entry(5, "ef-migrations");
+        // PassthroughSubcommands.CommandName(["sln", "list"]) is "sln list", sanitised to "sln-list" by
+        // TeeLogFileName.Sanitize — the same slug the log was actually written under. (`ef migrations`, the
+        // example here before dtk filtered it, now resolves as a filtered subcommand.)
+        var entry = Entry(5, "sln-list");
         var (command, console, _) = Create(new FakeStore(
-            new Dictionary<string, string> { [entry.FilePath] = "migrating...\n" }, entry, Entry(9, "build")));
+            new Dictionary<string, string> { [entry.FilePath] = "App.csproj\n" }, entry, Entry(9, "build")));
 
         var exitCode = await command.RunAsync(
-            new LogCommandSettings { Subcommand = ["ef", "migrations"], List = true },
+            new LogCommandSettings { Subcommand = ["sln", "list"], List = true },
             CancellationToken.None);
 
         exitCode.Should().Be(0);
-        console.Output.Should().Contain("ef-migrations");
+        console.Output.Should().Contain("sln-list");
     }
 
     [Fact]

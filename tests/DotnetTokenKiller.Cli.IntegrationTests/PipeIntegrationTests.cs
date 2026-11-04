@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
+using DotnetTokenKiller.Domain;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Xunit;
@@ -62,7 +63,34 @@ public class PipeIntegrationTests
             await IntegrationTestHelper.RunDtkWithStdinAsync("anything", "pipe", "run");
 
         exitCode.Should().Be(1);
-        output.Should().Contain("build").And.Contain("list package");
+
+        // The list is wrapped between names at 80 columns, so neither a narrow terminal nor a reader folds a
+        // multi-token name such as "list package" across two lines.
+        var lines = output.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n');
+        lines.Should().OnlyContain(line => line.Length <= 80, output);
+        foreach (var subcommand in DotnetSubcommands.Ordered)
+        {
+            lines.Should().Contain(line => line.Contains(subcommand, StringComparison.Ordinal), subcommand);
+        }
+
+        lines[^1].Should().EndWith("jb cleanupcode", "the list ends with the last subcommand, unfolded");
+    }
+
+    [Theory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    [InlineData("tool restore")]
+    [InlineData("ef migrations")]
+    [InlineData("ef database")]
+    [InlineData("stryker")]
+    [InlineData("jb cleanupcode")]
+    public async Task Pipe_ToolSubcommand_IsAcceptedAsync(string subcommand)
+    {
+        ArgumentNullException.ThrowIfNull(subcommand);
+
+        var (output, exitCode, dbPath) =
+            await IntegrationTestHelper.RunDtkWithStdinAsync("Done.", ["pipe", .. subcommand.Split(' ')]);
+
+        exitCode.Should().Be(0, output);
+        (await IntegrationTestHelper.ReadTrackedCommandsAsync(dbPath)).Should().Equal(subcommand);
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

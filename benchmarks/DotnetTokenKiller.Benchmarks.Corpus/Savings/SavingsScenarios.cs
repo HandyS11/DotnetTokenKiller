@@ -99,6 +99,10 @@ public static class SavingsScenarios
         FilterKeys.Format => new DotnetFormatFilter(PinnedRoot),
         FilterKeys.Publish => new DotnetPublishFilter(PinnedRoot),
         FilterKeys.Pack => new DotnetPackFilter(PinnedRoot),
+        FilterKeys.ToolRestore => new DotnetToolRestoreFilter(PinnedRoot),
+        FilterKeys.EfMigrations or FilterKeys.EfDatabase => new DotnetEfFilter(PinnedRoot),
+        FilterKeys.Stryker => new DotnetStrykerFilter(PinnedRoot),
+        FilterKeys.JbCleanupCode => new DotnetJbCleanupCodeFilter(PinnedRoot),
 
         // Takes no root: it reports package names, not file paths.
         FilterKeys.ListPackage => new DotnetListPackageFilter(),

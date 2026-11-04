@@ -33,6 +33,11 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetListPackageFilter>(FilterKeys.ListPackage);
         services.AddKeyedTransient<IOutputFilter, DotnetPublishFilter>(FilterKeys.Publish);
         services.AddKeyedTransient<IOutputFilter, DotnetPackFilter>(FilterKeys.Pack);
+        services.AddKeyedTransient<IOutputFilter, DotnetToolRestoreFilter>(FilterKeys.ToolRestore);
+        services.AddKeyedTransient<IOutputFilter, DotnetEfFilter>(FilterKeys.EfMigrations);
+        services.AddKeyedTransient<IOutputFilter, DotnetEfFilter>(FilterKeys.EfDatabase);
+        services.AddKeyedTransient<IOutputFilter, DotnetStrykerFilter>(FilterKeys.Stryker);
+        services.AddKeyedTransient<IOutputFilter, DotnetJbCleanupCodeFilter>(FilterKeys.JbCleanupCode);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
         // Decode piped stdin as UTF-8 explicitly rather than inheriting the OS console code page

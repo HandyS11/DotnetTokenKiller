@@ -30,4 +30,19 @@ public static class FilterKeys
 
     /// <summary>Key for the <c>dotnet pack</c> output filter.</summary>
     public const string Pack = DotnetSubcommands.Pack;
+
+    /// <summary>Key for the <c>dotnet tool restore</c> output filter.</summary>
+    public const string ToolRestore = DotnetSubcommands.ToolRestore;
+
+    /// <summary>Key for the <c>dotnet ef migrations</c> output filter, also <see cref="EfDatabase"/>'s.</summary>
+    public const string EfMigrations = DotnetSubcommands.EfMigrations;
+
+    /// <summary>Key for the <c>dotnet ef database</c> output filter, also <see cref="EfMigrations"/>'s.</summary>
+    public const string EfDatabase = DotnetSubcommands.EfDatabase;
+
+    /// <summary>Key for the <c>dotnet stryker</c> output filter.</summary>
+    public const string Stryker = DotnetSubcommands.Stryker;
+
+    /// <summary>Key for the <c>dotnet jb cleanupcode</c> output filter.</summary>
+    public const string JbCleanupCode = DotnetSubcommands.JbCleanupCode;
 }
