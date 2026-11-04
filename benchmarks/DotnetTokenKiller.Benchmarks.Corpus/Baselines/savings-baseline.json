@@ -476,6 +476,28 @@
       "savingsPercent": 90.2
     },
     {
+      "id": "test/mtp-detailed-fail",
+      "fixture": "dotnet_test_mtp_detailed_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2417,
+      "rawTokens": 658,
+      "filteredTokens": 91,
+      "savedTokens": 567,
+      "savingsPercent": 86.2
+    },
+    {
+      "id": "test/mtp-detailed-pass",
+      "fixture": "dotnet_test_mtp_detailed_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 1052,
+      "rawTokens": 350,
+      "filteredTokens": 19,
+      "savedTokens": 331,
+      "savingsPercent": 94.6
+    },
+    {
       "id": "test/mtp-failures",
       "fixture": "dotnet_test_mtp_failures.txt",
       "filterKey": "test",
@@ -507,6 +529,17 @@
       "filteredTokens": 104,
       "savedTokens": 541,
       "savingsPercent": 83.9
+    },
+    {
+      "id": "test/mtp-xunit3-detailed",
+      "fixture": "dotnet_test_mtp_xunit3_detailed.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 1716,
+      "rawTokens": 524,
+      "filteredTokens": 77,
+      "savedTokens": 447,
+      "savingsPercent": 85.3
     },
     {
       "id": "test/mtp-xunit3-failures",
@@ -573,6 +606,17 @@
       "filteredTokens": 27,
       "savedTokens": 212,
       "savingsPercent": 88.7
+    },
+    {
+      "id": "test/names-vstest",
+      "fixture": "dotnet_test_names_vstest.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 3029,
+      "rawTokens": 806,
+      "filteredTokens": 75,
+      "savedTokens": 731,
+      "savingsPercent": 90.7
     },
     {
       "id": "test/nested-exception",

@@ -1,0 +1,45 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  SampleApp.Tests -> /test/project/root/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll
+Test run for /test/project/root/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v4.0.1+0f7d528729 (64-bit .NET 10.0.14)
+[xUnit.net 00:00:00.07]   Discovering: SampleApp.Tests
+[xUnit.net 00:00:00.10]   Discovered:  SampleApp.Tests
+[xUnit.net 00:00:00.13]   Starting:    SampleApp.Tests
+     Warning:
+     The component "Fluent Assertions" is governed by the rules defined in the Xceed License Agreement and
+     the Xceed Fluent Assertions Community License. You may use Fluent Assertions free of charge for
+     non-commercial use only. An active subscription is required to use Fluent Assertions for commercial use.
+     Please contact Xceed Sales mailto:sales@xceed.com to acquire a subscription at a very low cost.
+     A paid commercial license supports the development and continued increasing support of
+     Fluent Assertions users under both commercial and community licenses. Help us
+     keep Fluent Assertions at the forefront of unit testing.
+     For more information, visit https://xceed.com/products/unit-testing/fluent-assertions/
+[xUnit.net 00:00:00.16]     SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [FAIL]
+[xUnit.net 00:00:00.17]       Intentional failure
+[xUnit.net 00:00:00.17]       Stack Trace:
+[xUnit.net 00:00:00.17]         /test/project/root/SampleApp.Tests/IntentionallyFailingTests.cs(8,0): at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails()
+[xUnit.net 00:00:00.17]            at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+[xUnit.net 00:00:00.17]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.17]   Finished:    SampleApp.Tests
+  Passed SampleApp.Tests.ParserTests.Parses(value: "x(y)") [2 ms]
+  Passed SampleApp.Tests.ParserTests.Parses(value: 1.5) [< 1 ms]
+  Passed SampleApp.Tests.ParserTests.Parses(value: 42) [< 1 ms]
+  Passed SampleApp.Tests.ParserTests.Parses(value: "a.b/c") [< 1 ms]
+  Failed SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]
+  Error Message:
+   Intentional failure
+  Stack Trace:
+     at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails() in /test/project/root/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Passed SampleApp.Tests.SampleTests.String_IsNotEmpty [11 ms]
+  Passed SampleApp.Tests.SampleTests.List_ContainsExpectedItems [< 1 ms]
+  Passed SampleApp.Tests.SampleTests.Addition_ReturnsCorrectResult [< 1 ms]
+
+Test Run Failed.
+Total tests: 8
+     Passed: 7
+     Failed: 1
+ Total time: 0.5031 Seconds

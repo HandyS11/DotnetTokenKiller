@@ -1,0 +1,31 @@
+Running tests from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+passed Beta.Tests.ParserTests.Parses(value: "x(y)") (9ms)
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+passed Beta.Tests.CalculatorTests.Subtracts (10ms)
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+passed Beta.Tests.ParserTests.Parses(value: 42) (0ms)
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+passed Beta.Tests.ParserTests.Parses(value: "a.b/c") (0ms)
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+passed Beta.Tests.ParserTests.Parses(value: 1.5) (0ms)
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+passed Beta.Tests.CalculatorTests.Adds (0ms)
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+failed Beta.Tests.CalculatorTests.Divides (1ms)
+  from /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)
+  Assert.Equal() Failure: Values differ
+  Expected: 3
+  Actual:   2
+    at Beta.Tests.CalculatorTests.Divides() in /test/project/root/Beta.Tests/Tests.cs:15
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64) failed with 1 error(s) (303ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 7
+  failed: 1
+  succeeded: 6
+  skipped: 0
+  duration: 473ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

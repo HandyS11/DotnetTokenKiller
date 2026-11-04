@@ -728,6 +728,29 @@ public sealed class ArgumentPreprocessorTests
     }
 
     [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Names_UnderVsTest_AddsTheNormalConsoleLoggerBeforeTheUsersSeparator()
+    {
+        // dtk runs in this repository, whose global.json names no test runner: VSTest.
+        var (_, _, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "test", "--names", "--filter", "X", "--", "RunConfiguration.X=1");
+
+        exitCode.Should().Be(0);
+        childArguments.Should().Equal(
+            "test", "--filter", "X", "--logger", "console;verbosity=normal", "--", "RunConfiguration.X=1");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_Names_InjectsNothing()
+    {
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            RawOutput, "dotnet", "test", "--names", "--filter", "X");
+
+        exitCode.Should().Be(0);
+        stdErr.Should().Be($"dtk: --names ignored: DTK_RAW=1 is set{Environment.NewLine}");
+        childArguments.Should().Equal("test", "--filter", "X");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task UnfilteredSubcommand_KeepsOptionsSpelledLikeDtksVerbatim()
     {
         var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(

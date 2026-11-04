@@ -2451,6 +2451,158 @@ public class DotnetTestFilterTests
         result.Should().NotContain("\r").And.Be(_sut.Apply(fixture, exitCode, ShowOutput).Output);
     }
 
+    private static FilterContext Names { get; } = new()
+    {
+        Test = new TestOptions(Names: true, ShowOutput: false, FailOnEmpty: false)
+    };
+
+    [Fact]
+    public void Apply_Names_GroupsByClass()
+    {
+        // VSTest's normal console logger, xUnit v2: SampleApp.Tests with a [Theory] class beside it.
+        var fixture = LoadFixture("dotnet_test_names_vstest.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
+
+        result.Should().Be(
+            "FAILURES (1):\n" +
+            "  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]\n" +
+            "    Intentional failure\n" +
+            "    at SampleApp.Tests/IntentionallyFailingTests.cs:line 8\n" +
+            "✓ SampleApp.Tests.ParserTests (1): Parses ×4\n" +
+            "✓ SampleApp.Tests.SampleTests (3): String_IsNotEmpty, List_ContainsExpectedItems, Addition_ReturnsCorrectResult\n" +
+            "✗ dotnet test: 1 failed, 7 passed (1 project, 0.50s)\n");
+    }
+
+    [Fact]
+    public void Apply_Names_TheoryWithDotsAndParens()
+    {
+        // Review Focus 4: the class is split at the last '.' before the first '(', so the rows
+        // Parses(value: 1.5), Parses(value: "a.b/c") and Parses(value: "x(y)") are one method of one class.
+        var fixture = LoadFixture("dotnet_test_names_vstest.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
+
+        result.Should().Contain("✓ SampleApp.Tests.ParserTests (1): Parses ×4\n")
+            .And.NotContain("a.b/c").And.NotContain("1.5");
+    }
+
+    [Fact]
+    public void Apply_Names_MtpMsTest_GroupsUnderAssembly()
+    {
+        // MSTest under MTP prints a bare display name ("Parses (1.5)") and, below it, the assembly it came from.
+        var pass = LoadFixture("dotnet_test_mtp_detailed_pass.txt");
+        var fail = LoadFixture("dotnet_test_mtp_detailed_fail.txt");
+
+        _sut.Apply(pass, exitCode: 0, Names).Output.Should().Be(
+            "✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n" +
+            "✓ dotnet test: 7 passed (1 project, 0.31s)\n");
+        _sut.Apply(fail, exitCode: 2, Names).Output.Should().EndWith(
+            "    at Alpha.Tests/CalculatorTests.cs:line 22\n" +
+            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Joins\n" +
+            "✗ dotnet test: 1 failed, 6 passed (1 project, 0.32s)\n");
+    }
+
+    [Fact]
+    public void Apply_Names_XunitV3()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_xunit3_detailed.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2, Names).Output;
+
+        result.Should().EndWith(
+            "    at Beta.Tests/Tests.cs:line 15\n" +
+            "✓ Beta.Tests.ParserTests (1): Parses ×4\n" +
+            "✓ Beta.Tests.CalculatorTests (2): Subtracts, Adds\n" +
+            "✗ dotnet test: 1 failed, 6 passed (1 project, 0.47s)\n");
+    }
+
+    [Fact]
+    public void Apply_Names_NotInOutput_Warns()
+    {
+        // The minimal logger prints no name: say so rather than list nothing.
+        var fixture = LoadFixture("dotnet_test_all_pass.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0, Names).Output;
+
+        result.Should().Be("⚠ --names: passed test names not in the output\n" + _sut.Apply(fixture, exitCode: 0));
+        LastLine(result).Should().StartWith("✓ dotnet test: 17 passed");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_names_vstest.txt", 1)]
+    [InlineData("dotnet_test_mtp_detailed_pass.txt", 0)]
+    [InlineData("dotnet_test_mtp_detailed_fail.txt", 2)]
+    [InlineData("dotnet_test_mtp_xunit3_detailed.txt", 2)]
+    public void Apply_NoNamesFlag_ListsNoName(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        _sut.Apply(fixture, exitCode).Should().NotContain("Parses").And.NotContain("--names");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_zero.txt", 0)]
+    [InlineData("dotnet_test_mtp_zero.txt", 8)]
+    [InlineData("dotnet_test_skipped_only.txt", 0)]
+    [InlineData("dotnet_test_missing_project.txt", 1)]
+    public void Apply_Names_NoPassedTest_AddsNothing(string name, int exitCode)
+    {
+        // No test passed, so there is no name to miss; and a run left to the raw tail must stay empty.
+        var fixture = LoadFixture(name);
+
+        _sut.Apply(fixture, exitCode, Names).Output.Should().Be(_sut.Apply(fixture, exitCode));
+    }
+
+    [Fact]
+    public void Apply_Names_MtpTwoAssemblies_GroupsEachUnderItsOwn()
+    {
+        // Parallel test apps announce themselves first and interleave their results: the "from" line under each
+        // result, not the last "Running tests from", says which assembly a bare name belongs to.
+        var fixture = LoadFixture("dotnet_test_mtp_detailed_pass.txt");
+        const string alpha = "/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)";
+        const string beta = "/test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)";
+        var twoApps = fixture
+            .Replace($"Running tests from {alpha}\n", $"Running tests from {alpha}\nRunning tests from {beta}\n",
+                StringComparison.Ordinal)
+            .Replace($"passed Joins (0ms)\n  from {alpha}", $"passed Joins (0ms)\n  from {beta}",
+                StringComparison.Ordinal);
+
+        var result = _sut.Apply(twoApps, exitCode: 0, Names).Output;
+
+        result.Should().StartWith(
+            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Divides\n" +
+            "✓ Beta.Tests.dll (1): Joins\n");
+    }
+
+    [Fact]
+    public void Apply_Names_MtpWithoutFromLines_UsesTheOnlyAssembly()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_detailed_pass.txt");
+        var noFrom = string.Join('\n', fixture.Split('\n').Where(l => !l.StartsWith("  from ", StringComparison.Ordinal)));
+
+        var single = _sut.Apply(noFrom, exitCode: 0, Names).Output;
+        var two = _sut.Apply(noFrom.Replace("Running tests from", "Running tests from /x/Other.dll (net10.0|x64)\nRunning tests from",
+            StringComparison.Ordinal), exitCode: 0, Names).Output;
+
+        single.Should().StartWith("✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
+        two.Should().StartWith("✓ (unknown class) (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_names_vstest.txt", 1)]
+    [InlineData("dotnet_test_mtp_detailed_pass.txt", 0)]
+    [InlineData("dotnet_test_mtp_detailed_fail.txt", 2)]
+    [InlineData("dotnet_test_mtp_xunit3_detailed.txt", 2)]
+    public void Apply_Names_Crlf(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture.ReplaceLineEndings("\r\n"), exitCode, Names).Output;
+
+        result.Should().NotContain("\r").And.Be(_sut.Apply(fixture, exitCode, Names).Output);
+    }
+
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>
     /// <param name="output">The filtered output.</param>
     private static string MessageLine(string output) =>

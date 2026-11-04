@@ -1,0 +1,33 @@
+Running tests from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Adds (4ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Subtracts (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Parses (1.5) (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Parses ("a.b/c") (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Parses (42) (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+failed Divides (9ms)
+  Assert.AreEqual failed. Expected:<3>. Actual:<2>. 'expected' expression: 'fail ? 3 : 2', 'actual' expression: '4 / 2'.
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+  Assert.AreEqual failed. Expected:<3>. Actual:<2>. 'expected' expression: 'fail ? 3 : 2', 'actual' expression: '4 / 2'.
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowAssertAreEqualFailed(Object expected, Object actual, String userMessage) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:665
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, IEqualityComparer`1 comparer, String message, String expectedExpression, String actualExpression) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:492
+    at Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, String message, String expectedExpression, String actualExpression) in /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:405
+    at Alpha.Tests.CalculatorTests.Divides() in /test/project/root/Alpha.Tests/CalculatorTests.cs:22
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+passed Joins (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) failed with 1 error(s) (170ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 7
+  failed: 1
+  succeeded: 6
+  skipped: 0
+  duration: 319ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
