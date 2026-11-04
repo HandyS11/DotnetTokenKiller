@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DotnetTokenKiller.Infrastructure.Files;
 using FluentAssertions;
 using Xunit;
@@ -110,5 +111,55 @@ public sealed class FileContentSnapshotterTests : IDisposable
         var act = () => new FileContentSnapshotter().Take(_root, cts.Token);
 
         act.Should().Throw<OperationCanceledException>();
+    }
+
+    [Fact]
+    public void Take_OverByteLimit_DecidesFromSizesWithoutReadingTheFile()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // Unreadable: were it opened, it would be skipped and the snapshot would succeed (unless running as
+        // root); judging by the size alone gives up before any read.
+        Write("big.bin", new string('x', 100));
+        var path = Path.Combine(_root, "big.bin");
+        File.SetUnixFileMode(path, UnixFileMode.None);
+        try
+        {
+            new FileContentSnapshotter(maxFiles: 10, maxBytes: 50).Take(_root).Should().BeNull();
+        }
+        finally
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+    }
+
+    [Fact]
+    public async Task Take_SkipsNamedPipes_AndReturnsPromptly()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Write("a.cs", "a");
+        var fifo = Path.Combine(_root, "pipe");
+        using (var mkfifo = Process.Start("mkfifo", fifo))
+        {
+            await mkfifo.WaitForExitAsync();
+            mkfifo.ExitCode.Should().Be(0);
+        }
+
+        var take = Task.Run(() => new FileContentSnapshotter().Take(_root));
+
+        var finished = await Task.WhenAny(take, Task.Delay(TimeSpan.FromSeconds(10)));
+
+        finished.Should().BeSameAs(take, "a named pipe must not block the snapshot");
+        var before = await take;
+        before.Should().NotBeNull();
+        Write("a.cs", "b");
+        new FileContentSnapshotter().Take(_root)!.ChangedSince(before).Should().Equal("a.cs");
     }
 }

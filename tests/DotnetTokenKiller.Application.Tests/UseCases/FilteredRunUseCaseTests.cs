@@ -1477,16 +1477,91 @@ public class FilteredRunUseCaseTests
         _snapshotter.DidNotReceiveWithAnyArgs().Take(default!, default);
     }
 
+    [Fact]
+    public async Task RunAsync_CancelledDuringTheBeforeSnapshot_FinalizesTheSessionAndClosesTheCopy()
+    {
+        using var cts = new CancellationTokenSource();
+        var session = CreateSession();
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        var act = async () => await _sut.RunAsync(
+            new SnapshotFilter("/somewhere"), "dotnet", ["jb", "cleanupcode"], new OutputOptions(TeePath: "raw.log"),
+            cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await session.Received(1).FinalizeAsync(ExitCodes.Cancelled, CancellationToken.None);
+        copy.DisposeCount.Should().BeGreaterThan(0);
+        await _runner.DidNotReceiveWithAnyArgs().RunStreamedAsync(default!, default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task RunAsync_BeforeSnapshotThrows_RunCompletesWithChangesNotComputed()
+    {
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ => throw new IOException("boom"));
+        var filter = new SnapshotFilter("/somewhere");
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        var exit = await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        exit.Should().Be(0);
+        filter.Seen!.Computed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_AfterSnapshotThrows_RunCompletesWithChangesNotComputed()
+    {
+        var before = new FileContentSnapshot("/r", new Dictionary<string, string>());
+        var calls = 0;
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => ++calls == 1 ? before : throw new UnauthorizedAccessException());
+        var filter = new SnapshotFilter("/somewhere");
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        var exit = await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        exit.Should().Be(0);
+        filter.Seen!.Computed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotRootThrows_RunCompletesWithChangesNotComputed()
+    {
+        var filter = new SnapshotFilter("/somewhere") { RootFailure = new InvalidOperationException("no root") };
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        var exit = await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        exit.Should().Be(0);
+        filter.Seen!.Computed.Should().BeFalse();
+    }
+
     private sealed class SnapshotFilter(string root) : IContextualOutputFilter, ISnapshotFilter
     {
         public FileChangeSet? Seen { get; private set; }
 
         public IReadOnlyList<string>? Arguments { get; private set; }
 
+        public Exception? RootFailure { get; init; }
+
         public string SnapshotRoot(IReadOnlyList<string> arguments, string workingDirectory)
         {
             Arguments = arguments;
-            return root;
+            return RootFailure is null ? root : throw RootFailure;
         }
 
         public string Apply(string strippedOutput, int exitCode) => Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;

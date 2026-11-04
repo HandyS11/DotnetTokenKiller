@@ -105,15 +105,12 @@ public sealed class FilteredRunUseCase(
 #pragma warning restore CA2007
         var stdOutSink = countingSink ?? session.Writer;
 
-        // Before the child starts; only a filter that asks for it pays for the walk.
-        var snapshotRoot = filter is ISnapshotFilter snapshotFilter
-            ? snapshotFilter.SnapshotRoot(ArgumentsAfterSubcommand(args), Environment.CurrentDirectory)
-            : null;
-        var snapshotBefore = snapshotRoot is null ? null : fileSnapshotter.Take(snapshotRoot, cancellationToken);
-
         CommandResult result;
+        SnapshotRun snapshot;
         try
         {
+            // Before the child starts, and inside this guard so a Ctrl+C during the walk still closes the log.
+            snapshot = TakeSnapshotBefore(filter, args, cancellationToken);
             result = await commandRunner
                 .RunStreamedAsync(command, args, stdOutSink, session.Writer, cancellationToken)
                 .ConfigureAwait(false);
@@ -138,7 +135,7 @@ public sealed class FilteredRunUseCase(
 
         // Only here, once the child has exited on its own: a cancelled run rethrew above. Not cancellable, like
         // the pipeline call below, so a late Ctrl+C cannot drop the output of a run that finished.
-        var changes = snapshotRoot is null ? null : ChangesSince(snapshotBefore, snapshotRoot);
+        var changes = ChangesSince(snapshot);
 
         var request = new FilteredOutputRequest(
             filter,
@@ -168,12 +165,58 @@ public sealed class FilteredRunUseCase(
         return await pipeline.ProcessAsync(request, session, prepared, CancellationToken.None).ConfigureAwait(false);
     }
 
-    private FileChangeSet ChangesSince(FileContentSnapshot? before, string root)
+    /// <summary>Hashes the tree before the child starts, for a filter that asks for it; never fails the run.</summary>
+    /// <param name="filter">The run's filter.</param>
+    /// <param name="args">The command's arguments.</param>
+    /// <param name="token">Cancels the walk.</param>
+    private SnapshotRun TakeSnapshotBefore(IOutputFilter filter, IReadOnlyList<string> args, CancellationToken token)
     {
-        var after = before is null ? null : fileSnapshotter.Take(root);
-        return before is null || after is null
-            ? FileChangeSet.NotComputed("tree too large")
-            : new FileChangeSet(after.ChangedSince(before));
+        if (filter is not ISnapshotFilter snapshotFilter)
+        {
+            return default;
+        }
+
+        try
+        {
+            var root = snapshotFilter.SnapshotRoot(ArgumentsAfterSubcommand(args), Environment.CurrentDirectory);
+            var before = fileSnapshotter.Take(root, token);
+            return new SnapshotRun(root, before, before is null ? TreeTooLarge : null);
+        }
+#pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
+        catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+        {
+            return new SnapshotRun(string.Empty, null, SnapshotFailed);
+        }
+    }
+
+    /// <summary>The files that changed during the run, or <see langword="null"/> when the filter asked for none.</summary>
+    /// <param name="run">What was taken before the child started.</param>
+    private FileChangeSet? ChangesSince(SnapshotRun run)
+    {
+        if (run.Root is null)
+        {
+            return null;
+        }
+
+        if (run.Before is null)
+        {
+            return FileChangeSet.NotComputed(run.FailureReason ?? SnapshotFailed);
+        }
+
+        try
+        {
+            var after = fileSnapshotter.Take(run.Root);
+            return after is null
+                ? FileChangeSet.NotComputed(TreeTooLarge)
+                : new FileChangeSet(after.ChangedSince(run.Before));
+        }
+#pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return FileChangeSet.NotComputed(SnapshotFailed);
+        }
     }
 
     /// <summary>The arguments after the subcommand's tokens, or after the first one when none matches.</summary>
@@ -204,4 +247,9 @@ public sealed class FilteredRunUseCase(
 
         return args.Count > 0 ? args[0] : command;
     }
+
+    private const string TreeTooLarge = "tree too large";
+    private const string SnapshotFailed = "snapshot failed";
+
+    private readonly record struct SnapshotRun(string? Root, FileContentSnapshot? Before, string? FailureReason);
 }

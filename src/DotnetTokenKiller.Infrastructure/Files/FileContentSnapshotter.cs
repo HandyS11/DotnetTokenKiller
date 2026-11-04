@@ -12,6 +12,8 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
     private static readonly HashSet<string> SkippedDirectories =
         new(["bin", "obj", "node_modules", "artifacts", "StrykerOutput"], StringComparer.Ordinal);
 
+    private static readonly string EmptyHash = Convert.ToHexString(SHA256.HashData([]));
+
     private readonly int _maxFiles;
     private readonly long _maxBytes;
 
@@ -44,33 +46,38 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
         }
 
         var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
-        long totalBytes = 0;
-        foreach (var path in files)
+        foreach (var (path, length) in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!TryHash(path, out var hash, out var length))
-            {
-                continue;
-            }
 
-            totalBytes += length;
-            if (totalBytes > _maxBytes)
+            // A zero-length entry is never opened: a named pipe or device reports no size and would block the
+            // open, while an empty regular file has a known hash. A file that later gains content still differs.
+            if (length == 0)
             {
-                return null;
+                hashes[RelativePath(rootPath, path)] = EmptyHash;
             }
-
-            hashes[Path.GetRelativePath(rootPath, path).Replace('\\', '/')] = hash;
+            else if (TryHash(path, out var hash))
+            {
+                hashes[RelativePath(rootPath, path)] = hash;
+            }
         }
 
         return new FileContentSnapshot(rootPath, hashes);
     }
 
-    /// <summary>Lists the regular files worth hashing, or <see langword="null"/> past the file limit.</summary>
+    private static string RelativePath(string rootPath, string path) =>
+        Path.GetRelativePath(rootPath, path).Replace('\\', '/');
+
+    /// <summary>
+    /// Lists the files worth hashing with their sizes, or <see langword="null"/> past the file or byte limit,
+    /// decided from the directory entries alone so an oversized tree is never read.
+    /// </summary>
     /// <param name="rootPath">The absolute root.</param>
     /// <param name="cancellationToken">Checked between entries.</param>
-    private List<string>? CollectFiles(string rootPath, CancellationToken cancellationToken)
+    private List<(string Path, long Length)>? CollectFiles(string rootPath, CancellationToken cancellationToken)
     {
-        var files = new List<string>();
+        var files = new List<(string Path, long Length)>();
+        long totalBytes = 0;
         var pending = new Stack<string>();
         pending.Push(rootPath);
         while (pending.Count > 0)
@@ -78,28 +85,45 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
             foreach (var entry in Entries(pending.Pop()))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                if (IsSkipped(entry))
                 {
                     continue;
                 }
 
-                if (entry is not DirectoryInfo)
+                if (entry is FileInfo file)
                 {
-                    files.Add(entry.FullName);
+                    var length = SizeOf(file);
+                    totalBytes += length;
+                    files.Add((file.FullName, length));
+                    if (files.Count > _maxFiles || totalBytes > _maxBytes)
+                    {
+                        return null;
+                    }
                 }
-                else if (!entry.Name.StartsWith('.') && !SkippedDirectories.Contains(entry.Name))
+                else
                 {
                     pending.Push(entry.FullName);
-                }
-
-                if (files.Count > _maxFiles)
-                {
-                    return null;
                 }
             }
         }
 
         return files;
+    }
+
+    private static bool IsSkipped(FileSystemInfo entry) =>
+        entry.Attributes.HasFlag(FileAttributes.ReparsePoint)
+        || (entry is DirectoryInfo && (entry.Name.StartsWith('.') || SkippedDirectories.Contains(entry.Name)));
+
+    private static long SizeOf(FileInfo file)
+    {
+        try
+        {
+            return file.Length;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
     }
 
     private static List<FileSystemInfo> Entries(string directory)
@@ -114,19 +138,17 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
         }
     }
 
-    private static bool TryHash(string path, out string hash, out long length)
+    private static bool TryHash(string path, out string hash)
     {
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            length = stream.Length;
             hash = Convert.ToHexString(SHA256.HashData(stream));
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             hash = string.Empty;
-            length = 0;
             return false;
         }
     }
