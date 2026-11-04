@@ -457,11 +457,11 @@ public sealed class DoctorUseCaseTests : IDisposable
         checks.Select(c => c.Name).Should().NotContain("rtk coexistence");
     }
 
-    private async Task RegisterRtkHookAsync()
+    private Task RegisterRtkHookAsync()
     {
         var settings = Path.Combine(_tempDir, ".claude", "settings.json");
         Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
-        await File.WriteAllTextAsync(settings, RtkHookSettings);
+        return File.WriteAllTextAsync(settings, RtkHookSettings);
     }
 
     private void RtkAnswersRewriteWith(string stdout, int exitCode) =>

@@ -41,7 +41,7 @@ dtk dotnet test --filter "FullyQualifiedName~ClassName.MethodName"
 
 ## Code Style
 
-Code style is enforced via `.editorconfig` and build-time analyzers. The project uses `TreatWarningsAsErrors`, so all analyzer warnings must be resolved before a build passes.
+Code style is enforced via `.editorconfig` and build-time analyzers. The project uses `TreatWarningsAsErrors`, so all analyzer warnings must be resolved before a build passes. `.editorconfig` also raises the rules SonarQube reports but the analyzers leave off by default (cognitive complexity, duplicated literals, VSTHRD202 and others), so the build catches them before SonarQube does. SonarQube also reports any other Info-level analyzer diagnostic, which the build lets through.
 
 To format your code before committing:
 
