@@ -201,6 +201,39 @@
       "savingsPercent": 66.4
     },
     {
+      "id": "jb-cleanupcode/load-error",
+      "fixture": "dotnet_jb_cleanupcode_load_error.txt",
+      "filterKey": "jb cleanupcode",
+      "exitCode": 4,
+      "rawBytes": 411,
+      "rawTokens": 126,
+      "filteredTokens": 70,
+      "savedTokens": 56,
+      "savingsPercent": 44.4
+    },
+    {
+      "id": "jb-cleanupcode/missing-path",
+      "fixture": "dotnet_jb_cleanupcode_missing_path.txt",
+      "filterKey": "jb cleanupcode",
+      "exitCode": 3,
+      "rawBytes": 283,
+      "rawTokens": 89,
+      "filteredTokens": 41,
+      "savedTokens": 48,
+      "savingsPercent": 53.9
+    },
+    {
+      "id": "jb-cleanupcode/success",
+      "fixture": "dotnet_jb_cleanupcode_success.txt",
+      "filterKey": "jb cleanupcode",
+      "exitCode": 0,
+      "rawBytes": 72959,
+      "rawTokens": 18946,
+      "filteredTokens": 23,
+      "savedTokens": 18923,
+      "savingsPercent": 99.9
+    },
+    {
       "id": "list-package/all",
       "fixture": "dotnet_list_package_raw.txt",
       "filterKey": "list package",
