@@ -1,0 +1,6 @@
+Tool 'docfx' (version '2.81.0') was restored. Available commands: docfx
+Tool 'jetbrains.resharper.globaltools' (version '2026.2.3.1') was restored. Available commands: jb
+Tool 'dotnet-stryker' (version '5.0.0') was restored. Available commands: dotnet-stryker
+Tool 'dotnettokenkiller' (version '0.9.0') was restored. Available commands: dtk
+
+Restore was successful.

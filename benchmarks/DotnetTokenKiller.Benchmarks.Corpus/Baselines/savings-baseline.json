@@ -694,6 +694,39 @@
       "filteredTokens": 28,
       "savedTokens": 188,
       "savingsPercent": 87
+    },
+    {
+      "id": "tool-restore/missing-package",
+      "fixture": "dotnet_tool_restore_missing_package.txt",
+      "filterKey": "tool restore",
+      "exitCode": 1,
+      "rawBytes": 121,
+      "rawTokens": 36,
+      "filteredTokens": 52,
+      "savedTokens": -16,
+      "savingsPercent": -44.4
+    },
+    {
+      "id": "tool-restore/success",
+      "fixture": "dotnet_tool_restore_success.txt",
+      "filterKey": "tool restore",
+      "exitCode": 0,
+      "rawBytes": 366,
+      "rawTokens": 112,
+      "filteredTokens": 25,
+      "savedTokens": 87,
+      "savingsPercent": 77.7
+    },
+    {
+      "id": "tool-restore/unreachable-feed",
+      "fixture": "dotnet_tool_restore_unreachable_feed.txt",
+      "filterKey": "tool restore",
+      "exitCode": 1,
+      "rawBytes": 100,
+      "rawTokens": 27,
+      "filteredTokens": 43,
+      "savedTokens": -16,
+      "savingsPercent": -59.3
     }
   ]
 }
