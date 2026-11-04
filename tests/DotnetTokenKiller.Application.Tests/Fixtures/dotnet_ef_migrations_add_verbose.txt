@@ -1,0 +1,41 @@
+Using project '/test/project/root/SampleApp.Ef.csproj'.
+Using startup project '/test/project/root/SampleApp.Ef.csproj'.
+dotnet msbuild /getProperty:ProjectName /getProperty:AssemblyName /getProperty:DesignAssembly /getProperty:Language /getProperty:OutputPath /getProperty:PlatformTarget /getProperty:ProjectAssetsFile /getProperty:ProjectDir /getProperty:RootNamespace /getProperty:RuntimeFrameworkVersion /getProperty:TargetFileName /getProperty:TargetFrameworkMoniker /getProperty:Nullable /getProperty:TargetFramework /getProperty:TargetPlatformIdentifier /getProperty:Platform /t:ResolvePackageAssets /getItem:RuntimeCopyLocalItems /test/project/root/SampleApp.Ef.csproj
+dotnet msbuild /getProperty:ProjectName /getProperty:AssemblyName /getProperty:DesignAssembly /getProperty:Language /getProperty:OutputPath /getProperty:PlatformTarget /getProperty:ProjectAssetsFile /getProperty:ProjectDir /getProperty:RootNamespace /getProperty:RuntimeFrameworkVersion /getProperty:TargetFileName /getProperty:TargetFrameworkMoniker /getProperty:Nullable /getProperty:TargetFramework /getProperty:TargetPlatformIdentifier /getProperty:Platform /t:ResolvePackageAssets /getItem:RuntimeCopyLocalItems /test/project/root/SampleApp.Ef.csproj
+Build started...
+dotnet build /test/project/root/SampleApp.Ef.csproj /verbosity:quiet /nologo /p:PublishAot=false
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.84
+
+Build succeeded.
+dotnet exec --depsfile /test/project/root/bin/Debug/net10.0/SampleApp.Ef.deps.json --additionalprobingpath /test/home/.nuget/packages --runtimeconfig /test/project/root/bin/Debug/net10.0/SampleApp.Ef.runtimeconfig.json /test/home/.dotnet/tools/.store/dotnet-ef/10.0.14/dotnet-ef/10.0.14/tools/net8.0/any/tools/net8.0/any/ef.dll migrations add AddRating --assembly /test/project/root/bin/Debug/net10.0/SampleApp.Ef.dll --project /test/project/root/SampleApp.Ef.csproj --startup-assembly /test/project/root/bin/Debug/net10.0/SampleApp.Ef.dll --startup-project /test/project/root/SampleApp.Ef.csproj --project-dir /test/project/root/ --root-namespace SampleApp.Ef --language C# --framework net10.0 --design-assembly /test/home/.nuget/packages/microsoft.entityframeworkcore.design/10.0.14/lib/net10.0/Microsoft.EntityFrameworkCore.Design.dll --nullable --working-dir /test/project/root --verbose
+Using assembly 'SampleApp.Ef'.
+Using startup assembly 'SampleApp.Ef'.
+Using application base '/test/project/root/bin/Debug/net10.0'.
+Using working directory '/test/project/root'.
+Using root namespace 'SampleApp.Ef'.
+Using project directory '/test/project/root/'.
+Remaining arguments: .
+Finding DbContext classes...
+Using environment 'Development'.
+Finding IDesignTimeDbContextFactory implementations...
+Finding DbContext classes in the project...
+Found DbContext 'BlogContext'.
+Finding application service provider in assembly 'SampleApp.Ef'...
+Finding Microsoft.Extensions.Hosting service provider...
+Using application service provider from Microsoft.Extensions.Hosting.
+Using context 'BlogContext'.
+Finding design-time services referenced by assembly 'SampleApp.Ef'...
+Finding design-time services referenced by assembly 'SampleApp.Ef'...
+No referenced design-time services were found.
+Finding design-time services for provider 'Microsoft.EntityFrameworkCore.Sqlite'...
+Using design-time services from provider 'Microsoft.EntityFrameworkCore.Sqlite'.
+Finding IDesignTimeServices implementations in assembly 'SampleApp.Ef'...
+No design-time services were found.
+Writing migration to '/test/project/root/Migrations/20261104221305_AddRating.cs'.
+Writing model snapshot to '/test/project/root/Migrations/BlogContextModelSnapshot.cs'.
+Done. To undo this action, use 'ef migrations remove'

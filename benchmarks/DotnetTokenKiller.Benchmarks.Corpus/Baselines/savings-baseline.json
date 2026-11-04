@@ -69,6 +69,94 @@
       "savingsPercent": 98
     },
     {
+      "id": "ef/database-update",
+      "fixture": "dotnet_ef_database_update.txt",
+      "filterKey": "ef database",
+      "exitCode": 0,
+      "rawBytes": 232,
+      "rawTokens": 51,
+      "filteredTokens": 22,
+      "savedTokens": 29,
+      "savingsPercent": 56.9
+    },
+    {
+      "id": "ef/database-update-error",
+      "fixture": "dotnet_ef_database_update_error.txt",
+      "filterKey": "ef database",
+      "exitCode": 1,
+      "rawBytes": 2584,
+      "rawTokens": 509,
+      "filteredTokens": 393,
+      "savedTokens": 116,
+      "savingsPercent": 22.8
+    },
+    {
+      "id": "ef/database-update-logging",
+      "fixture": "dotnet_ef_database_update_logging.txt",
+      "filterKey": "ef database",
+      "exitCode": 0,
+      "rawBytes": 3218,
+      "rawTokens": 726,
+      "filteredTokens": 32,
+      "savedTokens": 694,
+      "savingsPercent": 95.6
+    },
+    {
+      "id": "ef/migrations-add",
+      "fixture": "dotnet_ef_migrations_add.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 88,
+      "rawTokens": 19,
+      "filteredTokens": 21,
+      "savedTokens": -2,
+      "savingsPercent": -10.5
+    },
+    {
+      "id": "ef/migrations-add-build-failed",
+      "fixture": "dotnet_ef_migrations_add_build_failed.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 1,
+      "rawBytes": 67,
+      "rawTokens": 15,
+      "filteredTokens": 25,
+      "savedTokens": -10,
+      "savingsPercent": -66.7
+    },
+    {
+      "id": "ef/migrations-add-verbose",
+      "fixture": "dotnet_ef_migrations_add_verbose.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 3718,
+      "rawTokens": 822,
+      "filteredTokens": 821,
+      "savedTokens": 1,
+      "savingsPercent": 0.1
+    },
+    {
+      "id": "ef/migrations-list",
+      "fixture": "dotnet_ef_migrations_list.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 67,
+      "rawTokens": 16,
+      "filteredTokens": 18,
+      "savedTokens": -2,
+      "savingsPercent": -12.5
+    },
+    {
+      "id": "ef/migrations-remove",
+      "fixture": "dotnet_ef_migrations_remove.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 117,
+      "rawTokens": 25,
+      "filteredTokens": 27,
+      "savedTokens": -2,
+      "savingsPercent": -8
+    },
+    {
       "id": "format/files",
       "fixture": "dotnet_format_files_raw.txt",
       "filterKey": "format",

@@ -22,7 +22,10 @@
       so the two SQLitePCLRaw major versions coexisting here is unavoidable, not something to align.
     -->
     <PackageVersion Include="SQLitePCLRaw.bundle_winsqlite3" Version="2.1.11"/>
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14"/>
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14"/>
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14"/>
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14"/>
     <PackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.1"/>
     <PackageVersion Include="Microsoft.ML.Tokenizers.Data.Cl100kBase" Version="2.0.1"/>
     <PackageVersion Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.1"/>
