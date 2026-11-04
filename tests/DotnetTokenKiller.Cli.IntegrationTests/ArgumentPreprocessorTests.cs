@@ -944,7 +944,7 @@ public sealed class ArgumentPreprocessorTests
 
         exitCode.Should().Be(0, stdErr);
         childArguments.Should().Equal("ef", "database", "drop", "-f");
-        stdOut.TrimEnd().Split('\n')[^1].Should().StartWith("\u26a0 dotnet ef database drop -f");
+        stdOut.TrimEnd().Split('\n')[^1].Should().Be("\u2713 dotnet ef database drop: done");
     }
 
     [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
