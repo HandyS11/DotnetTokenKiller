@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
+using DotnetTokenKiller.Domain.Execution;
 using FluentAssertions;
 using Spectre.Console.Cli;
 using Xunit;
@@ -8,6 +10,10 @@ namespace DotnetTokenKiller.Cli.IntegrationTests;
 
 public sealed class ArgumentPreprocessorTests
 {
+    private static readonly Dictionary<string, string> NoEnvironment = [];
+
+    private static readonly Dictionary<string, string> RawOutput = new() { ["DTK_RAW"] = "1" };
+
     // ── IsPassthrough ────────────────────────────────────────────────────────
 
     [Theory]
@@ -83,6 +89,22 @@ public sealed class ArgumentPreprocessorTests
         ArgumentPreprocessor.PassthroughArguments(
                 ["dotnet", "build", "-q", "-getProperty:Version", "-v", "minimal", "--show-log"])
             .Should().Equal("build", "-getProperty:Version", "-v", "minimal");
+    }
+
+    [Fact]
+    public void PassthroughArguments_ToolRunKeepsTeeVerbatim()
+    {
+        // dtk reads its options only on the subcommands it filters: `--tee y` belongs to the tool.
+        ArgumentPreprocessor.PassthroughArguments(["dotnet", "tool", "run", "x", "--tee", "y"])
+            .Should().Equal("tool", "run", "x", "--tee", "y");
+    }
+
+    [Fact]
+    public void PassthroughArguments_FilteredSubcommand_DropsValueOptionAndValue()
+    {
+        ArgumentPreprocessor.PassthroughArguments(
+                ["dotnet", "list", "package", "--max-lines", "5", "--format", "json", "--tee=out.json"])
+            .Should().Equal("list", "package", "--format", "json");
     }
 
     [Fact]
@@ -383,6 +405,281 @@ public sealed class ArgumentPreprocessorTests
     public void StripDtkOptions_TrailingV_IsDtkVerbose()
     {
         ArgumentPreprocessor.StripDtkOptions(["build", "MyApp.slnx", "-v"]).Should().Equal("build", "MyApp.slnx");
+    }
+
+    [Theory]
+    [InlineData("test --tee out.log --max-lines=3 --filter X", "test --filter X")]
+    [InlineData("test --tee:out.log --max-lines 3 --filter X", "test --filter X")]
+    [InlineData("test --max-lines -1 --filter X", "test --filter X")]
+    [InlineData("test --names --show-output --fail-on-empty --filter X", "test --filter X")]
+    // A value option missing its value goes alone: dotnet's next option is never taken for it.
+    [InlineData("test --tee --filter X", "test --filter X")]
+    public void StripDtkOptions_DropsValueOptionAndValue(string input, string expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        ArgumentPreprocessor.StripDtkOptions(input.Split(' ')).Should().Equal(expected.Split(' '));
+    }
+
+    [Fact]
+    public void StripDtkOptions_LeavesTokensAfterUserSeparator()
+    {
+        ArgumentPreprocessor.StripDtkOptions(["test", "--", "--tee", "x"]).Should().Equal("test", "--", "--tee", "x");
+    }
+
+    // ── Value options and test-only options ──────────────────────────────────
+    // `--tee <path>` and `--max-lines <n>` take a value, which moves with them; the test-only flags are dtk's too.
+
+    [Theory]
+    [InlineData("dotnet test --tee out.log --filter X", "dotnet test --tee out.log -- --filter X")]
+    [InlineData("dotnet test --tee=out.log --filter X", "dotnet test --tee=out.log -- --filter X")]
+    [InlineData("dotnet test --tee:out.log --filter X", "dotnet test --tee:out.log -- --filter X")]
+    [InlineData("dotnet test --max-lines 5 --filter X", "dotnet test --max-lines 5 -- --filter X")]
+    [InlineData("dotnet test --filter X --max-lines=5", "dotnet test --max-lines=5 -- --filter X")]
+    [InlineData("dotnet test --max-lines -1 --filter X", "dotnet test --max-lines -1 -- --filter X")]
+    [InlineData("dotnet build -q --tee out.log MyApp.slnx", "dotnet build -q --tee out.log -- MyApp.slnx")]
+    public void InsertSeparator_MovesValueOptionWithItsValue(string input, string expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        ArgumentPreprocessor.InsertSeparator(input.Split(' ')).Should().Equal(expected.Split(' '));
+    }
+
+    [Fact]
+    public void InsertSeparator_ValueOptionWithoutValue_DoesNotTakeTheNextOption()
+    {
+        // `--filter` is dotnet's: it must never become the path (MissingOptionValue reports the missing value).
+        ArgumentPreprocessor.InsertSeparator(["dotnet", "test", "--tee", "--filter", "X"])
+            .Should().Equal("dotnet", "test", "--tee", "--", "--filter", "X");
+    }
+
+    [Fact]
+    public void InsertSeparator_ValueOptionAfterUserSeparator_IsForwardedVerbatim()
+    {
+        ArgumentPreprocessor.InsertSeparator(["dotnet", "test", "--filter", "X", "--", "--tee", "x"])
+            .Should().Equal("dotnet", "test", "--", "--filter", "X", "--", "--tee", "x");
+    }
+
+    [Fact]
+    public void InsertSeparator_ReturnsOriginal_WhenOnlyAValueOptionIsPresent()
+    {
+        string[] args = ["dotnet", "test", "--tee", "out.log"];
+
+        ArgumentPreprocessor.InsertSeparator(args).Should().BeSameAs(args);
+    }
+
+    [Fact]
+    public void InsertSeparator_PartitionsTestOnlyOptions()
+    {
+        ArgumentPreprocessor.InsertSeparator(
+                ["dotnet", "test", "--names", "--filter", "X", "--show-output", "--fail-on-empty"])
+            .Should().Equal("dotnet", "test", "--names", "--show-output", "--fail-on-empty", "--", "--filter", "X");
+    }
+
+    [Theory]
+    [InlineData("dotnet test --tee", "--tee")]
+    [InlineData("dotnet test --tee --filter X", "--tee")]
+    [InlineData("dotnet test --max-lines", "--max-lines")]
+    [InlineData("dotnet test --max-lines --tee out.log", "--max-lines")]
+    [InlineData("dotnet test --tee -- out.log", "--tee")]
+    [InlineData("dotnet test --tee=a", null)]
+    [InlineData("dotnet test --max-lines:5", null)]
+    [InlineData("dotnet test --max-lines -1", null)]
+    [InlineData("dotnet test --tee out.log --max-lines 5", null)]
+    [InlineData("dotnet test -- --tee", null)]
+    [InlineData("dotnet tool run x --tee", null)]
+    public void MissingOptionValue_Detects(string input, string? expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        ArgumentPreprocessor.MissingOptionValue(input.Split(' ')).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("dotnet build --names", "--names")]
+    [InlineData("dotnet build MyApp.slnx --show-output", "--show-output")]
+    [InlineData("dotnet list package --fail-on-empty", "--fail-on-empty")]
+    [InlineData("dotnet test --names", null)]
+    [InlineData("dotnet test --names --show-output --fail-on-empty", null)]
+    [InlineData("dotnet build -- --names", null)]
+    [InlineData("dotnet tool run x --names", null)]
+    public void MisplacedTestOption_Detects(string input, string? expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        ArgumentPreprocessor.MisplacedTestOption(input.Split(' ')).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("test --fail-on-empty", "--fail-on-empty")]
+    [InlineData("test --tee=x", "--tee")]
+    [InlineData("test --tee:x", "--tee")]
+    [InlineData("publish --interactive --tee x", "--tee")]
+    [InlineData("test --max-lines 5 --names --show-output", null)]
+    [InlineData("test -- --tee x", null)]
+    [InlineData("tool run x --tee y", null)]
+    public void OptionRefusedOnPassthrough_Detects(string input, string? expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        ArgumentPreprocessor.OptionRefusedOnPassthrough(input.Split(' ')).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("test --max-lines 5 --names -q --show-output", "--max-lines --names --show-output")]
+    [InlineData("build -getProperty:X --max-lines=5 --max-lines 3", "--max-lines")]
+    [InlineData("test -q --vv --show-log --fail-on-empty", "")]
+    [InlineData("test -- --max-lines 5", "")]
+    [InlineData("tool run x --max-lines 5", "")]
+    public void OptionsDroppedOnPassthrough_ListsEachDisplayOptionOnce(string input, string expected)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+
+        ArgumentPreprocessor.OptionsDroppedOnPassthrough(input.Split(' '))
+            .Should().Equal(expected.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Theory]
+    [InlineData("dotnet test --tee", null, true, "dtk: --tee needs a value")]
+    [InlineData("dotnet build --names", null, true, "dtk: --names applies only to dotnet test")]
+    [InlineData("dotnet test --fail-on-empty", "1", true, "dtk: --fail-on-empty needs a filtered run, but DTK_RAW=1 is set")]
+    [InlineData("dotnet publish --interactive --tee x", null, true,
+        "dtk: --tee needs a filtered run, but --interactive is set")]
+    [InlineData("dotnet build -getProperty:X --tee=x", null, true,
+        "dtk: --tee needs a filtered run, but the output is machine-readable")]
+    [InlineData("dotnet pack --interactive --max-lines 1", null, false, "dtk: --max-lines ignored: --interactive is set")]
+    [InlineData("dotnet test --max-lines 5 --names", "1", false,
+        "dtk: --max-lines ignored: DTK_RAW=1 is set|dtk: --names ignored: DTK_RAW=1 is set")]
+    // A filtered run honours every option; an unfiltered subcommand's arguments are not dtk's.
+    [InlineData("dotnet test --max-lines 5 --tee x --fail-on-empty", null, false, "")]
+    [InlineData("dotnet test --max-lines 5 --tee x", "0", false, "")]
+    [InlineData("dotnet tool run x --tee", "1", false, "")]
+    [InlineData("gain --days 7", "1", false, "")]
+    public void CheckOptions_ReportsUsageErrorsRefusalsAndDroppedOptions(
+        string input, string? dtkRawValue, bool isUsageError, string messages)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(messages);
+
+        var (actualMessages, actualIsUsageError) = ArgumentPreprocessor.CheckOptions(input.Split(' '), dtkRawValue);
+
+        actualIsUsageError.Should().Be(isUsageError);
+        actualMessages.Should().Equal(messages.Split('|', StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    // ── Usage errors and passthrough refusals, end to end ────────────────────
+    // A fake `dotnet` records whether dtk ran it: a usage error or a refusal must stop dtk before any child starts.
+
+    [UnixTheory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    [InlineData("--max-lines", "-1")]
+    [InlineData("--max-lines=-1")]
+    public async Task MaxLines_Negative_IsUsageError(params string[] option)
+    {
+        var (_, _, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, ["dotnet", "test", .. option]);
+
+        exitCode.Should().NotBe(0);
+        childArguments.Should().BeNull("a usage error never runs the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task MaxLines_NonNumeric_IsUsageError()
+    {
+        var (_, _, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "test", "--max-lines", "abc");
+
+        exitCode.Should().NotBe(0);
+        childArguments.Should().BeNull("a usage error never runs the child");
+    }
+
+    [UnixTheory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    [InlineData("--tee")]
+    [InlineData("--tee", "--filter", "X")]
+    [InlineData("--max-lines")]
+    public async Task ValueOptionWithoutValue_IsUsageErrorNamingTheOption(params string[] options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, ["dotnet", "test", .. options]);
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: {options[0]} needs a value{Environment.NewLine}");
+        childArguments.Should().BeNull("a usage error never runs the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task TestOptionOnAnotherSubcommand_IsUsageError()
+    {
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "build", "--names");
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: --names applies only to dotnet test{Environment.NewLine}");
+        childArguments.Should().BeNull("a usage error never runs the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_FailOnEmpty_IsRefusedWithoutRunningTheChild()
+    {
+        // Run raw, the verdict is dotnet's, so honouring the flag is impossible; running anyway would be a false green.
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            RawOutput, "dotnet", "test", "--fail-on-empty");
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be(
+            $"dtk: --fail-on-empty needs a filtered run, but DTK_RAW=1 is set{Environment.NewLine}");
+        childArguments.Should().BeNull("a refused run never starts the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task InteractivePublish_Tee_IsRefusedWithoutRunningTheChild()
+    {
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "publish", "--interactive", "--tee", "out.log");
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: --tee needs a filtered run, but --interactive is set{Environment.NewLine}");
+        childArguments.Should().BeNull("a refused run never starts the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task MachineReadableRun_MaxLines_IsDroppedWithAWarning()
+    {
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "build", "-getProperty:Version", "--max-lines", "5");
+
+        exitCode.Should().Be(0);
+        stdErr.Should().Be(
+            $"dtk: --max-lines ignored: the output is machine-readable{Environment.NewLine}");
+        childArguments.Should().Equal("build", "-getProperty:Version");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_DisplayOptions_AreDroppedWithAWarningEach()
+    {
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            RawOutput, "dotnet", "test", "--max-lines=5", "--filter", "X", "--show-output");
+
+        exitCode.Should().Be(0);
+        stdErr.Should().Be(
+            $"dtk: --max-lines ignored: DTK_RAW=1 is set{Environment.NewLine}" +
+            $"dtk: --show-output ignored: DTK_RAW=1 is set{Environment.NewLine}");
+        childArguments.Should().Equal("test", "--filter", "X");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task UnfilteredSubcommand_KeepsOptionsSpelledLikeDtksVerbatim()
+    {
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            RawOutput, "dotnet", "tool", "run", "x", "--tee", "--fail-on-empty", "--names", "--max-lines");
+
+        exitCode.Should().Be(0);
+        stdErr.Should().BeEmpty();
+        childArguments.Should().Equal("tool", "run", "x", "--tee", "--fail-on-empty", "--names", "--max-lines");
     }
 
     // ── Help routing ─────────────────────────────────────────────────────────

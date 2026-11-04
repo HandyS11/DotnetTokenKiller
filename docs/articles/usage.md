@@ -204,6 +204,17 @@ Output that another program reads is not filtered either: `dtk dotnet list packa
 dtk's own options (`-q`, `-v` without a level, `--show-log`) are dropped from these runs, which are recorded like the
 `--interactive` ones.
 
+Two of dtk's options cannot be honoured on a run that is passed through like these, or under [`DTK_RAW=1`](#raw-output):
+`--tee`, which promises a file, and `--fail-on-empty`, which changes the verdict. Rather than run without them, dtk
+prints one line and exits with code 1 before `dotnet` starts:
+
+```text
+dtk: --tee needs a filtered run, but the output is machine-readable
+```
+
+The display options `--max-lines`, `--names` and `--show-output` are dropped instead, with one warning each on stderr
+(`dtk: --max-lines ignored: --interactive is set`), and the run goes ahead.
+
 ### `dtk pipe`
 
 Filter output on stdin from a command dtk did not run — CI logs, or any invocation the hook
@@ -412,6 +423,9 @@ dtk dotnet watch      # runs: dotnet watch
 dtk dotnet msbuild    # runs: dotnet msbuild
 ```
 
+dtk reads its own options only on the supported subcommands, so `dtk dotnet tool run x --tee y` hands `--tee y` to
+`x`.
+
 ## Raw Output
 
 Set `DTK_RAW=1` to get `dotnet`'s own output, unfiltered: in the environment, or as a prefix to the command:
@@ -421,7 +435,7 @@ DTK_RAW=1 dtk dotnet test
 export DTK_RAW=1
 ```
 
-dtk then runs `dotnet` as a passthrough (recorded like any other, and without dtk's own `-q`, `-v` and `--show-log`). Any non-empty value except `0` and `false` turns it on.
+dtk then runs `dotnet` as a passthrough (recorded like any other, and without dtk's own `-q`, `-v` and `--show-log`). Any non-empty value except `0` and `false` turns it on. As with `--interactive` runs, `--tee` and `--fail-on-empty` are refused (`dtk: --fail-on-empty needs a filtered run, but DTK_RAW=1 is set`), and `--max-lines`, `--names` and `--show-output` are dropped with a warning.
 
 An agent hook rewrites plain `dotnet build|test|…` to `dtk dotnet …`, and leaves alone a `dotnet` that the command asks for raw: `DTK_RAW=1 dotnet test`, `\dotnet test`, `command dotnet test` and `rtk proxy dotnet test`. See [AI Agent Setup](ai-agent-setup.md).
 
