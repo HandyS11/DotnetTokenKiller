@@ -414,6 +414,8 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("test --names --show-output --fail-on-empty --filter X", "test --filter X")]
     // A value option missing its value goes alone: dotnet's next option is never taken for it.
     [InlineData("test --tee --filter X", "test --filter X")]
+    // --max-lines takes only an integer: a project after it is dotnet's.
+    [InlineData("build --max-lines MyApp.slnx", "build MyApp.slnx")]
     public void StripDtkOptions_DropsValueOptionAndValue(string input, string expected)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -455,6 +457,21 @@ public sealed class ArgumentPreprocessorTests
             .Should().Equal("dotnet", "test", "--tee", "--", "--filter", "X");
     }
 
+    [Theory]
+    [InlineData("dotnet build --max-lines MyApp.slnx", "dotnet build --max-lines -- MyApp.slnx")]
+    [InlineData("dotnet build --max-lines /getProperty:Version", "dotnet build --max-lines -- /getProperty:Version")]
+    [InlineData("dotnet test --max-lines abc", "dotnet test --max-lines -- abc")]
+    public void InsertSeparator_MaxLinesFollowedByNonInteger_LeavesTheTokenToDotnet(string input, string expected)
+    {
+        // --max-lines takes only an integer as its next token, so the token stays dotnet's and the number is missing.
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(expected);
+        var args = input.Split(' ');
+
+        ArgumentPreprocessor.InsertSeparator(args).Should().Equal(expected.Split(' '));
+        ArgumentPreprocessor.MissingOptionValue(args).Should().Be("--max-lines");
+    }
+
     [Fact]
     public void InsertSeparator_ValueOptionAfterUserSeparator_IsForwardedVerbatim()
     {
@@ -484,6 +501,10 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet test --max-lines", "--max-lines")]
     [InlineData("dotnet test --max-lines --tee out.log", "--max-lines")]
     [InlineData("dotnet test --tee -- out.log", "--tee")]
+    [InlineData("dotnet build --max-lines MyApp.slnx", "--max-lines")]
+    [InlineData("dotnet build --max-lines /getProperty:Version", "--max-lines")]
+    [InlineData("dotnet test --max-lines abc", "--max-lines")]
+    [InlineData("dotnet test --max-lines 5", null)]
     [InlineData("dotnet test --tee=a", null)]
     [InlineData("dotnet test --max-lines:5", null)]
     [InlineData("dotnet test --max-lines -1", null)]
@@ -544,6 +565,9 @@ public sealed class ArgumentPreprocessorTests
 
     [Theory]
     [InlineData("dotnet test --tee", null, true, "dtk: --tee needs a value")]
+    [InlineData("dotnet test --max-lines", null, true, "dtk: --max-lines needs a number")]
+    [InlineData("dotnet build --max-lines MyApp.slnx", "1", true, "dtk: --max-lines needs a number")]
+    [InlineData("dotnet build --max-lines /getProperty:Version", null, true, "dtk: --max-lines needs a number")]
     [InlineData("dotnet build --names", null, true, "dtk: --names applies only to dotnet test")]
     [InlineData("dotnet test --fail-on-empty", "1", true, "dtk: --fail-on-empty needs a filtered run, but DTK_RAW=1 is set")]
     [InlineData("dotnet publish --interactive --tee x", null, true,
@@ -588,26 +612,48 @@ public sealed class ArgumentPreprocessorTests
     [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task MaxLines_NonNumeric_IsUsageError()
     {
-        var (_, _, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
             NoEnvironment, "dotnet", "test", "--max-lines", "abc");
 
-        exitCode.Should().NotBe(0);
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: --max-lines needs a number{Environment.NewLine}");
         childArguments.Should().BeNull("a usage error never runs the child");
     }
 
     [UnixTheory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    [InlineData("--tee")]
-    [InlineData("--tee", "--filter", "X")]
-    [InlineData("--max-lines")]
-    public async Task ValueOptionWithoutValue_IsUsageErrorNamingTheOption(params string[] options)
+    [InlineData("dtk: --tee needs a value", "--tee")]
+    [InlineData("dtk: --tee needs a value", "--tee", "--filter", "X")]
+    [InlineData("dtk: --max-lines needs a number", "--max-lines")]
+    public async Task ValueOptionWithoutValue_IsUsageErrorNamingTheOption(string expected, params string[] options)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
         var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
             NoEnvironment, ["dotnet", "test", .. options]);
 
         exitCode.Should().Be(ExitCodes.UsageError);
-        stdErr.Should().Be($"dtk: {options[0]} needs a value{Environment.NewLine}");
+        stdErr.Should().Be(expected + Environment.NewLine);
+        childArguments.Should().BeNull("a usage error never runs the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task DtkRaw_MaxLinesBeforeAProject_IsUsageErrorWithoutRunningTheChild()
+    {
+        // Passed through, nothing would validate the value: taking the project for it would drop it from the run.
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            RawOutput, "dotnet", "build", "--max-lines", "MyApp.slnx");
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: --max-lines needs a number{Environment.NewLine}");
+        childArguments.Should().BeNull("a usage error never runs the child");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task MaxLinesBeforeAnMsBuildQuery_IsUsageErrorWithoutRunningTheChild()
+    {
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "build", "--max-lines", "/getProperty:Version");
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdErr.Should().Be($"dtk: --max-lines needs a number{Environment.NewLine}");
         childArguments.Should().BeNull("a usage error never runs the child");
     }
 

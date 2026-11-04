@@ -33,6 +33,12 @@ internal static class ArgumentPreprocessor
     /// <summary>The <c>dotnet</c> driver command that dtk-handled invocations begin with.</summary>
     private const string DotnetCommand = "dotnet";
 
+    /// <summary>
+    /// The value option whose value is a number: only an integer in the next token is its value, so a project, an
+    /// MSBuild query or another token after it stays dotnet's and the number is reported missing.
+    /// </summary>
+    private const string MaxLinesOption = "--max-lines";
+
     /// <summary>dtk's output options, which dotnet does not understand.</summary>
     private static readonly HashSet<string> OutputOptions =
         new(StringComparer.Ordinal)
@@ -53,7 +59,7 @@ internal static class ArgumentPreprocessor
         new(StringComparer.Ordinal)
         {
             "--tee",
-            "--max-lines"
+            MaxLinesOption
         };
 
     /// <summary>dtk's options that apply only to <c>dotnet test</c>.</summary>
@@ -226,9 +232,11 @@ internal static class ArgumentPreprocessor
 
     /// <summary>
     /// Returns the first value option of a filtered <c>dotnet</c> invocation that has no value: neither joined to it
-    /// (<c>--tee=out.log</c>) nor in the next token, which is absent or is an option other than a negative integer
+    /// (<c>--tee=out.log</c>) nor in the next token (see <see cref="IsOptionValue"/>). For <c>--tee</c> that token is
+    /// absent or an option other than a negative integer; for <c>--max-lines</c> it is anything but an integer
     /// (<c>--max-lines -1</c> has a value, which the settings then reject). Reporting it as dtk's usage error keeps
-    /// <c>--tee --filter X</c> from reading <c>--filter</c> as the path.
+    /// <c>--tee --filter X</c> from reading <c>--filter</c> as the path, and <c>--max-lines MyApp.slnx</c> from
+    /// dropping the project from a passed-through run, where nothing would validate the value.
     /// </summary>
     /// <param name="args">The raw CLI arguments, after <see cref="Normalize"/>.</param>
     /// <returns>The option's name, or <see langword="null"/> when every value option has its value.</returns>
@@ -292,7 +300,8 @@ internal static class ArgumentPreprocessor
     {
         if (MissingOptionValue(args) is { } withoutValue)
         {
-            return new OptionCheck([$"dtk: {withoutValue} needs a value"], IsUsageError: true);
+            var needed = string.Equals(withoutValue, MaxLinesOption, StringComparison.Ordinal) ? "a number" : "a value";
+            return new OptionCheck([$"dtk: {withoutValue} needs {needed}"], IsUsageError: true);
         }
 
         if (MisplacedTestOption(args) is { } testOption)
@@ -456,7 +465,7 @@ internal static class ArgumentPreprocessor
             if (ValueOptionName(args[i]) is { } name)
             {
                 var hasJoinedValue = name.Length < args[i].Length;
-                var hasNextValue = !hasJoinedValue && IsOptionValue(args, i + 1);
+                var hasNextValue = !hasJoinedValue && IsOptionValue(name, args, i + 1);
                 var option = new DtkOption(name, i, hasNextValue ? 2 : 1, !hasJoinedValue && !hasNextValue);
                 yield return option;
                 i += option.Length;
@@ -485,16 +494,25 @@ internal static class ArgumentPreprocessor
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> when <c>args[index]</c> exists and can be a value option's value: any token but
-    /// an option, though a negative integer is a value. So <c>--tee --filter X</c> never reads <c>--filter</c> as the
-    /// path, and the user's own <c>--</c> is never taken for one.
+    /// Returns <see langword="true"/> when <c>args[index]</c> exists and can be <paramref name="option"/>'s value: an
+    /// integer for <c>--max-lines</c>; for <c>--tee</c>, any token but an option, though a negative integer is a value.
+    /// So <c>--tee --filter X</c> never reads <c>--filter</c> as the path, <c>--max-lines MyApp.slnx</c> never takes the
+    /// project, and the user's own <c>--</c> is never taken for a value.
     /// </summary>
+    /// <param name="option">The value option's name.</param>
     /// <param name="args">The raw CLI arguments.</param>
     /// <param name="index">The index of the token after the option.</param>
-    private static bool IsOptionValue(string[] args, int index) =>
-        index < args.Length &&
-        (!args[index].StartsWith('-') ||
-         int.TryParse(args[index], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _));
+    private static bool IsOptionValue(string option, string[] args, int index)
+    {
+        if (index >= args.Length)
+        {
+            return false;
+        }
+
+        var isInteger = int.TryParse(args[index], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _);
+        return isInteger ||
+               (!string.Equals(option, MaxLinesOption, StringComparison.Ordinal) && !args[index].StartsWith('-'));
+    }
 
     /// <summary>One of dtk's options found in an argument list.</summary>
     /// <param name="Name">The option's name, without a joined value.</param>
