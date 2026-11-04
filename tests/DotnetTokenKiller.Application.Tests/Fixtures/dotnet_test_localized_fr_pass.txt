@@ -1,0 +1,7 @@
+  Identification des projets à restaurer...
+  Tous les projets sont à jour pour la restauration.
+  SampleApp.Tests -> /test/project/root/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll
+Série de tests pour /test/project/root/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll (.NETCoreApp,Version=v10.0)
+Au total, 1 fichiers de test ont correspondu au modèle spécifié.
+
+Réussi!  - échec :     0, réussite :     3, ignorée(s) :     0, total :     3, durée : 22 ms - SampleApp.Tests.dll (net10.0)

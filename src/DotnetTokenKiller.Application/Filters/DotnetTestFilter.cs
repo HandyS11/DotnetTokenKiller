@@ -9,7 +9,8 @@ namespace DotnetTokenKiller.Application.Filters;
 /// <summary>
 /// Condenses dotnet test output to a concise pass/fail summary. A test project that fails to compile
 /// gets the grouped diagnostics <c>dotnet build</c> prints for it, ahead of the other projects' results,
-/// and the status line of a run that compiled with warnings ends in their count and top codes.
+/// and the status line of a run that compiled with warnings ends in their count and top codes. Output in another
+/// language than English, which it cannot read, gets its raw tail and a status line naming the language and the fix.
 /// </summary>
 /// <param name="rootPath">Optional root path used to shorten file paths in stack traces and diagnostics.</param>
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IContextualOutputFilter
@@ -34,6 +35,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
 
     /// <summary>Name of the regex capture group holding a test/summary duration.</summary>
     private const string DurationGroup = "duration";
+
+    /// <summary>What the status line of a localized run tells the reader to do.</summary>
+    private const string LocalizedRemedy = "run it through dtk dotnet test, or set DOTNET_CLI_UI_LANGUAGE=en";
 
     /// <summary>What <c>--names</c> prints when tests passed but the output named none of them.</summary>
     private const string NamesNotInOutputLine = "\u26a0 --names: passed test names not in the output\n";
@@ -74,7 +78,29 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
         // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
         var buildReport = MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
-        return FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty);
+        var result = FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty);
+
+        // Nothing recognised, and the output is not in English: the raw tail the pipeline would show, under a
+        // status line that says why and what to do instead of "not recognized".
+        return result.Output.Length == 0 && LocalizedTestOutput.Detect(strippedOutput) is { } culture
+            ? new FilterResult(FormatLocalized(strippedOutput, exitCode, culture))
+            : result;
+    }
+
+    /// <summary>
+    /// The output of a run dtk cannot read because it is localized: its <see cref="RawTail"/>, then a status line
+    /// naming the language and the remedy. The glyph follows the exit code, as the pipeline's fallback does.
+    /// </summary>
+    /// <param name="strippedOutput">The test output.</param>
+    /// <param name="exitCode">The process exit code.</param>
+    /// <param name="culture">The culture <see cref="LocalizedTestOutput.Detect"/> named.</param>
+    private static string FormatLocalized(string strippedOutput, int exitCode, string culture)
+    {
+        var cause = $"output is localized ({culture}) \u2014 {LocalizedRemedy}";
+        var status = exitCode == 0
+            ? $"\u26a0 dotnet test: {cause}"
+            : string.Create(CultureInfo.InvariantCulture, $"\u2717 dotnet test failed (exit {exitCode}): {cause}");
+        return $"{RawTail.Last(strippedOutput)}{status}\n";
     }
 
     /// <summary>

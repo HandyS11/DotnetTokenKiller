@@ -240,12 +240,12 @@ public sealed class FilteredOutputPipeline(
 
     /// <summary>
     /// Builds the fallback shown when the filter left nothing to show or threw: the raw output (whole, or its
-    /// last 40 lines), then the run's single status line.
+    /// <see cref="RawTail"/>), then the run's single status line.
     /// </summary>
     /// <param name="command">The command line that was run, for display purposes.</param>
     /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
-    /// <param name="tailOnly">Whether to show only the last 40 lines of <paramref name="rawOutput"/>.</param>
+    /// <param name="tailOnly">Whether to show only the <see cref="RawTail"/> of <paramref name="rawOutput"/>.</param>
     private static string BuildFallback(
         string command,
         int exitCode,
@@ -256,10 +256,7 @@ public sealed class FilteredOutputPipeline(
         var hasOutput = !string.IsNullOrWhiteSpace(rawOutput);
         if (hasOutput && tailOnly)
         {
-            foreach (var line in rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(40))
-            {
-                sb.Append(line.TrimEnd('\r')).Append('\n');
-            }
+            sb.Append(RawTail.Last(rawOutput));
         }
         else if (hasOutput)
         {

@@ -2603,6 +2603,84 @@ public class DotnetTestFilterTests
         result.Should().NotContain("\r").And.Be(_sut.Apply(fixture, exitCode, Names).Output);
     }
 
+    private const string LocalizedRemedy = "run it through dtk dotnet test, or set DOTNET_CLI_UI_LANGUAGE=en";
+
+    /// <summary>The non-blank lines of <paramref name="text"/>, without carriage returns.</summary>
+    /// <param name="text">The text to split.</param>
+    private static string[] NonBlankLines(string text) =>
+        [.. text.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0)];
+
+    [Fact]
+    public void Apply_Localized_TailThenRemedy()
+    {
+        var fixture = LoadFixture("dotnet_test_localized_fr_fail.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        var lines = NonBlankLines(result);
+        lines[^1].Should().Be($"✗ dotnet test failed (exit 1): output is localized (fr) — {LocalizedRemedy}");
+        lines[..^1].Should().Equal(NonBlankLines(fixture), "the raw output fits the 40-line tail whole");
+        result.Should().EndWith("\n");
+    }
+
+    [Fact]
+    public void Apply_Localized_Pass_Warns()
+    {
+        var fixture = LoadFixture("dotnet_test_localized_fr_pass.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        var lines = NonBlankLines(result);
+        lines[^1].Should().Be($"⚠ dotnet test: output is localized (fr) — {LocalizedRemedy}");
+        lines[..^1].Should().Equal(NonBlankLines(fixture));
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_localized_de_fail.txt", 1, "✗ dotnet test failed (exit 1): output is localized (de)")]
+    [InlineData("dotnet_test_localized_ja_fail.txt", 1, "✗ dotnet test failed (exit 1): output is localized (ja)")]
+    [InlineData("dotnet_test_mtp_localized_fr_fail.txt", 2,
+        "✗ dotnet test failed (exit 2): output is localized (fr)")]
+    [InlineData("dotnet_test_mtp_localized_de_pass.txt", 0, "⚠ dotnet test: output is localized (de)")]
+    [InlineData("dotnet_test_mtp_localized_ja_fail.txt", 2,
+        "✗ dotnet test failed (exit 2): output is localized (ja)")]
+    public void Apply_Localized_StatusNamesCultureAndRemedy(string name, int exitCode, string status)
+    {
+        var result = _sut.Apply(LoadFixture(name), exitCode);
+
+        NonBlankLines(result)[^1].Should().Be($"{status} — {LocalizedRemedy}");
+    }
+
+    [Fact]
+    public void Apply_Localized_KeepsOnlyTheLast40Lines()
+    {
+        var noise = string.Concat(Enumerable.Range(1, 50).Select(i => $"ligne {i}\n"));
+        var fixture = noise + LoadFixture("dotnet_test_localized_fr_fail.txt");
+
+        var lines = NonBlankLines(_sut.Apply(fixture, exitCode: 1));
+
+        lines.Should().HaveCount(41);
+        lines[..^1].Should().Equal(NonBlankLines(fixture)[^40..]);
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_localized_fr_fail.txt", 1)]
+    [InlineData("dotnet_test_localized_fr_pass.txt", 0)]
+    [InlineData("dotnet_test_mtp_localized_ja_fail.txt", 2)]
+    public void Apply_Localized_Crlf(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture.ReplaceLineEndings("\r\n"), exitCode);
+
+        result.Should().Contain("output is localized").And.NotContain("\r").And.Be(_sut.Apply(fixture, exitCode));
+    }
+
+    [Fact]
+    public void Apply_UnrecognizedEnglish_StaysEmptyForThePipelineFallback()
+    {
+        _sut.Apply("some unrelated output\n", exitCode: 1).Should().BeEmpty();
+    }
+
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>
     /// <param name="output">The filtered output.</param>
     private static string MessageLine(string output) =>

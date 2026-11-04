@@ -145,4 +145,22 @@ public class PipeIntegrationTests
         exitCode.Should().Be(8);
         output.TrimEnd().Split('\n')[^1].Should().StartWith("\u2717");
     }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeTest_LocalizedOutput_NamesTheLanguageUnderTheCappedTailAsync()
+    {
+        var log = await File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "dotnet_test_localized_fr_fail.txt"));
+
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--exit-code", "1", "--max-lines", "3");
+
+        exitCode.Should().Be(1);
+        var lines = output.ReplaceLineEndings("\n").TrimEnd().Split('\n');
+        lines[..3].Should().Equal(log.ReplaceLineEndings("\n").Split('\n')[..3], "--max-lines caps the raw tail");
+        lines[3].Should().MatchRegex(@"^\u2026 \d+ more lines \(");
+        lines[^1].Should().Be(
+            "\u2717 dotnet test failed (exit 1): output is localized (fr) \u2014 run it through dtk dotnet test, " +
+            "or set DOTNET_CLI_UI_LANGUAGE=en");
+    }
 }

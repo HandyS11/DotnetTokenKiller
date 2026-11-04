@@ -553,6 +553,50 @@
       "savingsPercent": 71.6
     },
     {
+      "id": "test/localized-de-fail",
+      "fixture": "dotnet_test_localized_de_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1084,
+      "rawTokens": 308,
+      "filteredTokens": 344,
+      "savedTokens": -36,
+      "savingsPercent": -11.7
+    },
+    {
+      "id": "test/localized-fr-fail",
+      "fixture": "dotnet_test_localized_fr_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1096,
+      "rawTokens": 315,
+      "filteredTokens": 351,
+      "savedTokens": -36,
+      "savingsPercent": -11.4
+    },
+    {
+      "id": "test/localized-fr-pass",
+      "fixture": "dotnet_test_localized_fr_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 519,
+      "rawTokens": 161,
+      "filteredTokens": 193,
+      "savedTokens": -32,
+      "savingsPercent": -19.9
+    },
+    {
+      "id": "test/localized-ja-fail",
+      "fixture": "dotnet_test_localized_ja_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1130,
+      "rawTokens": 346,
+      "filteredTokens": 382,
+      "savedTokens": -36,
+      "savingsPercent": -10.4
+    },
+    {
       "id": "test/logger-detailed-fail",
       "fixture": "dotnet_test_logger_detailed_fail.txt",
       "filterKey": "test",
@@ -694,6 +738,39 @@
       "filteredTokens": 86,
       "savedTokens": 512,
       "savingsPercent": 85.6
+    },
+    {
+      "id": "test/mtp-localized-de-pass",
+      "fixture": "dotnet_test_mtp_localized_de_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 323,
+      "rawTokens": 113,
+      "filteredTokens": 145,
+      "savedTokens": -32,
+      "savingsPercent": -28.3
+    },
+    {
+      "id": "test/mtp-localized-fr-fail",
+      "fixture": "dotnet_test_mtp_localized_fr_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 1927,
+      "rawTokens": 518,
+      "filteredTokens": 554,
+      "savedTokens": -36,
+      "savingsPercent": -6.9
+    },
+    {
+      "id": "test/mtp-localized-ja-fail",
+      "fixture": "dotnet_test_mtp_localized_ja_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 1972,
+      "rawTokens": 582,
+      "filteredTokens": 618,
+      "savedTokens": -36,
+      "savingsPercent": -6.2
     },
     {
       "id": "test/mtp-multiproject",

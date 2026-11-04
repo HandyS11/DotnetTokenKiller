@@ -1,0 +1,21 @@
+次からテストを実行しています: /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+失敗 Divides (9ms)
+  Assert.AreEqual に失敗しました。<3> が必要ですが、<2> が指定されました。'expected' 式: 'fail ? 3 : 2'、'actual' 式: '4 / 2'。
+  参照元: /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+  Assert.AreEqual に失敗しました。<3> が必要ですが、<2> が指定されました。'expected' 式: 'fail ? 3 : 2'、'actual' 式: '4 / 2'。
+    場所: Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowAssertAreEqualFailed(Object expected, Object actual, String userMessage) 場所: /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:665
+    場所: Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, IEqualityComparer`1 comparer, String message, String expectedExpression, String actualExpression) 場所: /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:492
+    場所: Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, String message, String expectedExpression, String actualExpression) 場所: /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:405
+    場所: Alpha.Tests.CalculatorTests.Divides() 場所: /test/project/root/Alpha.Tests/CalculatorTests.cs:16
+    場所: System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    場所: System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) 1 件のエラーで失敗しました (332ms)
+終了コード: 2
+
+テストの実行の概要: 失敗!
+  合計: 3
+  失敗: 1
+  成功: 2
+  スキップ済み: 0
+  期間: 480ms
+テスト実行が非成功終了コードで完了しました: 2 (参照: https://aka.ms/testingplatform/exitcodes)
