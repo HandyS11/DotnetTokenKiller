@@ -5,6 +5,7 @@ using DotnetTokenKiller.Cli.Infrastructure;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
+using DotnetTokenKiller.Infrastructure.Tee;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console.Testing;
@@ -33,7 +34,8 @@ public class PipeCommandTests
     {
         var pipeline = new FilteredOutputPipeline(
             new StubTracker(), new StringWriter(), new StubConfigProvider());
-        var pipeFilter = new PipeFilterUseCase(pipeline, new StubTeeService(), new StringReader(string.Empty));
+        var pipeFilter = new PipeFilterUseCase(
+            pipeline, new StubTeeService(), new RawOutputCopyFactory(), new StringReader(string.Empty));
         var services = new ServiceCollection().BuildServiceProvider();
         return new PipeCommand(pipeFilter, services, console, new StubStandardInputState(isRedirected));
     }

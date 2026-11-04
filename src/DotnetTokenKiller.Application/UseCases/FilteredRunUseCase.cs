@@ -11,11 +11,13 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <summary>Runs a dotnet command and hands its output to the shared filtering pipeline.</summary>
 /// <param name="commandRunner">The command runner.</param>
 /// <param name="teeService">Opens the log the run streams into.</param>
+/// <param name="rawOutputCopyFactory">Creates the file <c>--tee &lt;path&gt;</c> copies the raw output into.</param>
 /// <param name="pipeline">The shared output-filtering pipeline.</param>
 /// <param name="output">The text writer for user-facing output.</param>
 public sealed class FilteredRunUseCase(
     ICommandRunner commandRunner,
     ITeeService teeService,
+    IRawOutputCopyFactory rawOutputCopyFactory,
     FilteredOutputPipeline pipeline,
     TextWriter output)
 {
@@ -39,6 +41,25 @@ public sealed class FilteredRunUseCase(
         ArgumentNullException.ThrowIfNull(options);
 
         options = options.Normalized();
+
+        // First, before the log, the tracking setup or the child exist: a --tee path that cannot be created
+        // stops the run here, so an agent never believes evidence was saved when it was not.
+        IRawOutputCopy? rawCopy;
+        try
+        {
+            rawCopy = options.TeePath is { } teePath ? rawOutputCopyFactory.Open(teePath) : null;
+        }
+        catch (RawOutputCopyException ex)
+        {
+            return await pipeline.RefuseRawCopyAsync(ex, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Closed as soon as the child has exited (below), so a failure closing it is reported with the run;
+        // this closes it on every other way out, a cancellation included.
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var copy = rawCopy;
+#pragma warning restore CA2007
+
         var startTimestamp = Stopwatch.GetTimestamp();
         var startedUtc = DateTimeOffset.UtcNow;
 
@@ -64,9 +85,10 @@ public sealed class FilteredRunUseCase(
             RunSource.Run,
             DateTimeOffset.UtcNow);
 
+        // With --tee, every line also goes to the copy, under the counting sink, whatever tee.mode says.
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var session = await teeService
-            .BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false);
+        await using var session = CopyingTeeSession.Wrap(
+            await teeService.BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false), copy);
 #pragma warning restore CA2007
 
         // Tracking counts stdout while the child streams it; stderr, usually empty for dotnet, is
@@ -100,6 +122,10 @@ public sealed class FilteredRunUseCase(
         // RunStreamedAsync awaits both pumps before returning, so both have finished writing by now:
         // appending after Finish would throw, but nothing more will be appended.
         counter?.Finish(result.StdErr);
+        if (copy is not null)
+        {
+            await copy.DisposeAsync().ConfigureAwait(false);
+        }
 
         var request = new FilteredOutputRequest(
             filter,
@@ -112,6 +138,7 @@ public sealed class FilteredRunUseCase(
             startTimestamp)
         {
             InputTokenCounter = counter,
+            RawCopyFailure = copy?.Failure,
             Context = new FilterContext
             {
                 Source = RunSource.Run,

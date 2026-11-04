@@ -43,6 +43,9 @@ internal static class DotnetCommandRewriter
     private const string Dotnet = "dotnet";
     private const string Prefix = "dtk dotnet ";
 
+    /// <summary>dtk's option that writes a file, which <see cref="IsAutoApprovable"/> never approves.</summary>
+    private const string TeeOption = "--tee";
+
     /// <summary>Characters that may precede <c>dotnet</c> where a command starts.</summary>
     private static readonly SearchValues<char> Boundaries = SearchValues.Create(" \t;&|({`\n");
 
@@ -143,14 +146,20 @@ internal static class DotnetCommandRewriter
 
     /// <summary>
     /// Whether Copilot CLI may run <paramref name="command"/>'s rewrite without asking: it is
-    /// <see cref="IsSimpleCommand">simple</see> and its subcommand is one of <see cref="AutoApprovableSubcommands"/>.
-    /// <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they write artifacts (and a publish
-    /// profile can deploy), so they are left to the user's own approval.
+    /// <see cref="IsSimpleCommand">simple</see>, its subcommand is one of <see cref="AutoApprovableSubcommands"/>,
+    /// and it contains no <c>--tee</c>. <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they
+    /// write artifacts (and a publish profile can deploy), so they are left to the user's own approval.
     /// </summary>
+    /// <remarks>
+    /// <c>--tee &lt;path&gt;</c> writes dtk's copy of the raw output wherever its value points, so
+    /// <c>dotnet test --tee ~/.bashrc</c> is the file write <see cref="IsSimpleCommand"/> refuses as
+    /// <c>dotnet test &gt; ~/.bashrc</c>. The text is searched anywhere, quoted or not and in any form
+    /// (<c>--tee x</c>, <c>--tee=x</c>, <c>--tee:x</c>): a false match costs an approval prompt, never an approval.
+    /// </remarks>
     /// <param name="command">The original, unrewritten command.</param>
     internal static bool IsAutoApprovable(string command)
     {
-        if (!IsSimpleCommand(command))
+        if (!IsSimpleCommand(command) || command.Contains(TeeOption, StringComparison.Ordinal))
         {
             return false;
         }

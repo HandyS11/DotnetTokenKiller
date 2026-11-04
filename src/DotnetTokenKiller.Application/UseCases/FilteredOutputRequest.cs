@@ -42,4 +42,11 @@ public sealed record FilteredOutputRequest(
 
     /// <summary>What a contextual filter may know about the run.</summary>
     public FilterContext Context { get; init; } = FilterContext.Unknown;
+
+    /// <summary>
+    /// Why the <c>--tee</c> copy of the raw output (<see cref="OutputOptions.TeePath"/>) could not be fully
+    /// written, or <see langword="null"/> when it was, or none was asked for. Reported in one line before the
+    /// status line; it never changes the exit code or the filtered output.
+    /// </summary>
+    public string? RawCopyFailure { get; init; }
 }

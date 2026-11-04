@@ -264,4 +264,30 @@ public sealed class DotnetCommandRewriterTests
     {
         DotnetCommandRewriter.IsAutoApprovable(command).Should().Be(expected);
     }
+
+    [Theory]
+    [InlineData("dotnet test --tee out.log")]
+    [InlineData("dotnet test --tee=out.log")]
+    [InlineData("dotnet build --tee x")]
+    [InlineData("dotnet test --tee:out.log")]
+    [InlineData("dotnet test --filter X --tee ~/.bashrc")]
+    public void IsAutoApprovable_IsFalse_WhenTheCommandWritesATeeFile(string command)
+    {
+        // `--tee` writes wherever its value points, so approving it would approve a file write that
+        // IsSimpleCommand refuses as a redirection: `dotnet test --tee ~/.bashrc` is `dotnet test > ~/.bashrc`.
+        DotnetCommandRewriter.IsSimpleCommand(command).Should().BeTrue("only the --tee rule refuses it");
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsAutoApprovable_StaysTrue_WithoutATeeOption()
+    {
+        DotnetCommandRewriter.IsAutoApprovable("dotnet test").Should().BeTrue();
+    }
+
+    [Fact]
+    public void Rewrite_KeepsTheTeeOption()
+    {
+        DotnetCommandRewriter.Rewrite("dotnet test --tee x").Should().Be("dtk dotnet test --tee x");
+    }
 }

@@ -135,8 +135,16 @@ public sealed class FilteredOutputPipeline(
             outcome = RunOutcome.Filtered;
         }
 
-        // Capped before the hint goes in, so the hint is never counted or cut: tail, footer, hint, status.
+        // Capped before the --tee warning and the hint go in, so neither is ever counted or cut: tail, footer,
+        // warning, hint, status.
         filtered = OutputCap.Truncate(filtered, options.MaxLines, footerTarget);
+        if (request.RawCopyFailure is { } rawCopyFailure)
+        {
+            // Shown under --quiet too: the user asked for this evidence, and it is incomplete.
+            filtered = InsertBeforeLastLine(filtered,
+                $"⚠ --tee: could not write {options.TeePath}: {rawCopyFailure}");
+        }
+
         if (shownLogHint is not null)
         {
             filtered = InsertBeforeLastLine(filtered, shownLogHint);
@@ -160,6 +168,25 @@ public sealed class FilteredOutputPipeline(
             .ConfigureAwait(false);
 
         return exitCode;
+    }
+
+    /// <summary>
+    /// Ends a run whose <c>--tee</c> copy cannot be created before it starts: writes the run's only line, naming
+    /// the path and the reason, with the glyph rules every filtered run's output follows, and returns the exit
+    /// code the run must end with.
+    /// </summary>
+    /// <param name="exception">Why the copy cannot be created; its message is <c>&lt;path&gt;: &lt;reason&gt;</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see cref="ExitCodes.UsageError"/>.</returns>
+    internal async Task<int> RefuseRawCopyAsync(
+        RawOutputCopyException exception, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
+        var line = NormalizeGlyphs($"✗ dtk: --tee cannot create {exception.Message}", config);
+        await output.WriteLineAsync(line).ConfigureAwait(false);
+        return ExitCodes.UsageError;
     }
 
     /// <summary>Applies the filter, falling back to raw output if the filter throws (never breaks the workflow).</summary>

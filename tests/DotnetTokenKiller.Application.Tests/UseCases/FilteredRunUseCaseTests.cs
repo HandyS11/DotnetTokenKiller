@@ -20,6 +20,7 @@ public class FilteredRunUseCaseTests
     private static readonly string[] ListPackageArgs = ["list", "package"];
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
+    private readonly IRawOutputCopyFactory _rawOutputCopyFactory = Substitute.For<IRawOutputCopyFactory>();
 
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly FilteredRunUseCase _sut;
@@ -34,7 +35,7 @@ public class FilteredRunUseCaseTests
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
         var pipeline = new FilteredOutputPipeline(_tracker, TextWriter.Null, _configProvider);
-        _sut = new FilteredRunUseCase(_runner, _teeService, pipeline, TextWriter.Null);
+        _sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, pipeline, TextWriter.Null);
     }
 
     private static ITeeSession CreateSession(string? finalizeHint = null)
@@ -383,7 +384,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -406,7 +407,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -430,7 +431,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -452,7 +453,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -471,7 +472,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -490,7 +491,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -512,7 +513,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -550,7 +551,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -617,7 +618,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -637,7 +638,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -660,7 +661,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -686,7 +687,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession(finalizeHint: null);
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -721,7 +722,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -747,7 +748,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -767,7 +768,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -789,7 +790,7 @@ public class FilteredRunUseCaseTests
             Tracking = new TrackingConfig(false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, TextWriter.Null, configProvider), TextWriter.Null);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -811,7 +812,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -831,7 +832,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -945,7 +946,7 @@ public class FilteredRunUseCaseTests
     private async Task<string> RunUseCaseAsync(int exitCode, string rawOutput)
     {
         await using var writer = new StringWriter();
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, _configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -971,7 +972,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -997,7 +998,7 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, _teeService,
+            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
                 new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
             _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1027,7 +1028,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1053,7 +1054,7 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, _teeService,
+            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory,
                 new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
             _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1240,5 +1241,188 @@ public class FilteredRunUseCaseTests
 
         startedWhileChildRan.Should().BeTrue();
         await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    // ── --tee <path> ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Stubs the runner to write <paramref name="stdout"/>'s lines to the stdout sink and
+    /// <paramref name="stderr"/>'s to the stderr sink, as the two pumps do, and to report them as its result.
+    /// </summary>
+    /// <param name="stdout">The lines written to the stdout sink.</param>
+    /// <param name="stderr">The lines written to the stderr sink, after stdout's.</param>
+    /// <param name="exitCode">The exit code <see cref="CommandResult"/> reports.</param>
+    private void RunnerWritesBothStreams(string[] stdout, string[] stderr, int exitCode = 0)
+    {
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var stdOutSink = call.ArgAt<TextWriter>(2);
+                var stdErrSink = call.ArgAt<TextWriter>(3);
+                foreach (var line in stdout)
+                {
+                    await stdOutSink.WriteLineAsync(line.AsMemory(), CancellationToken.None);
+                    await stdOutSink.FlushAsync(CancellationToken.None);
+                }
+
+                foreach (var line in stderr)
+                {
+                    await stdErrSink.WriteLineAsync(line.AsMemory(), CancellationToken.None);
+                    await stdErrSink.FlushAsync(CancellationToken.None);
+                }
+
+                return new CommandResult(
+                    string.Concat(stdout.Select(line => line + "\n")),
+                    string.Concat(stderr.Select(line => line + "\n")),
+                    exitCode);
+            });
+    }
+
+    private FilteredRunUseCase CreateWithOutput(TextWriter writer) =>
+        new(_runner, _teeService, _rawOutputCopyFactory,
+            new FilteredOutputPipeline(_tracker, writer, _configProvider), writer);
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_CopiesRawOutput()
+    {
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        var log = new StringWriter { NewLine = "\n" };
+        var session = CreateSession();
+        session.Writer.Returns(log);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        RunnerWritesBothStreams(["a", "b"], ["c"]);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
+        await using var writer = new StringWriter();
+
+        var exitCode = await CreateWithOutput(writer)
+            .RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        exitCode.Should().Be(0);
+        copy.Text.Should().Be("a\nb\nc\n");
+        log.ToString().Should().Be("a\nb\nc\n", "the tee log still gets every line too");
+        writer.ToString().Should().Be("✓ dotnet build\n", "the copy changes nothing in the filtered output");
+        copy.DisposeCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_StillCountsTheRawStdout()
+    {
+        // The copy sits under the counting sink, not instead of it: tracking still counts what the child printed.
+        _rawOutputCopyFactory.Open("raw.log").Returns(new RecordingRawOutputCopy());
+        var actualStdout = new StringBuilder();
+        RunnerWrites("Hello world", "", actualStdout);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("Hello");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.InputTokens == 3 && r.OutputTokens == 1), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_WithUncreatableTeePath_ReturnsUsageErrorWithoutRunningChild()
+    {
+        _rawOutputCopyFactory.Open("missing/raw.log").Throws(new RawOutputCopyException(
+            "missing/raw.log: Could not find a part of the path '/work/missing/raw.log'."));
+        await using var writer = new StringWriter();
+
+        var exitCode = await CreateWithOutput(writer)
+            .RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(VerbosityLevel: 1, TeePath: "missing/raw.log"));
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        writer.ToString().Should().Be(
+            "✗ dtk: --tee cannot create missing/raw.log: Could not find a part of the path '/work/missing/raw.log'."
+            + Environment.NewLine,
+            "it is the run's only line, before even the -v command echo");
+        await _runner.DidNotReceive().RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>());
+        await _teeService.DidNotReceive().BeginAsync(
+            Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceive().WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_WithUncreatableTeePath_FollowsTheGlyphRules()
+    {
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(DtkConfig.Default with { Display = new DisplayConfig(Emoji: false) });
+        _rawOutputCopyFactory.Open("x/raw.log").Throws(new RawOutputCopyException("x/raw.log: denied"));
+        await using var writer = new StringWriter();
+
+        await CreateWithOutput(writer).RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "x/raw.log"));
+
+        writer.ToString().Should().Be("FAIL: dtk: --tee cannot create x/raw.log: denied" + Environment.NewLine);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_WorksWhenTeeModeNever()
+    {
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(DtkConfig.Default with { Tee = new TeeConfig(TeeMode.Never) });
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(NullTeeSession.Instance);
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        RunnerWritesBothStreams(["a"], ["b"], exitCode: 1);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✗ dotnet build\n");
+
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        exitCode.Should().Be(1);
+        copy.Text.Should().Be("a\nb\n");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_ReportsAFailureToWriteTheCopyBeforeTheStatusLine()
+    {
+        // Disposed once the child has exited, before the output is built: a full disk can refuse the last
+        // buffered bytes only when the file is closed, and that failure must still reach the output.
+        var copy = new RecordingRawOutputCopy { FailureOnDispose = "No space left on device" };
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        RunnerWritesBothStreams(["a"], []);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("detail\n✓ dotnet build\n");
+        await using var writer = new StringWriter();
+
+        var exitCode = await CreateWithOutput(writer)
+            .RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        exitCode.Should().Be(0, "a copy that could not be written does not fail the run");
+        writer.ToString().Should().Be(
+            "detail\n⚠ --tee: could not write raw.log: No space left on device\n✓ dotnet build\n");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithoutTeePath_OpensNoCopy()
+    {
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
+
+        _rawOutputCopyFactory.DidNotReceive().Open(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledWithTeePath_ClosesTheCopy()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(
+            _filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"), cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        copy.DisposeCount.Should().BeGreaterThan(0);
     }
 }

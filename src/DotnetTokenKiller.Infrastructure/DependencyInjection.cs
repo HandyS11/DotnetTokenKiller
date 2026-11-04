@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ITeeService, FileTeeService>();
         services.AddSingleton<ITeeLogStore, FileTeeLogStore>();
+        services.AddSingleton<IRawOutputCopyFactory, RawOutputCopyFactory>();
         return services;
     }
 }

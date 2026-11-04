@@ -112,6 +112,8 @@ internal static class ParityCases
             new ParityStep(["dotnet", "clean"]),
             new ParityStep(["dotnet", "format"]),
             new ParityStep(["dotnet", "list", "package"]),
+            // The runner compares the files the steps leave, so raw.log is compared too.
+            new ParityStep(["dotnet", "build", "--tee", "{project}/raw.log", "--max-lines", "5"]),
         ], ArrangeFakeDotnet),
     };
 

@@ -15,6 +15,9 @@ internal static class IntegrationTestHelper
     /// contention while still failing fast on a genuine hang, well inside the CI job timeout.</summary>
     internal const int DefaultTimeoutMs = 180_000;
 
+    /// <summary>The variable whose value the fake <c>dotnet</c> of <see cref="RunDtkWithFakeDotnetAsync"/> prints.</summary>
+    internal const string FakeDotnetStdoutVariable = "DTK_TEST_FAKE_DOTNET_STDOUT";
+
     private static readonly string DllPath =
         Path.Combine(AppContext.BaseDirectory, "dtk.dll");
 
@@ -249,7 +252,8 @@ internal static class IntegrationTestHelper
     /// <summary>
     /// Runs dtk with a fake <c>dotnet</c> first on its <c>PATH</c>, keeping stdout and stderr apart. The fake, a shell
     /// script (so Unix only), records the arguments it was given and exits 0, so a test can tell whether dtk ran the
-    /// child at all and with what.
+    /// child at all and with what. It prints <see cref="FakeDotnetStdoutVariable"/>'s value verbatim, when a test
+    /// sets it in <paramref name="environment"/>, and nothing otherwise.
     /// </summary>
     /// <param name="environment">Variables to set for dtk, on top of the isolation ones.</param>
     /// <param name="args">The arguments to pass to dtk.</param>
@@ -265,7 +269,10 @@ internal static class IntegrationTestHelper
         Directory.CreateDirectory(binDir);
         var argumentsFile = Path.Combine(isolatedDir, "child-arguments");
         var fake = Path.Combine(binDir, "dotnet");
-        await File.WriteAllTextAsync(fake, $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{argumentsFile}'\n").ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                fake,
+                $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{argumentsFile}'\nprintf '%s' \"${{{FakeDotnetStdoutVariable}-}}\"\n")
+            .ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())
         {
             File.SetUnixFileMode(fake, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);

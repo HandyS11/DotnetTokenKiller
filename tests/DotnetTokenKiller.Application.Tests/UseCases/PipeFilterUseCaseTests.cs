@@ -1,11 +1,13 @@
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
 using FluentAssertions;
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 using Xunit;
 
 namespace DotnetTokenKiller.Application.Tests.UseCases;
@@ -14,6 +16,7 @@ public class PipeFilterUseCaseTests
 {
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
+    private readonly IRawOutputCopyFactory _rawOutputCopyFactory = Substitute.For<IRawOutputCopyFactory>();
     private readonly ITeeService _teeService = Substitute.For<ITeeService>();
     private readonly ITracker _tracker = Substitute.For<ITracker>();
 
@@ -26,10 +29,13 @@ public class PipeFilterUseCaseTests
             .Returns(session);
     }
 
-    private PipeFilterUseCase Create(string stdin, TextWriter? output = null)
+    private PipeFilterUseCase Create(string stdin, TextWriter? output = null) =>
+        Create(new StringReader(stdin), output);
+
+    private PipeFilterUseCase Create(TextReader stdin, TextWriter? output = null)
     {
         var pipeline = new FilteredOutputPipeline(_tracker, output ?? TextWriter.Null, _configProvider);
-        return new PipeFilterUseCase(pipeline, _teeService, new StringReader(stdin));
+        return new PipeFilterUseCase(pipeline, _teeService, _rawOutputCopyFactory, stdin);
     }
 
     [Fact]
@@ -147,6 +153,56 @@ public class PipeFilterUseCaseTests
     }
 
     [Fact]
+    public async Task RunAsync_WithTeePath_CopiesStdin()
+    {
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("condensed\n");
+        var output = new StringWriter();
+
+        await Create("line 1\nline 2", output)
+            .RunAsync(_filter, "build", 0, new OutputOptions(TeePath: "raw.log"));
+
+        copy.Text.Should().Be("line 1\nline 2\n");
+        copy.DisposeCount.Should().BeGreaterThan(0);
+        output.ToString().Should().Be("condensed\n");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_ReportsAFailureToWriteTheCopyBeforeTheStatusLine()
+    {
+        _rawOutputCopyFactory.Open("raw.log")
+            .Returns(new RecordingRawOutputCopy { FailureOnDispose = "No space left on device" });
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
+        var output = new StringWriter();
+
+        await Create("raw", output).RunAsync(_filter, "build", 0, new OutputOptions(TeePath: "raw.log"));
+
+        output.ToString().Should().Be("⚠ --tee: could not write raw.log: No space left on device\n✓ dotnet build\n");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithUncreatableTeePath_ReturnsUsageErrorWithoutReadingStdin()
+    {
+        _rawOutputCopyFactory.Open("missing/raw.log")
+            .Throws(new RawOutputCopyException("missing/raw.log: Could not find a part of the path."));
+        var stdin = new StringReader("piped");
+        var output = new StringWriter();
+
+        var exitCode = await Create(stdin, output)
+            .RunAsync(_filter, "build", 0, new OutputOptions(TeePath: "missing/raw.log"));
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        output.ToString().Should().Be(
+            "✗ dtk: --tee cannot create missing/raw.log: Could not find a part of the path." + Environment.NewLine);
+        stdin.Peek().Should().Be('p', "stdin is left unread");
+        _filter.DidNotReceive().Apply(Arg.Any<string>(), Arg.Any<int>());
+        await _teeService.DidNotReceive().BeginAsync(
+            Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceiveWithAnyArgs().RecordAsync(default!, default);
+    }
+
+    [Fact]
     public async Task RunAsync_StartsTrackingSetupBeforeStdinIsRead()
     {
         // Setup overlaps a slow producer on the other end of the pipe. The reader waits (bounded)
@@ -162,7 +218,7 @@ public class PipeFilterUseCaseTests
         var reader = new WarmUpAwareReader(warmUpStarted.Task, "piped input");
         var pipeline = new FilteredOutputPipeline(_tracker, TextWriter.Null, _configProvider);
 
-        await new PipeFilterUseCase(pipeline, _teeService, reader)
+        await new PipeFilterUseCase(pipeline, _teeService, _rawOutputCopyFactory, reader)
             .RunAsync(_filter, "build", 0, new OutputOptions());
 
         reader.WarmUpStartedBeforeRead.Should().BeTrue();

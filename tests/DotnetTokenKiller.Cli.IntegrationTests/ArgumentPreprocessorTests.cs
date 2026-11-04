@@ -728,6 +728,63 @@ public sealed class ArgumentPreprocessorTests
         childArguments.Should().Equal("tool", "run", "x", "--tee", "--fail-on-empty", "--names", "--max-lines");
     }
 
+    // ── --tee <path>, end to end ─────────────────────────────────────────────
+    // Spectre binds every form the preprocessor moves ahead of the inserted `--` to OutputDisplaySettings.TeePath.
+
+    [UnixTheory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    [InlineData("--tee", " ")]
+    [InlineData("--tee", "=")]
+    [InlineData("--tee", ":")]
+    public async Task Tee_EveryForm_WritesTheRawOutputAndNeverReachesTheChild(string option, string joiner)
+    {
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "raw.log");
+        string[] tee = joiner == " " ? [option, path] : [option + joiner + path];
+        var environment = new Dictionary<string, string>
+        {
+            [IntegrationTestHelper.FakeDotnetStdoutVariable] = "\e[33mwarning\e[0m CS0168\nBuild succeeded.\n"
+        };
+
+        var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            environment, ["dotnet", "build", .. tee, "--no-restore"]);
+
+        exitCode.Should().Be(0, stdErr);
+        childArguments.Should().Equal("build", "--no-restore");
+        (await File.ReadAllTextAsync(path)).Should().Be("warning CS0168\nBuild succeeded.\n");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Tee_UncreatablePath_IsUsageErrorWithoutRunningTheChild()
+    {
+        // As with shell redirection, a missing directory is not created: the run stops instead of starting
+        // without the evidence it was asked to keep.
+        var path = Path.Combine(IntegrationTestHelper.NewIsolatedDir(), "missing", "raw.log");
+
+        var (stdOut, _, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(
+            NoEnvironment, "dotnet", "test", "--tee", path);
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        stdOut.Should().StartWith($"✗ dtk: --tee cannot create {path}: ").And.EndWith(Environment.NewLine);
+        stdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().ContainSingle("it is the run's only line");
+        childArguments.Should().BeNull("a refused run never starts the child");
+        File.Exists(path).Should().BeFalse();
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeTee_WritesThePipedOutput()
+    {
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "raw.log");
+
+        var (_, stdErr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsInDirAsync(
+            dir, "Build succeeded.", "pipe", "build", $"--tee={path}");
+
+        exitCode.Should().Be(0, stdErr);
+        (await File.ReadAllTextAsync(path)).Should().Be("Build succeeded.\n");
+    }
+
     // ── Help routing ─────────────────────────────────────────────────────────
     // --help/-h must reach Spectre (dtk's own help), never be forwarded to dotnet.
 

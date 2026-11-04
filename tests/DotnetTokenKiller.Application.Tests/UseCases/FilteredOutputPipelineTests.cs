@@ -270,6 +270,46 @@ public class FilteredOutputPipelineTests
     }
 
     [Fact]
+    public async Task ProcessAsync_RawCopyFailure_PrintsWarningBeforeStatus()
+    {
+        // Pinned order: body, cap footer, --tee warning, log hint, status. The warning is added after
+        // capping, so it is never counted or cut, and the status line stays last.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(NumberedLines(10) + "✗ dotnet build: 1 error\n");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(exitCode: 1,
+            options: new OutputOptions(ShowLogHint: true, TeePath: "out/raw.log", MaxLines: 3)) with
+        {
+            RawCopyFailure = "No space left on device"
+        };
+
+        await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
+
+        writer.ToString().Should().Be(
+            "line 1\nline 2\nline 3\n… 7 more lines (dtk log)\n"
+            + "⚠ --tee: could not write out/raw.log: No space left on device\n"
+            + "[full output: /x.log]\n✗ dotnet build: 1 error\n");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RawCopyFailure_IsShownUnderQuiet()
+    {
+        // Quiet drops dtk's meta-output, but not news that the evidence the user asked for is incomplete.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(options: new OutputOptions(Quiet: true, TeePath: "raw.log")) with
+        {
+            RawCopyFailure = "disk full"
+        };
+
+        await sut.ProcessAsync(request, NullTeeSession.Instance);
+
+        writer.ToString().Should().Be("⚠ --tee: could not write raw.log: disk full\n✓ dotnet build\n");
+    }
+
+    [Fact]
     public async Task ProcessAsync_RawTailFallbackOfEmptyRaw_WritesOnlyTheStatusLine()
     {
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");

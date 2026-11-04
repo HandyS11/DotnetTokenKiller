@@ -10,8 +10,13 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <summary>Filters output that arrived on stdin rather than from a process dtk launched.</summary>
 /// <param name="pipeline">The shared output-filtering pipeline.</param>
 /// <param name="teeService">Opens the log the run's output is copied into.</param>
+/// <param name="rawOutputCopyFactory">Creates the file <c>--tee &lt;path&gt;</c> copies the piped output into.</param>
 /// <param name="input">The text reader supplying the piped output.</param>
-public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeService teeService, TextReader input)
+public sealed class PipeFilterUseCase(
+    FilteredOutputPipeline pipeline,
+    ITeeService teeService,
+    IRawOutputCopyFactory rawOutputCopyFactory,
+    TextReader input)
 {
     /// <summary>Reads stdin to the end, filters it, and records the run.</summary>
     /// <param name="filter">The output filter to apply.</param>
@@ -36,6 +41,24 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
         ArgumentException.ThrowIfNullOrWhiteSpace(commandSlug);
         ArgumentNullException.ThrowIfNull(options);
 
+        // First, before stdin is read: a --tee path that cannot be created stops the run here, so an agent never
+        // believes evidence was saved when it was not.
+        IRawOutputCopy? rawCopy;
+        try
+        {
+            rawCopy = options.TeePath is { } teePath ? rawOutputCopyFactory.Open(teePath) : null;
+        }
+        catch (RawOutputCopyException ex)
+        {
+            return await pipeline.RefuseRawCopyAsync(ex, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Closed once the input is written (below), so a failure closing it is reported with the run; this
+        // closes it on every other way out.
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var copy = rawCopy;
+#pragma warning restore CA2007
+
         var startTimestamp = Stopwatch.GetTimestamp();
 
         // Before reading stdin, so setup overlaps a slow producer on the other end of the pipe.
@@ -58,10 +81,14 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             DateTimeOffset.UtcNow);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var session = await teeService
-            .BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false);
+        await using var session = CopyingTeeSession.Wrap(
+            await teeService.BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false), copy);
 #pragma warning restore CA2007
         await session.Writer.WriteLineAsync(raw.AsMemory(), cancellationToken).ConfigureAwait(false);
+        if (copy is not null)
+        {
+            await copy.DisposeAsync().ConfigureAwait(false);
+        }
 
         var request = new FilteredOutputRequest(
             filter,
@@ -74,6 +101,7 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             startTimestamp)
         {
             InputTokenCounter = counter,
+            RawCopyFailure = copy?.Failure,
             Context = new FilterContext
             {
                 Source = RunSource.Pipe,
