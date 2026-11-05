@@ -604,6 +604,15 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet stryker --tee", "--tee")]
     [InlineData("dotnet ef migrations add X --max-lines", "--max-lines")]
     [InlineData("dotnet jb cleanupcode --max-lines -v", "--max-lines")]
+    // An empty joined value is no value, and the next token is not taken for one: Spectre would read none.
+    [InlineData("dotnet test --tee=", "--tee")]
+    [InlineData("dotnet test --tee:", "--tee")]
+    [InlineData("dotnet test --max-lines=", "--max-lines")]
+    [InlineData("dotnet test --max-lines:", "--max-lines")]
+    [InlineData("dotnet test --tee= out.log", "--tee")]
+    [InlineData("dotnet test --max-lines= 5", "--max-lines")]
+    [InlineData("dotnet stryker --tee=", "--tee")]
+    [InlineData("dotnet test -- --tee=", null)]
     public void MissingOptionValue_Detects(string input, string? expected)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -668,6 +677,10 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dotnet test --max-lines", null, true, "dtk: --max-lines needs a number")]
     [InlineData("dotnet build --max-lines MyApp.slnx", "1", true, "dtk: --max-lines needs a number")]
     [InlineData("dotnet build --max-lines /getProperty:Version", null, true, "dtk: --max-lines needs a number")]
+    [InlineData("dotnet test --tee=", null, true, "dtk: --tee needs a value")]
+    [InlineData("dotnet test --tee:", "1", true, "dtk: --tee needs a value")]
+    [InlineData("dotnet build --max-lines=", null, true, "dtk: --max-lines needs a number")]
+    [InlineData("dotnet build --max-lines:", "1", true, "dtk: --max-lines needs a number")]
     [InlineData("dotnet build --names", null, true, "dtk: --names applies only to dotnet test")]
     [InlineData("dotnet test --fail-on-empty", "1", true, "dtk: --fail-on-empty needs a filtered run, but DTK_RAW=1 is set")]
     [InlineData("dotnet publish --interactive --tee x", null, true,
@@ -737,6 +750,10 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("dtk: --tee needs a value", "--tee")]
     [InlineData("dtk: --tee needs a value", "--tee", "--filter", "X")]
     [InlineData("dtk: --max-lines needs a number", "--max-lines")]
+    [InlineData("dtk: --tee needs a value", "--tee=")]
+    [InlineData("dtk: --tee needs a value", "--tee:")]
+    [InlineData("dtk: --max-lines needs a number", "--max-lines=")]
+    [InlineData("dtk: --max-lines needs a number", "--max-lines:")]
     public async Task ValueOptionWithoutValue_IsUsageErrorNamingTheOption(string expected, params string[] options)
     {
         var (_, stdErr, exitCode, childArguments) = await IntegrationTestHelper.RunDtkWithFakeDotnetAsync(

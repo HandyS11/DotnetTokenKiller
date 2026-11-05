@@ -469,7 +469,7 @@ dtk completion powershell >> $PROFILE
 
 ## Output Options
 
-Two options work on every filtered subcommand and on `dtk pipe`. Both take a value, which must follow the option as the next token (or after `=`): `dtk dotnet test --tee out.log`, `--max-lines=40`. A missing value is a dtk usage error, never a project path for dotnet.
+Two options work on every filtered subcommand and on `dtk pipe`. Both take a value, which must follow the option as the next token (or after `=`): `dtk dotnet test --tee out.log`, `--max-lines=40`. A missing value, or an empty one after `=` (`--tee=`), is a dtk usage error, never a project path for dotnet.
 
 ### `--tee <path>`
 

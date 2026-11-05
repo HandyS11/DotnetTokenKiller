@@ -249,7 +249,8 @@ internal static class ArgumentPreprocessor
 
     /// <summary>
     /// Returns the first value option of a filtered <c>dotnet</c> invocation that has no value: neither joined to it
-    /// (<c>--tee=out.log</c>) nor in the next token (see <see cref="IsOptionValue"/>). For <c>--tee</c> that token is
+    /// (<c>--tee=out.log</c>; an empty joined value, <c>--tee=</c> or <c>--max-lines:</c>, is none) nor in the next
+    /// token (see <see cref="IsOptionValue"/>). For <c>--tee</c> that token is
     /// absent or an option other than a negative integer; for <c>--max-lines</c> it is anything but an integer
     /// (<c>--max-lines -1</c> has a value, which the settings then reject). Reporting it as dtk's usage error keeps
     /// <c>--tee --filter X</c> from reading <c>--filter</c> as the path, and <c>--max-lines MyApp.slnx</c> from
@@ -501,8 +502,10 @@ internal static class ArgumentPreprocessor
         {
             if (ValueOptionName(args[i]) is { } name)
             {
-                var hasJoinedValue = name.Length < args[i].Length;
-                var hasNextValue = !hasJoinedValue && IsOptionValue(name, args, i + 1);
+                // `--tee=` joins an empty value: none, and Spectre would not take the next token for one either.
+                var isJoined = name.Length < args[i].Length;
+                var hasJoinedValue = name.Length + 1 < args[i].Length;
+                var hasNextValue = !isJoined && IsOptionValue(name, args, i + 1);
                 var option = new DtkOption(name, i, hasNextValue ? 2 : 1, !hasJoinedValue && !hasNextValue);
                 yield return option;
                 i += option.Length;
