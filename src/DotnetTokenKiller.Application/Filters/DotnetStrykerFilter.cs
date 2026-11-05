@@ -385,7 +385,8 @@ public sealed partial class DotnetStrykerFilter(IArtifactFileReader? files = nul
             }
             else if (BreakPattern().Match(line) is { Success: true } breakAt)
             {
-                BreakThreshold = breakAt.Groups["threshold"].Value;
+                // Normalised like the score: a culture with a decimal comma prints "90,5%".
+                BreakThreshold = breakAt.Groups["threshold"].Value.Replace(',', '.');
             }
 
             return index + 1;

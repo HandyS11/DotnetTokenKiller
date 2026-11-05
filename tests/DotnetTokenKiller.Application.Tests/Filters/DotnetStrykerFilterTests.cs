@@ -164,6 +164,19 @@ public sealed class DotnetStrykerFilterTests
     }
 
     [Fact]
+    public void Apply_BreakAt_CommaDecimals_AreNormalizedLikeTheScore()
+    {
+        // The real --break-at run, as a culture with a decimal comma prints it: both figures read with a dot.
+        var fixture = LoadFixture("dotnet_stryker_break_at.txt")
+            .Replace("The final mutation score is 37.50 %", "The final mutation score is 37,50 %", StringComparison.Ordinal)
+            .Replace("configured break threshold of 90%.", "configured break threshold of 90,5%.", StringComparison.Ordinal);
+
+        var result = new DotnetStrykerFilter(null, Root).Apply(fixture, 2, FilterContext.Unknown).Output;
+
+        result.Should().Contain("✗ dotnet stryker: mutation score 37.50% below break threshold 90.5% (exit 2)");
+    }
+
+    [Fact]
     public void Apply_BuildFailed_GroupedErrors()
     {
         var result = new DotnetStrykerFilter(null, Root)
