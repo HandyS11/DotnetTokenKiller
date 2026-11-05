@@ -57,8 +57,8 @@ public sealed class FilteredOutputPipeline(
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the filter reports that no test
-    /// matched and the context asks to fail on that.
+    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the context asks to fail on an empty
+    /// run and either the filter reports that no test matched or, on a zero exit, dtk could not read the output.
     /// </returns>
     public async Task<int> ProcessAsync(
         FilteredOutputRequest request,
@@ -81,8 +81,8 @@ public sealed class FilteredOutputPipeline(
     /// <param name="prepared">What <see cref="BeginAsync"/> returned when this run started.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>
-    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the filter reports that no test
-    /// matched and the context asks to fail on that.
+    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the context asks to fail on an empty
+    /// run and either the filter reports that no test matched or, on a zero exit, dtk could not read the output.
     /// </returns>
     public async Task<int> ProcessAsync(
         FilteredOutputRequest request,
@@ -101,10 +101,15 @@ public sealed class FilteredOutputPipeline(
         var (result, filterFaulted) =
             await ApplyFilterSafelyAsync(request, stripped, options.VerbosityLevel).ConfigureAwait(false);
         var filtered = result.Output;
+        var fallback = filterFaulted || string.IsNullOrWhiteSpace(filtered);
 
-        // The filter saw the child's exit code; the run's own code may differ when no test matched and
-        // --fail-on-empty is set. The log, the record and the return value all use this one.
-        var exitCode = result.NoTestsMatched && request.Context.Test.FailOnEmpty
+        // The filter saw the child's exit code; the run's own code may differ when --fail-on-empty is set and no
+        // test matched, or when dtk could not read the output at all (the filter threw or recognised nothing), so
+        // it cannot confirm that a test ran: only the test filter's runs carry the flag, and a zero exit then fails
+        // closed. The log, the record and the return value all use this one.
+        var failOnEmpty = request.Context.Test.FailOnEmpty;
+        var unconfirmed = failOnEmpty && fallback && request.ExitCode == 0;
+        var exitCode = (failOnEmpty && result.NoTestsMatched) || unconfirmed
             ? ExitCodes.NoTestsMatched
             : request.ExitCode;
 
@@ -122,12 +127,12 @@ public sealed class FilteredOutputPipeline(
         RunOutcome outcome;
         if (filterFaulted)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false);
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false, unconfirmed);
             outcome = RunOutcome.FilterFaulted;
         }
-        else if (string.IsNullOrWhiteSpace(filtered))
+        else if (fallback)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true);
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true, unconfirmed);
             outcome = RunOutcome.RawTailFallback;
         }
         else
@@ -246,11 +251,16 @@ public sealed class FilteredOutputPipeline(
     /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
     /// <param name="tailOnly">Whether to show only the <see cref="RawTail"/> of <paramref name="rawOutput"/>.</param>
+    /// <param name="unconfirmed">
+    /// Whether <c>--fail-on-empty</c> failed this zero-exit run because it could not confirm from the output that a
+    /// test ran.
+    /// </param>
     private static string BuildFallback(
         string command,
         int exitCode,
         string rawOutput,
-        bool tailOnly)
+        bool tailOnly,
+        bool unconfirmed)
     {
         var sb = new StringBuilder();
         var hasOutput = !string.IsNullOrWhiteSpace(rawOutput);
@@ -267,11 +277,17 @@ public sealed class FilteredOutputPipeline(
             }
         }
 
-        return sb.Append(FallbackStatusLine(command, exitCode, hasOutput)).Append('\n').ToString();
+        return sb.Append(FallbackStatusLine(command, exitCode, hasOutput, unconfirmed)).Append('\n').ToString();
     }
 
-    private static string FallbackStatusLine(string command, int exitCode, bool hasOutput)
+    private static string FallbackStatusLine(string command, int exitCode, bool hasOutput, bool unconfirmed)
     {
+        if (unconfirmed)
+        {
+            var cause = hasOutput ? "output not recognized" : "no output";
+            return $"✗ {command}: {cause} — --fail-on-empty could not confirm a test ran";
+        }
+
         if (exitCode != 0)
         {
             return string.Create(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})");

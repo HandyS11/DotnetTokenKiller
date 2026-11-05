@@ -114,7 +114,8 @@ file keeps its mode, a new one is owner-only on POSIX), failing the run before i
 and a secondary writer, so a mid-run failure only adds a `⚠ --tee:` line. `--max-lines` is `OutputCap`, applied last in
 `FilteredOutputPipeline`, which never counts the status line. `--fail-on-empty` makes the run exit 8 (the filter
 reports the verdict in its `FilterResult`; the exit code is settled once, before the tee log header and the tracked
-`Success`); an MTP all-skipped session is reported `⚠ … no test ran (exit 8)`, not as empty. `--names` injects
+`Success`), and fails closed: a zero-exit run whose output dtk cannot read (raw-tail fallback, faulted filter, or
+localized output, which `DotnetTestFilter` reports as no test matched) also exits 8; an MTP all-skipped session is reported `⚠ … no test ran (exit 8)`, not as empty. `--names` injects
 `--logger "console;verbosity=normal"` (VSTest) or `--output Detailed` (MTP) only when `GlobalJsonTestRunnerDetector`
 knows the runner. `--show-output` is not named `--output`, which dotnet owns.
 

@@ -93,6 +93,80 @@ public class FilteredOutputPipelineTests
             Arg.Is<CommandRecord>(r => !r.Success), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    // The filter recognised nothing (the raw-tail fallback) or threw: either way dtk could not read the output, so
+    // --fail-on-empty cannot confirm that a test ran and fails closed.
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProcessAsync_FailOnEmpty_FailsClosed_WhenTheOutputCannotBeRead(bool filterThrows)
+    {
+        var filter = Substitute.For<IContextualOutputFilter>();
+        if (filterThrows)
+        {
+            filter.Apply(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<FilterContext>())
+                .Throws(new InvalidOperationException("boom"));
+        }
+        else
+        {
+            filter.Apply(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<FilterContext>())
+                .Returns(new FilterResult(string.Empty));
+        }
+
+        var session = SessionWithHint("hint");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = ContextualRequest(filter, new TestOptions(FailOnEmpty: true)) with { RawOutput = "a\nb\n" };
+
+        var exitCode = await sut.ProcessAsync(request, session);
+
+        exitCode.Should().Be(8);
+        writer.ToString().Should().Be(
+            "a\nb\n✗ dotnet test: output not recognized — --fail-on-empty could not confirm a test ran\n");
+        await session.Received(1).FinalizeAsync(8, Arg.Any<CancellationToken>());
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => !r.Success), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FailOnEmpty_FailsClosed_WhenThereIsNoOutput()
+    {
+        var filter = new FakeContextualFilter(new FilterResult(string.Empty));
+        var session = SessionWithHint("hint");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = ContextualRequest(filter, new TestOptions(FailOnEmpty: true)) with { RawOutput = "" };
+
+        var exitCode = await sut.ProcessAsync(request, session);
+
+        exitCode.Should().Be(8);
+        writer.ToString().Should().Be("✗ dotnet test: no output — --fail-on-empty could not confirm a test ran\n");
+        await session.Received(1).FinalizeAsync(8, Arg.Any<CancellationToken>());
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => !r.Success), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    // Without the flag nothing changes; with it, a failed run keeps the child's own code and status line.
+    [InlineData(false, 0, 0, "a\n⚠ dotnet test: output not recognized, raw tail shown above\n")]
+    [InlineData(true, 1, 1, "a\n✗ dotnet test failed (exit 1)\n")]
+    [InlineData(false, 1, 1, "a\n✗ dotnet test failed (exit 1)\n")]
+    public async Task ProcessAsync_RawTailFallback_KeepsTheChildsVerdict_UnlessFailOnEmptyMeetsAZeroExit(
+        bool failOnEmpty, int childExitCode, int expectedExitCode, string expectedOutput)
+    {
+        var filter = new FakeContextualFilter(new FilterResult(string.Empty));
+        var session = SessionWithHint("hint");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = ContextualRequest(filter, new TestOptions(FailOnEmpty: failOnEmpty), childExitCode)
+            with { RawOutput = "a\n" };
+
+        var exitCode = await sut.ProcessAsync(request, session);
+
+        exitCode.Should().Be(expectedExitCode);
+        writer.ToString().Should().Be(expectedOutput);
+        await session.Received(1).FinalizeAsync(expectedExitCode, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ProcessAsync_KeepsChildExitCode_WhenVerdictEmptyWithoutFailOnEmpty()
     {

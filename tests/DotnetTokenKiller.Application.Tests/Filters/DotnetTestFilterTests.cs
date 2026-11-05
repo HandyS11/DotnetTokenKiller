@@ -2650,6 +2650,40 @@ public class DotnetTestFilterTests
         NonBlankLines(result)[^1].Should().Be($"{status} — {LocalizedRemedy}");
     }
 
+    [Theory]
+    // A passing run dtk cannot read: --fail-on-empty cannot confirm a test ran, so it fails closed.
+    [InlineData("dotnet_test_localized_fr_pass.txt", "fr")]
+    [InlineData("dotnet_test_mtp_localized_de_pass.txt", "de")]
+    public void Apply_Localized_FailOnEmpty_FailsClosed(string name, string culture)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture, exitCode: 0, FailOnEmpty);
+
+        result.NoTestsMatched.Should().BeTrue("the pipeline's --fail-on-empty rule turns it into exit 8");
+        var lines = NonBlankLines(result.Output);
+        lines[^1].Should().Be(
+            $"✗ dotnet test: output is localized ({culture}) — --fail-on-empty could not confirm a test ran; " +
+            LocalizedRemedy);
+        lines[..^1].Should().Equal(NonBlankLines(fixture));
+    }
+
+    [Theory]
+    // A failed run keeps its own code, and a run without the flag keeps today's report.
+    [InlineData("dotnet_test_localized_fr_fail.txt", 1, true)]
+    [InlineData("dotnet_test_localized_fr_pass.txt", 0, false)]
+    public void Apply_Localized_OnlyAZeroExitWithFailOnEmpty_ReportsNoTestsMatched(
+        string name, int exitCode, bool failOnEmpty)
+    {
+        var fixture = LoadFixture(name);
+        var context = failOnEmpty ? FailOnEmpty : FilterContext.Unknown;
+
+        var result = _sut.Apply(fixture, exitCode, context);
+
+        result.NoTestsMatched.Should().BeFalse();
+        result.Output.Should().Be(_sut.Apply(fixture, exitCode));
+    }
+
     [Fact]
     public void Apply_Localized_KeepsOnlyTheLast40Lines()
     {

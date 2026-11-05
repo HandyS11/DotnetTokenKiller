@@ -162,6 +162,41 @@ public class PipeIntegrationTests
         output.TrimEnd().Split('\n')[^1].Should().StartWith("\u2717");
     }
 
+    [Theory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    // Output the test filter cannot read: a build log (nothing it recognises) and no output at all.
+    [InlineData("dotnet_build_success.txt", "output not recognized")]
+    [InlineData(null, "no output")]
+    public async Task PipeTest_FailOnEmpty_FailsClosed_WhenTheOutputIsNotRecognizedAsync(string? fixture, string cause)
+    {
+        var log = fixture is null
+            ? string.Empty
+            : await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture));
+
+        var (output, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--fail-on-empty", "--exit-code", "0");
+
+        exitCode.Should().Be(8, output);
+        output.ReplaceLineEndings("\n").TrimEnd().Split('\n')[^1].Should().Be(
+            $"✗ dotnet test: {cause} — --fail-on-empty could not confirm a test ran");
+        (await ReadTrackedSuccessAsync(dbPath)).Should().Equal(false);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeTest_FailOnEmpty_FailsClosed_WhenTheOutputIsLocalizedAsync()
+    {
+        var log = await File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "dotnet_test_localized_fr_pass.txt"));
+
+        var (output, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--fail-on-empty", "--exit-code", "0");
+
+        exitCode.Should().Be(8, output);
+        output.ReplaceLineEndings("\n").TrimEnd().Split('\n')[^1].Should().Be(
+            "✗ dotnet test: output is localized (fr) — --fail-on-empty could not confirm a test ran; " +
+            "run it through dtk dotnet test, or set DOTNET_CLI_UI_LANGUAGE=en");
+        (await ReadTrackedSuccessAsync(dbPath)).Should().Equal(false);
+    }
+
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task PipeTest_LocalizedOutput_NamesTheLanguageUnderTheCappedTailAsync()
     {
@@ -178,5 +213,27 @@ public class PipeIntegrationTests
         lines[^1].Should().Be(
             "\u2717 dotnet test failed (exit 1): output is localized (fr) \u2014 run it through dtk dotnet test, " +
             "or set DOTNET_CLI_UI_LANGUAGE=en");
+    }
+
+    /// <summary>The tracked <c>success</c> column of every run recorded in <paramref name="dbPath"/>, in order.</summary>
+    /// <param name="dbPath">The isolated tracking-database path a run returned.</param>
+    private static async Task<IReadOnlyList<bool>> ReadTrackedSuccessAsync(string dbPath)
+    {
+        await IntegrationTestHelper.FoldTrackingJournalAsync(dbPath);
+
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT success FROM commands ORDER BY id";
+
+        var results = new List<bool>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(reader.GetBoolean(0));
+        }
+
+        return results;
     }
 }

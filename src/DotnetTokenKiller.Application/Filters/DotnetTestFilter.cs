@@ -82,24 +82,37 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
 
         // Nothing recognised, and the output is not in English: the raw tail the pipeline would show, under a
         // status line that says why and what to do instead of "not recognized".
-        return result.Output.Length == 0 && LocalizedTestOutput.Detect(strippedOutput) is { } culture
-            ? new FilterResult(FormatLocalized(strippedOutput, exitCode, culture))
-            : result;
+        if (result.Output.Length != 0 || LocalizedTestOutput.Detect(strippedOutput) is not { } culture)
+        {
+            return result;
+        }
+
+        // --fail-on-empty cannot confirm from text it cannot read that a test ran, so a zero exit fails closed:
+        // reported as no test matched, which the pipeline turns into exit 8.
+        var failClosed = exitCode == 0 && context.Test.FailOnEmpty;
+        return new FilterResult(FormatLocalized(strippedOutput, exitCode, culture, failClosed), failClosed);
     }
 
     /// <summary>
     /// The output of a run dtk cannot read because it is localized: its <see cref="RawTail"/>, then a status line
-    /// naming the language and the remedy. The glyph follows the exit code, as the pipeline's fallback does.
+    /// naming the language and the remedy. The glyph follows the exit code, as the pipeline's fallback does,
+    /// except that <paramref name="failClosed"/> makes a zero exit a failure.
     /// </summary>
     /// <param name="strippedOutput">The test output.</param>
     /// <param name="exitCode">The process exit code.</param>
     /// <param name="culture">The culture <see cref="LocalizedTestOutput.Detect"/> named.</param>
-    private static string FormatLocalized(string strippedOutput, int exitCode, string culture)
+    /// <param name="failClosed">Whether <c>--fail-on-empty</c> turns this zero-exit run into a failure.</param>
+    private static string FormatLocalized(string strippedOutput, int exitCode, string culture, bool failClosed)
     {
-        var cause = $"output is localized ({culture}) \u2014 {LocalizedRemedy}";
-        var status = exitCode == 0
-            ? $"\u26a0 dotnet test: {cause}"
-            : string.Create(CultureInfo.InvariantCulture, $"\u2717 dotnet test failed (exit {exitCode}): {cause}");
+        var language = $"output is localized ({culture}) \u2014";
+        var status = (exitCode, failClosed) switch
+        {
+            (_, true) =>
+                $"\u2717 dotnet test: {language} --fail-on-empty could not confirm a test ran; {LocalizedRemedy}",
+            (0, _) => $"\u26a0 dotnet test: {language} {LocalizedRemedy}",
+            _ => string.Create(CultureInfo.InvariantCulture,
+                $"\u2717 dotnet test failed (exit {exitCode}): {language} {LocalizedRemedy}")
+        };
         return $"{RawTail.Last(strippedOutput)}{status}\n";
     }
 
