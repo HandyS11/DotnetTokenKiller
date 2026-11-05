@@ -476,10 +476,10 @@ Two options work on every filtered subcommand and on `dtk pipe`. Both take a val
 Keeps the run's raw output in `<path>`, in addition to the normal filtered output, as evidence of the run: both streams in arrival order, ANSI escapes stripped, no header, no size cap.
 
 ```sh
-dtk dotnet test --tee artifacts/test-raw.log
+dtk dotnet test --tee test-raw.log
 ```
 
-The file is created, or truncated, before `dotnet` starts: a new file is owner-only on Linux and macOS; an existing one keeps its mode, as with `>`. Parent directories are not created. If the file cannot be created, dtk prints one line (`✗ dtk: --tee cannot create <path>: <reason>`) and exits with the usage-error code (1) without running `dotnet`, so evidence is never believed saved when it was not. A failure writing it mid-run (a full disk) does not fail the run or cut the filtered output: one `⚠ --tee: could not write …` line comes before the status line. `--tee` does not depend on `tee.mode`, so it works with `Never`.
+The file is created, or truncated, before `dotnet` starts: a new file is owner-only on Linux and macOS; an existing one keeps its mode, as with `>`. The parent directory must exist: dtk does not create it. If the file cannot be created, dtk prints one line (`✗ dtk: --tee cannot create <path>: <reason>`) and exits with the usage-error code (1) without running `dotnet`, so evidence is never believed saved when it was not. A failure writing it mid-run (a full disk) does not fail the run or cut the filtered output: one `⚠ --tee: could not write …` line comes before the status line. `--tee` does not depend on `tee.mode`, so it works with `Never`.
 
 A command containing `--tee` is never auto-approved by an agent hook; see [AI Agent Setup](ai-agent-setup.md).
 

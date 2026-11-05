@@ -171,7 +171,7 @@ whose output a program reads: `dotnet list package --format json`, MSBuild's `-g
 Two options work on every filtered subcommand, and three more on `test`:
 
 ```sh
-dtk dotnet test --tee artifacts/raw.log     # keep the raw output as evidence
+dtk dotnet test --tee raw.log              # keep the raw output as evidence
 dtk dotnet build --max-lines 40             # cap the filtered report; the status line is never cut
 dtk dotnet test --names                     # list the tests that passed, by class
 dtk dotnet test --show-output               # add a failing test's console output
