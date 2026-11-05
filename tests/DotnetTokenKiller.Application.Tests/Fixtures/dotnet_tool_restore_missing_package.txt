@@ -1,0 +1,1 @@
+Version 1.0.0 of package dotnettokenkiller.doesnotexist is not found in NuGet feeds https://api.nuget.org/v3/index.json.

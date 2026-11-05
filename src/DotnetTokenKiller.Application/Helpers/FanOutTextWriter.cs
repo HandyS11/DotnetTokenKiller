@@ -7,7 +7,8 @@ namespace DotnetTokenKiller.Application.Helpers;
 /// <remarks>
 /// <para>
 /// Used on the passthrough path, where output must reach the terminal the user is watching and the
-/// tee log at the same time. The secondary is treated as expendable: a tee that fails must not cost
+/// tee log at the same time, and by <see cref="UseCases.CopyingTeeSession"/>, where it reaches the tee log and
+/// the <c>--tee</c> copy. The secondary is treated as expendable: a tee that fails must not cost
 /// the user the output they were waiting for.
 /// </para>
 /// <para>

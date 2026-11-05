@@ -10,8 +10,13 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <summary>Filters output that arrived on stdin rather than from a process dtk launched.</summary>
 /// <param name="pipeline">The shared output-filtering pipeline.</param>
 /// <param name="teeService">Opens the log the run's output is copied into.</param>
+/// <param name="rawOutputCopyFactory">Creates the file <c>--tee &lt;path&gt;</c> copies the piped output into.</param>
 /// <param name="input">The text reader supplying the piped output.</param>
-public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeService teeService, TextReader input)
+public sealed class PipeFilterUseCase(
+    FilteredOutputPipeline pipeline,
+    ITeeService teeService,
+    IRawOutputCopyFactory rawOutputCopyFactory,
+    TextReader input)
 {
     /// <summary>Reads stdin to the end, filters it, and records the run.</summary>
     /// <param name="filter">The output filter to apply.</param>
@@ -21,6 +26,7 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
     /// it is passed explicitly by the caller and defaults to success at the CLI boundary.
     /// </param>
     /// <param name="options">Display flags.</param>
+    /// <param name="test">Test display options handed to the filter; none when <see langword="null"/>.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><paramref name="exitCode"/>, so a CI step wrapping a failed build still fails.</returns>
     public async Task<int> RunAsync(
@@ -28,11 +34,30 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
         string commandSlug,
         int exitCode,
         OutputOptions options,
+        TestOptions? test = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentException.ThrowIfNullOrWhiteSpace(commandSlug);
         ArgumentNullException.ThrowIfNull(options);
+
+        // First, before stdin is read: a --tee path that cannot be created stops the run here, so an agent never
+        // believes evidence was saved when it was not.
+        IRawOutputCopy? rawCopy;
+        try
+        {
+            rawCopy = options.TeePath is { } teePath ? rawOutputCopyFactory.Open(teePath) : null;
+        }
+        catch (RawOutputCopyException ex)
+        {
+            return await pipeline.RefuseRawCopyAsync(ex, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Closed once the input is written (below), so a failure closing it is reported with the run; this
+        // closes it on every other way out.
+#pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
+        await using var copy = rawCopy;
+#pragma warning restore CA2007
 
         var startTimestamp = Stopwatch.GetTimestamp();
 
@@ -43,6 +68,10 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             : null;
         var raw = await ReadAllAsync(input, counter, cancellationToken).ConfigureAwait(false);
         counter?.Finish(string.Empty);
+
+        // None from here on, as in a wrapped run once its child exits: the input is complete, and a cancellation
+        // landing now must not drop the filtered output, the log or the record of a run that is already over.
+        var completion = CancellationToken.None;
 
         // Piped input is read to completion before anything can be written, so this path gains no
         // durability. It uses the session API so the header format and the retention rules have a
@@ -56,10 +85,14 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             DateTimeOffset.UtcNow);
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
-        await using var session = await teeService
-            .BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false);
+        await using var session = CopyingTeeSession.Wrap(
+            await teeService.BeginAsync(commandSlug, provisional, completion).ConfigureAwait(false), copy);
 #pragma warning restore CA2007
-        await session.Writer.WriteLineAsync(raw.AsMemory(), cancellationToken).ConfigureAwait(false);
+        await session.Writer.WriteLineAsync(raw.AsMemory(), completion).ConfigureAwait(false);
+        if (copy is not null)
+        {
+            await copy.DisposeAsync().ConfigureAwait(false);
+        }
 
         var request = new FilteredOutputRequest(
             filter,
@@ -71,10 +104,17 @@ public sealed class PipeFilterUseCase(FilteredOutputPipeline pipeline, ITeeServi
             options.Normalized(),
             startTimestamp)
         {
-            InputTokenCounter = counter
+            InputTokenCounter = counter,
+            RawCopyFailure = copy?.Failure,
+            Context = new FilterContext
+            {
+                Source = RunSource.Pipe,
+                WorkingDirectory = Environment.CurrentDirectory,
+                Test = test ?? TestOptions.None
+            }
         };
 
-        return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
+        return await pipeline.ProcessAsync(request, session, prepared, completion).ConfigureAwait(false);
     }
 
     private const int ReadBlockChars = 64 * 1024;

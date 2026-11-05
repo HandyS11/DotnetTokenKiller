@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Tests.Helpers;
+using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
@@ -1482,6 +1483,81 @@ public class DotnetTestFilterTests
         MessageLine(result).Should().Be("Line one of the message Line two of the message");
     }
 
+    private static FilterContext FailOnEmpty { get; } = new()
+    {
+        Test = new TestOptions(Names: false, ShowOutput: false, FailOnEmpty: true)
+    };
+
+    [Fact]
+    public void Apply_FailOnEmpty_VsTestNoMatch_ReportsFailureAndVerdict()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0, FailOnEmpty);
+
+        result.Output.Should().EndWith(
+            "\u2717 dotnet test: no test matched filter FullyQualifiedName~NonExistentTest (DotnetTokenKiller.Domain.Tests.dll) \u2014 --fail-on-empty\n");
+        result.NoTestsMatched.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Apply_FailOnEmpty_MtpZero_ReportsFailure()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_zero.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 8, FailOnEmpty);
+
+        result.Output.Should().Be("\u2717 dotnet test: no test found (Alpha.Tests.dll) \u2014 --fail-on-empty\n");
+        result.NoTestsMatched.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Apply_NoFlag_StillReportsVerdict_KeepsWarning()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0, FilterContext.Unknown);
+
+        result.Output.Should().StartWith("\u26a0 dotnet test: no test matched filter").And.NotContain("--fail-on-empty");
+        result.NoTestsMatched.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_skipped_only.txt", 0)]
+    [InlineData("dotnet_test_mtp_all_skipped.txt", 8)]
+    public void Apply_FailOnEmpty_AllSkipped_IsNotEmpty(string name, int exitCode)
+    {
+        // Tests matched and were skipped. Real MTP (MSTest 4.0.2, every test [Ignore]) exits 8 with its
+        // "Zero tests ran" verdict even so; dtk keeps whatever it printed for the run before the flag existed.
+        var fixture = LoadFixture(name);
+
+        var withFlag = _sut.Apply(fixture, exitCode, FailOnEmpty);
+
+        withFlag.NoTestsMatched.Should().BeFalse();
+        withFlag.Output.Should().Be(_sut.Apply(fixture, exitCode)).And.NotContain("--fail-on-empty");
+    }
+
+    [Fact]
+    public void Apply_MtpAllSkipped_ReportsSkippedLine()
+    {
+        // Real MTP exits 8 ("Zero tests ran") for a session whose only test is [Ignore]d: the test was found.
+        var fixture = LoadFixture("dotnet_test_mtp_all_skipped.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 8, FailOnEmpty);
+
+        result.Output.Should().Be("\u26a0 dotnet test: 0 passed, 1 skipped (1 project, 0.30s) \u00b7 no test ran (exit 8)\n");
+        result.NoTestsMatched.Should().BeFalse();
+        _sut.Apply(fixture, exitCode: 8, FilterContext.Unknown).Output.Should().Be(result.Output);
+    }
+
+    [Fact]
+    public void Apply_TwoArguments_IsTheThreeArgumentOneWithAnUnknownContext()
+    {
+        var fixture = LoadFixture("dotnet_test_zero.txt");
+
+        _sut.Apply(fixture, exitCode: 0).Should().Be(_sut.Apply(fixture, 0, FilterContext.Unknown).Output);
+    }
+
     [Fact]
     public void Apply_MtpZeroTestsFixture_ReportsZeroTestsFound()
     {
@@ -2276,6 +2352,421 @@ public class DotnetTestFilterTests
 
         result.Should().Contain(
             "\n    No matching step definition: When the following users exist; Then the payload is\n");
+    }
+
+    private static FilterContext ShowOutput { get; } = new()
+    {
+        Test = new TestOptions(Names: false, ShowOutput: true, FailOnEmpty: false)
+    };
+
+    [Fact]
+    public void Apply_ShowOutput_VsTest_ListsOutputUnderFailure()
+    {
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, ShowOutput).Output;
+
+        result.Should().Contain(
+            "    at UnitTest1.cs:line 14\n" +
+            "    output:\n" +
+            "      first line of output\n" +
+            "      second line of output\n" +
+            "      third line of output\n" +
+            "✗ dotnet test: 1 failed, 1 passed");
+        result.TrimEnd('\n').Split('\n')[^1].Should().StartWith("✗ dotnet test: 1 failed");
+        _sut.Apply(fixture, exitCode: 1).Should().NotContain("output:").And.NotContain("first line");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_Mtp_ListsOutputUnderFailure()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_output_fail.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2, ShowOutput).Output;
+
+        result.Should().Contain(
+            "    output:\n" +
+            "      console line one\n" +
+            "      console line two\n" +
+            "      TestContext Messages:\n" +
+            "      context line three\n" +
+            "✗ dotnet test: 1 failed, 1 passed");
+        _sut.Apply(fixture, exitCode: 2).Should().NotContain("console line").And.NotContain("output:");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_CapsAt20Lines()
+    {
+        var many = string.Join('\n', Enumerable.Range(1, 25).Select(n => $" output line {n}"));
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt")
+            .Replace(" first line of output\n second line of output\n third line of output", many,
+                StringComparison.Ordinal);
+
+        var result = _sut.Apply(fixture, exitCode: 1, ShowOutput).Output;
+
+        result.Should().Contain("      output line 20\n      … 5 more lines (dtk log)\n")
+            .And.NotContain("output line 21");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_CapSingular()
+    {
+        var many = string.Join('\n', Enumerable.Range(1, 21).Select(n => $" output line {n}"));
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt")
+            .Replace(" first line of output\n second line of output\n third line of output", many,
+                StringComparison.Ordinal);
+
+        _sut.Apply(fixture, exitCode: 1, ShowOutput).Output.Should().Contain("… 1 more line (dtk log)\n");
+    }
+
+    [Fact]
+    public void Apply_NoStackTrace_DoesNotFoldOutputIntoMessage()
+    {
+        // A failure whose report has no stack trace: the test's output must not become part of its message.
+        var fixture = LoadFixture("dotnet_test_output_vstest_fail.txt");
+        var start = fixture.IndexOf("  Stack Trace:", StringComparison.Ordinal);
+        var end = fixture.IndexOf("  Standard Output Messages:", StringComparison.Ordinal);
+        var noTrace = fixture.Remove(start, end - start)
+            .Replace("Assert.Equal() Failure: Values differ\nExpected: 4\nActual:   5", "Boom: plain message",
+                StringComparison.Ordinal);
+
+        var plain = _sut.Apply(noTrace, exitCode: 1);
+        var shown = _sut.Apply(noTrace, exitCode: 1, ShowOutput).Output;
+
+        MessageLine(plain).Should().Be("Boom: plain message");
+        plain.Should().NotContain("output:");
+        shown.Should().Contain("    output:\n      first line of output\n      second line of output\n");
+        MessageLine(shown).Should().Be(MessageLine(plain));
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_output_vstest_fail.txt", 1)]
+    [InlineData("dotnet_test_mtp_output_fail.txt", 2)]
+    public void Apply_ShowOutput_Crlf(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture.ReplaceLineEndings("\r\n"), exitCode, ShowOutput).Output;
+
+        result.Should().NotContain("\r").And.Be(_sut.Apply(fixture, exitCode, ShowOutput).Output);
+    }
+
+    private static FilterContext Names { get; } = new()
+    {
+        Test = new TestOptions(Names: true, ShowOutput: false, FailOnEmpty: false)
+    };
+
+    [Fact]
+    public void Apply_Names_GroupsByClass()
+    {
+        // VSTest's normal console logger, xUnit v2: SampleApp.Tests with a [Theory] class beside it.
+        var fixture = LoadFixture("dotnet_test_names_vstest.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
+
+        result.Should().Be(
+            "FAILURES (1):\n" +
+            "  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]\n" +
+            "    Intentional failure\n" +
+            "    at SampleApp.Tests/IntentionallyFailingTests.cs:line 8\n" +
+            "✓ SampleApp.Tests.ParserTests (1): Parses ×4\n" +
+            "✓ SampleApp.Tests.SampleTests (3): String_IsNotEmpty, List_ContainsExpectedItems, Addition_ReturnsCorrectResult\n" +
+            "✗ dotnet test: 1 failed, 7 passed (1 project, 0.50s)\n");
+    }
+
+    [Fact]
+    public void Apply_Names_TheoryWithDotsAndParens()
+    {
+        // Review Focus 4: the class is split at the last '.' before the first '(', so the rows
+        // Parses(value: 1.5), Parses(value: "a.b/c") and Parses(value: "x(y)") are one method of one class.
+        var fixture = LoadFixture("dotnet_test_names_vstest.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
+
+        result.Should().Contain("✓ SampleApp.Tests.ParserTests (1): Parses ×4\n")
+            .And.NotContain("a.b/c").And.NotContain("1.5");
+    }
+
+    [Fact]
+    public void Apply_Names_MtpMsTest_GroupsUnderAssembly()
+    {
+        // MSTest under MTP prints a bare display name ("Parses (1.5)") and, below it, the assembly it came from.
+        var pass = LoadFixture("dotnet_test_mtp_detailed_pass.txt");
+        var fail = LoadFixture("dotnet_test_mtp_detailed_fail.txt");
+
+        _sut.Apply(pass, exitCode: 0, Names).Output.Should().Be(
+            "✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n" +
+            "✓ dotnet test: 7 passed (1 project, 0.31s)\n");
+        _sut.Apply(fail, exitCode: 2, Names).Output.Should().EndWith(
+            "    at Alpha.Tests/CalculatorTests.cs:line 22\n" +
+            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Joins\n" +
+            "✗ dotnet test: 1 failed, 6 passed (1 project, 0.32s)\n");
+    }
+
+    [Fact]
+    public void Apply_Names_XunitV3()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_xunit3_detailed.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 2, Names).Output;
+
+        result.Should().EndWith(
+            "    at Beta.Tests/Tests.cs:line 15\n" +
+            "✓ Beta.Tests.ParserTests (1): Parses ×4\n" +
+            "✓ Beta.Tests.CalculatorTests (2): Subtracts, Adds\n" +
+            "✗ dotnet test: 1 failed, 6 passed (1 project, 0.47s)\n");
+    }
+
+    [Fact]
+    public void Apply_Names_NotInOutput_Warns()
+    {
+        // The minimal logger prints no name: say so rather than list nothing.
+        var fixture = LoadFixture("dotnet_test_all_pass.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0, Names).Output;
+
+        result.Should().Be("⚠ --names: passed test names not in the output\n" + _sut.Apply(fixture, exitCode: 0));
+        LastLine(result).Should().StartWith("✓ dotnet test: 17 passed");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_names_vstest.txt", 1)]
+    [InlineData("dotnet_test_mtp_detailed_pass.txt", 0)]
+    [InlineData("dotnet_test_mtp_detailed_fail.txt", 2)]
+    [InlineData("dotnet_test_mtp_xunit3_detailed.txt", 2)]
+    public void Apply_NoNamesFlag_ListsNoName(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        _sut.Apply(fixture, exitCode).Should().NotContain("Parses").And.NotContain("--names");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_zero.txt", 0)]
+    [InlineData("dotnet_test_mtp_zero.txt", 8)]
+    [InlineData("dotnet_test_skipped_only.txt", 0)]
+    [InlineData("dotnet_test_missing_project.txt", 1)]
+    public void Apply_Names_NoPassedTest_AddsNothing(string name, int exitCode)
+    {
+        // No test passed, so there is no name to miss; and a run left to the raw tail must stay empty.
+        var fixture = LoadFixture(name);
+
+        _sut.Apply(fixture, exitCode, Names).Output.Should().Be(_sut.Apply(fixture, exitCode));
+    }
+
+    [Fact]
+    public void Apply_Names_MtpTwoAssemblies_GroupsEachUnderItsOwn()
+    {
+        // Parallel test apps announce themselves first and interleave their results: the "from" line under each
+        // result, not the last "Running tests from", says which assembly a bare name belongs to.
+        var fixture = LoadFixture("dotnet_test_mtp_detailed_pass.txt");
+        const string alpha = "/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)";
+        const string beta = "/test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll (net10.0|x64)";
+        var twoApps = fixture
+            .Replace($"Running tests from {alpha}\n", $"Running tests from {alpha}\nRunning tests from {beta}\n",
+                StringComparison.Ordinal)
+            .Replace($"passed Joins (0ms)\n  from {alpha}", $"passed Joins (0ms)\n  from {beta}",
+                StringComparison.Ordinal);
+
+        var result = _sut.Apply(twoApps, exitCode: 0, Names).Output;
+
+        result.Should().StartWith(
+            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Divides\n" +
+            "✓ Beta.Tests.dll (1): Joins\n");
+    }
+
+    [Fact]
+    public void Apply_Names_MtpWithoutFromLines_UsesTheOnlyAssembly()
+    {
+        var fixture = LoadFixture("dotnet_test_mtp_detailed_pass.txt");
+        var noFrom = string.Join('\n', fixture.Split('\n').Where(l => !l.StartsWith("  from ", StringComparison.Ordinal)));
+
+        var single = _sut.Apply(noFrom, exitCode: 0, Names).Output;
+        var two = _sut.Apply(noFrom.Replace("Running tests from", "Running tests from /x/Other.dll (net10.0|x64)\nRunning tests from",
+            StringComparison.Ordinal), exitCode: 0, Names).Output;
+
+        single.Should().StartWith("✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
+        two.Should().StartWith("✓ (unknown class) (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
+    }
+
+    [Fact]
+    public void Apply_Names_MsTestUnderVsTest_GroupsUnderAssembly()
+    {
+        // VSTest's normal console logger, MSTest: bare method names, tied to their assembly by the
+        // "Test run for <path>/SampleApp.Tests.MSTest.dll" header above them.
+        var fixture = LoadFixture("dotnet_test_names_mstest_vstest.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
+
+        result.Should().EndWith(
+            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
+            "Add_Returns_Sum ×3\n" +
+            "✗ dotnet test: 3 failed, 5 passed (1 project, 0.42s)\n").And.NotContain("(unknown class)");
+    }
+
+    [Fact]
+    public void Apply_Names_MsTestUnderVsTest_SeveralRunsInFlight_StayUnknown()
+    {
+        // Real lines: a second assembly's header (from the multi-project fixture) before the results, as parallel
+        // projects print them. Either assembly may own a bare name, so none is attributed.
+        var fixture = LoadFixture("dotnet_test_names_mstest_vstest.txt");
+        const string beta = "Test run for /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll " +
+                            "(.NETCoreApp,Version=v10.0)\n";
+        var twoRuns = fixture.Replace("A total of 1 test files matched", beta + "A total of 1 test files matched",
+            StringComparison.Ordinal);
+
+        var result = _sut.Apply(twoRuns, exitCode: 1, Names).Output;
+
+        result.Should().Contain(
+            "✓ (unknown class) (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
+            "Add_Returns_Sum ×3\n");
+    }
+
+    [Fact]
+    public void Apply_Names_MsTestUnderVsTest_NoHeader_UsesTheClosingSummary()
+    {
+        // Real lines: the results without their header (a log cut at the top), closed by the minimal logger's
+        // summary line of a real run of the same project, which names the assembly.
+        var fixture = LoadFixture("dotnet_test_names_mstest_vstest.txt");
+        const string summary = "Failed!  - Failed:     3, Passed:     5, Skipped:     0, Total:     8, Duration: 31 ms" +
+                               " - SampleApp.Tests.MSTest.dll (net10.0)";
+        var lines = fixture.Split('\n');
+        var results = lines.SkipWhile(l => !l.StartsWith("  Failed ", StringComparison.Ordinal))
+            .TakeWhile(l => !l.StartsWith("Test Run Failed.", StringComparison.Ordinal));
+        var cut = string.Join('\n', results) + summary + "\n";
+
+        var result = _sut.Apply(cut, exitCode: 1, Names).Output;
+
+        result.Should().Contain(
+            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
+            "Add_Returns_Sum ×3\n");
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_names_vstest.txt", 1)]
+    [InlineData("dotnet_test_names_mstest_vstest.txt", 1)]
+    [InlineData("dotnet_test_mtp_detailed_pass.txt", 0)]
+    [InlineData("dotnet_test_mtp_detailed_fail.txt", 2)]
+    [InlineData("dotnet_test_mtp_xunit3_detailed.txt", 2)]
+    public void Apply_Names_Crlf(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture.ReplaceLineEndings("\r\n"), exitCode, Names).Output;
+
+        result.Should().NotContain("\r").And.Be(_sut.Apply(fixture, exitCode, Names).Output);
+    }
+
+    private const string LocalizedRemedy = "run it through dtk dotnet test, or set DOTNET_CLI_UI_LANGUAGE=en";
+
+    /// <summary>The non-blank lines of <paramref name="text"/>, without carriage returns.</summary>
+    /// <param name="text">The text to split.</param>
+    private static string[] NonBlankLines(string text) =>
+        [.. text.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0)];
+
+    [Fact]
+    public void Apply_Localized_TailThenRemedy()
+    {
+        var fixture = LoadFixture("dotnet_test_localized_fr_fail.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1);
+
+        var lines = NonBlankLines(result);
+        lines[^1].Should().Be($"✗ dotnet test failed (exit 1): output is localized (fr) — {LocalizedRemedy}");
+        lines[..^1].Should().Equal(NonBlankLines(fixture), "the raw output fits the 40-line tail whole");
+        result.Should().EndWith("\n");
+    }
+
+    [Fact]
+    public void Apply_Localized_Pass_Warns()
+    {
+        var fixture = LoadFixture("dotnet_test_localized_fr_pass.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 0);
+
+        var lines = NonBlankLines(result);
+        lines[^1].Should().Be($"⚠ dotnet test: output is localized (fr) — {LocalizedRemedy}");
+        lines[..^1].Should().Equal(NonBlankLines(fixture));
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_localized_de_fail.txt", 1, "✗ dotnet test failed (exit 1): output is localized (de)")]
+    [InlineData("dotnet_test_localized_ja_fail.txt", 1, "✗ dotnet test failed (exit 1): output is localized (ja)")]
+    [InlineData("dotnet_test_mtp_localized_fr_fail.txt", 2,
+        "✗ dotnet test failed (exit 2): output is localized (fr)")]
+    [InlineData("dotnet_test_mtp_localized_de_pass.txt", 0, "⚠ dotnet test: output is localized (de)")]
+    [InlineData("dotnet_test_mtp_localized_ja_fail.txt", 2,
+        "✗ dotnet test failed (exit 2): output is localized (ja)")]
+    public void Apply_Localized_StatusNamesCultureAndRemedy(string name, int exitCode, string status)
+    {
+        var result = _sut.Apply(LoadFixture(name), exitCode);
+
+        NonBlankLines(result)[^1].Should().Be($"{status} — {LocalizedRemedy}");
+    }
+
+    [Theory]
+    // A passing run dtk cannot read: --fail-on-empty cannot confirm a test ran, so it fails closed.
+    [InlineData("dotnet_test_localized_fr_pass.txt", "fr")]
+    [InlineData("dotnet_test_mtp_localized_de_pass.txt", "de")]
+    public void Apply_Localized_FailOnEmpty_FailsClosed(string name, string culture)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture, exitCode: 0, FailOnEmpty);
+
+        result.NoTestsMatched.Should().BeTrue("the pipeline's --fail-on-empty rule turns it into exit 8");
+        var lines = NonBlankLines(result.Output);
+        lines[^1].Should().Be(
+            $"✗ dotnet test: output is localized ({culture}) — --fail-on-empty could not confirm a test ran; " +
+            LocalizedRemedy);
+        lines[..^1].Should().Equal(NonBlankLines(fixture));
+    }
+
+    [Theory]
+    // A failed run keeps its own code, and a run without the flag keeps today's report.
+    [InlineData("dotnet_test_localized_fr_fail.txt", 1, true)]
+    [InlineData("dotnet_test_localized_fr_pass.txt", 0, false)]
+    public void Apply_Localized_OnlyAZeroExitWithFailOnEmpty_ReportsNoTestsMatched(
+        string name, int exitCode, bool failOnEmpty)
+    {
+        var fixture = LoadFixture(name);
+        var context = failOnEmpty ? FailOnEmpty : FilterContext.Unknown;
+
+        var result = _sut.Apply(fixture, exitCode, context);
+
+        result.NoTestsMatched.Should().BeFalse();
+        result.Output.Should().Be(_sut.Apply(fixture, exitCode));
+    }
+
+    [Fact]
+    public void Apply_Localized_KeepsOnlyTheLast40Lines()
+    {
+        var noise = string.Concat(Enumerable.Range(1, 50).Select(i => $"ligne {i}\n"));
+        var fixture = noise + LoadFixture("dotnet_test_localized_fr_fail.txt");
+
+        var lines = NonBlankLines(_sut.Apply(fixture, exitCode: 1));
+
+        lines.Should().HaveCount(41);
+        lines[..^1].Should().Equal(NonBlankLines(fixture)[^40..]);
+    }
+
+    [Theory]
+    [InlineData("dotnet_test_localized_fr_fail.txt", 1)]
+    [InlineData("dotnet_test_localized_fr_pass.txt", 0)]
+    [InlineData("dotnet_test_mtp_localized_ja_fail.txt", 2)]
+    public void Apply_Localized_Crlf(string name, int exitCode)
+    {
+        var fixture = LoadFixture(name);
+
+        var result = _sut.Apply(fixture.ReplaceLineEndings("\r\n"), exitCode);
+
+        result.Should().Contain("output is localized").And.NotContain("\r").And.Be(_sut.Apply(fixture, exitCode));
+    }
+
+    [Fact]
+    public void Apply_UnrecognizedEnglish_StaysEmptyForThePipelineFallback()
+    {
+        _sut.Apply("some unrelated output\n", exitCode: 1).Should().BeEmpty();
     }
 
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>

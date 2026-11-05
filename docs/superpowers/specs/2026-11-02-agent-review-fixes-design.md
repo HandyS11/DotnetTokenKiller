@@ -210,15 +210,15 @@ rewriter's existing table tests; `-v q` in the preprocessor tests.
 
 | Item | Source | Notes |
 |---|---|---|
-| Filter for `dotnet tool restore` | review §7 (56 calls, up to 14K chars) | captured today, unfiltered; one line on success |
-| Filter for `dotnet ef migrations …` | §7 (18 calls) | captured today; strip build noise, keep result |
-| Filter for `dotnet stryker` | §7 (36 calls, up to 17K) | attached passthrough today; mutation score + survivors |
-| Filter for `dotnet jb cleanupcode` | §7 (70 calls) | attached passthrough today; changed files only |
-| `dotnet run` startup summary | §7 (90 calls) | attached and long-running; may never fit |
-| `--names` (list passed tests, grouped by class) | M4 | evidence per acceptance criterion |
-| `--output` (test stdout / `ITestOutputHelper` for failures) | M4 | |
-| `--tee <path>` (raw output to a chosen file, filtered to stdout) | M4 | red/green evidence; strongest candidate for 0.11 |
-| `--max-lines N` with "… N more (dtk log)" footer | H2 | |
-| `--fail-on-empty` for zero matched tests | M3 | opt-in; MTP already exits 8 |
-| `dtk log` header to stderr | C1 option 3 | moot once the slot exists, revisit if needed |
-| Localized VSTest output through `dtk pipe` | found in verification | wrapped runs unaffected |
+| Filter for `dotnet tool restore` | review §7 (56 calls, up to 14K chars) | captured today, unfiltered; one line on success → 0.11 (2026-11-04 design) |
+| Filter for `dotnet ef migrations …` | §7 (18 calls) | captured today; strip build noise, keep result → 0.11 (2026-11-04 design) |
+| Filter for `dotnet stryker` | §7 (36 calls, up to 17K) | attached passthrough today; mutation score + survivors → 0.11 (2026-11-04 design) |
+| Filter for `dotnet jb cleanupcode` | §7 (70 calls) | attached passthrough today; changed files only → 0.11 (2026-11-04 design) |
+| `dotnet run` startup summary | §7 (90 calls) | attached and long-running; may never fit; closed in the 2026-11-04 design (dropped: no streamed route) |
+| `--names` (list passed tests, grouped by class) | M4 | evidence per acceptance criterion → 0.11 (2026-11-04 design) |
+| `--output` (test stdout / `ITestOutputHelper` for failures) | M4 | → 0.11 (2026-11-04 design), as `--show-output` |
+| `--tee <path>` (raw output to a chosen file, filtered to stdout) | M4 | red/green evidence; strongest candidate for 0.11 → 0.11 (2026-11-04 design) |
+| `--max-lines N` with "… N more (dtk log)" footer | H2 | → 0.11 (2026-11-04 design) |
+| `--fail-on-empty` for zero matched tests | M3 | opt-in; MTP already exits 8 → 0.11 (2026-11-04 design) |
+| `dtk log` header to stderr | C1 option 3 | moot once the slot exists, revisit if needed; closed in the 2026-11-04 design |
+| Localized VSTest output through `dtk pipe` | found in verification | wrapped runs unaffected → 0.11 (2026-11-04 design): detected and redirected, not parsed |

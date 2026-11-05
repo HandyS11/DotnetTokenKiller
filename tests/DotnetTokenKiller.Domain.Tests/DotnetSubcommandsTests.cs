@@ -16,7 +16,16 @@ public class DotnetSubcommandsTests
     public void Ordered_IsTheDisplayOrderUsedByTheCli()
     {
         DotnetSubcommands.Ordered.Should().Equal(
-            "build", "test", "restore", "clean", "format", "list package", "publish", "pack");
+            "build", "test", "restore", "clean", "format", "list package", "publish", "pack",
+            "tool restore", "ef migrations", "ef database", "stryker", "jb cleanupcode");
+    }
+
+    [Fact]
+    public void ToolBacked_IsTheSubcommandsWhoseToolOwnsTheShortOptions()
+    {
+        // `tool restore` is a dotnet verb: dotnet's own option rules apply to it, unlike to these tools.
+        DotnetSubcommands.ToolBacked.Should().BeEquivalentTo("ef migrations", "ef database", "stryker", "jb cleanupcode");
+        DotnetSubcommands.ToolBacked.Should().BeSubsetOf(DotnetSubcommands.Ordered);
     }
 
     [Fact]
@@ -61,6 +70,30 @@ public class DotnetSubcommandsTests
         DotnetSubcommands.TryMatch(["BUILD"], out var match).Should().BeTrue();
 
         match.Name.Should().Be("build");
+    }
+
+    [Theory]
+    [InlineData(new[] { "tool", "restore", "--interactive" }, "tool restore", 2)]
+    [InlineData(new[] { "ef", "migrations", "add", "Initial" }, "ef migrations", 2)]
+    [InlineData(new[] { "EF", "Database", "update" }, "ef database", 2)]
+    [InlineData(new[] { "stryker", "--break-at", "80" }, "stryker", 1)]
+    [InlineData(new[] { "jb", "cleanupcode", "App.slnx" }, "jb cleanupcode", 2)]
+    public void TryMatch_ToolSubcommands_ConsumeTheirTokens(string[] args, string name, int tokenCount)
+    {
+        DotnetSubcommands.TryMatch(args, out var match).Should().BeTrue();
+
+        match.Should().Be(new SubcommandMatch(name, tokenCount));
+    }
+
+    [Theory]
+    [InlineData((object)new[] { "tool", "run", "x" })]
+    [InlineData((object)new[] { "tool", "install", "dotnet-ef" })]
+    [InlineData((object)new[] { "ef", "dbcontext", "list" })]
+    [InlineData((object)new[] { "ef" })]
+    [InlineData((object)new[] { "jb", "inspectcode", "App.slnx" })]
+    public void TryMatch_OtherVerbsOfTheSameTools_ReturnFalse(string[] args)
+    {
+        DotnetSubcommands.TryMatch(args, out _).Should().BeFalse();
     }
 
     [Fact]

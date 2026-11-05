@@ -29,7 +29,16 @@ public static class PassthroughSubcommands
     /// which they use to prompt for private-feed credentials.
     /// </summary>
     private static readonly HashSet<string> PassedThroughWhenInteractive =
-        new(StringComparer.OrdinalIgnoreCase) { DotnetSubcommands.Publish, DotnetSubcommands.Pack };
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            DotnetSubcommands.Publish, DotnetSubcommands.Pack, DotnetSubcommands.ToolRestore
+        };
+
+    /// <summary>
+    /// The options with which a tool in <see cref="DotnetSubcommands.ToolBacked"/> prints its help: ef's, Stryker's
+    /// and jb's <c>-h</c>, <c>--help</c> and <c>-?</c>.
+    /// </summary>
+    private static readonly HashSet<string> ToolHelpOptions = new(StringComparer.Ordinal) { "-h", "--help", "-?" };
 
     /// <summary>
     /// Filtered subcommands that hand their arguments to MSBuild, which understands the
@@ -50,6 +59,18 @@ public static class PassthroughSubcommands
 
     /// <summary>The <c>dotnet list package</c> option that selects JSON output, as <c>--format json</c> or <c>--format=json</c>.</summary>
     private const string FormatOption = "--format";
+
+    /// <summary>The first token of a <c>dotnet ef</c> invocation.</summary>
+    private const string EfVerb = "ef";
+
+    /// <summary>The <c>dotnet ef</c> option that prints a JSON document instead of a log.</summary>
+    private const string EfJsonOption = "--json";
+
+    /// <summary>The separator after which no argument is the tool's; ef hands the rest to the application.</summary>
+    private const string EndOfOptions = "--";
+
+    /// <summary>The <c>dotnet ef migrations script</c> options that write the SQL to a file, not stdout.</summary>
+    private static readonly string[] EfOutputOptions = ["-o", "--output"];
 
     /// <summary>
     /// <c>dotnet ef</c> invocations, keyed by their (subcommand, verb) token pair, that block on an
@@ -196,19 +217,21 @@ public static class PassthroughSubcommands
         }
 
         return !HasInteractiveFlag(dotnetArgs)
-               && !IsPromptingEfInvocation(dotnetArgs)
+               && !PromptsForConfirmation(dotnetArgs)
                && !IsMachineReadableRun(dotnetArgs);
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> when this invocation matches one of the
-    /// <see cref="PromptingEfInvocations"/> entries and none of that entry's non-interactive flags
-    /// are present.
+    /// Returns <see langword="true"/> when this invocation reads a confirmation from standard input: it matches one of
+    /// the <see cref="PromptingEfInvocations"/> entries (<c>dotnet ef database drop</c>) and none of that entry's
+    /// non-interactive flags (<c>-f</c>, <c>--force</c>) are present.
     /// </summary>
     /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>
-    private static bool IsPromptingEfInvocation(IReadOnlyList<string> dotnetArgs)
+    public static bool PromptsForConfirmation(IReadOnlyList<string> dotnetArgs)
     {
-        if (dotnetArgs.Count < 3 || !string.Equals(dotnetArgs[0], "ef", StringComparison.OrdinalIgnoreCase))
+        ArgumentNullException.ThrowIfNull(dotnetArgs);
+
+        if (dotnetArgs.Count < 3 || !string.Equals(dotnetArgs[0], EfVerb, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -227,33 +250,54 @@ public static class PassthroughSubcommands
 
     /// <summary>
     /// Returns <see langword="true"/> when this invocation of a filtered subcommand must be passed
-    /// through rather than filtered: <c>dotnet publish</c> or <c>dotnet pack</c> run with
-    /// <c>--interactive</c>.
+    /// through rather than filtered because it may prompt: <c>dotnet publish</c>, <c>dotnet pack</c> or
+    /// <c>dotnet tool restore</c> run with <c>--interactive</c>, or <c>dotnet ef database drop</c> without
+    /// <c>-f</c>/<c>--force</c> (see <see cref="PromptsForConfirmation"/>).
     /// </summary>
     /// <param name="dotnetArgs">
     /// The arguments passed to <c>dotnet</c>, starting at the subcommand.
     /// </param>
     /// <remarks>
     /// A filtered run captures the child's output until it exits and closes its stdin, so a
-    /// credential provider's prompt (or the device code it prints) would never reach the user. These
-    /// two were passed through, with the terminal attached, before dtk filtered them, and their
-    /// <c>--interactive</c> runs keep doing so; they record as
+    /// credential provider's prompt (or the device code it prints) would never reach the user, and ef's
+    /// confirmation read would see EOF at once. These were passed through, with the terminal attached, before dtk
+    /// filtered them, and these runs keep doing so; they record as
     /// <see cref="Tracking.RunOutcome.PassthroughUnmeasured"/> via <see cref="IsMeasurable"/>.
     /// </remarks>
     public static bool IsInteractiveFilteredRun(IReadOnlyList<string> dotnetArgs)
     {
         ArgumentNullException.ThrowIfNull(dotnetArgs);
 
-        return dotnetArgs.Count > 0
-               && PassedThroughWhenInteractive.Contains(dotnetArgs[0])
-               && HasInteractiveFlag(dotnetArgs);
+        return DotnetSubcommands.TryMatch(dotnetArgs, out var match)
+               && ((PassedThroughWhenInteractive.Contains(match.Name) && HasInteractiveFlag(dotnetArgs))
+                   || PromptsForConfirmation(dotnetArgs));
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when this invocation of a subcommand in
+    /// <see cref="DotnetSubcommands.ToolBacked"/> asks the tool for its help (<c>-h</c>, <c>--help</c> or <c>-?</c>
+    /// before any <c>--</c>), which a filter would replace with a status line: it is passed through, unfiltered.
+    /// </summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>
+    /// <remarks>
+    /// A dotnet verb's help is not the tool's: on <c>dtk dotnet test --help</c> or
+    /// <c>dtk dotnet tool restore --help</c> dtk prints its own help for the command.
+    /// </remarks>
+    public static bool IsToolHelpRun(IReadOnlyList<string> dotnetArgs)
+    {
+        ArgumentNullException.ThrowIfNull(dotnetArgs);
+
+        return DotnetSubcommands.TryMatch(dotnetArgs, out var match)
+               && DotnetSubcommands.ToolBacked.Contains(match.Name)
+               && OptionsBeforeSeparator(dotnetArgs, match.TokenCount).Any(ToolHelpOptions.Contains);
     }
 
     /// <summary>
     /// Returns <see langword="true"/> when this invocation prints output for a program to parse, which a
-    /// filter would corrupt or replace: <c>dotnet list package --format json</c>, or an MSBuild query
+    /// filter would corrupt or replace: <c>dotnet list package --format json</c>, an MSBuild query
     /// (<c>-getProperty</c>, <c>-getItem</c>, <c>-getTargetResult</c>) on <c>build</c>, <c>test</c>,
-    /// <c>restore</c>, <c>clean</c>, <c>publish</c> or <c>pack</c>.
+    /// <c>restore</c>, <c>clean</c>, <c>publish</c> or <c>pack</c>, any <c>dotnet ef</c> command with <c>--json</c>,
+    /// or <c>dotnet ef migrations script</c> without <c>-o</c>/<c>--output</c>, which prints the SQL itself.
     /// </summary>
     /// <param name="dotnetArgs">
     /// The arguments passed to <c>dotnet</c>, starting at the subcommand.
@@ -281,8 +325,48 @@ public static class PassthroughSubcommands
                    && RequestsJsonFormat(dotnetArgs);
         }
 
+        if (string.Equals(dotnetArgs[0], EfVerb, StringComparison.OrdinalIgnoreCase))
+        {
+            return IsMachineReadableEfRun(dotnetArgs);
+        }
+
         return MsBuildQueryVerbs.Contains(dotnetArgs[0]) && HasMsBuildQuery(dotnetArgs);
     }
+
+    /// <summary>
+    /// Whether a <c>dotnet ef</c> invocation prints a document: <c>--json</c>, or <c>migrations script</c> with no
+    /// output file. Only ef's own arguments count, those before <c>--</c>; ef hands the rest to the application.
+    /// </summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at <c>ef</c>.</param>
+    private static bool IsMachineReadableEfRun(IReadOnlyList<string> dotnetArgs)
+    {
+        var efArgs = OptionsBeforeSeparator(dotnetArgs, 1).ToList();
+        if (efArgs.Exists(arg => string.Equals(arg, EfJsonOption, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return efArgs.Count >= 2
+               && string.Equals(efArgs[0], "migrations", StringComparison.OrdinalIgnoreCase)
+               && string.Equals(efArgs[1], "script", StringComparison.OrdinalIgnoreCase)
+               && !efArgs.Exists(IsEfOutputOption);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="arg"/> is <c>-o</c> or <c>--output</c>, alone or with its value joined by <c>=</c> or
+    /// <c>:</c>, as ef's parser accepts.
+    /// </summary>
+    /// <param name="arg">One argument.</param>
+    private static bool IsEfOutputOption(string arg) =>
+        EfOutputOptions.Any(option =>
+            arg.StartsWith(option, StringComparison.Ordinal)
+            && (arg.Length == option.Length || arg[option.Length] is '=' or ':'));
+
+    /// <summary>The arguments from <paramref name="start"/> up to the first <c>--</c>, which is not included.</summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>
+    /// <param name="start">The index of the first argument to return.</param>
+    private static IEnumerable<string> OptionsBeforeSeparator(IReadOnlyList<string> dotnetArgs, int start) =>
+        dotnetArgs.Skip(start).TakeWhile(arg => !string.Equals(arg, EndOfOptions, StringComparison.Ordinal));
 
     /// <summary>Whether <c>--format json</c>, <c>--format=json</c> or <c>--format:json</c> follows the subcommand.</summary>
     /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>

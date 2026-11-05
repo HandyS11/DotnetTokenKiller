@@ -1,0 +1,5 @@
+Build started...
+Build succeeded.
+Acquiring an exclusive lock for migration application. See https://aka.ms/efcore-docs-migrations-lock for more information if this takes too long.
+Applying migration '20261104221252_Initial'.
+Done.

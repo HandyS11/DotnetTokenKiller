@@ -4,6 +4,7 @@ using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
@@ -20,8 +21,10 @@ public class FilteredRunUseCaseTests
     private static readonly string[] ListPackageArgs = ["list", "package"];
     private readonly IConfigProvider _configProvider = Substitute.For<IConfigProvider>();
     private readonly IOutputFilter _filter = Substitute.For<IOutputFilter>();
+    private readonly IRawOutputCopyFactory _rawOutputCopyFactory = Substitute.For<IRawOutputCopyFactory>();
 
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
+    private readonly IFileContentSnapshotter _snapshotter = Substitute.For<IFileContentSnapshotter>();
     private readonly FilteredRunUseCase _sut;
     private readonly ITeeService _teeService = Substitute.For<ITeeService>();
     private readonly ITracker _tracker = Substitute.For<ITracker>();
@@ -34,7 +37,7 @@ public class FilteredRunUseCaseTests
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
         var pipeline = new FilteredOutputPipeline(_tracker, TextWriter.Null, _configProvider);
-        _sut = new FilteredRunUseCase(_runner, _teeService, pipeline, TextWriter.Null);
+        _sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter, pipeline, TextWriter.Null);
     }
 
     private static ITeeSession CreateSession(string? finalizeHint = null)
@@ -94,7 +97,7 @@ public class FilteredRunUseCaseTests
             .Returns(_ => { callOrder.Add("run"); return new CommandResult("out", "", 0); });
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         callOrder.Should().Equal("begin", "run");
     }
@@ -111,7 +114,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("out", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", ListPackageArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", ListPackageArgs, new OutputOptions());
 
         // Status is derived from ExitCode (see TeeLogHeader.Status), so asserting both would be
         // redundant; CommandLine and ProjectPath are asserted here because they are exactly what
@@ -138,7 +141,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("out", "", 7));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await session.Received(1).FinalizeAsync(7, Arg.Any<CancellationToken>());
     }
@@ -157,7 +160,7 @@ public class FilteredRunUseCaseTests
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(), cancellationToken: cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await session.Received(1).FinalizeAsync(ExitCodes.Cancelled, CancellationToken.None);
@@ -179,7 +182,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 3));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(), cancellationToken: cts.Token);
 
         exitCode.Should().Be(3);
         await session.Received(1).FinalizeAsync(3, Arg.Is<CancellationToken>(t => !t.IsCancellationRequested));
@@ -201,7 +204,7 @@ public class FilteredRunUseCaseTests
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0, cancellationToken: cts.Token);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(), cancellationToken: cts.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -220,7 +223,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("out", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await act.Should().NotThrowAsync();
     }
@@ -233,7 +236,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 42));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         exitCode.Should().Be(42);
     }
@@ -246,10 +249,10 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await act.Should().NotThrowAsync();
-        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
         exitCode.Should().Be(0);
     }
 
@@ -263,7 +266,7 @@ public class FilteredRunUseCaseTests
         _tracker.RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db error"));
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await act.Should().NotThrowAsync();
     }
@@ -281,7 +284,7 @@ public class FilteredRunUseCaseTests
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
 
-        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        var act = async () => await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await act.Should().NotThrowAsync();
     }
@@ -296,7 +299,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult(stdout, stderr, 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("ok");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         _filter.Received(1).Apply("Hello\nError\n", 0);
     }
@@ -313,7 +316,7 @@ public class FilteredRunUseCaseTests
         RunnerWrites("1234567890123456", "", actualStdout);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
@@ -332,7 +335,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Command == "build"),
@@ -347,7 +350,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", [], 0);
+        await _sut.RunAsync(_filter, "dotnet", [], new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Command == "dotnet"),
@@ -366,7 +369,7 @@ public class FilteredRunUseCaseTests
         RunnerWrites("1234", "", actualStdout);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("1234567890123456");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
@@ -383,7 +386,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -391,7 +394,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         writer.ToString().Should().Contain("✓ dotnet build");
     }
@@ -406,7 +409,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -414,7 +417,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         var output = writer.ToString();
         output.Should().NotContain("✓");
@@ -430,7 +433,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -438,7 +441,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         writer.ToString().Should().NotContain("[full output:");
     }
@@ -452,7 +455,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -460,7 +463,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(0, true));
 
         writer.ToString().Should().Contain("[full output: 123_test.log]");
     }
@@ -471,7 +474,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -479,7 +482,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(1));
 
         writer.ToString().Should().Contain("$ dotnet build");
     }
@@ -490,7 +493,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -498,7 +501,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(2));
 
         var output = writer.ToString();
         output.Should().Contain("[raw output]");
@@ -512,7 +515,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -520,7 +523,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(2));
 
         writer.ToString().Should().Contain("[filter error — using raw output]");
     }
@@ -529,7 +532,7 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_NullFilter_ThrowsArgumentNullException()
     {
         // Kills statement mutation on ArgumentNullException.ThrowIfNull(filter) (line 41)
-        var act = () => _sut.RunAsync(null!, "dotnet", BuildArgs, 0);
+        var act = () => _sut.RunAsync(null!, "dotnet", BuildArgs, new OutputOptions());
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -538,7 +541,7 @@ public class FilteredRunUseCaseTests
     public async Task RunAsync_NullArgs_ThrowsArgumentNullException()
     {
         // Kills statement mutation on ArgumentNullException.ThrowIfNull(args) (line 42)
-        var act = () => _sut.RunAsync(_filter, "dotnet", null!, 0);
+        var act = () => _sut.RunAsync(_filter, "dotnet", null!, new OutputOptions());
 
         await act.Should().ThrowAsync<ArgumentNullException>();
     }
@@ -550,7 +553,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -559,7 +562,7 @@ public class FilteredRunUseCaseTests
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
 
         // verbosityLevel=2 would normally print command line and raw output, but quiet overrides
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2, quiet: true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(2, Quiet: true));
 
         var output = writer.ToString();
         output.Should().NotContain("$ dotnet build");
@@ -577,7 +580,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
@@ -599,7 +602,7 @@ public class FilteredRunUseCaseTests
         RunnerWrites("Hello world", "", actualStdout);
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("Hello");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r =>
@@ -617,7 +620,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -625,7 +628,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         writer.ToString().Should().NotContain("$ dotnet");
     }
@@ -637,7 +640,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -645,7 +648,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw stuff", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 1);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(1));
 
         var output = writer.ToString();
         output.Should().Contain("$ dotnet build");
@@ -660,7 +663,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -668,7 +671,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         writer.ToString().Should().Contain("✓");
         writer.ToString().Should().NotContain("ok:");
@@ -686,7 +689,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession(finalizeHint: null);
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -694,7 +697,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(0, true));
 
         writer.ToString().Should().Be("filtered\n");
     }
@@ -708,7 +711,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => Math.Abs(r.SavingsPercentage) < 0.001),
@@ -721,7 +724,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -730,7 +733,7 @@ public class FilteredRunUseCaseTests
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
         // verbosityLevel=2 would normally print meta lines, but quiet overrides it
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 2, quiet: true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(2, Quiet: true));
 
         var result = writer.ToString();
         result.Should().NotContain("$ dotnet");
@@ -747,7 +750,7 @@ public class FilteredRunUseCaseTests
         var session = CreateSession("[full output: 123_test.log]");
         _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
             .Returns(session);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -756,7 +759,7 @@ public class FilteredRunUseCaseTests
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
 
         // showLogHint=true but quiet overrides it
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, true, true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(0, true, true));
 
         writer.ToString().Should().NotContain("[full output:");
     }
@@ -767,7 +770,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -775,7 +778,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered result\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0, quiet: true);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(0, Quiet: true));
 
         writer.ToString().Should().Contain("filtered result");
     }
@@ -789,7 +792,7 @@ public class FilteredRunUseCaseTests
             Tracking = new TrackingConfig(false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, TextWriter.Null, configProvider), TextWriter.Null);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -797,7 +800,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.DidNotReceive().RecordAsync(
             Arg.Any<CommandRecord>(),
@@ -811,7 +814,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -819,7 +822,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         writer.ToString().Should().NotContain("[filter error");
     }
@@ -831,7 +834,7 @@ public class FilteredRunUseCaseTests
         await using var writer = new StringWriter();
         var configProvider = Substitute.For<IConfigProvider>();
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -839,7 +842,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("\x1b[32mraw fallback\x1b[0m", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         writer.ToString().Should().Contain("raw fallback");
     }
@@ -856,7 +859,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 7));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _teeService.Received(1).BeginAsync(
             "build",
@@ -874,7 +877,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Any<CommandRecord>(),
@@ -890,7 +893,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Success),
@@ -906,7 +909,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => !r.Success),
@@ -945,7 +948,7 @@ public class FilteredRunUseCaseTests
     private async Task<string> RunUseCaseAsync(int exitCode, string rawOutput)
     {
         await using var writer = new StringWriter();
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, _configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -953,7 +956,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult(rawOutput, "", exitCode));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         return writer.ToString();
     }
@@ -971,7 +974,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -979,7 +982,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("MSBUILD : error MSB1009: Project file does not exist.", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         var output = writer.ToString();
         output.Should().Contain("FAIL:");
@@ -997,7 +1000,7 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, _teeService,
+            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
                 new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
             _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1005,7 +1008,7 @@ public class FilteredRunUseCaseTests
                 .Returns(new CommandResult("output", "", 0));
             _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ build ok\n");
 
-            await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+            await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
             var output = writer.ToString();
             output.Should().NotContain("✓");
@@ -1027,7 +1030,7 @@ public class FilteredRunUseCaseTests
             Display = new DisplayConfig(Emoji: false)
         };
         configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(config);
-        var sut = new FilteredRunUseCase(_runner, _teeService,
+        var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
             new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1035,7 +1038,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ dotnet test: 0 tests found\n");
 
-        await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         var output = writer.ToString();
         output.Should().NotContain("⚠");
@@ -1053,7 +1056,7 @@ public class FilteredRunUseCaseTests
             await using var writer = new StringWriter();
             var configProvider = Substitute.For<IConfigProvider>();
             configProvider.LoadAsync(Arg.Any<CancellationToken>()).Returns(DtkConfig.Default);
-            var sut = new FilteredRunUseCase(_runner, _teeService,
+            var sut = new FilteredRunUseCase(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
                 new FilteredOutputPipeline(_tracker, writer, configProvider), writer);
 
             _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1061,7 +1064,7 @@ public class FilteredRunUseCaseTests
                 .Returns(new CommandResult("output", "", 0));
             _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("⚠ nothing matched\n");
 
-            await sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+            await sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
             var output = writer.ToString();
             output.Should().NotContain("⚠");
@@ -1081,7 +1084,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.Filtered),
@@ -1096,7 +1099,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("raw output", "", 0));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
@@ -1111,7 +1114,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("line one\nline two\n", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("   ");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.RawTailFallback),
@@ -1130,7 +1133,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("some raw output", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
@@ -1151,7 +1154,7 @@ public class FilteredRunUseCaseTests
             .Returns(new CommandResult("", "", 1));
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Outcome == RunOutcome.FilterFaulted),
@@ -1168,7 +1171,7 @@ public class FilteredRunUseCaseTests
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
             .Returns(new CommandResult("Project 'A' has the following package references", "", 0));
 
-        await _sut.RunAsync(new DotnetListPackageFilter(), "dotnet", ListPackageArgs, 0);
+        await _sut.RunAsync(new DotnetListPackageFilter(), "dotnet", ListPackageArgs, new OutputOptions());
 
         await _tracker.Received(1).RecordAsync(
             Arg.Is<CommandRecord>(r => r.Command == "list package"),
@@ -1186,7 +1189,7 @@ public class FilteredRunUseCaseTests
             onSinksUsed: (o, e) => { stdOutSink = o; stdErrSink = e; });
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         var expected = TokenEstimator.Estimate(actualStdout + stderr);
         await _tracker.Received(1).RecordAsync(
@@ -1204,7 +1207,7 @@ public class FilteredRunUseCaseTests
         RunnerWrites("out\n", "", new StringBuilder());
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         await _runner.Received(1).RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
             Arg.Is<TextWriter>(w => ReferenceEquals(w, TextWriter.Null)), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>());
@@ -1236,9 +1239,386 @@ public class FilteredRunUseCaseTests
             });
         _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered");
 
-        await _sut.RunAsync(_filter, "dotnet", BuildArgs, 0);
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
         startedWhileChildRan.Should().BeTrue();
         await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    // ── --tee <path> ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Stubs the runner to write <paramref name="stdout"/>'s lines to the stdout sink and
+    /// <paramref name="stderr"/>'s to the stderr sink, as the two pumps do, and to report them as its result.
+    /// </summary>
+    /// <param name="stdout">The lines written to the stdout sink.</param>
+    /// <param name="stderr">The lines written to the stderr sink, after stdout's.</param>
+    /// <param name="exitCode">The exit code <see cref="CommandResult"/> reports.</param>
+    private void RunnerWritesBothStreams(string[] stdout, string[] stderr, int exitCode = 0)
+    {
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var stdOutSink = call.ArgAt<TextWriter>(2);
+                var stdErrSink = call.ArgAt<TextWriter>(3);
+                foreach (var line in stdout)
+                {
+                    await stdOutSink.WriteLineAsync(line.AsMemory(), CancellationToken.None);
+                    await stdOutSink.FlushAsync(CancellationToken.None);
+                }
+
+                foreach (var line in stderr)
+                {
+                    await stdErrSink.WriteLineAsync(line.AsMemory(), CancellationToken.None);
+                    await stdErrSink.FlushAsync(CancellationToken.None);
+                }
+
+                return new CommandResult(
+                    string.Concat(stdout.Select(line => line + "\n")),
+                    string.Concat(stderr.Select(line => line + "\n")),
+                    exitCode);
+            });
+    }
+
+    private FilteredRunUseCase CreateWithOutput(TextWriter writer) =>
+        new(_runner, _teeService, _rawOutputCopyFactory, _snapshotter,
+            new FilteredOutputPipeline(_tracker, writer, _configProvider), writer);
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_CopiesRawOutput()
+    {
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        var log = new StringWriter { NewLine = "\n" };
+        var session = CreateSession();
+        session.Writer.Returns(log);
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        RunnerWritesBothStreams(["a", "b"], ["c"]);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
+        await using var writer = new StringWriter();
+
+        var exitCode = await CreateWithOutput(writer)
+            .RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        exitCode.Should().Be(0);
+        copy.Text.Should().Be("a\nb\nc\n");
+        log.ToString().Should().Be("a\nb\nc\n", "the tee log still gets every line too");
+        writer.ToString().Should().Be("✓ dotnet build\n", "the copy changes nothing in the filtered output");
+        copy.DisposeCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_StillCountsTheRawStdout()
+    {
+        // The copy sits under the counting sink, not instead of it: tracking still counts what the child printed.
+        _rawOutputCopyFactory.Open("raw.log").Returns(new RecordingRawOutputCopy());
+        var actualStdout = new StringBuilder();
+        RunnerWrites("Hello world", "", actualStdout);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("Hello");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => r.InputTokens == 3 && r.OutputTokens == 1), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_WithUncreatableTeePath_ReturnsUsageErrorWithoutRunningChild()
+    {
+        _rawOutputCopyFactory.Open("missing/raw.log").Throws(new RawOutputCopyException(
+            "missing/raw.log: Could not find a part of the path '/work/missing/raw.log'."));
+        await using var writer = new StringWriter();
+
+        var exitCode = await CreateWithOutput(writer)
+            .RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(VerbosityLevel: 1, TeePath: "missing/raw.log"));
+
+        exitCode.Should().Be(ExitCodes.UsageError);
+        writer.ToString().Should().Be(
+            "✗ dtk: --tee cannot create missing/raw.log: Could not find a part of the path '/work/missing/raw.log'."
+            + Environment.NewLine,
+            "it is the run's only line, before even the -v command echo");
+        await _runner.DidNotReceive().RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>());
+        await _teeService.DidNotReceive().BeginAsync(
+            Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceive().RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+        await _tracker.DidNotReceive().WarmUpAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RunAsync_WithUncreatableTeePath_FollowsTheGlyphRules()
+    {
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(DtkConfig.Default with { Display = new DisplayConfig(Emoji: false) });
+        _rawOutputCopyFactory.Open("x/raw.log").Throws(new RawOutputCopyException("x/raw.log: denied"));
+        await using var writer = new StringWriter();
+
+        await CreateWithOutput(writer).RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "x/raw.log"));
+
+        writer.ToString().Should().Be("FAIL: dtk: --tee cannot create x/raw.log: denied" + Environment.NewLine);
+    }
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_WorksWhenTeeModeNever()
+    {
+        _configProvider.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(DtkConfig.Default with { Tee = new TeeConfig(TeeMode.Never) });
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(NullTeeSession.Instance);
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        RunnerWritesBothStreams(["a"], ["b"], exitCode: 1);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✗ dotnet build\n");
+
+        var exitCode = await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        exitCode.Should().Be(1);
+        copy.Text.Should().Be("a\nb\n");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithTeePath_ReportsAFailureToWriteTheCopyBeforeTheStatusLine()
+    {
+        // Disposed once the child has exited, before the output is built: a full disk can refuse the last
+        // buffered bytes only when the file is closed, and that failure must still reach the output.
+        var copy = new RecordingRawOutputCopy { FailureOnDispose = "No space left on device" };
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        RunnerWritesBothStreams(["a"], []);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("detail\n✓ dotnet build\n");
+        await using var writer = new StringWriter();
+
+        var exitCode = await CreateWithOutput(writer)
+            .RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"));
+
+        exitCode.Should().Be(0, "a copy that could not be written does not fail the run");
+        writer.ToString().Should().Be(
+            "detail\n⚠ --tee: could not write raw.log: No space left on device\n✓ dotnet build\n");
+    }
+
+    [Fact]
+    public async Task RunAsync_WithoutTeePath_OpensNoCopy()
+    {
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
+
+        _rawOutputCopyFactory.DidNotReceive().Open(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledWithTeePath_ClosesTheCopy()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<CommandResult>(new OperationCanceledException(cts.Token)));
+
+        var act = async () => await _sut.RunAsync(
+            _filter, "dotnet", BuildArgs, new OutputOptions(TeePath: "raw.log"), cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        copy.DisposeCount.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotFilter_PassesChanges()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "snap-root");
+        var before = new FileContentSnapshot(root, new Dictionary<string, string> { ["a.cs"] = "1", ["b.cs"] = "1" });
+        var after = new FileContentSnapshot(root, new Dictionary<string, string> { ["a.cs"] = "1", ["b.cs"] = "2" });
+        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        var filter = new SnapshotFilter(root);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode", "X.slnx"], new OutputOptions());
+
+        filter.Seen.Should().NotBeNull();
+        filter.Seen.Computed.Should().BeTrue();
+        filter.Seen.ChangedPaths.Should().Equal("b.cs");
+        filter.Arguments.Should().Equal("X.slnx");
+        _snapshotter.Received(2).Take(root, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    // Relative to the working directory, as typed, and absolute: either way the copy dtk writes during the run is
+    // not a file the tool changed.
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_SnapshotFilter_LeavesTheTeeFileOutOfTheChanges(bool absolute)
+    {
+        var root = Environment.CurrentDirectory;
+        var teePath = Path.Combine("logs", "raw.log");
+        if (absolute)
+        {
+            teePath = Path.Combine(root, teePath);
+        }
+
+        var before = new FileContentSnapshot(root,
+            new Dictionary<string, string> { ["a.cs"] = "1", ["logs/raw.log"] = "empty" });
+        var after = new FileContentSnapshot(root,
+            new Dictionary<string, string> { ["a.cs"] = "2", ["logs/raw.log"] = "filled" });
+        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        _rawOutputCopyFactory.Open(teePath).Returns(new RecordingRawOutputCopy());
+        var filter = new SnapshotFilter(root);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions(TeePath: teePath));
+
+        filter.Seen!.ChangedPaths.Should().Equal("a.cs");
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotFilter_KeepsAFileNamedLikeATeeFileOutsideTheRoot()
+    {
+        // The tee file is beside the root, not in it: the root's own raw.log is a change of the tool's.
+        var root = Path.Combine(Environment.CurrentDirectory, "src");
+        var before = new FileContentSnapshot(root, new Dictionary<string, string> { ["raw.log"] = "1" });
+        var after = new FileContentSnapshot(root, new Dictionary<string, string> { ["raw.log"] = "2" });
+        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        _rawOutputCopyFactory.Open("raw.log").Returns(new RecordingRawOutputCopy());
+        var filter = new SnapshotFilter(root);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions(TeePath: "raw.log"));
+
+        filter.Seen!.ChangedPaths.Should().Equal("raw.log");
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotFilter_TreeTooLarge_ReportsNotComputed()
+    {
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((FileContentSnapshot?)null);
+        var filter = new SnapshotFilter("/somewhere");
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        filter.Seen!.Computed.Should().BeFalse();
+        filter.Seen.NotComputedReason.Should().Be("tree too large");
+    }
+
+    [Fact]
+    public async Task RunAsync_PlainFilter_TakesNoSnapshot()
+    {
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("filtered\n");
+
+        await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
+
+        _snapshotter.DidNotReceiveWithAnyArgs().Take(default!, default);
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledDuringTheBeforeSnapshot_FinalizesTheSessionAndClosesTheCopy()
+    {
+        using var cts = new CancellationTokenSource();
+        var session = CreateSession();
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        var copy = new RecordingRawOutputCopy();
+        _rawOutputCopyFactory.Open("raw.log").Returns(copy);
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                cts.Cancel();
+                throw new OperationCanceledException(cts.Token);
+            });
+
+        var act = async () => await _sut.RunAsync(
+            new SnapshotFilter("/somewhere"), "dotnet", ["jb", "cleanupcode"], new OutputOptions(TeePath: "raw.log"),
+            cancellationToken: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        await session.Received(1).FinalizeAsync(ExitCodes.Cancelled, CancellationToken.None);
+        copy.DisposeCount.Should().BeGreaterThan(0);
+        await _runner.DidNotReceiveWithAnyArgs().RunStreamedAsync(default!, default!, default!, default!, default);
+    }
+
+    [Fact]
+    public async Task RunAsync_BeforeSnapshotThrows_RunCompletesWithChangesNotComputed()
+    {
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ => throw new IOException("boom"));
+        var filter = new SnapshotFilter("/somewhere");
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        var exit = await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        exit.Should().Be(0);
+        filter.Seen!.Computed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_AfterSnapshotThrows_RunCompletesWithChangesNotComputed()
+    {
+        var before = new FileContentSnapshot("/r", new Dictionary<string, string>());
+        var calls = 0;
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => ++calls == 1 ? before : throw new UnauthorizedAccessException());
+        var filter = new SnapshotFilter("/somewhere");
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        var exit = await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        exit.Should().Be(0);
+        filter.Seen!.Computed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotRootThrows_RunCompletesWithChangesNotComputed()
+    {
+        var filter = new SnapshotFilter("/somewhere") { RootFailure = new InvalidOperationException("no root") };
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        var exit = await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions());
+
+        exit.Should().Be(0);
+        filter.Seen!.Computed.Should().BeFalse();
+    }
+
+    private sealed class SnapshotFilter(string root) : IContextualOutputFilter, ISnapshotFilter
+    {
+        public FileChangeSet? Seen { get; private set; }
+
+        public IReadOnlyList<string>? Arguments { get; private set; }
+
+        public Exception? RootFailure { get; init; }
+
+        public string SnapshotRoot(IReadOnlyList<string> arguments, string workingDirectory)
+        {
+            Arguments = arguments;
+            return RootFailure is null ? root : throw RootFailure;
+        }
+
+        public string Apply(string strippedOutput, int exitCode) => Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;
+
+        public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
+        {
+            Seen = context.Changes;
+            return new FilterResult("done\n");
+        }
     }
 }

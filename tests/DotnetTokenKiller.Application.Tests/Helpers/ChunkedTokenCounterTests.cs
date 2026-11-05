@@ -230,7 +230,9 @@ public class ChunkedTokenCounterTests(ITestOutputHelper output)
                     }
                 }
 
-                if (name.StartsWith("fixture", StringComparison.Ordinal) && cutsInText == 0)
+                // A single-line fixture (a lone error line) has no line break to cut at.
+                if (name.StartsWith("fixture", StringComparison.Ordinal) && cutsInText == 0
+                    && text.TrimEnd('\n').Contains('\n', StringComparison.Ordinal))
                 {
                     failures.Add($"{name}, {model}: no safe cut at all, so the fixture proves nothing");
                 }

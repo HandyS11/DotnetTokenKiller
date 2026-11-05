@@ -43,6 +43,20 @@ public class HookIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_CopilotCli_LineContinuationIntoTee_AsksAsync()
+    {
+        // `--te\<newline>e` reaches dtk as `--tee` once the shell removes the backslash-newline: never "allow".
+        var (stdout, _, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsAsync(
+            """{"toolName":"bash","toolArgs":"{\"command\":\"dotnet test --te\\\\\\ne ~/.bashrc\"}"}""",
+            "hook", "copilot-cli");
+
+        exitCode.Should().Be(0);
+        var root = JsonNode.Parse(stdout)!;
+        root["permissionDecision"]!.GetValue<string>().Should().Be("ask");
+        root["modifiedArgs"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test --te\\\ne ~/.bashrc");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Hook_UnknownProvider_ExitsZeroWithUsageOnStderrAsync()
     {
         // dtk rejects the provider without reading stdin. A payload larger than any pipe buffer makes the

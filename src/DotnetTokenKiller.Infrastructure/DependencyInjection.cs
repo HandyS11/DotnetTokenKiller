@@ -1,9 +1,11 @@
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Tracking;
 using DotnetTokenKiller.Infrastructure.Configuration;
 using DotnetTokenKiller.Infrastructure.Execution;
+using DotnetTokenKiller.Infrastructure.Files;
 using DotnetTokenKiller.Infrastructure.Tee;
 using DotnetTokenKiller.Infrastructure.Tracking;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +30,10 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ITeeService, FileTeeService>();
         services.AddSingleton<ITeeLogStore, FileTeeLogStore>();
+        services.AddSingleton<IRawOutputCopyFactory, RawOutputCopyFactory>();
+        services.AddSingleton<IFileContentSnapshotter, FileContentSnapshotter>();
+        services.AddSingleton<IArtifactFileReader, ArtifactFileReader>();
+        services.AddSingleton<ITestRunnerDetector, GlobalJsonTestRunnerDetector>();
         return services;
     }
 }

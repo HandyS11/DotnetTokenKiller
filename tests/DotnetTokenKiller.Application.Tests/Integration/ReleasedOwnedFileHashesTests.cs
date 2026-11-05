@@ -93,15 +93,61 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
         {V090MarkdownRule}
         """;
 
+    /// <summary>The Windsurf rule, Devin rule and Aider instructions file dtk 0.10.0 wrote, byte for byte.</summary>
+    private const string V0100MarkdownRule =
+        """
+        # DotnetTokenKiller (dtk)
+
+        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, and pack commands.
+
+        ## Usage
+
+        ```sh
+        dtk dotnet build MyProject.slnx
+        dtk dotnet test --filter "Category=Unit"
+        dtk dotnet restore
+        dtk dotnet clean
+        dtk dotnet format
+        dtk dotnet format --verify-no-changes
+        dtk dotnet list package --outdated
+        dtk dotnet publish -c Release
+        dtk dotnet pack
+        ```
+
+        - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
+        - Exit codes are preserved.
+        - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
+        - Don't pipe dtk output into tail or grep: its last line is the status.
+        - `dtk log [build|test]` prints the latest run's raw output instead of re-running: last 100 lines, `--full` for all, `--list`.
+        - `dtk pipe <subcommand>` filters stdin. `-q` (any command) prints only the filtered output.
+        - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
+        """;
+
+    /// <summary>The Cursor rule dtk 0.10.0 wrote, byte for byte.</summary>
+    private const string V0100CursorRule =
+        $"""
+        ---
+        description: Use dtk instead of dotnet for build, test, restore, clean, format, list package, publish, and pack commands
+        globs:
+          - "**/*.cs"
+          - "**/*.csproj"
+          - "**/*.slnx"
+          - "**/*.sln"
+        alwaysApply: false
+        ---
+
+        {V0100MarkdownRule}
+        """;
+
     /// <summary>
     /// The hashes of the bodies this dtk writes. When a test pinning one fails, the text changed: if the old body has
     /// shipped in a release, append its hash (the pinned value) to the matching list in
     /// <see cref="IntegrationInstructions"/>, then pin the new one here.
     /// </summary>
-    private const string CurrentCursorRuleHash = "7c369fc9f3989aea48fce6aa9e723267b637808f0844628c3c93089f134a0c7c";
+    private const string CurrentCursorRuleHash = "babe8c7a7239929c71117d6e714cb13bdfb2dc5ea1c0a6e1d7f416e1532953d8";
 
     /// <inheritdoc cref="CurrentCursorRuleHash"/>
-    private const string CurrentMarkdownRuleHash = "9a4f734ee4318b9b203a5d87532a4fc6c25ce465a8b62fe842f428f3baca54b8";
+    private const string CurrentMarkdownRuleHash = "2b666a47044daff019ab67108ae63ee19e8f22085f0af8144a94fbd1b6ba6180";
 
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-released-hashes-{Guid.NewGuid()}");
 
@@ -138,6 +184,19 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     }
 
     [Fact]
+    public void ReleasedHashes_IncludeTheV0100Bodies()
+    {
+        // The hashes of the files dtk 0.10.0 (the v0.10.0 tag, f0b0a61) wrote, spelled out for the same reason.
+        UninstallHelpers.HashOwnedFile(V0100CursorRule)
+            .Should().Be("7c369fc9f3989aea48fce6aa9e723267b637808f0844628c3c93089f134a0c7c");
+        UninstallHelpers.HashOwnedFile(V0100MarkdownRule)
+            .Should().Be("9a4f734ee4318b9b203a5d87532a4fc6c25ce465a8b62fe842f428f3baca54b8");
+
+        IntegrationInstructions.ReleasedCursorRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V0100CursorRule));
+        IntegrationInstructions.ReleasedMarkdownRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V0100MarkdownRule));
+    }
+
+    [Fact]
     public async Task CurrentCursorRule_MatchesThePinnedHash()
     {
         await Cursor(ProjectDir).IntegrateAsync(ProjectDir, false, default);
@@ -165,6 +224,7 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     [Theory]
     [InlineData(V080CursorRule)]
     [InlineData(V090CursorRule)]
+    [InlineData(V0100CursorRule)]
     public async Task Uninstall_CursorRuleWrittenByAReleasedDtk_IsRemoved(string released)
     {
         var path = await WriteAsync(Path.Combine(ProjectDir, ".cursor", "rules", "dtk.mdc"), released);
@@ -179,6 +239,7 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     [Theory]
     [InlineData(V080MarkdownRule)]
     [InlineData(V090MarkdownRule)]
+    [InlineData(V0100MarkdownRule)]
     public async Task Uninstall_WindsurfRuleWrittenByAReleasedDtk_IsRemovedByDevin(string released)
     {
         var path = await WriteAsync(Path.Combine(ProjectDir, ".windsurf", "rules", "dtk.md"), released);
@@ -190,10 +251,12 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
         File.Exists(path).Should().BeFalse();
     }
 
-    [Fact]
-    public async Task Uninstall_DevinRuleWrittenByV090_IsRemoved()
+    [Theory]
+    [InlineData(V090MarkdownRule)]
+    [InlineData(V0100MarkdownRule)]
+    public async Task Uninstall_DevinRuleWrittenByAReleasedDtk_IsRemoved(string released)
     {
-        var path = await WriteAsync(Path.Combine(ProjectDir, ".devin", "rules", "dtk.md"), V090MarkdownRule);
+        var path = await WriteAsync(Path.Combine(ProjectDir, ".devin", "rules", "dtk.md"), released);
 
         var result = await new DevinIntegrator(new HomePaths(Path.Combine(ProjectDir, "no-home"))).UninstallAsync(
             ProjectDir, HookScope.Project, new Dictionary<string, string>(), default);
@@ -207,6 +270,8 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
     [InlineData(HookScope.Global, V080MarkdownRule)]
     [InlineData(HookScope.Project, V090MarkdownRule)]
     [InlineData(HookScope.Global, V090MarkdownRule)]
+    [InlineData(HookScope.Project, V0100MarkdownRule)]
+    [InlineData(HookScope.Global, V0100MarkdownRule)]
     internal async Task Uninstall_AiderInstructionsWrittenByAReleasedDtk_AreRemoved(HookScope scope, string released)
     {
         var home = Home;

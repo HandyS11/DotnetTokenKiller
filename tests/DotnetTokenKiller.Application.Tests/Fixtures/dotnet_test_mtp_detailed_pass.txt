@@ -1,0 +1,23 @@
+Running tests from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Adds (4ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Subtracts (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Parses (1.5) (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Parses ("a.b/c") (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Parses (42) (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Divides (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+passed Joins (0ms)
+  from /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) passed (162ms)
+
+Test run summary: Passed!
+  total: 7
+  failed: 0
+  succeeded: 7
+  skipped: 0
+  duration: 310ms

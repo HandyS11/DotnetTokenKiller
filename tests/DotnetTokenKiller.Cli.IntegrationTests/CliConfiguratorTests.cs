@@ -138,6 +138,13 @@ public sealed class CliConfiguratorTests
     }
 
     [Fact]
+    public Task Configure_DotnetToolRestoreHelp_MatchesSnapshot()
+    {
+        // The one new subcommand whose help is dtk's: a tool-backed subcommand's --help is passed to the tool.
+        return Verify(RunHelp("dotnet", "tool", "restore", "--help"));
+    }
+
+    [Fact]
     public Task Configure_ConfigShowHelp_MatchesSnapshot()
     {
         return Verify(RunHelp("config", "show", "--help"));

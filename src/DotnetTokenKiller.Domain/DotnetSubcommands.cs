@@ -40,10 +40,15 @@ namespace DotnetTokenKiller.Domain;
 ///   hand-editing — but that test's pinned literals do.
 ///   </description></item>
 ///   <item><description>
-///   Check <c>PipeCommand</c>'s "Available: …" error line. It renders <see cref="Ordered"/> joined
-///   with ", " on one line, 75 characters with eight entries; a longer list can push that line past
-///   Spectre's 80-column non-interactive wrap width and fold it mid-name, which
+///   Check <c>PipeCommand</c>'s "Available: …" error lines. They render <see cref="Ordered"/> joined
+///   with ", " and wrapped between names at 80 columns, so no name is folded across lines, which
 ///   <c>PipeIntegrationTests.Pipe_UnknownSubcommand_FailsWithKnownListAsync</c> checks for.
+///   </description></item>
+///   <item><description>
+///   Decide whether the subcommand runs a tool that owns the short options: if so, add it to
+///   <see cref="ToolBacked"/>. Then check <c>PassthroughSubcommands</c>: a run that prompts
+///   (<c>IsInteractiveFilteredRun</c>) or prints output for a program to read (<c>IsMachineReadableRun</c>) must
+///   stay unfiltered.
 ///   </description></item>
 /// </list>
 /// </remarks>
@@ -79,12 +84,40 @@ public static class DotnetSubcommands
     /// <summary>The <c>dotnet pack</c> subcommand.</summary>
     public const string Pack = "pack";
 
+    /// <summary>The <c>dotnet tool restore</c> subcommand.</summary>
+    /// <remarks>A dotnet verb, so dtk's options follow the same rules as on <see cref="Restore"/>.</remarks>
+    public const string ToolRestore = "tool restore";
+
+    /// <summary>The <c>dotnet ef migrations</c> subcommand (the Entity Framework Core tool).</summary>
+    public const string EfMigrations = "ef migrations";
+
+    /// <summary>The <c>dotnet ef database</c> subcommand (the Entity Framework Core tool).</summary>
+    public const string EfDatabase = "ef database";
+
+    /// <summary>The <c>dotnet stryker</c> subcommand (the Stryker.NET mutation-testing tool).</summary>
+    public const string Stryker = "stryker";
+
+    /// <summary>The <c>dotnet jb cleanupcode</c> subcommand (the ReSharper command-line tools).</summary>
+    public const string JbCleanupCode = "jb cleanupcode";
+
     /// <summary>
     /// Canonical display order, used for CLI routing, help, and completion. Changing this order
     /// changes the order commands are listed in <c>dtk dotnet --help</c>.
     /// </summary>
     public static readonly IReadOnlyList<string> Ordered =
-        [Build, Test, Restore, Clean, Format, ListPackage, Publish, Pack];
+    [
+        Build, Test, Restore, Clean, Format, ListPackage, Publish, Pack, ToolRestore, EfMigrations, EfDatabase,
+        Stryker, JbCleanupCode
+    ];
+
+    /// <summary>
+    /// The subcommands that run a tool rather than a dotnet verb. The tool owns every short option and
+    /// <c>--verbose</c>, <c>--quiet</c> and <c>--help</c> (ef's <c>-v</c> is its verbose flag, Stryker's
+    /// <c>-v &lt;version&gt;</c> takes a value, jb's <c>-v</c> prints its version), so on these dtk reads only its
+    /// long, dtk-only options, and passes the tool's help through.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ToolBacked =
+        new HashSet<string>(StringComparer.Ordinal) { EfMigrations, EfDatabase, Stryker, JbCleanupCode };
 
     /// <summary>
     /// The canonical names as a case-insensitive set, for asserting membership and binding other

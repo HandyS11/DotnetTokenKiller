@@ -1,0 +1,40 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  SampleApp.Tests.MSTest -> /test/project/root/SampleApp.Tests.MSTest/bin/Debug/net10.0/SampleApp.Tests.MSTest.dll
+Test run for /test/project/root/SampleApp.Tests.MSTest/bin/Debug/net10.0/SampleApp.Tests.MSTest.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+  Failed Equality_Fails [12 ms]
+  Error Message:
+   Assert.AreEqual failed. Expected:<100>. Actual:<42>. Expected values to be equal
+  Stack Trace:
+     at SampleApp.Tests.MSTest.FailingTests.Equality_Fails() in /test/project/root/SampleApp.Tests.MSTest/FailingTests.cs:line 11
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+  Failed Null_Check_Fails [< 1 ms]
+  Error Message:
+   Assert.IsNull failed. Value was expected to be null
+  Stack Trace:
+     at SampleApp.Tests.MSTest.FailingTests.Null_Check_Fails() in /test/project/root/SampleApp.Tests.MSTest/FailingTests.cs:line 18
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+  Failed Wrong_Exception_Type [< 1 ms]
+  Error Message:
+   Test method threw exception System.InvalidOperationException, but exception System.ArgumentException was expected. Exception message: System.InvalidOperationException: Wrong exception type
+  Stack Trace:
+     at SampleApp.Tests.MSTest.FailingTests.Wrong_Exception_Type() in /test/project/root/SampleApp.Tests.MSTest/FailingTests.cs:line 26
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+  Passed Addition_Returns_Correct_Result [< 1 ms]
+  Passed String_StartsWith_Expected_Prefix [< 1 ms]
+  Passed Add_Returns_Sum (1,1,2) [< 1 ms]
+  Passed Add_Returns_Sum (5,3,8) [< 1 ms]
+  Passed Add_Returns_Sum (-1,1,0) [< 1 ms]
+
+Test Run Failed.
+Total tests: 8
+     Passed: 5
+     Failed: 3
+ Total time: 0.4194 Seconds

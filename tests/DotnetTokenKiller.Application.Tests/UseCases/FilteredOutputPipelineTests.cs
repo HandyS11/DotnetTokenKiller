@@ -43,6 +43,142 @@ public class FilteredOutputPipelineTests
         return session;
     }
 
+    private sealed class FakeContextualFilter(FilterResult result) : IContextualOutputFilter
+    {
+        public FilterContext? ReceivedContext { get; private set; }
+
+        public int? ReceivedExitCode { get; private set; }
+
+        public string Apply(string strippedOutput, int exitCode) =>
+            Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;
+
+        public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
+        {
+            ReceivedContext = context;
+            ReceivedExitCode = exitCode;
+            return result;
+        }
+    }
+
+    private static FilteredOutputRequest ContextualRequest(IOutputFilter filter, TestOptions test, int exitCode = 0) =>
+        new(filter, "raw output", exitCode, "test", "dotnet test", RunSource.Run, new OutputOptions(),
+            Stopwatch.GetTimestamp())
+        {
+            Context = new FilterContext { Arguments = ["--filter", "X"], Test = test }
+        };
+
+    [Fact]
+    public async Task ProcessAsync_PassesContextToContextualFilter()
+    {
+        var filter = new FakeContextualFilter(new FilterResult("ok"));
+
+        await _sut.ProcessAsync(ContextualRequest(filter, TestOptions.None), NullTeeSession.Instance);
+
+        filter.ReceivedContext!.Arguments.Should().Equal("--filter", "X");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReturnsNoTestsMatchedExitCode_WhenFailOnEmptyAndVerdictEmpty()
+    {
+        var filter = new FakeContextualFilter(new FilterResult("no tests", NoTestsMatched: true));
+        var session = SessionWithHint("hint");
+
+        var exitCode = await _sut.ProcessAsync(
+            ContextualRequest(filter, new TestOptions(FailOnEmpty: true)), session);
+
+        exitCode.Should().Be(8);
+        filter.ReceivedExitCode.Should().Be(0);
+        await session.Received(1).FinalizeAsync(8, Arg.Any<CancellationToken>());
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => !r.Success), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    // The filter recognised nothing (the raw-tail fallback) or threw: either way dtk could not read the output, so
+    // --fail-on-empty cannot confirm that a test ran and fails closed.
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProcessAsync_FailOnEmpty_FailsClosed_WhenTheOutputCannotBeRead(bool filterThrows)
+    {
+        var filter = Substitute.For<IContextualOutputFilter>();
+        if (filterThrows)
+        {
+            filter.Apply(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<FilterContext>())
+                .Throws(new InvalidOperationException("boom"));
+        }
+        else
+        {
+            filter.Apply(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<FilterContext>())
+                .Returns(new FilterResult(string.Empty));
+        }
+
+        var session = SessionWithHint("hint");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = ContextualRequest(filter, new TestOptions(FailOnEmpty: true)) with { RawOutput = "a\nb\n" };
+
+        var exitCode = await sut.ProcessAsync(request, session);
+
+        exitCode.Should().Be(8);
+        writer.ToString().Should().Be(
+            "a\nb\n✗ dotnet test: output not recognized — --fail-on-empty could not confirm a test ran\n");
+        await session.Received(1).FinalizeAsync(8, Arg.Any<CancellationToken>());
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => !r.Success), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FailOnEmpty_FailsClosed_WhenThereIsNoOutput()
+    {
+        var filter = new FakeContextualFilter(new FilterResult(string.Empty));
+        var session = SessionWithHint("hint");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = ContextualRequest(filter, new TestOptions(FailOnEmpty: true)) with { RawOutput = "" };
+
+        var exitCode = await sut.ProcessAsync(request, session);
+
+        exitCode.Should().Be(8);
+        writer.ToString().Should().Be("✗ dotnet test: no output — --fail-on-empty could not confirm a test ran\n");
+        await session.Received(1).FinalizeAsync(8, Arg.Any<CancellationToken>());
+        await _tracker.Received(1).RecordAsync(
+            Arg.Is<CommandRecord>(r => !r.Success), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    // Without the flag nothing changes; with it, a failed run keeps the child's own code and status line.
+    [InlineData(false, 0, 0, "a\n⚠ dotnet test: output not recognized, raw tail shown above\n")]
+    [InlineData(true, 1, 1, "a\n✗ dotnet test failed (exit 1)\n")]
+    [InlineData(false, 1, 1, "a\n✗ dotnet test failed (exit 1)\n")]
+    public async Task ProcessAsync_RawTailFallback_KeepsTheChildsVerdict_UnlessFailOnEmptyMeetsAZeroExit(
+        bool failOnEmpty, int childExitCode, int expectedExitCode, string expectedOutput)
+    {
+        var filter = new FakeContextualFilter(new FilterResult(string.Empty));
+        var session = SessionWithHint("hint");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var test = new TestOptions(FailOnEmpty: failOnEmpty);
+        var request = ContextualRequest(filter, test, childExitCode) with { RawOutput = "a\n" };
+
+        var exitCode = await sut.ProcessAsync(request, session);
+
+        exitCode.Should().Be(expectedExitCode);
+        writer.ToString().Should().Be(expectedOutput);
+        await session.Received(1).FinalizeAsync(expectedExitCode, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_KeepsChildExitCode_WhenVerdictEmptyWithoutFailOnEmpty()
+    {
+        var filter = new FakeContextualFilter(new FilterResult("no tests", NoTestsMatched: true));
+        var session = SessionWithHint("hint");
+
+        var exitCode = await _sut.ProcessAsync(ContextualRequest(filter, TestOptions.None), session);
+
+        exitCode.Should().Be(0);
+        await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task ProcessAsync_ReturnsSuppliedExitCode()
     {
@@ -155,6 +291,96 @@ public class FilteredOutputPipelineTests
         await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
 
         writer.ToString().Should().Be("a\nb\n[full output: /x.log]\n✗ dotnet build failed (exit 1)\n");
+    }
+
+    private static string NumberedLines(int count) =>
+        string.Concat(Enumerable.Range(1, count).Select(i => $"line {i}\n"));
+
+    [Fact]
+    public async Task ProcessAsync_MaxLines_CapsFallbackTail_HintStaysBeforeStatus()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(raw: NumberedLines(100), exitCode: 1,
+            options: new OutputOptions(ShowLogHint: true, MaxLines: 5));
+
+        await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
+
+        writer.ToString().Should().Be(
+            "line 61\nline 62\nline 63\nline 64\nline 65\n… 35 more lines (dtk log)\n"
+            + "[full output: /x.log]\n✗ dotnet build failed (exit 1)\n");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MaxLines_FooterSaysRerun_WhenNoLog()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(raw: NumberedLines(100), exitCode: 1, options: new OutputOptions(MaxLines: 5));
+
+        await sut.ProcessAsync(request, NullTeeSession.Instance);
+
+        var lines = writer.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        lines[^2].Should().Be("… 35 more lines (rerun without --max-lines)");
+        lines[^1].Should().Be("✗ dotnet build failed (exit 1)");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_MaxLines_CapsFaultedFilterRawOutput()
+    {
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(raw: NumberedLines(100), exitCode: 1, options: new OutputOptions(MaxLines: 10));
+
+        await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
+
+        var lines = writer.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        lines.Should().HaveCount(12);
+        lines[10].Should().Be("… 90 more lines (dtk log)");
+        lines[^1].Should().Be("✗ dotnet build failed (exit 1)");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RawCopyFailure_PrintsWarningBeforeStatus()
+    {
+        // Pinned order: body, cap footer, --tee warning, log hint, status. The warning is added after
+        // capping, so it is never counted or cut, and the status line stays last.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>())
+            .Returns(NumberedLines(10) + "✗ dotnet build: 1 error\n");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(exitCode: 1,
+            options: new OutputOptions(ShowLogHint: true, TeePath: "out/raw.log", MaxLines: 3)) with
+        {
+            RawCopyFailure = "No space left on device"
+        };
+
+        await sut.ProcessAsync(request, SessionWithHint("[full output: /x.log]"));
+
+        writer.ToString().Should().Be(
+            "line 1\nline 2\nline 3\n… 7 more lines (dtk log)\n"
+            + "⚠ --tee: could not write out/raw.log: No space left on device\n"
+            + "[full output: /x.log]\n✗ dotnet build: 1 error\n");
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RawCopyFailure_IsShownUnderQuiet()
+    {
+        // Quiet drops dtk's meta-output, but not news that the evidence the user asked for is incomplete.
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("✓ dotnet build\n");
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = Request(options: new OutputOptions(Quiet: true, TeePath: "raw.log")) with
+        {
+            RawCopyFailure = "disk full"
+        };
+
+        await sut.ProcessAsync(request, NullTeeSession.Instance);
+
+        writer.ToString().Should().Be("⚠ --tee: could not write raw.log: disk full\n✓ dotnet build\n");
     }
 
     [Fact]

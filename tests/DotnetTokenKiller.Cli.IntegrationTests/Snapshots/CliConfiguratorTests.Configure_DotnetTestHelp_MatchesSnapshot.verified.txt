@@ -12,8 +12,15 @@ ARGUMENTS:
     [args]    Arguments to forward to the underlying dotnet process
 
 OPTIONS:
-    -h, --help        Prints help information                                        
-    -v, --verbose     Echo the resolved command line before running                  
-        --vv          Also dump the raw dotnet output and elapsed time               
-        --show-log    Print the path to the full log file when the output was saved  
-    -q, --quiet       Suppress all DTK meta-output; forward only the filtered content
+                           DEFAULT                                                                  
+    -h, --help                        Prints help information                                       
+    -v, --verbose                     Echo the resolved command line before running                 
+        --vv                          Also dump the raw dotnet output and elapsed time              
+        --show-log                    Print the path to the full log file when the output was saved 
+    -q, --quiet                       Suppress all DTK meta-output; forward only the filtered       
+                                      content                                                       
+        --tee <PATH>                  Also write the raw output to PATH                             
+        --max-lines <N>    0          Print at most N lines of filtered output (0: no limit)        
+        --names                       List the names of the tests that ran                          
+        --show-output                 Show the console output the tests wrote                       
+        --fail-on-empty               Fail when no test matched                                     

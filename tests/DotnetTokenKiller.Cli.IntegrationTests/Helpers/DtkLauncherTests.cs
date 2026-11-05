@@ -7,6 +7,8 @@ public sealed class DtkLauncherTests
 {
     private const string DllPath = "/build/dtk.dll";
 
+    private const string AppHostPath = "/build/dtk";
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -26,5 +28,20 @@ public sealed class DtkLauncherTests
 
         executable.Should().Be("/tools/dtk");
         prefix.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveAppHost_NoBinary_StartsTheJitApphost(string? testBinary)
+    {
+        DtkLauncher.ResolveAppHost(testBinary, AppHostPath).Should().Be(AppHostPath);
+    }
+
+    [Fact]
+    public void ResolveAppHost_Binary_StartsIt()
+    {
+        DtkLauncher.ResolveAppHost("  /tools/dtk  ", AppHostPath).Should().Be("/tools/dtk");
     }
 }

@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
+using DotnetTokenKiller.Domain;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Xunit;
@@ -62,7 +63,50 @@ public class PipeIntegrationTests
             await IntegrationTestHelper.RunDtkWithStdinAsync("anything", "pipe", "run");
 
         exitCode.Should().Be(1);
-        output.Should().Contain("build").And.Contain("list package");
+
+        // The list is wrapped between names at 80 columns, so neither a narrow terminal nor a reader folds a
+        // multi-token name such as "list package" across two lines.
+        var lines = output.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n');
+        lines.Should().OnlyContain(line => line.Length <= 80, output);
+        foreach (var subcommand in DotnetSubcommands.Ordered)
+        {
+            lines.Should().Contain(line => line.Contains(subcommand, StringComparison.Ordinal), subcommand);
+        }
+
+        lines[^1].Should().EndWith("jb cleanupcode", "the list ends with the last subcommand, unfolded");
+    }
+
+    [Theory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    [InlineData("tool restore")]
+    [InlineData("ef migrations")]
+    [InlineData("ef database")]
+    [InlineData("stryker")]
+    [InlineData("jb cleanupcode")]
+    public async Task Pipe_ToolSubcommand_IsAcceptedAsync(string subcommand)
+    {
+        ArgumentNullException.ThrowIfNull(subcommand);
+
+        var (output, exitCode, dbPath) =
+            await IntegrationTestHelper.RunDtkWithStdinAsync("Done.", ["pipe", .. subcommand.Split(' ')]);
+
+        exitCode.Should().Be(0, output);
+        (await IntegrationTestHelper.ReadTrackedCommandsAsync(dbPath)).Should().Equal(subcommand);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeJbCleanupCode_UnrecognisedFailure_ShowsTheRawTailAsync()
+    {
+        // Real output, exit 1: `dotnet jb cleanupcode App.csproj` where the tool manifest's jb was never restored.
+        const string notRestored = "Run \"dotnet tool restore\" to make the \"jb\" command available.\n";
+
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            notRestored, "pipe", "jb", "cleanupcode", "--exit-code", "1");
+
+        exitCode.Should().Be(1, output);
+        var lines = output.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n');
+        lines.Should().Equal(
+            "Run \"dotnet tool restore\" to make the \"jb\" command available.",
+            "\u2717 dotnet jb cleanupcode failed (exit 1)");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
@@ -104,5 +148,92 @@ public class PipeIntegrationTests
 
         var source = (string?)await cmd.ExecuteScalarAsync();
         source.Should().Be("Pipe");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeTest_FailOnEmpty_ExitsEightAsync()
+    {
+        var log = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "dotnet_test_zero.txt"));
+
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--exit-code", "0", "--fail-on-empty");
+
+        exitCode.Should().Be(8);
+        output.TrimEnd().Split('\n')[^1].Should().StartWith("\u2717");
+    }
+
+    [Theory(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    // Output the test filter cannot read: a build log (nothing it recognises) and no output at all.
+    [InlineData("dotnet_build_success.txt", "output not recognized")]
+    [InlineData(null, "no output")]
+    public async Task PipeTest_FailOnEmpty_FailsClosed_WhenTheOutputIsNotRecognizedAsync(string? fixture, string cause)
+    {
+        var log = fixture is null
+            ? string.Empty
+            : await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture));
+
+        var (output, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--fail-on-empty", "--exit-code", "0");
+
+        exitCode.Should().Be(8, output);
+        output.ReplaceLineEndings("\n").TrimEnd().Split('\n')[^1].Should().Be(
+            $"✗ dotnet test: {cause} — --fail-on-empty could not confirm a test ran");
+        (await ReadTrackedSuccessAsync(dbPath)).Should().Equal(false);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeTest_FailOnEmpty_FailsClosed_WhenTheOutputIsLocalizedAsync()
+    {
+        var log = await File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "dotnet_test_localized_fr_pass.txt"));
+
+        var (output, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--fail-on-empty", "--exit-code", "0");
+
+        exitCode.Should().Be(8, output);
+        output.ReplaceLineEndings("\n").TrimEnd().Split('\n')[^1].Should().Be(
+            "✗ dotnet test: output is localized (fr) — --fail-on-empty could not confirm a test ran; " +
+            "run it through dtk dotnet test, or set DOTNET_CLI_UI_LANGUAGE=en");
+        (await ReadTrackedSuccessAsync(dbPath)).Should().Equal(false);
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeTest_LocalizedOutput_NamesTheLanguageUnderTheCappedTailAsync()
+    {
+        var log = await File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "dotnet_test_localized_fr_fail.txt"));
+
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            log, "pipe", "test", "--exit-code", "1", "--max-lines", "3");
+
+        exitCode.Should().Be(1);
+        var lines = output.ReplaceLineEndings("\n").TrimEnd().Split('\n');
+        lines[..3].Should().Equal(log.ReplaceLineEndings("\n").Split('\n')[..3], "--max-lines caps the raw tail");
+        lines[3].Should().MatchRegex(@"^\u2026 \d+ more lines \(");
+        lines[^1].Should().Be(
+            "\u2717 dotnet test failed (exit 1): output is localized (fr) \u2014 run it through dtk dotnet test, " +
+            "or set DOTNET_CLI_UI_LANGUAGE=en");
+    }
+
+    /// <summary>The tracked <c>success</c> column of every run recorded in <paramref name="dbPath"/>, in order.</summary>
+    /// <param name="dbPath">The isolated tracking-database path a run returned.</param>
+    private static async Task<IReadOnlyList<bool>> ReadTrackedSuccessAsync(string dbPath)
+    {
+        await IntegrationTestHelper.FoldTrackingJournalAsync(dbPath);
+
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString();
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT success FROM commands ORDER BY id";
+
+        var results = new List<bool>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(reader.GetBoolean(0));
+        }
+
+        return results;
     }
 }

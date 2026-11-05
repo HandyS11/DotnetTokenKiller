@@ -6,7 +6,7 @@
 
 **A .NET CLI proxy that reduces LLM token usage by filtering the verbose output of `dotnet` commands
 down to only what matters.**
-Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, and `pack` with `dtk` for
+Prefix `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, `pack` and more with `dtk` for
 60–90% fewer tokens — per-command filters, token analytics, and one-command setup for 17 AI coding agents.
 
 [![CI](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml/badge.svg)](https://github.com/HandyS11/DotnetTokenKiller/actions/workflows/ci.yml)
@@ -83,8 +83,13 @@ context consumed.
   `--deprecated`, and `--vulnerable` (~80.9% savings)
 - **Publish/Pack filtering** — the build's error/warning summary, plus the publish directories or
   created packages on success
+- **`tool restore`, `ef`, Stryker and `jb cleanupcode` filtering** — one line of restored tools; EF Core results without
+  the build and log noise; the mutation score with its survivors; the files ReSharper's cleanup actually changed
+- **Evidence and size options** — `--tee <path>` keeps the raw output, `--max-lines N` caps the report, and on tests
+  `--names`, `--show-output` and `--fail-on-empty`
 - **Pipe mode** — `dtk pipe <subcommand>` filters output dtk did not produce: CI logs, or any
-  invocation the hook missed
+  invocation the hook missed (localized test output is
+  recognised and pointed to its remedy)
 - **Log retrieval** — `dtk log` returns a previous run's full output instead of re-running the build
 - **Filter coverage** — `dtk gain --coverage` ranks every command by unfiltered tokens at stake, so
   the next filter is chosen from data
@@ -149,11 +154,32 @@ dtk dotnet format --verify-no-changes
 dtk dotnet list package --outdated
 dtk dotnet publish -c Release
 dtk dotnet pack
+dtk dotnet tool restore
+dtk dotnet ef migrations add <Name>
+dtk dotnet stryker
+dtk dotnet jb cleanupcode <solution>
 ```
 
-Unknown subcommands pass through to `dotnet` unchanged, as do `dotnet publish --interactive` and
-`dotnet pack --interactive`, which keep the terminal so a credential provider can prompt, and the runs whose output a
-program reads: `dotnet list package --format json` and MSBuild's `-getProperty`, `-getItem` and `-getTargetResult`.
+Unknown subcommands pass through to `dotnet` unchanged, as do `dotnet publish --interactive`,
+`dotnet pack --interactive` and `dotnet tool restore --interactive`, which keep the terminal so a credential provider
+can prompt, `dotnet ef database drop` without `-f`, which asks for confirmation, a tool's own `--help`, and the runs
+whose output a program reads: `dotnet list package --format json`, MSBuild's `-getProperty`, `-getItem` and
+`-getTargetResult`, and `dotnet ef` with `--json` or a `migrations script` without `-o`.
+
+### Options
+
+Two options work on every filtered subcommand, and three more on `test`:
+
+```sh
+dtk dotnet test --tee raw.log              # keep the raw output as evidence
+dtk dotnet build --max-lines 40             # cap the filtered report; the status line is never cut
+dtk dotnet test --names                     # list the tests that passed, by class
+dtk dotnet test --show-output               # add a failing test's console output
+dtk dotnet test --filter Name~X --fail-on-empty   # exit 8 when no test matched
+```
+
+On `ef`, `stryker` and `jb cleanupcode` every short option and `--verbose`, `--quiet` and `--help` belong to the tool.
+See the [usage guide](docs/articles/usage.md) for each option.
 
 ### Filtering output dtk did not produce
 

@@ -69,6 +69,94 @@
       "savingsPercent": 98
     },
     {
+      "id": "ef/database-update",
+      "fixture": "dotnet_ef_database_update.txt",
+      "filterKey": "ef database",
+      "exitCode": 0,
+      "rawBytes": 232,
+      "rawTokens": 51,
+      "filteredTokens": 22,
+      "savedTokens": 29,
+      "savingsPercent": 56.9
+    },
+    {
+      "id": "ef/database-update-error",
+      "fixture": "dotnet_ef_database_update_error.txt",
+      "filterKey": "ef database",
+      "exitCode": 1,
+      "rawBytes": 2584,
+      "rawTokens": 509,
+      "filteredTokens": 393,
+      "savedTokens": 116,
+      "savingsPercent": 22.8
+    },
+    {
+      "id": "ef/database-update-logging",
+      "fixture": "dotnet_ef_database_update_logging.txt",
+      "filterKey": "ef database",
+      "exitCode": 0,
+      "rawBytes": 3218,
+      "rawTokens": 726,
+      "filteredTokens": 32,
+      "savedTokens": 694,
+      "savingsPercent": 95.6
+    },
+    {
+      "id": "ef/migrations-add",
+      "fixture": "dotnet_ef_migrations_add.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 88,
+      "rawTokens": 19,
+      "filteredTokens": 21,
+      "savedTokens": -2,
+      "savingsPercent": -10.5
+    },
+    {
+      "id": "ef/migrations-add-build-failed",
+      "fixture": "dotnet_ef_migrations_add_build_failed.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 1,
+      "rawBytes": 67,
+      "rawTokens": 15,
+      "filteredTokens": 25,
+      "savedTokens": -10,
+      "savingsPercent": -66.7
+    },
+    {
+      "id": "ef/migrations-add-verbose",
+      "fixture": "dotnet_ef_migrations_add_verbose.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 3718,
+      "rawTokens": 822,
+      "filteredTokens": 821,
+      "savedTokens": 1,
+      "savingsPercent": 0.1
+    },
+    {
+      "id": "ef/migrations-list",
+      "fixture": "dotnet_ef_migrations_list.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 67,
+      "rawTokens": 16,
+      "filteredTokens": 18,
+      "savedTokens": -2,
+      "savingsPercent": -12.5
+    },
+    {
+      "id": "ef/migrations-remove",
+      "fixture": "dotnet_ef_migrations_remove.txt",
+      "filterKey": "ef migrations",
+      "exitCode": 0,
+      "rawBytes": 117,
+      "rawTokens": 25,
+      "filteredTokens": 27,
+      "savedTokens": -2,
+      "savingsPercent": -8
+    },
+    {
       "id": "format/files",
       "fixture": "dotnet_format_files_raw.txt",
       "filterKey": "format",
@@ -111,6 +199,39 @@
       "filteredTokens": 293,
       "savedTokens": 579,
       "savingsPercent": 66.4
+    },
+    {
+      "id": "jb-cleanupcode/load-error",
+      "fixture": "dotnet_jb_cleanupcode_load_error.txt",
+      "filterKey": "jb cleanupcode",
+      "exitCode": 4,
+      "rawBytes": 411,
+      "rawTokens": 126,
+      "filteredTokens": 70,
+      "savedTokens": 56,
+      "savingsPercent": 44.4
+    },
+    {
+      "id": "jb-cleanupcode/missing-path",
+      "fixture": "dotnet_jb_cleanupcode_missing_path.txt",
+      "filterKey": "jb cleanupcode",
+      "exitCode": 3,
+      "rawBytes": 283,
+      "rawTokens": 89,
+      "filteredTokens": 41,
+      "savedTokens": 48,
+      "savingsPercent": 53.9
+    },
+    {
+      "id": "jb-cleanupcode/success",
+      "fixture": "dotnet_jb_cleanupcode_success.txt",
+      "filterKey": "jb cleanupcode",
+      "exitCode": 0,
+      "rawBytes": 72959,
+      "rawTokens": 18946,
+      "filteredTokens": 23,
+      "savedTokens": 18923,
+      "savingsPercent": 99.9
     },
     {
       "id": "list-package/all",
@@ -232,6 +353,72 @@
       "filteredTokens": 15,
       "savedTokens": 491,
       "savingsPercent": 97
+    },
+    {
+      "id": "stryker/break-at",
+      "fixture": "dotnet_stryker_break_at.txt",
+      "filterKey": "stryker",
+      "exitCode": 2,
+      "rawBytes": 2226,
+      "rawTokens": 672,
+      "filteredTokens": 101,
+      "savedTokens": 571,
+      "savingsPercent": 85
+    },
+    {
+      "id": "stryker/build-failed",
+      "fixture": "dotnet_stryker_build_failed.txt",
+      "filterKey": "stryker",
+      "exitCode": 1,
+      "rawBytes": 2386,
+      "rawTokens": 690,
+      "filteredTokens": 44,
+      "savedTokens": 646,
+      "savingsPercent": 93.6
+    },
+    {
+      "id": "stryker/default",
+      "fixture": "dotnet_stryker_default.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 2199,
+      "rawTokens": 669,
+      "filteredTokens": 116,
+      "savedTokens": 553,
+      "savingsPercent": 82.7
+    },
+    {
+      "id": "stryker/json-only",
+      "fixture": "dotnet_stryker_json_only.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 1833,
+      "rawTokens": 565,
+      "filteredTokens": 69,
+      "savedTokens": 496,
+      "savingsPercent": 87.8
+    },
+    {
+      "id": "stryker/json-reporter",
+      "fixture": "dotnet_stryker_json_reporter.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 2177,
+      "rawTokens": 666,
+      "filteredTokens": 86,
+      "savedTokens": 580,
+      "savingsPercent": 87.1
+    },
+    {
+      "id": "stryker/solution",
+      "fixture": "dotnet_stryker_solution.txt",
+      "filterKey": "stryker",
+      "exitCode": 0,
+      "rawBytes": 1904,
+      "rawTokens": 601,
+      "filteredTokens": 83,
+      "savedTokens": 518,
+      "savingsPercent": 86.2
     },
     {
       "id": "test/all-pass",
@@ -366,6 +553,50 @@
       "savingsPercent": 71.6
     },
     {
+      "id": "test/localized-de-fail",
+      "fixture": "dotnet_test_localized_de_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1084,
+      "rawTokens": 308,
+      "filteredTokens": 344,
+      "savedTokens": -36,
+      "savingsPercent": -11.7
+    },
+    {
+      "id": "test/localized-fr-fail",
+      "fixture": "dotnet_test_localized_fr_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1096,
+      "rawTokens": 315,
+      "filteredTokens": 351,
+      "savedTokens": -36,
+      "savingsPercent": -11.4
+    },
+    {
+      "id": "test/localized-fr-pass",
+      "fixture": "dotnet_test_localized_fr_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 519,
+      "rawTokens": 161,
+      "filteredTokens": 193,
+      "savedTokens": -32,
+      "savingsPercent": -19.9
+    },
+    {
+      "id": "test/localized-ja-fail",
+      "fixture": "dotnet_test_localized_ja_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1130,
+      "rawTokens": 346,
+      "filteredTokens": 382,
+      "savedTokens": -36,
+      "savingsPercent": -10.4
+    },
+    {
       "id": "test/logger-detailed-fail",
       "fixture": "dotnet_test_logger_detailed_fail.txt",
       "filterKey": "test",
@@ -465,6 +696,39 @@
       "savingsPercent": 89.3
     },
     {
+      "id": "test/mtp-all-skipped",
+      "fixture": "dotnet_test_mtp_all_skipped.txt",
+      "filterKey": "test",
+      "exitCode": 8,
+      "rawBytes": 1162,
+      "rawTokens": 338,
+      "filteredTokens": 33,
+      "savedTokens": 305,
+      "savingsPercent": 90.2
+    },
+    {
+      "id": "test/mtp-detailed-fail",
+      "fixture": "dotnet_test_mtp_detailed_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2417,
+      "rawTokens": 658,
+      "filteredTokens": 91,
+      "savedTokens": 567,
+      "savingsPercent": 86.2
+    },
+    {
+      "id": "test/mtp-detailed-pass",
+      "fixture": "dotnet_test_mtp_detailed_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 1052,
+      "rawTokens": 350,
+      "filteredTokens": 19,
+      "savedTokens": 331,
+      "savingsPercent": 94.6
+    },
+    {
       "id": "test/mtp-failures",
       "fixture": "dotnet_test_mtp_failures.txt",
       "filterKey": "test",
@@ -476,6 +740,39 @@
       "savingsPercent": 85.6
     },
     {
+      "id": "test/mtp-localized-de-pass",
+      "fixture": "dotnet_test_mtp_localized_de_pass.txt",
+      "filterKey": "test",
+      "exitCode": 0,
+      "rawBytes": 323,
+      "rawTokens": 113,
+      "filteredTokens": 145,
+      "savedTokens": -32,
+      "savingsPercent": -28.3
+    },
+    {
+      "id": "test/mtp-localized-fr-fail",
+      "fixture": "dotnet_test_mtp_localized_fr_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 1927,
+      "rawTokens": 518,
+      "filteredTokens": 554,
+      "savedTokens": -36,
+      "savingsPercent": -6.9
+    },
+    {
+      "id": "test/mtp-localized-ja-fail",
+      "fixture": "dotnet_test_mtp_localized_ja_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 1972,
+      "rawTokens": 582,
+      "filteredTokens": 618,
+      "savedTokens": -36,
+      "savingsPercent": -6.2
+    },
+    {
       "id": "test/mtp-multiproject",
       "fixture": "dotnet_test_mtp_multiproject.txt",
       "filterKey": "test",
@@ -485,6 +782,28 @@
       "filteredTokens": 90,
       "savedTokens": 579,
       "savingsPercent": 86.5
+    },
+    {
+      "id": "test/mtp-output-fail",
+      "fixture": "dotnet_test_mtp_output_fail.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 2508,
+      "rawTokens": 645,
+      "filteredTokens": 104,
+      "savedTokens": 541,
+      "savingsPercent": 83.9
+    },
+    {
+      "id": "test/mtp-xunit3-detailed",
+      "fixture": "dotnet_test_mtp_xunit3_detailed.txt",
+      "filterKey": "test",
+      "exitCode": 2,
+      "rawBytes": 1716,
+      "rawTokens": 524,
+      "filteredTokens": 77,
+      "savedTokens": 447,
+      "savingsPercent": 85.3
     },
     {
       "id": "test/mtp-xunit3-failures",
@@ -553,6 +872,28 @@
       "savingsPercent": 88.7
     },
     {
+      "id": "test/names-mstest-vstest",
+      "fixture": "dotnet_test_names_mstest_vstest.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 2199,
+      "rawTokens": 555,
+      "filteredTokens": 180,
+      "savedTokens": 375,
+      "savingsPercent": 67.6
+    },
+    {
+      "id": "test/names-vstest",
+      "fixture": "dotnet_test_names_vstest.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 3029,
+      "rawTokens": 806,
+      "filteredTokens": 75,
+      "savedTokens": 731,
+      "savingsPercent": 90.7
+    },
+    {
       "id": "test/nested-exception",
       "fixture": "dotnet_test_nested_exception.txt",
       "filterKey": "test",
@@ -573,6 +914,17 @@
       "filteredTokens": 16,
       "savedTokens": 156,
       "savingsPercent": 90.7
+    },
+    {
+      "id": "test/output-vstest-fail",
+      "fixture": "dotnet_test_output_vstest_fail.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1001,
+      "rawTokens": 272,
+      "filteredTokens": 77,
+      "savedTokens": 195,
+      "savingsPercent": 71.7
     },
     {
       "id": "test/pass-with-warnings",
@@ -617,6 +969,39 @@
       "filteredTokens": 28,
       "savedTokens": 188,
       "savingsPercent": 87
+    },
+    {
+      "id": "tool-restore/missing-package",
+      "fixture": "dotnet_tool_restore_missing_package.txt",
+      "filterKey": "tool restore",
+      "exitCode": 1,
+      "rawBytes": 121,
+      "rawTokens": 36,
+      "filteredTokens": 52,
+      "savedTokens": -16,
+      "savingsPercent": -44.4
+    },
+    {
+      "id": "tool-restore/success",
+      "fixture": "dotnet_tool_restore_success.txt",
+      "filterKey": "tool restore",
+      "exitCode": 0,
+      "rawBytes": 366,
+      "rawTokens": 112,
+      "filteredTokens": 25,
+      "savedTokens": 87,
+      "savingsPercent": 77.7
+    },
+    {
+      "id": "tool-restore/unreachable-feed",
+      "fixture": "dotnet_tool_restore_unreachable_feed.txt",
+      "filterKey": "tool restore",
+      "exitCode": 1,
+      "rawBytes": 100,
+      "rawTokens": 27,
+      "filteredTokens": 43,
+      "savedTokens": -16,
+      "savingsPercent": -59.3
     }
   ]
 }

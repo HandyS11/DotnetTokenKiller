@@ -1,7 +1,9 @@
+using System.Text;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands.Settings;
 using DotnetTokenKiller.Cli.Infrastructure;
 using DotnetTokenKiller.Domain;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -20,6 +22,19 @@ internal sealed class PipeCommand(
     IAnsiConsole console,
     IStandardInputState standardInput) : AsyncCommand<PipeCommandSettings>
 {
+    /// <summary>
+    /// How wide a line of the "Available:" list may be: Spectre's wrap width when the output is not a terminal, and a
+    /// narrow terminal's.
+    /// </summary>
+    private const int AvailableListWidth = 80;
+
+    /// <summary>
+    /// The filtered subcommands after "Available: ", wrapped between names so that Spectre never folds a multi-token
+    /// name such as "list package" across two lines.
+    /// </summary>
+    private static readonly IReadOnlyList<string> AvailableLines =
+        WrapBetweenNames("Available: ", DotnetSubcommands.Ordered, AvailableListWidth);
+
     /// <inheritdoc/>
     public override Task<int> ExecuteAsync(
         CommandContext context,
@@ -47,14 +62,23 @@ internal sealed class PipeCommand(
         if (!DotnetSubcommands.TryMatch(settings.Subcommand, out var match))
         {
             var attempted = string.Join(' ', settings.Subcommand);
-            var known = string.Join(", ", DotnetSubcommands.Ordered);
 
-            // Two lines rather than one: the combined message can exceed the console's default
-            // (non-interactive) wrap width, and Spectre would then fold mid-item, splitting a
-            // multi-token name like "list package" across lines.
+            // The list on lines of its own, never after the attempted name: the combined message can exceed the
+            // console's default (non-interactive) wrap width, and Spectre would then fold mid-item.
             console.MarkupLine($"[red]No filter for:[/] {attempted.EscapeMarkup()}.");
-            console.MarkupLine($"Available: {known.EscapeMarkup()}");
+            foreach (var line in AvailableLines)
+            {
+                console.MarkupLine(line.EscapeMarkup());
+            }
+
             return Task.FromResult(1);
+        }
+
+        if (!string.Equals(match.Name, DotnetSubcommands.Test, StringComparison.Ordinal)
+            && FirstTestOption(settings) is { } option)
+        {
+            console.MarkupLine($"[red]dtk:[/] {option} applies only to dtk pipe test");
+            return Task.FromResult(ExitCodes.UsageError);
         }
 
         // Keyed by the canonical name, the same key FilterKeys aliases, so pipe mode can never
@@ -62,6 +86,51 @@ internal sealed class PipeCommand(
         var filter = services.GetRequiredKeyedService<IOutputFilter>(match.Name);
 
         return pipeFilter
-            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), cancellationToken);
+            .RunAsync(filter, match.Name, settings.ExitCode, settings.ToOutputOptions(), settings.ToTestOptions(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Joins <paramref name="names"/> with ", " after <paramref name="prefix"/>, starting a new line, indented to the
+    /// first name, before a name that would pass <paramref name="width"/>.
+    /// </summary>
+    /// <param name="prefix">The text the first line starts with.</param>
+    /// <param name="names">The names to list, in order.</param>
+    /// <param name="width">The widest a line may be, unless a single name is wider.</param>
+    private static List<string> WrapBetweenNames(string prefix, IReadOnlyList<string> names, int width)
+    {
+        var lines = new List<string>();
+        var line = new StringBuilder(prefix);
+        var lineHasName = false;
+        for (var i = 0; i < names.Count; i++)
+        {
+            var item = i < names.Count - 1 ? $"{names[i]}," : names[i];
+            if (lineHasName && line.Length + 1 + item.Length > width)
+            {
+                lines.Add(line.ToString());
+                line.Clear().Append(' ', prefix.Length);
+                lineHasName = false;
+            }
+
+            line.Append(lineHasName ? " " : string.Empty).Append(item);
+            lineHasName = true;
+        }
+
+        lines.Add(line.ToString());
+        return lines;
+    }
+
+    private static string? FirstTestOption(PipeCommandSettings settings)
+    {
+        if (settings.Names)
+        {
+            return "--names";
+        }
+
+        if (settings.ShowOutput)
+        {
+            return "--show-output";
+        }
+
+        return settings.FailOnEmpty ? "--fail-on-empty" : null;
     }
 }

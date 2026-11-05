@@ -30,7 +30,7 @@ public sealed class CommandSettingsAotGuardTests
     [Fact]
     public void SettingsTypes_FindsEverySettingsClass()
     {
-        DtkSettingsTypes.Should().HaveCount(9, "dtk has nine settings classes, one abstract; update this when adding one");
+        DtkSettingsTypes.Should().HaveCount(10, "dtk has ten settings classes, one abstract; update this when adding one");
     }
 
     [Theory]

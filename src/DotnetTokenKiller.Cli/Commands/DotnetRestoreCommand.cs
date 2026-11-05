@@ -22,7 +22,6 @@ internal sealed class DotnetRestoreCommand(
         ArgumentNullException.ThrowIfNull(context);
 
         var args = settings.PositionalArgs.Prepend("restore").Concat(context.Remaining.Raw).ToArray();
-        return filteredRun.RunAsync(filter, "dotnet", args, settings.VerbosityLevel, settings.ShowLog,
-            settings.Quiet, cancellationToken);
+        return filteredRun.RunAsync(filter, "dotnet", args, settings.ToOutputOptions(), cancellationToken: cancellationToken);
     }
 }

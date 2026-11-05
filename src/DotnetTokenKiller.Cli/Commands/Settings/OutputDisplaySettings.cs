@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using DotnetTokenKiller.Application.UseCases;
+using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace DotnetTokenKiller.Cli.Commands.Settings;
@@ -35,7 +36,22 @@ internal abstract class OutputDisplaySettings : CommandSettings
     [Description("Suppress all DTK meta-output; forward only the filtered content")]
     public bool Quiet { get; init; }
 
+    /// <summary>Gets the path the run's raw output is also written to, or <see langword="null"/> for none.</summary>
+    [CommandOption("--tee <PATH>")]
+    [Description("Also write the raw output to PATH")]
+    public string? TeePath { get; init; }
+
+    /// <summary>Gets the most lines of filtered output to print before the status line, or 0 for no limit.</summary>
+    [CommandOption("--max-lines <N>")]
+    [Description("Print at most N lines of filtered output (0: no limit)")]
+    [DefaultValue(0)]
+    public int MaxLines { get; init; }
+
+    /// <inheritdoc/>
+    public override ValidationResult Validate() =>
+        MaxLines < 0 ? ValidationResult.Error("--max-lines must be 0 or more") : base.Validate();
+
     /// <summary>Projects these flags onto the Application-layer options record.</summary>
     /// <returns>The equivalent <see cref="OutputOptions"/>.</returns>
-    public OutputOptions ToOutputOptions() => new(VerbosityLevel, ShowLog, Quiet);
+    public OutputOptions ToOutputOptions() => new(VerbosityLevel, ShowLog, Quiet, TeePath, MaxLines);
 }

@@ -18,6 +18,11 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet publish --interactive", "dtk dotnet publish --interactive")]
     [InlineData("dotnet pack", "dtk dotnet pack")]
     [InlineData("dotnet pack -o artifacts", "dtk dotnet pack -o artifacts")]
+    [InlineData("dotnet tool restore", "dtk dotnet tool restore")]
+    [InlineData("dotnet ef migrations add Initial -v", "dtk dotnet ef migrations add Initial -v")]
+    [InlineData("dotnet ef database drop", "dtk dotnet ef database drop")]
+    [InlineData("dotnet stryker --break-at 80", "dtk dotnet stryker --break-at 80")]
+    [InlineData("dotnet jb cleanupcode App.slnx", "dtk dotnet jb cleanupcode App.slnx")]
     [InlineData("dotnet list   package", "dtk dotnet list   package")]
     [InlineData("dotnet   build", "dtk dotnet build")]
     [InlineData("dotnet\tformat", "dtk dotnet format")]
@@ -77,6 +82,11 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet publisher")]
     [InlineData("dotnet --info")]
     [InlineData("dotnet list  reference")]
+    [InlineData("dotnet tool run x")]
+    [InlineData("dotnet tool install -g dotnet-ef")]
+    [InlineData("dotnet ef dbcontext list")]
+    [InlineData("dotnet jb inspectcode App.slnx")]
+    [InlineData("dotnet strykers")]
     [InlineData("git commit -m \"fix dotnet build\"")]
     [InlineData("echo 'dotnet test'")]
     [InlineData("echo 'it\\'s'; dotnet build")]
@@ -256,6 +266,11 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet publish -c Release -p:PublishProfile=Production", false)]
     [InlineData("dotnet publish", false)]
     [InlineData("dotnet pack -o artifacts", false)]
+    [InlineData("dotnet tool restore", false)]
+    [InlineData("dotnet ef migrations list", false)]
+    [InlineData("dotnet ef database update", false)]
+    [InlineData("dotnet stryker", false)]
+    [InlineData("dotnet jb cleanupcode App.slnx", false)]
     [InlineData("dotnet run dotnet build", false)]
     [InlineData("dotnet list reference", false)]
     [InlineData("dotnet build && rm -rf x", false)]
@@ -263,5 +278,83 @@ public sealed class DotnetCommandRewriterTests
     public void IsAutoApprovable_RequiresASimpleCommandAndAnApprovableSubcommand(string command, bool expected)
     {
         DotnetCommandRewriter.IsAutoApprovable(command).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("dotnet test --tee out.log")]
+    [InlineData("dotnet test --tee=out.log")]
+    [InlineData("dotnet build --tee x")]
+    [InlineData("dotnet test --tee:out.log")]
+    [InlineData("dotnet test --filter X --tee ~/.bashrc")]
+    // The shell removes quotes and backslashes before dtk sees the word: each of these reaches dtk as `--tee`.
+    [InlineData("dotnet test --\"tee\" ~/.bashrc")]
+    [InlineData("dotnet test --t\\ee ~/.bashrc")]
+    [InlineData("dotnet test --te''e ~/.bashrc")]
+    [InlineData("dotnet build --t\"ee\"=/home/u/.bashrc")]
+    public void IsAutoApprovable_IsFalse_WhenTheCommandWritesATeeFile(string command)
+    {
+        // `--tee` writes wherever its value points, so approving it would approve a file write that
+        // IsSimpleCommand refuses as a redirection: `dotnet test --tee ~/.bashrc` is `dotnet test > ~/.bashrc`.
+        DotnetCommandRewriter.IsSimpleCommand(command).Should().BeTrue("only the --tee rule refuses it");
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().BeFalse();
+    }
+
+    [Theory]
+    // Brace expansion assembles it: `{--te,/home/u/.profil}e` becomes `--tee /home/u/.profile`.
+    [InlineData("dotnet test {--te,/home/u/.profil}e")]
+    [InlineData("dotnet test --filter \"A{B}\"")]
+    [InlineData("dotnet build {a,b}")]
+    // Globbing can match a file named `--tee` that the shell then hands over as the option.
+    [InlineData("dotnet test --te[e] x")]
+    [InlineData("dotnet test --filter Name~Foo*")]
+    [InlineData("dotnet test x?")]
+    // An unset parameter expands to nothing: `--te$9e` reaches dtk as `--tee`, with no variable set beforehand.
+    [InlineData("dotnet test --te$9e ~/.bashrc")]
+    [InlineData("dotnet test -$9-tee x")]
+    [InlineData("dotnet test $X-tee x")]
+    [InlineData("dotnet test \"$OPTS\"")]
+    [InlineData("dotnet build $$")]
+    // Fail-closed: an escaped `$` is refused too, rather than trusted to stay literal.
+    [InlineData("dotnet test \\$X")]
+    // The shell removes a backslash-newline, even inside double quotes: each of these reaches dtk as `--tee`.
+    [InlineData("dotnet test --te\\\ne ~/.bashrc")]
+    [InlineData("dotnet test --t\\\nee=x")]
+    [InlineData("dotnet test -\\\n-tee x")]
+    [InlineData("dotnet test \"--te\\\ne\" x")]
+    // The same continuation turns an approvable `build` into `dotnet build-server shutdown`.
+    [InlineData("dotnet build\\\n-server shutdown")]
+    // Fail-closed: any newline or carriage return is refused, quoted or not.
+    [InlineData("dotnet test --filter \"A\nB\"")]
+    [InlineData("dotnet test --filter 'A\nB'")]
+    [InlineData("dotnet build\r")]
+    public void IsAutoApprovable_IsFalse_WhenTheShellExpandsTheCommand(string command)
+    {
+        // Expansion can assemble a `--tee` the text does not show, and so can a line continuation, so neither
+        // an expanded command nor one with a newline is auto-approved.
+        DotnetCommandRewriter.IsSimpleCommand(command).Should().BeTrue("only the expansion or newline rule refuses it");
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("dotnet test")]
+    [InlineData("dotnet build --tl:off")]
+    [InlineData("dotnet test --filter \"FullyQualifiedName~Foo\"")]
+    [InlineData("dotnet test --filter 'Name=A|B' --no-build")]
+    // Quoted or escaped, a glob character or a `$` is literal: the shell expands nothing.
+    [InlineData("dotnet test --filter 'Name~Foo*'")]
+    [InlineData("dotnet test --filter 'A$B'")]
+    [InlineData("dotnet test --filter \"Name~Foo*\"")]
+    [InlineData("dotnet test --filter Name~Foo\\*")]
+    // A word-initial `~` is expanded but not refused: it yields a home directory, never `--tee`.
+    [InlineData("dotnet build ~/src/App.csproj")]
+    public void IsAutoApprovable_StaysTrue_WithoutATeeOption(string command)
+    {
+        DotnetCommandRewriter.IsAutoApprovable(command).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Rewrite_KeepsTheTeeOption()
+    {
+        DotnetCommandRewriter.Rewrite("dotnet test --tee x").Should().Be("dtk dotnet test --tee x");
     }
 }

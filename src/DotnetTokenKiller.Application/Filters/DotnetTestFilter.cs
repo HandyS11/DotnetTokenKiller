@@ -9,13 +9,17 @@ namespace DotnetTokenKiller.Application.Filters;
 /// <summary>
 /// Condenses dotnet test output to a concise pass/fail summary. A test project that fails to compile
 /// gets the grouped diagnostics <c>dotnet build</c> prints for it, ahead of the other projects' results,
-/// and the status line of a run that compiled with warnings ends in their count and top codes.
+/// and the status line of a run that compiled with warnings ends in their count and top codes. Output in another
+/// language than English, which it cannot read, gets its raw tail and a status line naming the language and the fix.
 /// </summary>
 /// <param name="rootPath">Optional root path used to shorten file paths in stack traces and diagnostics.</param>
-public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputFilter
+public sealed partial class DotnetTestFilter(string? rootPath = null) : IContextualOutputFilter
 {
     private const int MaxFailures = 15;
     private const int MessageMaxLen = 300;
+
+    /// <summary>How many lines of a failing test's own output <c>--show-output</c> prints per test.</summary>
+    private const int MaxOutputLines = 20;
 
     /// <summary>How many warning codes the status line names before it trails off.</summary>
     private const int MaxWarningCodes = 3;
@@ -32,6 +36,14 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// <summary>Name of the regex capture group holding a test/summary duration.</summary>
     private const string DurationGroup = "duration";
 
+    /// <summary>What the status line of a localized run tells the reader to do.</summary>
+    private const string LocalizedRemedy = "run it through dtk dotnet test, or set DOTNET_CLI_UI_LANGUAGE=en";
+
+    /// <summary>What <c>--names</c> prints when tests passed but the output named none of them.</summary>
+    private const string NamesNotInOutputLine = "\u26a0 --names: passed test names not in the output\n";
+
+    private static readonly char[] PathSeparators = ['/', '\\'];
+
     private string RootPath => rootPath ?? Environment.CurrentDirectory;
 
     /// <summary>Applies the filter to the test output.</summary>
@@ -40,20 +52,68 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     /// The process exit code; the sole source of truth for the success/failure verdict, except that
     /// Microsoft.Testing.Platform's exit code 8 with its "Zero tests ran" verdict reads as a zero-tests warning.
     /// </param>
-    public string Apply(string strippedOutput, int exitCode)
+    public string Apply(string strippedOutput, int exitCode) =>
+        Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;
+
+    /// <summary>
+    /// Applies the filter to the test output and says whether the run was a "no test matched" verdict, which
+    /// <c>--fail-on-empty</c> in <paramref name="context"/> turns into a failure line.
+    /// </summary>
+    /// <param name="strippedOutput">The test output to filter, with ANSI escape sequences already stripped.</param>
+    /// <param name="exitCode">The process exit code, as for <see cref="Apply(string, int)"/>.</param>
+    /// <param name="context">The run's context; only its test options are read.</param>
+    public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
         if (string.IsNullOrEmpty(strippedOutput))
         {
-            return string.Empty;
+            return new FilterResult(string.Empty);
         }
 
         var lines = strippedOutput.Split('\n');
         var state = ParseLines(lines);
+        state.ShowOutput = context.Test.ShowOutput;
+        state.ListNames = context.Test.Names;
 
         // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
         // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
         var buildReport = MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
-        return FormatOutput(state, exitCode, buildReport);
+        var result = FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty);
+
+        // Nothing recognised, and the output is not in English: the raw tail the pipeline would show, under a
+        // status line that says why and what to do instead of "not recognized".
+        if (result.Output.Length != 0 || LocalizedTestOutput.Detect(strippedOutput) is not { } culture)
+        {
+            return result;
+        }
+
+        // --fail-on-empty cannot confirm from text it cannot read that a test ran, so a zero exit fails closed:
+        // reported as no test matched, which the pipeline turns into exit 8.
+        var failClosed = exitCode == 0 && context.Test.FailOnEmpty;
+        return new FilterResult(FormatLocalized(strippedOutput, exitCode, culture, failClosed), failClosed);
+    }
+
+    /// <summary>
+    /// The output of a run dtk cannot read because it is localized: its <see cref="RawTail"/>, then a status line
+    /// naming the language and the remedy. The glyph follows the exit code, as the pipeline's fallback does,
+    /// except that <paramref name="failClosed"/> makes a zero exit a failure.
+    /// </summary>
+    /// <param name="strippedOutput">The test output.</param>
+    /// <param name="exitCode">The process exit code.</param>
+    /// <param name="culture">The culture <see cref="LocalizedTestOutput.Detect"/> named.</param>
+    /// <param name="failClosed">Whether <c>--fail-on-empty</c> turns this zero-exit run into a failure.</param>
+    private static string FormatLocalized(string strippedOutput, int exitCode, string culture, bool failClosed)
+    {
+        var language = $"output is localized ({culture}) \u2014";
+        var status = (exitCode, failClosed) switch
+        {
+            (_, true) =>
+                $"\u2717 dotnet test: {language} --fail-on-empty could not confirm a test ran; {LocalizedRemedy}",
+            (0, _) => $"\u26a0 dotnet test: {language} {LocalizedRemedy}",
+            _ => string.Create(CultureInfo.InvariantCulture,
+                $"\u2717 dotnet test failed (exit {exitCode}): {language} {LocalizedRemedy}")
+        };
+        return $"{RawTail.Last(strippedOutput)}{status}\n";
     }
 
     /// <summary>
@@ -83,8 +143,24 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             i = ParseLine(lines, i, state);
         }
 
+        AttributeBareVsTestNames(state);
         ResolveTotals(state);
         return state;
+    }
+
+    /// <summary>
+    /// Records the bare VSTest names no single "Test run for" header could vouch for when they were read: under
+    /// the one assembly the whole output named (in its headers and its <c>Passed!</c>/<c>Failed!</c> summary
+    /// lines), or under none when it named several, since any of them may own a name.
+    /// </summary>
+    /// <param name="state">The state the whole output was read into.</param>
+    private static void AttributeBareVsTestNames(ParseState state)
+    {
+        var assembly = state.VsTestAssemblies.Count == 1 ? state.VsTestAssemblies[0] : null;
+        foreach (var name in state.UnattributedVsTestNames)
+        {
+            state.PassedNames.Add(name, assembly);
+        }
     }
 
     /// <summary>Parses the line at <paramref name="i"/>, and any lines that belong to it.</summary>
@@ -96,7 +172,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     {
         var line = lines[i].TrimEnd('\r');
 
-        if (TryParseSingleLine(line, state) || TryParseConsoleLoggerLine(line, state) || TryParseListLine(line, state))
+        if (TryParseSingleLine(line, state) || TryParseConsoleLoggerLine(line, state) || TryParseListLine(line, state)
+            || TryParsePassedTest(lines, i, state))
         {
             return i + 1;
         }
@@ -127,6 +204,20 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         if (summaryMatch.Success)
         {
             AccumulateSummary(summaryMatch, state);
+            if (SummaryAssemblyPattern().Match(line, summaryMatch.Index + summaryMatch.Length) is { Success: true } name)
+            {
+                AddDistinct(state.VsTestAssemblies, FileNameOf(name.Groups["name"].Value));
+            }
+
+            return true;
+        }
+
+        var testRunForMatch = VsTestRunForPattern().Match(line);
+        if (testRunForMatch.Success)
+        {
+            var assembly = FileNameOf(testRunForMatch.Groups["path"].Value);
+            AddDistinct(state.VsTestRunAssemblies, assembly);
+            AddDistinct(state.VsTestAssemblies, assembly);
             return true;
         }
 
@@ -137,9 +228,11 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return true;
         }
 
-        if (MtpRunningTestsPattern().IsMatch(line))
+        var runningMatch = MtpRunningTestsPattern().Match(line);
+        if (runningMatch.Success)
         {
             state.MtpAssembliesRun++;
+            state.MtpAssembly = runningMatch.Groups["path"] is { Success: true } path ? FileNameOf(path.Value) : null;
             return true;
         }
 
@@ -272,6 +365,94 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         return true;
     }
 
+    /// <summary>
+    /// Records the line at <paramref name="i"/> when it is a passed test's result line, for <c>--names</c>: VSTest's
+    /// <c>  Passed Ns.Class.Method [4 ms]</c> (normal and detailed console loggers) or Microsoft.Testing.Platform's
+    /// <c>passed DisplayName (4ms)</c> (<c>--output Detailed</c>), which it follows with the indented
+    /// <c>from /path/Tests.dll (net10.0|x64)</c> line that names the test's assembly.
+    /// </summary>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="i">The index of the line to read.</param>
+    /// <param name="state">The state accumulated so far.</param>
+    /// <returns>Whether the line was recognised.</returns>
+    private static bool TryParsePassedTest(string[] lines, int i, ParseState state)
+    {
+        var line = lines[i].TrimEnd('\r');
+        var vsTestMatch = PassedTestHeaderPattern().Match(line);
+        if (vsTestMatch.Success)
+        {
+            // A bare name (MSTest's) groups under its assembly: the one "Test run for" header announced so far, which
+            // must be its own, since a run's header precedes its results. With none or several, it waits for the end.
+            var name = vsTestMatch.Groups["name"].Value;
+            if (PassedTestNames.NamesAClass(name))
+            {
+                state.PassedNames.Add(name, assembly: null);
+            }
+            else if (state.VsTestRunAssemblies.Count == 1)
+            {
+                state.PassedNames.Add(name, state.VsTestRunAssemblies[0]);
+            }
+            else
+            {
+                state.UnattributedVsTestNames.Add(name);
+            }
+
+            return true;
+        }
+
+        var mtpMatch = MtpPassedTestPattern().Match(line);
+        if (!mtpMatch.Success)
+        {
+            return false;
+        }
+
+        state.PassedNames.Add(mtpMatch.Groups["name"].Value, MtpPassedTestAssembly(lines, i + 1, state));
+        return true;
+    }
+
+    /// <summary>
+    /// The file name of the assembly an MTP result belongs to: the one its <c>from</c> line names, among the indented
+    /// lines below it; else the one the run announced with "Running tests from" when it announced only one so far
+    /// (parallel test apps announce themselves first and interleave their results); else <see langword="null"/>.
+    /// </summary>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="from">The index of the line after the result line.</param>
+    /// <param name="state">The state accumulated so far.</param>
+    private static string? MtpPassedTestAssembly(string[] lines, int from, ParseState state)
+    {
+        for (var i = from; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (line.Length == 0 || !char.IsWhiteSpace(line[0]))
+            {
+                break;
+            }
+
+            var fromMatch = MtpFromAssemblyPattern().Match(line);
+            if (fromMatch.Success)
+            {
+                return FileNameOf(fromMatch.Groups["path"].Value);
+            }
+        }
+
+        return state.MtpAssembliesRun == 1 ? state.MtpAssembly : null;
+    }
+
+    /// <summary>The file name of a path, whichever separator it uses (a Windows log can be piped on Linux).</summary>
+    /// <param name="path">A file path.</param>
+    private static string FileNameOf(string path) => path[(path.LastIndexOfAny(PathSeparators) + 1)..];
+
+    /// <summary>Appends <paramref name="value"/> to <paramref name="values"/> unless it is already there.</summary>
+    /// <param name="values">The list, in order of first appearance.</param>
+    /// <param name="value">The value to add.</param>
+    private static void AddDistinct(List<string> values, string value)
+    {
+        if (!values.Contains(value, StringComparer.Ordinal))
+        {
+            values.Add(value);
+        }
+    }
+
     private int ParseFailure(string[] lines, int i, Match failedHeaderMatch, ParseState state)
     {
         var testName = failedHeaderMatch.Groups["name"].Value.Trim();
@@ -298,7 +479,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         i = afterStack;
 
         var message = ReqnrollPendingMessage(msgLines, lines, detailStart, afterStack) ?? CompactMessage(msgLines);
-        state.Failures.Add(new FailureInfo(testName, duration, message, sourceRef));
+        var output = CollectVsTestOutput(lines, detailStart, afterStack);
+        state.Failures.Add(new FailureInfo(testName, duration, message, sourceRef, output));
         return i;
     }
 
@@ -318,6 +500,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // marker or the test's captured "Standard output"/"Error output" (a timed-out test has no frame).
         var msgLines = new List<string>();
         var sourceRef = string.Empty;
+        var output = new List<string>();
+        var inOutput = false;
         var messageEnded = false;
         var messageFollowsFrom = false;
         while (i < lines.Length)
@@ -330,6 +514,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
                                     || SummaryPattern().IsMatch(current))
             {
                 break;
+            }
+
+            if (TryCollectMtpOutput(current, output, ref inOutput))
+            {
+                i++;
+                continue;
             }
 
             if (string.IsNullOrEmpty(sourceRef))
@@ -356,8 +546,59 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             i++;
         }
 
-        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef));
+        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef, output));
         return i;
+    }
+
+    /// <summary>
+    /// Takes the line of an MTP failure that belongs to the test's captured output: the header of a
+    /// "Standard output"/"Error output" section, and every line after one. Blank lines are dropped.
+    /// </summary>
+    /// <param name="current">The failure's line, without its carriage return.</param>
+    /// <param name="output">The output lines collected so far.</param>
+    /// <param name="inOutput">Whether a section header was already seen.</param>
+    /// <returns>Whether the line was part of the output section, and so is not a message or a stack frame.</returns>
+    private static bool TryCollectMtpOutput(string current, List<string> output, ref bool inOutput)
+    {
+        if (!inOutput)
+        {
+            inOutput = MtpOutputHeaderPattern().IsMatch(current);
+            return inOutput;
+        }
+
+        if (!MtpOutputHeaderPattern().IsMatch(current) && !string.IsNullOrWhiteSpace(current))
+        {
+            output.Add(current.Trim());
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the "Standard Output Messages:" section of a VSTest failure, the test's own output, without its
+    /// blank lines.
+    /// </summary>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="from">The index of the first line after the failure's message.</param>
+    /// <param name="to">The index of the first line after the failure.</param>
+    private static List<string> CollectVsTestOutput(string[] lines, int from, int to)
+    {
+        var output = new List<string>();
+        var inOutput = false;
+        for (var i = from; i < to; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (!inOutput)
+            {
+                inOutput = StandardOutputLabelPattern().IsMatch(line);
+            }
+            else if (!string.IsNullOrWhiteSpace(line))
+            {
+                output.Add(line.Trim());
+            }
+        }
+
+        return output;
     }
 
     private static (List<string> Lines, int NextIndex) CollectMessageLines(string[] lines, int i)
@@ -366,7 +607,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         while (i < lines.Length)
         {
             var current = lines[i].TrimEnd('\r');
-            if (StackTraceLabelPattern().IsMatch(current) || EndsVsTestFailure(current))
+            if (StackTraceLabelPattern().IsMatch(current) || StandardOutputLabelPattern().IsMatch(current)
+                                                          || EndsVsTestFailure(current))
             {
                 break;
             }
@@ -623,7 +865,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         state.ProjectCount = Math.Max(1, state.ProjectCount);
     }
 
-    private static string FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport)
+    private static FilterResult FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport,
+        bool failOnEmpty)
     {
         var elapsed = DurationFormat.Format(state.TotalDurationMs, state.DurationExact);
         var warnings = DescribeBuildWarnings(buildReport);
@@ -636,7 +879,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // nothing else to report, yields to the raw tail.
         if (exitCode != 0 && buildReport.ParsedErrorCount > 0)
         {
-            return FormatBuildFailure(state, buildReport, elapsed, warnings);
+            return new FilterResult(FormatBuildFailure(state, buildReport, elapsed, warnings));
         }
 
         // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
@@ -646,41 +889,46 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         // because a stray line happened to match a failure-shaped pattern.
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
-            return FormatFailures(state, elapsed, warnings: warnings);
+            return new FilterResult(FormatFailures(state, elapsed, warnings: warnings));
         }
 
         // A listing that found names wins even beside a "No test matches" line: that one is another
         // project's, and says nothing about the names that were listed.
         if (exitCode == 0 && state.ListedTests.Count > 0)
         {
-            return FormatTestList(state);
+            return new FilterResult(FormatTestList(state));
         }
 
-        if (FormatZeroTests(state, exitCode) is { } zeroTests)
+        if (FormatZeroTests(state, exitCode, failOnEmpty) is { } zeroTests)
         {
-            return zeroTests;
+            return new FilterResult(zeroTests, NoTestsMatched: true);
         }
 
         if (state.ProjectCount == 0)
         {
             // No summary and no failures parsed: nothing meaningful to condense. A non-zero exit
             // degrades to blank so FilteredRunUseCase's raw-tail fallback surfaces the real reason.
-            return string.Empty;
+            return new FilterResult(string.Empty);
+        }
+
+        if (FormatMtpAllSkipped(state, exitCode, elapsed, warnings) is { } allSkipped)
+        {
+            return new FilterResult(allSkipped);
         }
 
         if (exitCode != 0)
         {
             // Non-zero exit but the summary reported zero failures (e.g. crash after a pass summary):
             // blank so the raw-tail fallback fires instead of printing a clean-looking report.
-            return string.Empty;
+            return new FilterResult(string.Empty);
         }
 
         // A skipped-only run (VSTest's "Skipped!" summary) lands here too: "0 passed, N skipped".
         var skippedSuffix = state.TotalSkipped > 0
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
-        return
-            $"\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n";
+        return new FilterResult(
+            $"{PassedNamesBlock(state)}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n");
     }
 
     /// <summary>
@@ -731,10 +979,32 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             .ToString();
     }
 
+    /// <summary>
+    /// The report of an MTP session in which every test was skipped: MTP exits 8 with "Zero tests ran" although
+    /// the tests were found, so dtk reports the skips as for VSTest's skipped-only run and keeps the exit code.
+    /// Such a run is not empty and never sets <c>NoTestsMatched</c>. <see langword="null"/> for any other run.
+    /// </summary>
+    /// <param name="state">The parsed run.</param>
+    /// <param name="exitCode">The run's exit code.</param>
+    /// <param name="elapsed">The run's duration.</param>
+    /// <param name="warnings">What the status line says of the build's warnings.</param>
+    private static string? FormatMtpAllSkipped(ParseState state, int exitCode, string elapsed, string warnings)
+    {
+        if (exitCode != MtpZeroTestsExitCode
+            || state is not { MtpZeroTestsVerdict: true, TotalPassed: 0, TotalFailed: 0, TotalSkipped: > 0 })
+        {
+            return null;
+        }
+
+        return
+            $"\u26a0 dotnet test: 0 passed, {state.TotalSkipped} skipped ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings} \u00b7 no test ran (exit {MtpZeroTestsExitCode})\n";
+    }
+
     /// <summary>The "0 tests found" verdict, or <see langword="null"/> when the run is not one.</summary>
     /// <param name="state">The parsed run.</param>
     /// <param name="exitCode">The run's exit code.</param>
-    private static string? FormatZeroTests(ParseState state, int exitCode)
+    /// <param name="failOnEmpty">Whether <c>--fail-on-empty</c> asked for the verdict to read as a failure.</param>
+    private static string? FormatZeroTests(ParseState state, int exitCode, bool failOnEmpty)
     {
         // A "nothing ran" verdict requires that no assembly produced evidence of a test.
         // ZeroTestsFound is per-assembly: in a multi-project run, one assembly matching nothing must
@@ -753,9 +1023,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             return null;
         }
 
-        return state.ZeroTestsFound
-            ? $"⚠ dotnet test: {DescribeNoTests(state)}\n"
-            : "⚠ dotnet test: 0 tests found\n";
+        var description = state.ZeroTestsFound ? DescribeNoTests(state) : "0 tests found";
+        return failOnEmpty
+            ? $"\u2717 dotnet test: {description} \u2014 --fail-on-empty\n"
+            : $"\u26a0 dotnet test: {description}\n";
     }
 
     /// <summary>
@@ -837,6 +1108,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             AppendFailureBlock(sb, state, failedCount);
         }
 
+        sb.Append(PassedNamesBlock(state));
+
         // Only show the "(N projects, elapsed)" context when a summary was actually parsed. Without
         // one (crashed host), ProjectCount and elapsed are both 0, and "(0 projects, 0.00s)" reads
         // as a real — but bogus — measurement.
@@ -856,6 +1129,27 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         return sb.ToString().ReplaceLineEndings("\n");
     }
 
+    /// <summary>
+    /// What <c>--names</c> adds above the status line: the passed tests by class, or, when tests passed but the output
+    /// named none of them (the minimal logger, an unknown runner), one line saying so. Nothing without the flag or
+    /// when no test passed, since there is then no name to miss.
+    /// </summary>
+    /// <param name="state">The parsed run.</param>
+    private static string PassedNamesBlock(ParseState state)
+    {
+        if (!state.ListNames)
+        {
+            return string.Empty;
+        }
+
+        if (!state.PassedNames.IsEmpty)
+        {
+            return state.PassedNames.Render();
+        }
+
+        return state.TotalPassed > 0 ? NamesNotInOutputLine : string.Empty;
+    }
+
     private static void AppendFailureBlock(StringBuilder sb, ParseState state, int failedCount)
     {
         sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({failedCount}):");
@@ -868,11 +1162,32 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
             {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"    at {f.SourceRef}");
             }
+
+            if (state.ShowOutput && f.Output.Count > 0)
+            {
+                AppendOutput(sb, f.Output);
+            }
         }
 
         if (state.Failures.Count > MaxFailures)
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"+{state.Failures.Count - MaxFailures} more failures");
+        }
+    }
+
+    private static void AppendOutput(StringBuilder sb, IReadOnlyList<string> output)
+    {
+        sb.AppendLine("    output:");
+        foreach (var line in output.Take(MaxOutputLines))
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture, $"      {line}");
+        }
+
+        var hidden = output.Count - MaxOutputLines;
+        if (hidden > 0)
+        {
+            sb.AppendLine(CultureInfo.InvariantCulture,
+                $"      \u2026 {hidden} more {(hidden == 1 ? "line" : "lines")} (dtk log)");
         }
     }
 
@@ -995,6 +1310,15 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     [GeneratedRegex(@"^Test Run (?:Successful|Failed)\.\s*$")]
     private static partial Regex TestRunBlockHeaderPattern();
 
+    // "Test run for /dir/bin/Debug/net10.0/App.Tests.dll (.NETCoreApp,Version=v10.0)": VSTest's header above one
+    // assembly's results.
+    [GeneratedRegex(@"^Test run for\s(?<path>.+\.(?i:dll|exe))(?:\s\([^)]*\))?\s*$")]
+    private static partial Regex VsTestRunForPattern();
+
+    // What follows a SummaryPattern match: " - App.Tests.dll (net10.0)", the assembly the summary closes.
+    [GeneratedRegex(@"\G\s+-\s+(?<name>\S.*?\.(?i:dll|exe))(?:\s\([^)]*\))?\s*$")]
+    private static partial Regex SummaryAssemblyPattern();
+
     [GeneratedRegex("^Total tests:")]
     private static partial Regex TestRunTotalTestsPattern();
 
@@ -1009,6 +1333,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     // test's result line under the normal and detailed console loggers (the same duration shapes as a failure's).
     [GeneratedRegex(@"^\s+(?:Passed|Skipped)\s+.+?\s+\[(?:< )?[\d.]+ (?:ms|s|m(?: \d+ s)?)\]\s*$")]
     private static partial Regex PassedOrSkippedTestHeaderPattern();
+
+    // The passed test's result line alone, with its name: "  Passed Ns.ParserTests.Parses(value: 1.5) [< 1 ms]".
+    [GeneratedRegex(@"^\s+Passed\s+(?<name>.+?)\s+\[(?:< )?[\d.]+ (?:ms|s|m(?: \d+ s)?)\]\s*$")]
+    private static partial Regex PassedTestHeaderPattern();
 
     // `--list-tests`: "The following Tests are available:" once per project, then each test's name indented
     // by four spaces. Parallel projects print all their headers before any name.
@@ -1034,9 +1362,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     [GeneratedRegex(@"^failed\s+(?<name>.+?)(?:\s+\((?<duration>\d[\dhms. ]*)\))?\s*$")]
     private static partial Regex MtpFailedTestPattern();
 
-    // MTP: the "from <assembly> (<tfm>|<arch>)" line between a failure's message and its stack trace.
-    [GeneratedRegex(@"^\s+from\s.+\.(?:dll|exe)(?:\s\([^)]*\))?\s*$", RegexOptions.IgnoreCase)]
+    // MTP: the "from <assembly> (<tfm>|<arch>)" line between a failure's message and its stack trace, and under a
+    // passed or skipped test's result line with --output Detailed.
+    [GeneratedRegex(@"^\s+from\s(?<path>.+\.(?:dll|exe))(?:\s\([^)]*\))?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex MtpFromAssemblyPattern();
+
+    // MTP, --output Detailed: "passed DisplayName (4ms)". MSTest's display name is the bare method, with a data row's
+    // arguments ("passed Parses (1.5) (0ms)"); xUnit v3's is the full name ("passed Ns.Class.Parses(value: 1.5) (0ms)").
+    // The duration is the trailing parenthesized group that starts with a digit.
+    [GeneratedRegex(@"^passed\s+(?<name>.+?)\s+\(\d[\dhms. ]*\)\s*$")]
+    private static partial Regex MtpPassedTestPattern();
 
     // MTP, xUnit v3: what ends a failure message that follows the "from" line besides a stack frame: the
     // "--- End of stack trace from previous location ---" marker and the "Standard output"/"Error output"
@@ -1044,8 +1379,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     [GeneratedRegex(@"^\s+(?:--- End of .+ ---|(?:Standard|Error) output)\s*$")]
     private static partial Regex MtpMessageEndPattern();
 
+    // MTP: the "Standard output" / "Error output" section headers of a failure's captured output.
+    [GeneratedRegex(@"^\s+(?:Standard|Error) output\s*$")]
+    private static partial Regex MtpOutputHeaderPattern();
+
     // MTP: "Running tests from /path/Tests.dll (net10.0|x64)", one per test assembly run.
-    [GeneratedRegex(@"^Running tests from\s")]
+    [GeneratedRegex(@"^Running tests from\s(?:(?<path>.+\.(?i:dll|exe))(?:\s\([^)]*\))?\s*$)?")]
     private static partial Regex MtpRunningTestsPattern();
 
     // MTP: an assembly that ran nothing, "/path/Tests.dll (net10.0|x64) Zero tests ran (160ms)". The
@@ -1152,6 +1491,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
     private sealed class ParseState
     {
         public List<FailureInfo> Failures { get; } = [];
+
+        /// <summary>Whether <c>--show-output</c> asked for each failure's captured output.</summary>
+        public bool ShowOutput { get; set; }
+
+        /// <summary>Whether <c>--names</c> asked for the passed tests by class.</summary>
+        public bool ListNames { get; set; }
+
+        /// <summary>The passed tests the output named, for <c>--names</c>.</summary>
+        public PassedTestNames PassedNames { get; } = new();
+
         public int TotalPassed { get; set; }
         public int TotalFailed { get; set; }
         public int TotalSkipped { get; set; }
@@ -1174,8 +1523,22 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         /// <summary>The file names of the assemblies that matched or ran no test, distinct, in order of appearance.</summary>
         public List<string> ZeroTestsAssemblies { get; } = [];
 
+        /// <summary>The file names of the assemblies VSTest's "Test run for" headers named, distinct, in order.</summary>
+        public List<string> VsTestRunAssemblies { get; } = [];
+
+        /// <summary>
+        /// The file names of the assemblies the VSTest output named, in its headers and its summary lines, distinct.
+        /// </summary>
+        public List<string> VsTestAssemblies { get; } = [];
+
+        /// <summary>Bare VSTest names read while no single header could vouch for their assembly.</summary>
+        public List<string> UnattributedVsTestNames { get; } = [];
+
         /// <summary>Test assemblies an MTP run announced with "Running tests from".</summary>
         public int MtpAssembliesRun { get; set; }
+
+        /// <summary>The file name of the assembly the last "Running tests from" line named, or <see langword="null"/>.</summary>
+        public string? MtpAssembly { get; set; }
 
         /// <summary>The MTP run summary's verdict was "Zero tests ran".</summary>
         public bool MtpZeroTestsVerdict { get; set; }
@@ -1207,5 +1570,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IOutputF
         public bool DurationExact { get; set; } = true;
     }
 
-    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef);
+    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef,
+        IReadOnlyList<string> Output);
 }

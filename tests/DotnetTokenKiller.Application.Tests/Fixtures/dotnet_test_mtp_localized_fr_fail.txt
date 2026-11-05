@@ -1,0 +1,21 @@
+Exécuter des tests à partir de /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+échec Divides (9ms)
+  Échec de Assert.AreEqual. Attendu : <3>, Réel : <2>. expression « expected » : « fail ? 3 : 2 », expression « actual » : « 4 / 2 ».
+  à partir de /test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64)
+  Échec de Assert.AreEqual. Attendu : <3>, Réel : <2>. expression « expected » : « fail ? 3 : 2 », expression « actual » : « 4 / 2 ».
+    sur Microsoft.VisualStudio.TestTools.UnitTesting.Assert.ThrowAssertAreEqualFailed(Object expected, Object actual, String userMessage) dans /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:665
+    sur Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, IEqualityComparer`1 comparer, String message, String expectedExpression, String actualExpression) dans /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:492
+    sur Microsoft.VisualStudio.TestTools.UnitTesting.Assert.AreEqual[T](T expected, T actual, String message, String expectedExpression, String actualExpression) dans /_/src/TestFramework/TestFramework/Assertions/Assert.AreEqual.cs:405
+    sur Alpha.Tests.CalculatorTests.Divides() dans /test/project/root/Alpha.Tests/CalculatorTests.cs:16
+    sur System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    sur System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/test/project/root/Alpha.Tests/bin/Debug/net10.0/Alpha.Tests.dll (net10.0|x64) a échoué avec 1 erreur(s) (195ms)
+Code de sortie: 2
+
+Résumé de série de tests : Échec!
+  total : 3
+  échec : 1
+  réussie : 2
+  ignoré : 0
+  durée : 347ms
+L’exécution de tests s’est terminée avec un code de sortie non réussi : 2 (voir : https://aka.ms/testingplatform/exitcodes)

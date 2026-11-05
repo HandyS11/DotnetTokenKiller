@@ -15,6 +15,9 @@ internal static class IntegrationTestHelper
     /// contention while still failing fast on a genuine hang, well inside the CI job timeout.</summary>
     internal const int DefaultTimeoutMs = 180_000;
 
+    /// <summary>The variable whose value the fake <c>dotnet</c> of <see cref="RunDtkWithFakeDotnetAsync"/> prints.</summary>
+    internal const string FakeDotnetStdoutVariable = "DTK_TEST_FAKE_DOTNET_STDOUT";
+
     private static readonly string DllPath =
         Path.Combine(AppContext.BaseDirectory, "dtk.dll");
 
@@ -22,6 +25,11 @@ internal static class IntegrationTestHelper
     /// <c>DTK_TEST_BINARY</c> (CI points it at the installed Native AOT tool).</summary>
     private static readonly (string Executable, string[] PrefixArguments) Launcher =
         DtkLauncher.Resolve(Environment.GetEnvironmentVariable(DtkLauncher.TestBinaryVariable), DllPath);
+
+    /// <summary>What a run with a fake <c>dotnet</c> starts: the JIT build's apphost, or the binary under test.</summary>
+    private static readonly string AppHost = DtkLauncher.ResolveAppHost(
+        Environment.GetEnvironmentVariable(DtkLauncher.TestBinaryVariable),
+        Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "dtk.exe" : "dtk"));
 
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
@@ -239,6 +247,75 @@ internal static class IntegrationTestHelper
         await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
         await process.WaitForExitAsync().ConfigureAwait(false);
         return (await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false), process.ExitCode);
+    }
+
+    /// <summary>
+    /// Runs dtk with a fake <c>dotnet</c> first on its <c>PATH</c>, keeping stdout and stderr apart. The fake, a shell
+    /// script (so Unix only), records the arguments it was given and exits 0, so a test can tell whether dtk ran the
+    /// child at all and with what. It prints <see cref="FakeDotnetStdoutVariable"/>'s value verbatim, when a test
+    /// sets it in <paramref name="environment"/>, and nothing otherwise.
+    /// </summary>
+    /// <param name="environment">Variables to set for dtk, on top of the isolation ones.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    /// <returns>
+    /// Both streams, the exit code, and the fake's arguments, or <see langword="null"/> when dtk never started it.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">The process could not be started.</exception>
+    internal static async Task<(string StdOut, string StdErr, int ExitCode, IReadOnlyList<string>? ChildArguments)>
+        RunDtkWithFakeDotnetAsync(IReadOnlyDictionary<string, string> environment, params string[] args)
+    {
+        var isolatedDir = NewIsolatedDir();
+        var binDir = Path.Combine(isolatedDir, "bin");
+        Directory.CreateDirectory(binDir);
+        var argumentsFile = Path.Combine(isolatedDir, "child-arguments");
+        var fake = Path.Combine(binDir, "dotnet");
+        await File.WriteAllTextAsync(
+                fake,
+                $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{argumentsFile}'\nprintf '%s' \"${{{FakeDotnetStdoutVariable}-}}\"\n")
+            .ConfigureAwait(false);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(fake, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        // The apphost, not `dotnet dtk.dll`: on Unix, Process looks for a bare file name beside the running
+        // executable before searching PATH, so dtk hosted by the muxer would find the real SDK, never the fake.
+        var psi = new ProcessStartInfo(AppHost)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            Environment =
+            {
+                ["PATH"] = $"{binDir}{Path.PathSeparator}{Environment.GetEnvironmentVariable("PATH")}",
+                ["DTK_DB_PATH"] = Path.Combine(isolatedDir, "tracking.db"),
+                ["DTK_TEE_DIR"] = Path.Combine(isolatedDir, "tee"),
+                ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
+            }
+        };
+        foreach (var (name, value) in environment)
+        {
+            psi.Environment[name] = value;
+        }
+
+        foreach (var arg in args)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start dtk");
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
+        await process.WaitForExitAsync().ConfigureAwait(false);
+
+        IReadOnlyList<string>? childArguments = File.Exists(argumentsFile)
+            ? await File.ReadAllLinesAsync(argumentsFile).ConfigureAwait(false)
+            : null;
+        return (await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false), process.ExitCode,
+            childArguments);
     }
 
     internal static double CalculateSavings(string rawOutput, string filteredOutput)

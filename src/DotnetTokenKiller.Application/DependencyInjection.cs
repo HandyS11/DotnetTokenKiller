@@ -2,6 +2,7 @@ using System.Text;
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.UseCases;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Integration;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +34,12 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IOutputFilter, DotnetListPackageFilter>(FilterKeys.ListPackage);
         services.AddKeyedTransient<IOutputFilter, DotnetPublishFilter>(FilterKeys.Publish);
         services.AddKeyedTransient<IOutputFilter, DotnetPackFilter>(FilterKeys.Pack);
+        services.AddKeyedTransient<IOutputFilter, DotnetToolRestoreFilter>(FilterKeys.ToolRestore);
+        services.AddKeyedTransient<IOutputFilter, DotnetEfFilter>(FilterKeys.EfMigrations);
+        services.AddKeyedTransient<IOutputFilter, DotnetEfFilter>(FilterKeys.EfDatabase);
+        services.AddKeyedTransient<IOutputFilter>(FilterKeys.Stryker,
+            (sp, _) => new DotnetStrykerFilter(sp.GetService<IArtifactFileReader>()));
+        services.AddKeyedTransient<IOutputFilter, DotnetJbCleanupCodeFilter>(FilterKeys.JbCleanupCode);
         services.AddSingleton<TextWriter>(_ => Console.Out);
 
         // Decode piped stdin as UTF-8 explicitly rather than inheriting the OS console code page

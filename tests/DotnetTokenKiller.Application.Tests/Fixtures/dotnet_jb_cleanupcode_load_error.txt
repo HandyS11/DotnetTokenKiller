@@ -1,0 +1,5 @@
+JetBrains Cleanup Code 2026.2.3.1
+Running on x64 OS in x64 architecture, .NET 10.0.14 under Debian GNU/Linux 13 (trixie)
+Using toolset version 18.9 from /usr/share/dotnet/sdk/10.0.403
+Configuration: Debug, Platform: Any CPU
+[MsBuild] /test/project/root/src/DotnetTokenKiller.Domain/DotnetSubcommands.cs (210,11)->(210,11)  CS8955: Source file can not contain both file-scoped and normal namespace declarations.

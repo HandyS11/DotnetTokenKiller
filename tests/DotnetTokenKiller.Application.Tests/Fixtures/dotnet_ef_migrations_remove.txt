@@ -1,0 +1,5 @@
+Build started...
+Build succeeded.
+Removing migration '20261104221305_AddRating'.
+Reverting the model snapshot.
+Done.

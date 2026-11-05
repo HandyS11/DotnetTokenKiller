@@ -1,0 +1,817 @@
+JetBrains Cleanup Code 2026.2.3.1
+Running on x64 OS in x64 architecture, .NET 10.0.14 under Debian GNU/Linux 13 (trixie)
+Using toolset version 18.9 from /usr/share/dotnet/sdk/10.0.403
+Configuration: Debug, Platform: Any CPU
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Baselines\savings-baseline.json - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_build_errors.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_build_long_messages.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_build_multitarget_errors.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_build_success.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_build_warnings.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_clean_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_database_update.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_database_update_error.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_database_update_logging.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_migrations_add.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_migrations_add_build_failed.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_migrations_add_verbose.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_migrations_list.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_ef_migrations_remove.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_format_files_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_format_verbose_nothing_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_format_violations_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_format_whitespace_many.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_list_package_deprecated_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_list_package_outdated_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_list_package_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_list_package_vulnerable_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_pack_failure.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_pack_success.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_pack_warnings.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_publish_failure.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_publish_success.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_publish_warnings.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_restore_raw.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_all_pass.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_assert_diffs.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_compile_errors.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_compile_errors_mixed.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_compile_errors_mixed_passing.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_duration_under_1ms.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_failures.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_failures_with_warnings.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_failure_mentions_diagnostic.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_list_tests.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_list_tests_filtered.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_list_tests_single.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_logger_detailed_fail.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_logger_detailed_fail_interleaved.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_logger_detailed_fail_multiproject.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_logger_detailed_pass.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_logger_minimal_terminal_logger.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_logger_normal_pass.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_logger_normal_terminal_logger.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_missing_project.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_all_pass.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_all_skipped.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_detailed_fail.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_detailed_pass.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_failures.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_multiproject.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_output_fail.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_xunit3_detailed.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_xunit3_failures.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_xunit3_timeout.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_mtp_zero.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_multiproject_partial_match.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_multiproject_skipped.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_multiproject_zero.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_names_vstest.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_nested_exception.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_no_test_available.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_output_vstest_fail.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_pass_with_warnings.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_reqnroll_pending.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_skipped_only.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_test_zero.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_tool_restore_missing_package.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_tool_restore_success.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Fixtures\dotnet_tool_restore_unreachable_feed.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\obj\Debug\net10.0\DotnetTokenKiller.Benchmarks.Corpus.GlobalUsings.g.cs - Skipping. Generated file
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\obj\Debug\net10.0\DotnetTokenKiller.Benchmarks.Corpus.AssemblyInfo.cs - Skipping. Generated file
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\obj\Debug\net10.0\DotnetTokenKiller.Benchmarks.Corpus.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\config\analysislevel_10_all.globalconfig - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\.editorconfig - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\x86\KernelTraceControl.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\x86\KernelTraceControl.Win61.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\x86\msdia140.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\amd64\KernelTraceControl.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\amd64\msdia140.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\arm64\KernelTraceControl.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\arm64\msdia140.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\obj\Debug\net10.0\DotnetTokenKiller.Benchmarks.GlobalUsings.g.cs - Skipping. Generated file
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\obj\Debug\net10.0\DotnetTokenKiller.Benchmarks.AssemblyInfo.cs - Skipping. Generated file
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\obj\Debug\net10.0\DotnetTokenKiller.Benchmarks.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\config\analysislevel_10_all.globalconfig - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\.editorconfig - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\TraceReloggerLib.dll - Skipping. 
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Dia2Lib.dll - Skipping. 
+<Solution Items>\CLAUDE.md - Skipping. 
+<Solution Items>\global.json - Skipping. 
+<Solution Items>\LICENSE - Skipping. 
+<Solution Items>\README.md - Skipping. 
+<src>\<DotnetTokenKiller.Application>\obj\Debug\net10.0\DotnetTokenKiller.Application.GlobalUsings.g.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Application>\obj\Debug\net10.0\DotnetTokenKiller.Application.AssemblyInfo.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Application>\obj\Debug\net10.0\DotnetTokenKiller.Application.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Application>\config\analysislevel_10_all.globalconfig - Skipping. 
+<src>\<DotnetTokenKiller.Application>\.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Application>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<src>\<DotnetTokenKiller.Application>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Application>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Application>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<src>\<DotnetTokenKiller.Application>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\obj\Debug\net10.0\DotnetTokenKiller.Cli.GlobalUsings.g.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Cli>\obj\Debug\net10.0\DotnetTokenKiller.Cli.AssemblyInfo.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Cli>\obj\Debug\net10.0\DotnetTokenKiller.Cli.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\config\analysislevel_10_all.globalconfig - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\README.md - Skipping. 
+<src>\<DotnetTokenKiller.Cli>\icon.png - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\obj\Debug\net10.0\DotnetTokenKiller.Domain.GlobalUsings.g.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Domain>\obj\Debug\net10.0\DotnetTokenKiller.Domain.AssemblyInfo.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Domain>\obj\Debug\net10.0\DotnetTokenKiller.Domain.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\config\analysislevel_10_all.globalconfig - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<src>\<DotnetTokenKiller.Domain>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\obj\Debug\net10.0\DotnetTokenKiller.Infrastructure.GlobalUsings.g.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Infrastructure>\obj\Debug\net10.0\DotnetTokenKiller.Infrastructure.AssemblyInfo.cs - Skipping. Generated file
+<src>\<DotnetTokenKiller.Infrastructure>\obj\Debug\net10.0\DotnetTokenKiller.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\config\analysislevel_10_all.globalconfig - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\.editorconfig - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<src>\<DotnetTokenKiller.Infrastructure>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetBuildFilterTests.Apply_ErrorsFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetBuildFilterTests.Apply_LongMessagesFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetBuildFilterTests.Apply_MultitargetErrorsFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetBuildFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetBuildFilterTests.Apply_WarningsFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetCleanFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetFormatFilterTests.Apply_FilesFormattedFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetFormatFilterTests.Apply_ViolationsFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetFormatFilterTests.Apply_WhitespaceManyFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetListPackageFilterTests.Apply_DeprecatedFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetListPackageFilterTests.Apply_OutdatedFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetListPackageFilterTests.Apply_PlainFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetListPackageFilterTests.Apply_VulnerableFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetRestoreFilterTests.Apply_SuccessFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetTestFilterTests.Apply_AllPassFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetTestFilterTests.Apply_CompileErrorsWithTestResults_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetTestFilterTests.Apply_CompileErrors_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetTestFilterTests.Apply_FailuresFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetTestFilterTests.Apply_MultiProjectPartialMatch_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Snapshots\DotnetTestFilterTests.Apply_ZeroTestsFixture_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_build_errors.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_build_long_messages.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_build_multitarget_errors.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_build_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_build_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_clean_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_database_update.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_database_update_error.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_database_update_logging.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_migrations_add.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_migrations_add_build_failed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_migrations_add_verbose.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_migrations_list.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_ef_migrations_remove.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_format_files_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_format_verbose_nothing_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_format_violations_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_format_whitespace_many.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_list_package_deprecated_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_list_package_outdated_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_list_package_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_list_package_vulnerable_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_pack_failure.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_pack_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_pack_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_publish_failure.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_publish_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_publish_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_restore_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_all_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_assert_diffs.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_compile_errors.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_compile_errors_mixed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_compile_errors_mixed_passing.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_duration_under_1ms.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_failures.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_failures_with_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_failure_mentions_diagnostic.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_list_tests.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_list_tests_filtered.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_list_tests_single.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_logger_detailed_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_logger_detailed_fail_interleaved.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_logger_detailed_fail_multiproject.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_logger_detailed_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_logger_minimal_terminal_logger.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_logger_normal_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_logger_normal_terminal_logger.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_missing_project.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_all_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_all_skipped.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_detailed_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_detailed_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_failures.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_multiproject.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_output_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_xunit3_detailed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_xunit3_failures.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_xunit3_timeout.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_mtp_zero.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_multiproject_partial_match.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_multiproject_skipped.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_multiproject_zero.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_names_vstest.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_nested_exception.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_no_test_available.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_output_vstest_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_pass_with_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_reqnroll_pending.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_skipped_only.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_test_zero.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_tool_restore_missing_package.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_tool_restore_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\Fixtures\dotnet_tool_restore_unreachable_feed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\net8.0\Microsoft.NET.Test.Sdk.Program.cs - Skipping. File from NuGet package /home/user/.nuget/packages/
+<tests>\<DotnetTokenKiller.Application.Tests>\config\analysislevel_10_all.globalconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Application.Tests.GlobalUsings.g.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Application.Tests>\obj\Debug\net10.0\Verify.Attributes.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Application.Tests>\obj\Debug\net10.0\VerifyXunit.Attributes.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Application.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Application.Tests.AssemblyInfo.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Application.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Application.Tests.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\xunit.abstractions.dll - Skipping. 
+<tests>\<DotnetTokenKiller.Application.Tests>\xunit.runner.visualstudio.testadapter.dll - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_CompletionHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_ConfigBranchHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_ConfigSetHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_ConfigShowHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DoctorHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetBranchHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetBuildHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetCleanHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetFormatHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetListBranchHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetListPackageHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetPackHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetPublishHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetRestoreHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetTestHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_DotnetToolRestoreHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_GainHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_InitHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_LogHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_PipeHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_ResetHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Snapshots\CliConfiguratorTests.Configure_RootHelp_MatchesSnapshot.verified.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_build_errors.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_build_long_messages.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_build_multitarget_errors.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_build_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_build_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_clean_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_database_update.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_database_update_error.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_database_update_logging.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_migrations_add.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_migrations_add_build_failed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_migrations_add_verbose.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_migrations_list.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_ef_migrations_remove.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_format_files_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_format_verbose_nothing_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_format_violations_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_format_whitespace_many.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_list_package_deprecated_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_list_package_outdated_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_list_package_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_list_package_vulnerable_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_pack_failure.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_pack_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_pack_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_publish_failure.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_publish_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_publish_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_restore_raw.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_all_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_assert_diffs.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_compile_errors.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_compile_errors_mixed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_compile_errors_mixed_passing.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_duration_under_1ms.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_failures.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_failures_with_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_failure_mentions_diagnostic.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_list_tests.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_list_tests_filtered.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_list_tests_single.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_logger_detailed_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_logger_detailed_fail_interleaved.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_logger_detailed_fail_multiproject.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_logger_detailed_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_logger_minimal_terminal_logger.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_logger_normal_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_logger_normal_terminal_logger.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_missing_project.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_all_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_all_skipped.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_detailed_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_detailed_pass.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_failures.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_multiproject.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_output_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_xunit3_detailed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_xunit3_failures.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_xunit3_timeout.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_mtp_zero.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_multiproject_partial_match.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_multiproject_skipped.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_multiproject_zero.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_names_vstest.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_nested_exception.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_no_test_available.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_output_vstest_fail.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_pass_with_warnings.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_reqnroll_pending.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_skipped_only.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_test_zero.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_tool_restore_missing_package.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_tool_restore_success.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Fixtures\dotnet_tool_restore_unreachable_feed.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\net8.0\Microsoft.NET.Test.Sdk.Program.cs - Skipping. File from NuGet package /home/user/.nuget/packages/
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\config\analysislevel_10_all.globalconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\obj\Debug\net10.0\DotnetTokenKiller.Cli.IntegrationTests.GlobalUsings.g.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\obj\Debug\net10.0\Verify.Attributes.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\obj\Debug\net10.0\VerifyXunit.Attributes.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\obj\Debug\net10.0\DotnetTokenKiller.Cli.IntegrationTests.AssemblyInfo.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\obj\Debug\net10.0\DotnetTokenKiller.Cli.IntegrationTests.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\xunit.abstractions.dll - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\xunit.runner.visualstudio.testadapter.dll - Skipping. 
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\xunit.runner.json - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\net8.0\Microsoft.NET.Test.Sdk.Program.cs - Skipping. File from NuGet package /home/user/.nuget/packages/
+<tests>\<DotnetTokenKiller.Domain.Tests>\config\analysislevel_10_all.globalconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Domain.Tests.GlobalUsings.g.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Domain.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Domain.Tests.AssemblyInfo.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Domain.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Domain.Tests.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\xunit.abstractions.dll - Skipping. 
+<tests>\<DotnetTokenKiller.Domain.Tests>\xunit.runner.visualstudio.testadapter.dll - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\net8.0\Microsoft.NET.Test.Sdk.Program.cs - Skipping. File from NuGet package /home/user/.nuget/packages/
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\config\analysislevel_10_all.globalconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Infrastructure.Tests.GlobalUsings.g.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Infrastructure.Tests.AssemblyInfo.cs - Skipping. Generated file
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\obj\Debug\net10.0\DotnetTokenKiller.Infrastructure.Tests.GeneratedMSBuildEditorConfig.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\.editorconfig - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\vs-threading.LegacyThreadSwitchingMembers.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\vs-threading.MainThreadAssertingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\vs-threading.MainThreadSwitchingMethods.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\vs-threading.MembersRequiringMainThread.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\vs-threading.SyncMethodsToExcludeFromVSTHRD103.frameworks.txt - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\xunit.abstractions.dll - Skipping. 
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\xunit.runner.visualstudio.testadapter.dll - Skipping. 
+Cleaning up using profile Built-in: Reformat & Apply Syntax Style
+
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Savings\SavingsBaseline.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Savings\SavingsBaselineFile.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Savings\SavingsBaselineJsonContext.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Savings\SavingsEngine.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Savings\SavingsScenario.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Savings\SavingsScenarios.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\Savings\ScenarioSavings.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\CorpusTier.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\FixtureCorpus.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks.Corpus>\LogCorpusGenerator.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Support\CommandRecordFactory.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Support\FakeDotnet.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Support\HermeticState.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Support\NullTracker.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Support\TimedProcess.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Support\TimedRun.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Support\TimingReport.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\AnsiStripBenchmarks.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\ColdStartCommand.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\FilterBenchmarks.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\PipelineBenchmarks.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\Program.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\StartupBenchmarks.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\TokenEstimatorBenchmarks.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\TokenizerLoadCommand.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\TrackerReadBenchmarks.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\TrackerWriteBenchmarks.cs
+<benchmarks>\<DotnetTokenKiller.Benchmarks>\UpdateBaselineCommand.cs
+<Solution Items>\Directory.Build.props
+<Solution Items>\Directory.Packages.props
+<Solution Items>\NuGet.config
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetBuildFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetCleanFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetEfFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetFormatFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetJbCleanupCodeFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetListPackageFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetPackFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetPublishFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetRestoreFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetStrykerFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetTestFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\DotnetToolRestoreFilter.cs
+<src>\<DotnetTokenKiller.Application>\Filters\MsBuildDiagnosticReport.cs
+<src>\<DotnetTokenKiller.Application>\Filters\PassedTestNames.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\ChunkedTokenCounter.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\CountingTextWriter.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\DurationFormat.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\ExecutableSearch.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\FanOutTextWriter.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\OutputCap.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\TestArgumentInjector.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\TextHelpers.cs
+<src>\<DotnetTokenKiller.Application>\Helpers\TokenEstimator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\Hooks\DotnetCommandRewriter.cs
+<src>\<DotnetTokenKiller.Application>\Integration\Hooks\HookCommands.cs
+<src>\<DotnetTokenKiller.Application>\Integration\Hooks\HookPayloads.cs
+<src>\<DotnetTokenKiller.Application>\Integration\AgentsFileIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\AiderIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\AmpIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\AmpPlugin.cs
+<src>\<DotnetTokenKiller.Application>\Integration\AntigravityIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\ArtifactStamping.cs
+<src>\<DotnetTokenKiller.Application>\Integration\ClaudeCodeIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\CodexConfig.cs
+<src>\<DotnetTokenKiller.Application>\Integration\CodexIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\CopilotCliIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\CrushIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\CrushrcFile.cs
+<src>\<DotnetTokenKiller.Application>\Integration\CursorHooksFile.cs
+<src>\<DotnetTokenKiller.Application>\Integration\CursorIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\DevinIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\FactoryDroidHooks.cs
+<src>\<DotnetTokenKiller.Application>\Integration\FactoryDroidIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\GeminiCliIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\GitHubCopilotIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\HomePaths.cs
+<src>\<DotnetTokenKiller.Application>\Integration\IHookApprovalInspector.cs
+<src>\<DotnetTokenKiller.Application>\Integration\IHookIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\ImportedClaudeHook.cs
+<src>\<DotnetTokenKiller.Application>\Integration\IntegrateUseCase.cs
+<src>\<DotnetTokenKiller.Application>\Integration\IntegrationContext.cs
+<src>\<DotnetTokenKiller.Application>\Integration\IntegrationInstructions.cs
+<src>\<DotnetTokenKiller.Application>\Integration\IntegratorHelpers.cs
+<src>\<DotnetTokenKiller.Application>\Integration\IUninstallIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\JetBrainsAiIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\KiloIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\KiloPlugin.cs
+<src>\<DotnetTokenKiller.Application>\Integration\OhMyPiIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\OpenCodeIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\OpenCodePlugin.cs
+<src>\<DotnetTokenKiller.Application>\Integration\PiExtension.cs
+<src>\<DotnetTokenKiller.Application>\Integration\PiFamilyIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\PiIntegrator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\PluginRuntime.cs
+<src>\<DotnetTokenKiller.Application>\Integration\RtkConfigLocator.cs
+<src>\<DotnetTokenKiller.Application>\Integration\RtkHookCoexistence.cs
+<src>\<DotnetTokenKiller.Application>\Integration\SharedInstructionArtifacts.cs
+<src>\<DotnetTokenKiller.Application>\Integration\TomlTableContext.cs
+<src>\<DotnetTokenKiller.Application>\Integration\UninstallHelpers.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\ConfigSetUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\CopyingTeeSession.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\DoctorUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\FilteredOutputPipeline.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\FilteredOutputRequest.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\FilteredRunUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\FullResetUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\GainReportUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\HookHealthChecker.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\LogQuery.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\LogViewUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\OutputOptions.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\PassthroughRunUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\PipeFilterUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\PreparedRun.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\ResetTrackingUseCase.cs
+<src>\<DotnetTokenKiller.Application>\UseCases\TrackingWarmUp.cs
+<src>\<DotnetTokenKiller.Application>\DependencyInjection.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\CompletionCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\ConfigSetCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\DotnetCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\DotnetTestCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\GainCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\InitCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\LogCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\OutputDisplaySettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\PipeCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\Settings\ResetCommandSettings.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\CompletionCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\ConfigSetCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\ConfigShowCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DoctorCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetBuildCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetCleanCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetEfDatabaseCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetEfMigrationsCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetFormatCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetJbCleanupCodeCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetListPackageCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetPackCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetPublishCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetRestoreCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetStrykerCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetTestCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\DotnetToolRestoreCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\GainCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\InitCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\LogCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\PipeCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Commands\ResetCommand.cs
+<src>\<DotnetTokenKiller.Cli>\Formatting\GainDashboardRenderer.cs
+<src>\<DotnetTokenKiller.Cli>\Formatting\TeeLogRenderer.cs
+<src>\<DotnetTokenKiller.Cli>\Formatting\TokenFormat.cs
+<src>\<DotnetTokenKiller.Cli>\Infrastructure\IStandardInputState.cs
+<src>\<DotnetTokenKiller.Cli>\Infrastructure\IWorkingDirectory.cs
+<src>\<DotnetTokenKiller.Cli>\Infrastructure\RunCancellation.cs
+<src>\<DotnetTokenKiller.Cli>\Infrastructure\SpectreCommandApp.cs
+<src>\<DotnetTokenKiller.Cli>\Infrastructure\TypeRegistrar.cs
+<src>\<DotnetTokenKiller.Cli>\Infrastructure\TypeResolver.cs
+<src>\<DotnetTokenKiller.Cli>\Serialization\GainSummaryJsonContext.cs
+<src>\<DotnetTokenKiller.Cli>\Native\fcntl64.c
+<src>\<DotnetTokenKiller.Cli>\ArgumentPreprocessor.cs
+<src>\<DotnetTokenKiller.Cli>\CliConfigurator.cs
+<src>\<DotnetTokenKiller.Cli>\HookEntryPoint.cs
+<src>\<DotnetTokenKiller.Cli>\PassthroughEntryPoint.cs
+<src>\<DotnetTokenKiller.Cli>\Program.cs
+<src>\<DotnetTokenKiller.Domain>\Configuration\DtkConfig.cs
+<src>\<DotnetTokenKiller.Domain>\Configuration\IConfigProvider.cs
+<src>\<DotnetTokenKiller.Domain>\Execution\CommandResult.cs
+<src>\<DotnetTokenKiller.Domain>\Execution\ExitCodes.cs
+<src>\<DotnetTokenKiller.Domain>\Execution\ICommandRunner.cs
+<src>\<DotnetTokenKiller.Domain>\Execution\ITestRunnerDetector.cs
+<src>\<DotnetTokenKiller.Domain>\Execution\RawOutputSwitch.cs
+<src>\<DotnetTokenKiller.Domain>\Execution\TestRunner.cs
+<src>\<DotnetTokenKiller.Domain>\Files\FileChangeSet.cs
+<src>\<DotnetTokenKiller.Domain>\Files\FileContentSnapshot.cs
+<src>\<DotnetTokenKiller.Domain>\Files\IFileContentSnapshotter.cs
+<src>\<DotnetTokenKiller.Domain>\Filters\FilterContext.cs
+<src>\<DotnetTokenKiller.Domain>\Filters\FilterKeys.cs
+<src>\<DotnetTokenKiller.Domain>\Filters\FilterResult.cs
+<src>\<DotnetTokenKiller.Domain>\Filters\IContextualOutputFilter.cs
+<src>\<DotnetTokenKiller.Domain>\Filters\IOutputFilter.cs
+<src>\<DotnetTokenKiller.Domain>\Filters\ISnapshotFilter.cs
+<src>\<DotnetTokenKiller.Domain>\Filters\TestOptions.cs
+<src>\<DotnetTokenKiller.Domain>\Integration\IGlobalIntegrator.cs
+<src>\<DotnetTokenKiller.Domain>\Integration\IntegrationResult.cs
+<src>\<DotnetTokenKiller.Domain>\Integration\IProviderIntegrator.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\IRawOutputCopy.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\IRawOutputCopyFactory.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\ITeeLogStore.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\ITeeService.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\ITeeSession.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\NullTeeSession.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\RawOutputCopyException.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\TeeLogEntry.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\TeeLogFileName.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\TeeLogHeader.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\TeeLogStatus.cs
+<src>\<DotnetTokenKiller.Domain>\Tee\TeeTruncationMarker.cs
+<src>\<DotnetTokenKiller.Domain>\Text\AnsiStrip.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\CommandGainDetail.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\CommandRecord.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\CoverageSummary.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\GainSummary.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\ITracker.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\RunOutcome.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\RunSource.cs
+<src>\<DotnetTokenKiller.Domain>\Tracking\TokenStatistics.cs
+<src>\<DotnetTokenKiller.Domain>\DotnetSubcommands.cs
+<src>\<DotnetTokenKiller.Domain>\PassthroughSubcommands.cs
+<src>\<DotnetTokenKiller.Domain>\SubcommandMatch.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Configuration\DtkConfigJsonContext.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Configuration\JsonConfigProvider.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Execution\GlobalJsonTestRunnerDetector.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Execution\ProcessCommandRunner.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Files\FileContentSnapshotter.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\FileTeeLogStore.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\FileTeeService.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\FileTeeSession.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\RawOutputCopy.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\RawOutputCopyFactory.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\TeeDirectoryResolver.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\TeeSessionPolicy.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tee\Utf8Text.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\FoldOutcome.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\PendingRecord.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\PendingRecordJournal.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\PendingRecordJsonContext.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\SqliteFoldCoordinator.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\SqliteQueryReader.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\SqliteSchemaMigrator.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\SqliteTracker.cs
+<src>\<DotnetTokenKiller.Infrastructure>\Tracking\TrackerFactory.cs
+<src>\<DotnetTokenKiller.Infrastructure>\DependencyInjection.cs
+<src>\<DotnetTokenKiller.Infrastructure>\EnvironmentOverride.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Benchmarks\FixtureCorpusTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Benchmarks\LogCorpusGeneratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Benchmarks\SavingsBaselineTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Benchmarks\SavingsEngineTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetBuildFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetCleanFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetEfFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetFormatFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetListPackageFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetPackFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetPublishFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetRestoreFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetTestFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\DotnetToolRestoreFilterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\ExamplesBindingTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\LargeOutputStressTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Filters\MsBuildDiagnosticReportTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\ChunkedTokenCounterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\CountingTextWriterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\CultureScope.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\DurationFormatTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\ExecutableSearchTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\FanOutTextWriterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\OutputCapTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\TestArgumentInjectorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\TextHelpersTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Helpers\TokenEstimatorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\Hooks\DotnetCommandRewriterTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\Hooks\HookPayloadsTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\AiderIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\AmpIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\AmpPluginTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\AntigravityIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\ArtifactStampingTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\ClaudeCodeIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\CodexConfigTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\CodexIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\CopilotCliIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\CrushIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\CrushrcFileTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\CursorHooksFileTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\CursorIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\DevinIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\FactoryDroidHooksTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\FactoryDroidIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\GeminiCliIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\GitHubCopilotIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\HomePathsTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\HookDescriptionTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\ImportedClaudeHookTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\IntegrateUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\IntegratorHelpersTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\JetBrainsAiIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\KiloIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\KiloPluginTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\LegacyHookFixtures.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\OhMyPiIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\OpenCodeIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\PiExtensionTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\PiIntegratorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\ReleasedOwnedFileHashesTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\RtkConfigLocatorTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\RtkHookCoexistenceTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\SharedInstructionArtifactsTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\UninstallHelpersTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Integration\UninstallIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Repository\SnapshotEncodingTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\Repository\ToolManifestOrderTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\ConfigSetUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\DoctorUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\FilteredOutputPipelineTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\FilteredRunUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\FullResetUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\GainReportUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\HookHealthCheckerTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\LogViewUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\NoColorCollectionTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\NoColorEnvironment.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\OutputOptionsTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\PassthroughRunUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\PipeFilterUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\RecordingRawOutputCopy.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\ResetTrackingUseCaseTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\UseCases\TrackingWarmUpTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\SubcommandBindingTests.cs
+<tests>\<DotnetTokenKiller.Application.Tests>\VerifyInit.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\AotParityAttributes.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\AotParitySkipTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\AotParityTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\AotWarningLog.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\AotWarningLogTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\ParityArrangementTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\ParityCase.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\ParityCases.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\ParityProcess.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\ParityProcessTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\ParityRunner.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\ParitySandbox.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Aot\SqliteLoaderTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\CompletionCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\ConfigCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\DoctorCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\GainCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\InitCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\LogCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\PipeCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Commands\ResetCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Formatting\GainDashboardRendererTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Formatting\TeeLogRendererTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Formatting\TokenFormatTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\DtkLauncher.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\DtkLauncherTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\ExportedPluginTestsBase.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\FakeConfigProvider.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\IntegrationTestHelper.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\NodeDriver.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\NodeFactAttribute.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\RawOutputIsolation.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\UnixFactAttribute.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Helpers\UnixTheoryAttribute.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Infrastructure\CommandSettingsAotGuardTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Infrastructure\RunCancellationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\Infrastructure\TypeResolverTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\AmpPluginTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\ArgumentPreprocessorTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\CancellationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\CliConfiguratorTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\CommandDispatchIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\DocsBindingTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\DotnetBuildIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\DotnetCleanIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\DotnetFormatIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\DotnetPublishPackIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\DotnetRestoreIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\DotnetTestIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\HookEntryPointTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\HookIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\KiloPluginRuntimeTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\ListPackageIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\LogIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\MachineReadableOutputIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\OpenCodePluginTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\PassthroughIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\PiExtensionTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\PipeIntegrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\SpectreBuiltInCommandTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\SubcommandRegistrationTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\TeeDurabilityTests.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\VerifyInit.cs
+<tests>\<DotnetTokenKiller.Cli.IntegrationTests>\VersionTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\Tee\NullTeeSessionTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\Tee\TeeLogFileNameTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\Tee\TeeLogHeaderTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\Text\AnsiStripTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\CommandGainDetailTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\CommandRecordTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\CommandResultTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\DotnetSubcommandsTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\DtkConfigTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\GainSummaryTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\PassthroughSubcommandsTests.cs
+<tests>\<DotnetTokenKiller.Domain.Tests>\RunOutcomeTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Configuration\JsonConfigProviderTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Execution\GlobalJsonTestRunnerDetectorTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Execution\ProcessCommandRunnerTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Files\FileContentSnapshotterTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Helpers\WindowsFactAttribute.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tee\FileTeeLogStoreTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tee\FileTeeServiceTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tee\FileTeeSessionTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tee\RawOutputCopyFactoryTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tee\TeeDirectoryResolverTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tee\TeeLogFileReader.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tee\Utf8TextTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tracking\PendingRecordJournalTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tracking\SqliteTrackerJournalTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tracking\SqliteTrackerTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\Tracking\TrackerFactoryTests.cs
+<tests>\<DotnetTokenKiller.Infrastructure.Tests>\FakeConfigProvider.cs

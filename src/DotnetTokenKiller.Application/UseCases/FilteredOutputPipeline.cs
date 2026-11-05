@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Domain.Configuration;
+using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Tee;
 using DotnetTokenKiller.Domain.Text;
@@ -55,7 +56,10 @@ public sealed class FilteredOutputPipeline(
     /// <see cref="NullTeeSession.Instance"/>.
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The request's exit code, unchanged.</returns>
+    /// <returns>
+    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the context asks to fail on an empty
+    /// run and either the filter reports that no test matched or, on a zero exit, dtk could not read the output.
+    /// </returns>
     public async Task<int> ProcessAsync(
         FilteredOutputRequest request,
         ITeeSession session,
@@ -76,7 +80,10 @@ public sealed class FilteredOutputPipeline(
     /// </param>
     /// <param name="prepared">What <see cref="BeginAsync"/> returned when this run started.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The request's exit code, unchanged.</returns>
+    /// <returns>
+    /// The request's exit code, or <see cref="ExitCodes.NoTestsMatched"/> when the context asks to fail on an empty
+    /// run and either the filter reports that no test matched or, on a zero exit, dtk could not read the output.
+    /// </returns>
     public async Task<int> ProcessAsync(
         FilteredOutputRequest request,
         ITeeSession session,
@@ -91,14 +98,26 @@ public sealed class FilteredOutputPipeline(
         var options = request.Options.Normalized();
         var stripped = AnsiStrip.Strip(request.RawOutput);
 
-        var (filtered, filterFaulted) =
-            await ApplyFilterSafelyAsync(request.Filter, stripped, request.ExitCode, options.VerbosityLevel)
-                .ConfigureAwait(false);
+        var (result, filterFaulted) =
+            await ApplyFilterSafelyAsync(request, stripped, options.VerbosityLevel).ConfigureAwait(false);
+        var filtered = result.Output;
+        var fallback = filterFaulted || string.IsNullOrWhiteSpace(filtered);
 
-        // Finalized before the raw-tail fallback is built, because the fallback embeds this hint.
-        var logHint = await FinalizeTeeAsync(session, request.ExitCode, cancellationToken).ConfigureAwait(false);
+        // The filter saw the child's exit code; the run's own code may differ when --fail-on-empty is set and no
+        // test matched, or when dtk could not read the output at all (the filter threw or recognised nothing), so
+        // it cannot confirm that a test ran: only the test filter's runs carry the flag, and a zero exit then fails
+        // closed. The log, the record and the return value all use this one.
+        var failOnEmpty = request.Context.Test.FailOnEmpty;
+        var unconfirmed = failOnEmpty && fallback && request.ExitCode == 0;
+        var exitCode = (failOnEmpty && result.NoTestsMatched) || unconfirmed
+            ? ExitCodes.NoTestsMatched
+            : request.ExitCode;
+
+        // Finalized before the output is capped, because the footer names the log when there is one.
+        var logHint = await FinalizeTeeAsync(session, exitCode, cancellationToken).ConfigureAwait(false);
 
         var shownLogHint = options.ShowLogHint ? logHint : null;
+        var footerTarget = logHint is null ? "rerun without --max-lines" : "dtk log";
 
         // A filtered run never prints nothing, whatever the exit code, and the last line of every
         // filtered run is its single status line. A faulted filter is checked first: its raw text is
@@ -108,24 +127,32 @@ public sealed class FilteredOutputPipeline(
         RunOutcome outcome;
         if (filterFaulted)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: false,
-                shownLogHint);
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false, unconfirmed);
             outcome = RunOutcome.FilterFaulted;
         }
-        else if (string.IsNullOrWhiteSpace(filtered))
+        else if (fallback)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, request.ExitCode, stripped, tailOnly: true,
-                shownLogHint);
+            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true, unconfirmed);
             outcome = RunOutcome.RawTailFallback;
         }
         else
         {
-            if (shownLogHint is not null)
-            {
-                filtered = InsertBeforeLastLine(filtered, shownLogHint);
-            }
-
             outcome = RunOutcome.Filtered;
+        }
+
+        // Capped before the --tee warning and the hint go in, so neither is ever counted or cut: tail, footer,
+        // warning, hint, status.
+        filtered = OutputCap.Truncate(filtered, options.MaxLines, footerTarget);
+        if (request.RawCopyFailure is { } rawCopyFailure)
+        {
+            // Shown under --quiet too: the user asked for this evidence, and it is incomplete.
+            filtered = InsertBeforeLastLine(filtered,
+                $"⚠ --tee: could not write {options.TeePath}: {rawCopyFailure}");
+        }
+
+        if (shownLogHint is not null)
+        {
+            filtered = InsertBeforeLastLine(filtered, shownLogHint);
         }
 
         filtered = NormalizeGlyphs(filtered, config);
@@ -140,31 +167,52 @@ public sealed class FilteredOutputPipeline(
 
         await output.WriteAsync(filtered).ConfigureAwait(false);
 
-        await TrackIfEnabledAsync(prepared, request, stripped, filtered,
+        // The record carries the run's own exit code, so it agrees with the log and the return value.
+        await TrackIfEnabledAsync(prepared, request with { ExitCode = exitCode }, stripped, filtered,
                 Stopwatch.GetElapsedTime(request.StartTimestamp), outcome, cancellationToken)
             .ConfigureAwait(false);
 
-        return request.ExitCode;
+        return exitCode;
+    }
+
+    /// <summary>
+    /// Ends a run whose <c>--tee</c> copy cannot be created before it starts: writes the run's only line, naming
+    /// the path and the reason, with the glyph rules every filtered run's output follows, and returns the exit
+    /// code the run must end with.
+    /// </summary>
+    /// <param name="exception">Why the copy cannot be created; its message is <c>&lt;path&gt;: &lt;reason&gt;</c>.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see cref="ExitCodes.UsageError"/>.</returns>
+    internal async Task<int> RefuseRawCopyAsync(
+        RawOutputCopyException exception, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var config = await configProvider.LoadAsync(cancellationToken).ConfigureAwait(false);
+        var line = NormalizeGlyphs($"✗ dtk: --tee cannot create {exception.Message}", config);
+        await output.WriteLineAsync(line).ConfigureAwait(false);
+        return ExitCodes.UsageError;
     }
 
     /// <summary>Applies the filter, falling back to raw output if the filter throws (never breaks the workflow).</summary>
-    /// <param name="filter">The output filter to apply.</param>
+    /// <param name="request">The request whose filter, exit code and context are used.</param>
     /// <param name="stripped">The ANSI-stripped command output.</param>
-    /// <param name="exitCode">The process exit code.</param>
     /// <param name="verbosityLevel">Verbosity level controlling diagnostic output.</param>
     /// <returns>
     /// The filtered output and whether the filter threw. A faulted filter yields the stripped
     /// output unchanged.
     /// </returns>
-    private async Task<(string Output, bool Faulted)> ApplyFilterSafelyAsync(
-        IOutputFilter filter,
+    private async Task<(FilterResult Result, bool Faulted)> ApplyFilterSafelyAsync(
+        FilteredOutputRequest request,
         string stripped,
-        int exitCode,
         int verbosityLevel)
     {
         try
         {
-            return (filter.Apply(stripped, exitCode), false);
+            var result = request.Filter is IContextualOutputFilter contextual
+                ? contextual.Apply(stripped, request.ExitCode, request.Context)
+                : new FilterResult(request.Filter.Apply(stripped, request.ExitCode));
+            return (result, false);
         }
         catch
         {
@@ -174,7 +222,7 @@ public sealed class FilteredOutputPipeline(
                 await output.WriteLineAsync("[filter error — using raw output]").ConfigureAwait(false);
             }
 
-            return (stripped, true);
+            return (new FilterResult(stripped), true);
         }
     }
 
@@ -197,28 +245,28 @@ public sealed class FilteredOutputPipeline(
 
     /// <summary>
     /// Builds the fallback shown when the filter left nothing to show or threw: the raw output (whole, or its
-    /// last 40 lines), the tee log hint when present, then the run's single status line.
+    /// <see cref="RawTail"/>), then the run's single status line.
     /// </summary>
     /// <param name="command">The command line that was run, for display purposes.</param>
     /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
-    /// <param name="tailOnly">Whether to show only the last 40 lines of <paramref name="rawOutput"/>.</param>
-    /// <param name="logHint">An optional tee log hint, written just before the status line.</param>
+    /// <param name="tailOnly">Whether to show only the <see cref="RawTail"/> of <paramref name="rawOutput"/>.</param>
+    /// <param name="unconfirmed">
+    /// Whether <c>--fail-on-empty</c> failed this zero-exit run because it could not confirm from the output that a
+    /// test ran.
+    /// </param>
     private static string BuildFallback(
         string command,
         int exitCode,
         string rawOutput,
         bool tailOnly,
-        string? logHint)
+        bool unconfirmed)
     {
         var sb = new StringBuilder();
         var hasOutput = !string.IsNullOrWhiteSpace(rawOutput);
         if (hasOutput && tailOnly)
         {
-            foreach (var line in rawOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(40))
-            {
-                sb.Append(line.TrimEnd('\r')).Append('\n');
-            }
+            sb.Append(RawTail.Last(rawOutput));
         }
         else if (hasOutput)
         {
@@ -229,16 +277,17 @@ public sealed class FilteredOutputPipeline(
             }
         }
 
-        if (logHint is not null)
-        {
-            sb.Append(logHint).Append('\n');
-        }
-
-        return sb.Append(FallbackStatusLine(command, exitCode, hasOutput)).Append('\n').ToString();
+        return sb.Append(FallbackStatusLine(command, exitCode, hasOutput, unconfirmed)).Append('\n').ToString();
     }
 
-    private static string FallbackStatusLine(string command, int exitCode, bool hasOutput)
+    private static string FallbackStatusLine(string command, int exitCode, bool hasOutput, bool unconfirmed)
     {
+        if (unconfirmed)
+        {
+            var cause = hasOutput ? "output not recognized" : "no output";
+            return $"✗ {command}: {cause} — --fail-on-empty could not confirm a test ran";
+        }
+
         if (exitCode != 0)
         {
             return string.Create(CultureInfo.InvariantCulture, $"✗ {command} failed (exit {exitCode})");

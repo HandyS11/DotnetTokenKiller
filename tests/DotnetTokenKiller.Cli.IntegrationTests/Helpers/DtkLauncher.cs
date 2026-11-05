@@ -12,4 +12,14 @@ internal static class DtkLauncher
     /// <returns><c>dotnet</c> and <paramref name="dllPath"/> when no binary is given; the binary alone otherwise.</returns>
     internal static (string Executable, string[] PrefixArguments) Resolve(string? testBinary, string dllPath) =>
         string.IsNullOrWhiteSpace(testBinary) ? ("dotnet", [dllPath]) : (testBinary.Trim(), []);
+
+    /// <summary>
+    /// Resolves the executable a test starts when it puts a fake <c>dotnet</c> first on dtk's <c>PATH</c>, which
+    /// dtk hosted by the <c>dotnet</c> muxer would never find (see <see cref="IntegrationTestHelper"/>).
+    /// </summary>
+    /// <param name="testBinary">The value of <see cref="TestBinaryVariable"/>, or <see langword="null"/>.</param>
+    /// <param name="appHostPath">The JIT build's apphost.</param>
+    /// <returns><paramref name="appHostPath"/> when no binary is given; the binary otherwise.</returns>
+    internal static string ResolveAppHost(string? testBinary, string appHostPath) =>
+        string.IsNullOrWhiteSpace(testBinary) ? appHostPath : testBinary.Trim();
 }

@@ -1,0 +1,15 @@
+  復元対象のプロジェクトを決定しています...
+  復元対象のすべてのプロジェクトは最新です。
+  SampleApp.Tests -> /test/project/root/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll
+/test/project/root/SampleApp.Tests/bin/Debug/net10.0/SampleApp.Tests.dll (.NETCoreApp,Version=v10.0) のテスト実行
+合計 1 個のテスト ファイルが指定されたパターンと一致しました。
+[xUnit.net 00:00:00.32]     SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [FAIL]
+  失敗 SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]
+  エラー メッセージ:
+   Intentional failure
+  スタック トレース:
+     at SampleApp.Tests.IntentionallyFailingTests.AlwaysFails() in /test/project/root/SampleApp.Tests/IntentionallyFailingTests.cs:line 8
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+失敗!   -失敗:     1、合格:     3、スキップ:     0、合計:     4、期間: 26 ms - SampleApp.Tests.dll (net10.0)

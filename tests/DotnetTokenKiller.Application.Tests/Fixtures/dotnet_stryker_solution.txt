@@ -1,0 +1,39 @@
+
+   _____ _              _               _   _ ______ _______  
+  / ____| |            | |             | \ | |  ____|__   __| 
+ | (___ | |_ _ __ _   _| | _____ _ __  |  \| | |__     | |    
+  \___ \| __| '__| | | | |/ / _ \ '__| | . ` |  __|    | |    
+  ____) | |_| |  | |_| |   <  __/ |    | |\  | |____   | |    
+ |_____/ \__|_|   \__, |_|\_\___|_| (_)|_| \_|______|  |_|    
+                   __/ |                                      
+                  |___/                                       
+
+
+Version: 5.0.0
+
+[23:41:12 INF] Analysis starting.
+[23:41:12 INF] Using solution configuration/platform 'Debug|Any CPU'.
+[23:41:12 INF] Identifying projects to mutate in Strk.sln. This can take a while.
+[23:41:13 INF] Picking net10.0 for project /test/project/root/Calc/Calc.csproj. 
+[23:41:14 INF] Found project /test/project/root/Calc/Calc.csproj to mutate.
+[23:41:14 INF] Analysis complete.
+[23:41:14 INF] Building solution Strk.sln.
+[23:41:14 INF] Building project Strk.sln using dotnet build Strk.sln -c Debug --property:Platform="Any CPU" (directory /test/project/root.)
+[23:41:16 INF] Number of tests found: 3 for project /test/project/root/Calc/Calc.csproj. Initial test run started.
+[23:41:18 INF] 17 mutants created
+[23:41:18 INF] Capture mutant coverage using 'CoverageBasedTest' mode.
+[23:41:19 INF] 7     mutants got status NoCoverage.   Reason: Not covered by any test.
+[23:41:19 INF] 1     mutants got status Ignored.      Reason: Removed by block already covered filter
+[23:41:19 INF] 8     total mutants are skipped for the above mentioned reasons
+[23:41:19 INF] 9     total mutants will be tested
+
+Killed:   6
+Survived: 3
+Timeout:  0
+Errors:  0
+
+Your json report has been generated at:
+file:///test/project/root/StrykerOutput/2026-11-04.23-41-12/reports/mutation-rep
+ort.json
+[23:41:22 INF] Time Elapsed 00:00:09.1057425
+[23:41:22 INF] The final mutation score is 37.50 %

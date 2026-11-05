@@ -43,6 +43,24 @@ internal static class DotnetCommandRewriter
     private const string Dotnet = "dotnet";
     private const string Prefix = "dtk dotnet ";
 
+    /// <summary>dtk's option that writes a file, which <see cref="IsAutoApprovable"/> never approves.</summary>
+    private const string TeeOption = "--tee";
+
+    /// <summary>The shortest prefix a glob could complete to <see cref="TeeOption"/> from (<c>--t*</c>).</summary>
+    private const string TeeGlobPrefix = "--t";
+
+    /// <summary>The quoting characters the shell removes from a word before the program sees it.</summary>
+    private static readonly SearchValues<char> QuotingCharacters = SearchValues.Create("'\"\\");
+
+    /// <summary>The characters that make a word a glob pattern the shell may replace with file names.</summary>
+    private static readonly SearchValues<char> GlobCharacters = SearchValues.Create("*?[");
+
+    /// <summary>The blanks the shell splits words on.</summary>
+    private static readonly char[] WordSeparators = [' ', '\t', '\n'];
+
+    /// <summary>The line breaks <see cref="IsAutoApprovable"/> refuses wherever they stand.</summary>
+    private static readonly SearchValues<char> LineBreaks = SearchValues.Create("\n\r");
+
     /// <summary>Characters that may precede <c>dotnet</c> where a command starts.</summary>
     private static readonly SearchValues<char> Boundaries = SearchValues.Create(" \t;&|({`\n");
 
@@ -143,14 +161,25 @@ internal static class DotnetCommandRewriter
 
     /// <summary>
     /// Whether Copilot CLI may run <paramref name="command"/>'s rewrite without asking: it is
-    /// <see cref="IsSimpleCommand">simple</see> and its subcommand is one of <see cref="AutoApprovableSubcommands"/>.
+    /// <see cref="IsSimpleCommand">simple</see>, its subcommand is one of <see cref="AutoApprovableSubcommands"/>,
+    /// it holds no newline or carriage return anywhere (quoted, escaped or not), it has no brace, parameter or glob
+    /// expansion (<see cref="ShellExpands"/>), and quote removal could not hand dtk a <c>--tee</c> option from it
+    /// (<see cref="MayPassTeeOption"/>). A word-initial <c>~</c> is not refused: tilde expansion yields a home
+    /// directory, never <c>--tee</c>, short of control over <c>HOME</c>.
     /// <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they write artifacts (and a publish
     /// profile can deploy), so they are left to the user's own approval.
     /// </summary>
+    /// <remarks>
+    /// The newline rule closes line continuation: the shell removes a backslash-newline before the words are split,
+    /// even inside double quotes, so <c>--te\</c>, a newline and <c>e</c> reach dtk as <c>--tee</c>, and
+    /// <c>dotnet build\</c>, a newline and <c>-server shutdown</c> run <c>dotnet build-server shutdown</c>: words no
+    /// rule that reads the text as written can see. Refusing every newline also covers quoted ones and multi-line
+    /// commands without deciding which ones the shell would join.
+    /// </remarks>
     /// <param name="command">The original, unrewritten command.</param>
     internal static bool IsAutoApprovable(string command)
     {
-        if (!IsSimpleCommand(command))
+        if (!IsSimpleCommand(command) || command.AsSpan().ContainsAny(LineBreaks) || MayPassTeeOption(command))
         {
             return false;
         }
@@ -162,6 +191,108 @@ internal static class DotnetCommandRewriter
             if (TryMatchTokens(command, subcommandStart, tokens, out var end) && !IsWordAt(command, end))
             {
                 return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether the shell might hand dtk a <c>--tee</c> option, in any form (<c>--tee x</c>, <c>--tee=x</c>,
+    /// <c>--tee:x</c>), from <paramref name="command"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>--tee &lt;path&gt;</c> writes dtk's copy of the raw output wherever its value points, so
+    /// <c>dotnet test --tee ~/.bashrc</c> is the file write <see cref="IsSimpleCommand"/> refuses as
+    /// <c>dotnet test &gt; ~/.bashrc</c>.
+    /// </para>
+    /// <para>
+    /// Auto-approval never covers a command with a brace, parameter or glob expansion, because expansion can
+    /// assemble a <c>--tee</c> the text does not show: <c>--te$9e</c> is <c>--tee</c> (an unset parameter expands
+    /// to nothing), <c>{--te,x}e</c> is <c>--tee xe</c>, and <c>--te[e]</c> matches a file named <c>--tee</c>. See
+    /// <see cref="ShellExpands"/> for what counts. A word-initial <c>~</c> is the one expansion left in: it yields a
+    /// home directory, never <c>--tee</c>, unless the caller controls <c>HOME</c>. Line continuation, which can join
+    /// <c>--te</c> and <c>e</c> across a backslash-newline, is refused before this runs
+    /// (<see cref="IsAutoApprovable"/> refuses every newline).
+    /// </para>
+    /// <para>
+    /// Nor does it cover a command that contains <c>--tee</c> once quote removal is done, with every <c>'</c>,
+    /// <c>"</c> and <c>\</c> removed (<c>--"tee"</c>, <c>--t\ee</c>, <c>--te''e</c>), or in which a word of that
+    /// quote-stripped text starts with <c>--t</c> and holds <c>*</c>, <c>?</c> or <c>[</c>.
+    /// </para>
+    /// <para>
+    /// None of these parses the command, and each matches far more than an option (a quoted <c>--filter "A{B}"</c>,
+    /// an unquoted <c>Foo*</c>, a test named <c>--tee</c>): a false match costs an approval prompt, never an approval.
+    /// </para>
+    /// </remarks>
+    /// <param name="command">A <see cref="IsSimpleCommand">simple</see> command.</param>
+    private static bool MayPassTeeOption(string command)
+    {
+        if (ShellExpands(command))
+        {
+            return true;
+        }
+
+        // Every quoting character goes, wherever it stands: no scan decides which ones the shell would keep.
+        var unquoted = string.Concat(command.Where(character => !QuotingCharacters.Contains(character)));
+        return unquoted.Contains(TeeOption, StringComparison.Ordinal)
+               || unquoted.Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries).Any(word =>
+                   word.StartsWith(TeeGlobPrefix, StringComparison.Ordinal) && word.AsSpan().ContainsAny(GlobCharacters));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="command"/> has a brace, parameter or glob expansion: a <c>{</c> anywhere (brace
+    /// expansion), a <c>$</c> anywhere outside single quotes (a parameter; double-quoted and backslash-escaped ones
+    /// included, fail-closed), or a <c>*</c>, <c>?</c> or <c>[</c> outside quotes and unescaped (a glob).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not every expansion counts. Tilde expansion is left alone: a word-initial <c>~</c> yields a home directory,
+    /// which cannot spell <c>--tee</c> without control over <c>HOME</c>. Line continuation is not this method's job
+    /// either: <see cref="IsAutoApprovable"/> refuses every newline before this runs.
+    /// </para>
+    /// <para>
+    /// A walk of its own rather than <see cref="ShellScanner"/>'s, which reports no character inside double quotes,
+    /// where a <c>$</c> still expands. A simple command has no <c>$'…'</c>, <c>$"…"</c>, here-document or
+    /// substitution, so its quotes and backslashes are all this has to follow.
+    /// </para>
+    /// </remarks>
+    /// <param name="command">A <see cref="IsSimpleCommand">simple</see> command.</param>
+    private static bool ShellExpands(string command)
+    {
+        if (command.Contains('{', StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var inDoubleQuotes = false;
+        var position = 0;
+        while (position < command.Length)
+        {
+            switch (command[position++])
+            {
+                case '$':
+                    return true;
+                case '\\' when position < command.Length && command[position] != '$':
+                    // The escaped character is literal. An escaped `$` is not skipped, so it is refused like any other.
+                    position++;
+                    break;
+                case '"':
+                    inDoubleQuotes = !inDoubleQuotes;
+                    break;
+                case '\'' when !inDoubleQuotes:
+                    // Nothing inside single quotes expands. Unterminated, which a simple command never is: refused.
+                    var close = command.IndexOf('\'', position);
+                    if (close < 0)
+                    {
+                        return true;
+                    }
+
+                    position = close + 1;
+                    break;
+                case '*' or '?' or '[' when !inDoubleQuotes:
+                    return true;
             }
         }
 

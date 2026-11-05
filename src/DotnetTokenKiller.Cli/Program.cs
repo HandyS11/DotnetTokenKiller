@@ -40,6 +40,21 @@ const int redirectedOutputWidth = 4096;
 // case-sensitive routing resolves it; unknown/passthrough invocations are left untouched.
 args = ArgumentPreprocessor.Normalize(args);
 
+var dtkRawValue = Environment.GetEnvironmentVariable(RawOutputSwitch.EnvironmentVariable);
+
+// dtk's own usage errors, and an option a filtered subcommand passed through anyway cannot honour, stop the run here,
+// before any child starts; a display option such a run drops gets a warning, and the run goes ahead.
+var optionCheck = ArgumentPreprocessor.CheckOptions(args, dtkRawValue);
+foreach (var message in optionCheck.Messages)
+{
+    await Console.Error.WriteLineAsync(message).ConfigureAwait(false);
+}
+
+if (optionCheck.IsUsageError)
+{
+    return ExitCodes.UsageError;
+}
+
 // Only a run that wraps a dotnet child takes over Ctrl+C and SIGTERM: the first one stops the child and
 // lets dtk finalize its log and report an exit code, rather than dying with the child still running.
 // Every other command keeps the default, dying at once.
@@ -51,7 +66,7 @@ var cancellationToken = runCancellation?.Token ?? CancellationToken.None;
 // Passthrough: run any unsupported dotnet subcommand directly, recording what it cost so the
 // coverage report can rank which subcommand is worth filtering next. A filtered subcommand lands here when
 // its run prompts (--interactive) or prints machine-readable output (--format json, -getProperty), and then
-// goes without dtk's output options, which dotnet would reject.
+// goes without dtk's options, which dotnet would reject.
 if (ArgumentPreprocessor.IsPassthrough(args))
 {
     return await PassthroughEntryPoint
@@ -60,8 +75,8 @@ if (ArgumentPreprocessor.IsPassthrough(args))
 }
 
 // DTK_RAW=1 asks for dotnet's own output: a filtered subcommand is passed through as well, recorded like any
-// passthrough, without dtk's output options, which dotnet would reject.
-if (ArgumentPreprocessor.IsRawRequested(args, Environment.GetEnvironmentVariable(RawOutputSwitch.EnvironmentVariable)))
+// passthrough, without dtk's options, which dotnet would reject.
+if (ArgumentPreprocessor.IsRawRequested(args, dtkRawValue))
 {
     return await PassthroughEntryPoint
         .RunAsync(dotnetCmd, ArgumentPreprocessor.StripDtkOptions(args[1..]), runCancellation)
