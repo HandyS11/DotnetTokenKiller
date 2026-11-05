@@ -53,19 +53,37 @@ internal sealed class PassedTestNames
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Whether <paramref name="name"/> names its class (<c>Ns.Class.Method</c>), so that <see cref="Add"/> needs no
+    /// assembly to group it under; a bare display name (MSTest's) does not.
+    /// </summary>
+    /// <param name="name">The test's name as the runner printed it.</param>
+    public static bool NamesAClass(string name) => ClassSeparator(Head(name.Trim())) > 0;
+
     private static (string Class, string Method) Split(string name, string? assembly)
+    {
+        var head = Head(name);
+        var dot = ClassSeparator(head);
+        return dot > 0
+            ? (head[..dot], head[(dot + 1)..])
+            : (assembly ?? UnknownClass, head);
+    }
+
+    /// <summary>The name without a data row's arguments: the part before its first <c>(</c>.</summary>
+    /// <param name="name">A trimmed test name.</param>
+    private static string Head(string name)
     {
         var parenthesis = name.IndexOf('(', StringComparison.Ordinal);
         var head = (parenthesis < 0 ? name : name[..parenthesis]).TrimEnd();
-        if (head.Length == 0)
-        {
-            head = name;
-        }
+        return head.Length == 0 ? name : head;
+    }
 
+    /// <summary>The index of the <c>.</c> that ends the class in <paramref name="head"/>, or <c>-1</c> when none does.</summary>
+    /// <param name="head">A name's <see cref="Head"/>.</param>
+    private static int ClassSeparator(string head)
+    {
         var dot = head.LastIndexOf('.');
-        return dot > 0 && dot < head.Length - 1
-            ? (head[..dot], head[(dot + 1)..])
-            : (assembly ?? UnknownClass, head);
+        return dot > 0 && dot < head.Length - 1 ? dot : -1;
     }
 
     /// <summary>One class's methods, in order of first appearance, and how many times each passed.</summary>

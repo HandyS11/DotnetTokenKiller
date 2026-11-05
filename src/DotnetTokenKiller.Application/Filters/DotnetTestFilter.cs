@@ -143,8 +143,24 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             i = ParseLine(lines, i, state);
         }
 
+        AttributeBareVsTestNames(state);
         ResolveTotals(state);
         return state;
+    }
+
+    /// <summary>
+    /// Records the bare VSTest names no single "Test run for" header could vouch for when they were read: under
+    /// the one assembly the whole output named (in its headers and its <c>Passed!</c>/<c>Failed!</c> summary
+    /// lines), or under none when it named several, since any of them may own a name.
+    /// </summary>
+    /// <param name="state">The state the whole output was read into.</param>
+    private static void AttributeBareVsTestNames(ParseState state)
+    {
+        var assembly = state.VsTestAssemblies.Count == 1 ? state.VsTestAssemblies[0] : null;
+        foreach (var name in state.UnattributedVsTestNames)
+        {
+            state.PassedNames.Add(name, assembly);
+        }
     }
 
     /// <summary>Parses the line at <paramref name="i"/>, and any lines that belong to it.</summary>
@@ -188,6 +204,20 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         if (summaryMatch.Success)
         {
             AccumulateSummary(summaryMatch, state);
+            if (SummaryAssemblyPattern().Match(line, summaryMatch.Index + summaryMatch.Length) is { Success: true } name)
+            {
+                AddDistinct(state.VsTestAssemblies, FileNameOf(name.Groups["name"].Value));
+            }
+
+            return true;
+        }
+
+        var testRunForMatch = VsTestRunForPattern().Match(line);
+        if (testRunForMatch.Success)
+        {
+            var assembly = FileNameOf(testRunForMatch.Groups["path"].Value);
+            AddDistinct(state.VsTestRunAssemblies, assembly);
+            AddDistinct(state.VsTestAssemblies, assembly);
             return true;
         }
 
@@ -351,7 +381,22 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         var vsTestMatch = PassedTestHeaderPattern().Match(line);
         if (vsTestMatch.Success)
         {
-            state.PassedNames.Add(vsTestMatch.Groups["name"].Value, assembly: null);
+            // A bare name (MSTest's) groups under its assembly: the one "Test run for" header announced so far, which
+            // must be its own, since a run's header precedes its results. With none or several, it waits for the end.
+            var name = vsTestMatch.Groups["name"].Value;
+            if (PassedTestNames.NamesAClass(name))
+            {
+                state.PassedNames.Add(name, assembly: null);
+            }
+            else if (state.VsTestRunAssemblies.Count == 1)
+            {
+                state.PassedNames.Add(name, state.VsTestRunAssemblies[0]);
+            }
+            else
+            {
+                state.UnattributedVsTestNames.Add(name);
+            }
+
             return true;
         }
 
@@ -396,6 +441,17 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <summary>The file name of a path, whichever separator it uses (a Windows log can be piped on Linux).</summary>
     /// <param name="path">A file path.</param>
     private static string FileNameOf(string path) => path[(path.LastIndexOfAny(PathSeparators) + 1)..];
+
+    /// <summary>Appends <paramref name="value"/> to <paramref name="values"/> unless it is already there.</summary>
+    /// <param name="values">The list, in order of first appearance.</param>
+    /// <param name="value">The value to add.</param>
+    private static void AddDistinct(List<string> values, string value)
+    {
+        if (!values.Contains(value, StringComparer.Ordinal))
+        {
+            values.Add(value);
+        }
+    }
 
     private int ParseFailure(string[] lines, int i, Match failedHeaderMatch, ParseState state)
     {
@@ -1254,6 +1310,15 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     [GeneratedRegex(@"^Test Run (?:Successful|Failed)\.\s*$")]
     private static partial Regex TestRunBlockHeaderPattern();
 
+    // "Test run for /dir/bin/Debug/net10.0/App.Tests.dll (.NETCoreApp,Version=v10.0)": VSTest's header above one
+    // assembly's results.
+    [GeneratedRegex(@"^Test run for\s(?<path>.+\.(?i:dll|exe))(?:\s\([^)]*\))?\s*$")]
+    private static partial Regex VsTestRunForPattern();
+
+    // What follows a SummaryPattern match: " - App.Tests.dll (net10.0)", the assembly the summary closes.
+    [GeneratedRegex(@"\G\s+-\s+(?<name>\S.*?\.(?i:dll|exe))(?:\s\([^)]*\))?\s*$")]
+    private static partial Regex SummaryAssemblyPattern();
+
     [GeneratedRegex("^Total tests:")]
     private static partial Regex TestRunTotalTestsPattern();
 
@@ -1457,6 +1522,17 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
 
         /// <summary>The file names of the assemblies that matched or ran no test, distinct, in order of appearance.</summary>
         public List<string> ZeroTestsAssemblies { get; } = [];
+
+        /// <summary>The file names of the assemblies VSTest's "Test run for" headers named, distinct, in order.</summary>
+        public List<string> VsTestRunAssemblies { get; } = [];
+
+        /// <summary>
+        /// The file names of the assemblies the VSTest output named, in its headers and its summary lines, distinct.
+        /// </summary>
+        public List<string> VsTestAssemblies { get; } = [];
+
+        /// <summary>Bare VSTest names read while no single header could vouch for their assembly.</summary>
+        public List<string> UnattributedVsTestNames { get; } = [];
 
         /// <summary>Test assemblies an MTP run announced with "Running tests from".</summary>
         public int MtpAssembliesRun { get; set; }

@@ -2589,8 +2589,62 @@ public class DotnetTestFilterTests
         two.Should().StartWith("✓ (unknown class) (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
     }
 
+    [Fact]
+    public void Apply_Names_MsTestUnderVsTest_GroupsUnderAssembly()
+    {
+        // VSTest's normal console logger, MSTest: bare method names, tied to their assembly by the
+        // "Test run for <path>/SampleApp.Tests.MSTest.dll" header above them.
+        var fixture = LoadFixture("dotnet_test_names_mstest_vstest.txt");
+
+        var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
+
+        result.Should().EndWith(
+            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
+            "Add_Returns_Sum ×3\n" +
+            "✗ dotnet test: 3 failed, 5 passed (1 project, 0.42s)\n").And.NotContain("(unknown class)");
+    }
+
+    [Fact]
+    public void Apply_Names_MsTestUnderVsTest_SeveralRunsInFlight_StayUnknown()
+    {
+        // Real lines: a second assembly's header (from the multi-project fixture) before the results, as parallel
+        // projects print them. Either assembly may own a bare name, so none is attributed.
+        var fixture = LoadFixture("dotnet_test_names_mstest_vstest.txt");
+        const string beta = "Test run for /test/project/root/Beta.Tests/bin/Debug/net10.0/Beta.Tests.dll " +
+                            "(.NETCoreApp,Version=v10.0)\n";
+        var twoRuns = fixture.Replace("A total of 1 test files matched", beta + "A total of 1 test files matched",
+            StringComparison.Ordinal);
+
+        var result = _sut.Apply(twoRuns, exitCode: 1, Names).Output;
+
+        result.Should().Contain(
+            "✓ (unknown class) (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
+            "Add_Returns_Sum ×3\n");
+    }
+
+    [Fact]
+    public void Apply_Names_MsTestUnderVsTest_NoHeader_UsesTheClosingSummary()
+    {
+        // Real lines: the results without their header (a log cut at the top), closed by the minimal logger's
+        // summary line of a real run of the same project, which names the assembly.
+        var fixture = LoadFixture("dotnet_test_names_mstest_vstest.txt");
+        const string summary = "Failed!  - Failed:     3, Passed:     5, Skipped:     0, Total:     8, Duration: 31 ms" +
+                               " - SampleApp.Tests.MSTest.dll (net10.0)";
+        var lines = fixture.Split('\n');
+        var results = lines.SkipWhile(l => !l.StartsWith("  Failed ", StringComparison.Ordinal))
+            .TakeWhile(l => !l.StartsWith("Test Run Failed.", StringComparison.Ordinal));
+        var cut = string.Join('\n', results) + summary + "\n";
+
+        var result = _sut.Apply(cut, exitCode: 1, Names).Output;
+
+        result.Should().Contain(
+            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
+            "Add_Returns_Sum ×3\n");
+    }
+
     [Theory]
     [InlineData("dotnet_test_names_vstest.txt", 1)]
+    [InlineData("dotnet_test_names_mstest_vstest.txt", 1)]
     [InlineData("dotnet_test_mtp_detailed_pass.txt", 0)]
     [InlineData("dotnet_test_mtp_detailed_fail.txt", 2)]
     [InlineData("dotnet_test_mtp_xunit3_detailed.txt", 2)]

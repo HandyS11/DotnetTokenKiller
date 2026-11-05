@@ -872,6 +872,17 @@
       "savingsPercent": 88.7
     },
     {
+      "id": "test/names-mstest-vstest",
+      "fixture": "dotnet_test_names_mstest_vstest.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 2199,
+      "rawTokens": 555,
+      "filteredTokens": 180,
+      "savedTokens": 375,
+      "savingsPercent": 67.6
+    },
+    {
       "id": "test/names-vstest",
       "fixture": "dotnet_test_names_vstest.txt",
       "filterKey": "test",
