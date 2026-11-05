@@ -157,8 +157,8 @@ public class FilteredOutputPipelineTests
         var session = SessionWithHint("hint");
         await using var writer = new StringWriter();
         var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
-        var request = ContextualRequest(filter, new TestOptions(FailOnEmpty: failOnEmpty), childExitCode)
-            with { RawOutput = "a\n" };
+        var test = new TestOptions(FailOnEmpty: failOnEmpty);
+        var request = ContextualRequest(filter, test, childExitCode) with { RawOutput = "a\n" };
 
         var exitCode = await sut.ProcessAsync(request, session);
 
