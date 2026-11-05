@@ -135,7 +135,7 @@ public sealed class FilteredRunUseCase(
 
         // Only here, once the child has exited on its own: a cancelled run rethrew above. Not cancellable, like
         // the pipeline call below, so a late Ctrl+C cannot drop the output of a run that finished.
-        var changes = ChangesSince(snapshot);
+        var changes = ChangesSince(snapshot, options.TeePath);
 
         var request = new FilteredOutputRequest(
             filter,
@@ -192,7 +192,11 @@ public sealed class FilteredRunUseCase(
 
     /// <summary>The files that changed during the run, or <see langword="null"/> when the filter asked for none.</summary>
     /// <param name="run">What was taken before the child started.</param>
-    private FileChangeSet? ChangesSince(SnapshotRun run)
+    /// <param name="teePath">
+    /// The run's <c>--tee</c> file, if any: dtk creates it before the snapshot and fills it during the run, so it is
+    /// left out rather than listed as a file the tool changed.
+    /// </param>
+    private FileChangeSet? ChangesSince(SnapshotRun run, string? teePath)
     {
         if (run.Root is null)
         {
@@ -207,9 +211,16 @@ public sealed class FilteredRunUseCase(
         try
         {
             var after = fileSnapshotter.Take(run.Root);
-            return after is null
-                ? FileChangeSet.NotComputed(TreeTooLarge)
-                : new FileChangeSet(after.ChangedSince(run.Before));
+            if (after is null)
+            {
+                return FileChangeSet.NotComputed(TreeTooLarge);
+            }
+
+            var changed = after.ChangedSince(run.Before);
+            var teeEntry = teePath is null ? null : SnapshotEntry(run.Root, teePath);
+            return new FileChangeSet(teeEntry is null
+                ? changed
+                : [.. changed.Where(path => !string.Equals(path, teeEntry, StringComparison.Ordinal))]);
         }
 #pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
         catch (Exception)
@@ -217,6 +228,25 @@ public sealed class FilteredRunUseCase(
         {
             return FileChangeSet.NotComputed(SnapshotFailed);
         }
+    }
+
+    /// <summary>
+    /// <paramref name="path"/> as a snapshot names it: relative to <paramref name="root"/>, <c>/</c>-separated, or
+    /// <see langword="null"/> when it lies outside the root.
+    /// </summary>
+    /// <param name="root">The snapshot's root.</param>
+    /// <param name="path">A path as the user typed it, relative to the working directory or absolute.</param>
+    private static string? SnapshotEntry(string root, string path)
+    {
+        // Resolved as RawOutputCopyFactory opens it: against the working directory.
+        var relative = Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(path));
+        if (Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar,
+                StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return relative.Replace(Path.DirectorySeparatorChar, '/');
     }
 
     /// <summary>The arguments after the subcommand's tokens, or after the first one when none matches.</summary>

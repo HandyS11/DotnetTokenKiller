@@ -1449,6 +1449,55 @@ public class FilteredRunUseCaseTests
         _snapshotter.Received(2).Take(root, Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    // Relative to the working directory, as typed, and absolute: either way the copy dtk writes during the run is
+    // not a file the tool changed.
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunAsync_SnapshotFilter_LeavesTheTeeFileOutOfTheChanges(bool absolute)
+    {
+        var root = Environment.CurrentDirectory;
+        var teePath = Path.Combine("logs", "raw.log");
+        if (absolute)
+        {
+            teePath = Path.Combine(root, teePath);
+        }
+
+        var before = new FileContentSnapshot(root,
+            new Dictionary<string, string> { ["a.cs"] = "1", ["logs/raw.log"] = "empty" });
+        var after = new FileContentSnapshot(root,
+            new Dictionary<string, string> { ["a.cs"] = "2", ["logs/raw.log"] = "filled" });
+        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        _rawOutputCopyFactory.Open(teePath).Returns(new RecordingRawOutputCopy());
+        var filter = new SnapshotFilter(root);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions(TeePath: teePath));
+
+        filter.Seen!.ChangedPaths.Should().Equal("a.cs");
+    }
+
+    [Fact]
+    public async Task RunAsync_SnapshotFilter_KeepsAFileNamedLikeATeeFileOutsideTheRoot()
+    {
+        // The tee file is beside the root, not in it: the root's own raw.log is a change of the tool's.
+        var root = Path.Combine(Environment.CurrentDirectory, "src");
+        var before = new FileContentSnapshot(root, new Dictionary<string, string> { ["raw.log"] = "1" });
+        var after = new FileContentSnapshot(root, new Dictionary<string, string> { ["raw.log"] = "2" });
+        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        _rawOutputCopyFactory.Open("raw.log").Returns(new RecordingRawOutputCopy());
+        var filter = new SnapshotFilter(root);
+        _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult("out", "", 0));
+
+        await _sut.RunAsync(filter, "dotnet", ["jb", "cleanupcode"], new OutputOptions(TeePath: "raw.log"));
+
+        filter.Seen!.ChangedPaths.Should().Equal("raw.log");
+    }
+
     [Fact]
     public async Task RunAsync_SnapshotFilter_TreeTooLarge_ReportsNotComputed()
     {
