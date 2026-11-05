@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-05
+
 ### Added
 
 - Five options, documented in the usage guide. `--tee <path>` keeps the run's raw output in a file you choose, as
@@ -14,12 +16,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `--max-lines N` caps the filtered body and ends with `… N more lines (dtk log)`; the status line is never cut.
   On `dotnet test` and `dtk pipe test`, `--names` lists the tests that passed grouped by class, `--show-output` shows
   each failing test's console output, and `--fail-on-empty` makes a run in which no test matched exit 8
-  (`✗ dotnet test: no test matched filter … — --fail-on-empty`).
+  (`✗ dotnet test: no test matched filter … — --fail-on-empty`). A run that `dotnet` prints unfiltered all the same
+  (`DTK_RAW=1`, `--interactive`, `--format json`, `-getProperty`) refuses `--tee` and `--fail-on-empty` before it
+  starts, and ignores the other three with a warning.
 - `dotnet tool restore` reports `✓ dotnet tool restore: 2 tools (dotnet-ef, jb)`, and on failure each distinct error
   once.
 - `dotnet ef migrations …` and `dotnet ef database …` drop the build and application log noise and keep the result; a
   failed build says to run `dtk dotnet build` for the errors, which ef never prints.
-- `dotnet stryker` reports the mutation score, the counts and up to 20 survivors read from the json report.
+- `dotnet stryker` reports the mutation score and the counts, and, when Stryker's json reporter is on, up to 20
+  surviving mutants read from its report.
 - `dotnet jb cleanupcode` lists the files it changed, found by hashing the tree before and after, instead of every
   file it processed.
 - `dtk pipe test` recognises test output in another language and says so, with the remedy (`run it through dtk dotnet
@@ -27,20 +32,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- `dotnet stryker` and `dotnet jb cleanupcode` are no longer attached passthrough: they run filtered, print once they
-  end, and are rewritten by the agent hooks. `dotnet tool restore` and `dotnet ef migrations`/`database` are no longer
-  unfiltered.
-- On `ef`, `stryker` and `jb cleanupcode` every short option and `--verbose`, `--quiet` and `--help` belong to the
-  tool, so `-v` and `-q` no longer mean dtk's there; `--help` passes through unfiltered.
-- A command containing `--tee`, or one the shell would expand (a `$` outside single quotes, an unquoted `*`, `?` or `[`,
-  any `{`), is no longer auto-approved by the Copilot CLI hook (`ask`) and is left as written by Cursor's. The new
-  subcommands are never auto-approved.
+- `dotnet stryker` and `dotnet jb cleanupcode` are no longer attached passthrough: they run filtered and print once
+  they end. `dotnet tool restore` and `dotnet ef migrations`/`database` are no longer unfiltered, except where the
+  output is a document or the tool waits for an answer: `ef … --json`, `ef migrations script` without `-o`,
+  `ef database drop` without `--force` and `tool restore --interactive` still pass through. The agent hooks now
+  rewrite all four to `dtk dotnet …`, but never auto-approve them, so Cursor's hook, which rewrites only what it can
+  auto-approve, leaves them as written.
+- On `ef`, `stryker` and `jb cleanupcode`, now filtered, every short option and `--verbose`, `--quiet` and `--help`
+  still belong to the tool, so `-v` and `-q` there reach the tool instead of meaning dtk's verbose and quiet as on
+  `build` or `test`. dtk reads only its long options `--vv`, `--show-log`, `--tee` and `--max-lines` there, and
+  `--help` passes through unfiltered.
+- A command containing `--tee`, one the shell would expand (a `$` outside single quotes, an unquoted `*`, `?` or `[`,
+  any `{`), or one that spans more than one line (a `\` line continuation included) is no longer auto-approved by
+  the Copilot CLI hook (`ask`) and is left as written by Cursor's.
 - The generated skill and instruction text lists the new subcommands and options, and no longer says `-q` works on any
-  command.
+  command. Re-run `dtk init <provider>` to refresh the skill, and add `--force` to refresh a section in an existing
+  `AGENTS.md`.
 
 ### Fixed
 
 - A failing test with no stack trace no longer folds the test's own console output into its failure message.
+- A Microsoft.Testing.Platform run in which every test was skipped (exit 8) reports `⚠ dotnet test: 0 passed,
+  1 skipped (1 project, 0.30s) · no test ran (exit 8)` instead of the last 40 raw lines and `✗ dotnet test failed
+  (exit 8)`.
 
 ## [0.10.0] - 2026-11-04
 
@@ -354,7 +368,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - JSON configuration support.
 - Packaging as a .NET tool (`dotnet tool install DotnetTokenKiller`).
 
-[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0-beta.1...v0.8.0
