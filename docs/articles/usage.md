@@ -278,7 +278,7 @@ src/DotnetTokenKiller.Infrastructure/Tracking/TrackerFactory.cs
 ✓ dotnet jb cleanupcode: 2 files changed (356 processed, 314 skipped)
 ```
 
-At most 30 files are listed, then `… N more (git status)`; no change reads `✓ dotnet jb cleanupcode: no changes (356 processed, 314 skipped)`. A tree of more than 20,000 files or 256 MiB is not snapshotted, and the status line says `changed files not computed (tree too large)`. Under `dtk pipe` there is no before-state: only the counts are printed, with `changed files unknown (piped)`. A failure (exit 3 or 4) keeps the `Warning:` and `[MsBuild]` lines and ends `✗ dotnet jb cleanupcode failed (exit 4): 1 project load error`.
+At most 30 files are listed, then `… N more (git status)`; no change reads `✓ dotnet jb cleanupcode: no changes (356 processed, 314 skipped)`. A tree of more than 20,000 files or 256 MiB is not snapshotted, and the status line says `changed files not computed (tree too large)`. Under `dtk pipe` there is no before-state: only the counts are printed, with `changed files unknown (piped)`. A failure (exit 3 or 4) keeps the `Warning:` and `[MsBuild]` lines, and any line after the `Cleaning up using profile` header that is not a processed file, and ends `✗ dotnet jb cleanupcode failed (exit 4): 1 project load error`. A failure with none of those (jb not restored, say) shows the raw tail of the output above the `✗ … failed (exit 1)` status line.
 
 ### Options the tool owns
 

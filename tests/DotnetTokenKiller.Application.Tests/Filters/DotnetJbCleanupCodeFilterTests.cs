@@ -115,10 +115,81 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     }
 
     [Fact]
-    public void Apply_UnknownFailure_UsesBareStatus()
+    public void Apply_UnknownFailure_LeavesTheRawTailToThePipeline()
     {
-        _sut.Apply("boom\n", 9, FilterContext.Unknown).Output
-            .Should().Be("✗ dotnet jb cleanupcode failed (exit 9)\n");
+        // Nothing the filter recognises: an empty result makes the pipeline show the raw tail above its status line.
+        _sut.Apply("boom\n", 9, FilterContext.Unknown).Output.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_ToolNotRestored_LeavesTheRawTailToThePipeline()
+    {
+        // Real output, exit 1: `dotnet jb cleanupcode App.csproj` in a directory whose tool manifest names
+        // jetbrains.resharper.globaltools at a version that was never restored.
+        const string output = "Run \"dotnet tool restore\" to make the \"jb\" command available.\n";
+
+        _sut.Apply(output, 1, FilterContext.Unknown).Output.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Apply_FailureAfterTheHeader_KeepsWhatIsNotAProcessedFile()
+    {
+        // Real lines: the success fixture up to its header and first entries, then the load-error fixture's
+        // [MsBuild] line and the missing-path fixture's Warning line, as if jb had failed while it cleaned up.
+        var success = LoadFixture("dotnet_jb_cleanupcode_success.txt").Split('\n');
+        var header = Array.FindIndex(success, l => l.StartsWith("Cleaning up using profile", StringComparison.Ordinal));
+        var msBuild = LoadFixture("dotnet_jb_cleanupcode_load_error.txt").Split('\n')[4];
+        var warning = LoadFixture("dotnet_jb_cleanupcode_missing_path.txt").Split('\n')[3];
+        var output = string.Join('\n', success[..(header + 5)]) +
+                     $"\n{msBuild}\n{warning}\n{success[header + 5]}\n";
+
+        _sut.Apply(output, 4, FilterContext.Unknown).Output.Should().Be(
+            "[MsBuild] src/DotnetTokenKiller.Domain/DotnetSubcommands.cs (210,11)->(210,11)  CS8955: " +
+            "Source file can not contain both file-scoped and normal namespace declarations.\n" +
+            "Warning: Path doesn't exist DoesNotExist.csproj\n" +
+            "✗ dotnet jb cleanupcode failed (exit 4): 1 project load error\n");
+    }
+
+    [Fact]
+    public void Apply_FailureAfterTheHeader_KeepsTextThatIsNotAFile()
+    {
+        // Real lines: text the filter does not know, after the header and the first entries, as a crash would leave
+        // it. It is shown, not counted as a processed file.
+        var success = LoadFixture("dotnet_jb_cleanupcode_success.txt").Split('\n');
+        var header = Array.FindIndex(success, l => l.StartsWith("Cleaning up using profile", StringComparison.Ordinal));
+        var output = string.Join('\n', success[..(header + 3)]) +
+                     "\nRun \"dotnet tool restore\" to make the \"jb\" command available.\n";
+
+        _sut.Apply(output, 1, FilterContext.Unknown).Output.Should().Be(
+            "Run \"dotnet tool restore\" to make the \"jb\" command available.\n" +
+            "✗ dotnet jb cleanupcode failed (exit 1)\n");
+    }
+
+    [Fact]
+    public void Apply_ProgressLines_AreNeitherCountedNorKept()
+    {
+        // Real lines, verbatim, from `dtk dotnet jb cleanupcode DotnetTokenKiller.slnx --include=...` on a tree with
+        // changes to make: jb prints its progress, then the header again, then the processed list (here cut to two).
+        const string output =
+            "JetBrains Cleanup Code 2026.2.3.1\n" +
+            "Configuration: Debug, Platform: Any CPU\n" +
+            "<src>\\<DotnetTokenKiller.Domain>\\obj\\Debug\\net10.0\\DotnetTokenKiller.Domain.AssemblyInfo.cs" +
+            " - Skipping. Generated file\n" +
+            "Cleaning up using profile Built-in: Reformat & Apply Syntax Style\n" +
+            "\n" +
+            "Analyzing file 1 of 46: DtkConfig.cs\n" +
+            "\n" +
+            "Analyzing file 9 of 46: FileChangeSet.cs\n" +
+            "Analyzing file 9 of 46: FileChangeSet.cs - Cleaning up using profile Built-in: Reformat & Apply Syntax" +
+            " Style\n" +
+            "Cleaning up using profile Built-in: Reformat & Apply Syntax Style\n" +
+            "\n" +
+            "<src>\\<DotnetTokenKiller.Domain>\\Configuration\\DtkConfig.cs\n" +
+            "<src>\\<DotnetTokenKiller.Domain>\\Configuration\\IConfigProvider.cs\n";
+
+        _sut.Apply(output, 0, FilterContext.Unknown).Output
+            .Should().Be("✓ dotnet jb cleanupcode: 2 processed, 1 skipped · changed files unknown (piped)\n");
+        _sut.Apply(output, 1, FilterContext.Unknown).Output.Should().BeEmpty();
     }
 
     [Theory]

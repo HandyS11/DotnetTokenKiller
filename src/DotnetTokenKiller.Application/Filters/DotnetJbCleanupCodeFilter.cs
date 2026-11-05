@@ -8,15 +8,25 @@ namespace DotnetTokenKiller.Application.Filters;
 
 /// <summary>Condenses <c>dotnet jb cleanupcode</c> output to the files it changed.</summary>
 /// <remarks>
+/// <para>
 /// jb prints a banner, every skipped file and every processed file, changed or not, so the output says nothing about
 /// what changed: the changed files come from <see cref="FilterContext.Changes"/>, found by hashing the target's tree
-/// before and after the run. The filter counts the skipped and processed files and drops the lists. Under
-/// <c>dtk pipe</c> there is no such context and it says so.
+/// before and after the run. The filter counts the skipped and processed files and drops the lists, and the
+/// <c>Analyzing file N of M</c> progress lines jb prints while it works. Under <c>dtk pipe</c> there is no such
+/// context and it says so.
+/// </para>
+/// <para>
+/// A failed run keeps the <c>[MsBuild]</c>, <c>Warning:</c> and <c>No items were found</c> lines before the
+/// <c>Cleaning up using profile</c> header, and every line after it that is not a processed file or progress, so
+/// a crash's text stays visible. When it keeps nothing, it returns an empty result, so the pipeline's raw tail shows
+/// what happened (jb not restored, say).
+/// </para>
 /// </remarks>
 /// <param name="rootPath">Optional root path used to shorten file paths in the output.</param>
 public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) : IContextualOutputFilter, ISnapshotFilter
 {
     private const int MaxChangedPaths = 30;
+    private const string ProcessingHeader = "Cleaning up using profile";
     private static readonly string[] ProjectExtensions = [".sln", ".slnx", ".slnf", ".csproj"];
 
     /// <summary>The root that paths are shown relative to: the given one, else the working directory.</summary>
@@ -70,6 +80,11 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         var sb = new StringBuilder();
         if (exitCode != 0)
         {
+            if (kept.Count == 0)
+            {
+                return new FilterResult(string.Empty);
+            }
+
             foreach (var line in kept)
             {
                 sb.Append(line).Append('\n');
@@ -110,19 +125,21 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         foreach (var rawLine in output.Split('\n'))
         {
             var line = rawLine.TrimEnd('\r');
-            if (inProcessed)
+            if (line.StartsWith(ProcessingHeader, StringComparison.Ordinal))
             {
-                processed += line.Trim().Length == 0 ? 0 : 1;
-            }
-            else if (line.StartsWith("Cleaning up using profile", StringComparison.Ordinal))
-            {
+                // jb prints it again before the processed list when it printed progress lines first.
                 inProcessed = true;
             }
-            else if (SkippedPattern().IsMatch(line))
+            else if (inProcessed && IsProcessedEntry(line))
+            {
+                processed++;
+            }
+            else if (!inProcessed && SkippedPattern().IsMatch(line))
             {
                 skipped++;
             }
-            else if (IsKeptLine(line) && AddDistinct(kept, TextHelpers.ShortenPathsInLine(line.TrimEnd(), RootPath)))
+            else if ((inProcessed ? !IsProgressOrBlank(line) : IsKeptLine(line))
+                     && AddDistinct(kept, TextHelpers.ShortenPathsInLine(line.TrimEnd(), RootPath)))
             {
                 loadErrors += line.StartsWith("[MsBuild]", StringComparison.Ordinal) ? 1 : 0;
             }
@@ -135,6 +152,27 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         line.StartsWith("[MsBuild]", StringComparison.Ordinal)
         || line.StartsWith("Warning:", StringComparison.Ordinal)
         || line.StartsWith("No items were found", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether a line after the header names a processed file: <c>&lt;folder&gt;\&lt;project&gt;\…</c> as jb
+    /// prints it, or a bare path (no blank, a separator).
+    /// </summary>
+    /// <param name="line">A line after the <c>Cleaning up using profile</c> header.</param>
+    private static bool IsProcessedEntry(string line)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.StartsWith('<'))
+        {
+            return trimmed.Contains(">\\", StringComparison.Ordinal) || trimmed.Contains(">/", StringComparison.Ordinal);
+        }
+
+        return trimmed.Length > 0
+               && !trimmed.AsSpan().ContainsAny(' ', '\t')
+               && trimmed.AsSpan().ContainsAny('\\', '/');
+    }
+
+    private static bool IsProgressOrBlank(string line) =>
+        line.Trim().Length == 0 || ProgressPattern().IsMatch(line);
 
     private static bool AddDistinct(List<string> lines, string line)
     {
@@ -181,4 +219,7 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
 
     [GeneratedRegex(@" - Skipping\.( .*)?$")]
     private static partial Regex SkippedPattern();
+
+    [GeneratedRegex(@"^Analyzing file \d+ of \d+: ")]
+    private static partial Regex ProgressPattern();
 }

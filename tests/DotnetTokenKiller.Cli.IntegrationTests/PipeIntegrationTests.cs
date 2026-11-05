@@ -94,6 +94,22 @@ public class PipeIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task PipeJbCleanupCode_UnrecognisedFailure_ShowsTheRawTailAsync()
+    {
+        // Real output, exit 1: `dotnet jb cleanupcode App.csproj` where the tool manifest's jb was never restored.
+        const string notRestored = "Run \"dotnet tool restore\" to make the \"jb\" command available.\n";
+
+        var (output, exitCode, _) = await IntegrationTestHelper.RunDtkWithStdinAsync(
+            notRestored, "pipe", "jb", "cleanupcode", "--exit-code", "1");
+
+        exitCode.Should().Be(1, output);
+        var lines = output.ReplaceLineEndings("\n").TrimEnd('\n').Split('\n');
+        lines.Should().Equal(
+            "Run \"dotnet tool restore\" to make the \"jb\" command available.",
+            "\u2717 dotnet jb cleanupcode failed (exit 1)");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task Pipe_UnknownSubcommand_WithStdinLargerThanThePipeBuffer_FailsWithKnownListAsync()
     {
         // dtk rejects the subcommand without reading stdin, closing the pipe under the test's write. A small payload
