@@ -63,15 +63,17 @@ public sealed class FileContentSnapshotterTests : IDisposable
     [Fact]
     public void ChangedSince_IsOrdinalSortedAndSlashSeparated()
     {
-        Write("b.cs", "1");
+        // Names that differ by more than case, so the test also holds on a case-insensitive file system
+        // (Windows, macOS); ordinal order still differs from a culture-aware one ("B.cs" before "a/z.cs").
+        Write("c.cs", "1");
         Write("a/z.cs", "1");
         Write("B.cs", "1");
         var before = new FileContentSnapshotter().Take(_root)!;
-        Write("b.cs", "2");
+        Write("c.cs", "2");
         Write("a/z.cs", "2");
         Write("B.cs", "2");
 
-        new FileContentSnapshotter().Take(_root)!.ChangedSince(before).Should().Equal("B.cs", "a/z.cs", "b.cs");
+        new FileContentSnapshotter().Take(_root)!.ChangedSince(before).Should().Equal("B.cs", "a/z.cs", "c.cs");
     }
 
     [Fact]

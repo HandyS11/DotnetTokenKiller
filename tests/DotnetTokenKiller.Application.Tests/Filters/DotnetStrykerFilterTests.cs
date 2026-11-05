@@ -124,17 +124,20 @@ public sealed class DotnetStrykerFilterTests
         ArgumentNullException.ThrowIfNull(arguments);
         const string newest = "/elsewhere/reports/mutation-report.json";
         var files = new FakeFiles(new Dictionary<string, string> { [newest] = LoadFixture("stryker_mutation_report.json") }, newest);
+        // A real run's working directory is fully qualified; TestsDirectory alone is not on Windows (no drive),
+        // where Path.GetFullPath(path, basePath) rejects it.
+        var workingDirectory = Path.GetFullPath(TestsDirectory);
         var context = new FilterContext
         {
             Source = Domain.Tracking.RunSource.Run,
             Arguments = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries),
-            WorkingDirectory = TestsDirectory,
+            WorkingDirectory = workingDirectory,
             StartedUtc = Started,
         };
 
         var result = new DotnetStrykerFilter(files, Root).Apply(LoadFixture("dotnet_stryker_default.txt"), 0, context).Output;
 
-        files.Searches.Should().Equal((Path.GetFullPath(directory, TestsDirectory), "mutation-report.json", Started));
+        files.Searches.Should().Equal((Path.GetFullPath(directory, workingDirectory), "mutation-report.json", Started));
         result.Should().Contain(Survivors + NoCoverage);
     }
 

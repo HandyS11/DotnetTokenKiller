@@ -23,7 +23,9 @@ public sealed class ArtifactFileReaderTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         File.SetLastWriteTimeUtc(path, lastWriteUtc.UtcDateTime);
-        return path;
+
+        // Native separators, as the reader returns them: on Windows the relative part's '/' becomes '\'.
+        return Path.GetFullPath(path);
     }
 
     [Fact]

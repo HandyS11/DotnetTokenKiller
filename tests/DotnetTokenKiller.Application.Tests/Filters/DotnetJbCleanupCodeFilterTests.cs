@@ -9,6 +9,13 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
 {
     private const string Counts = "414 processed, 397 skipped";
 
+    /// <summary>
+    /// A working directory that is fully qualified on every OS: <c>/work</c> alone is rooted but not qualified on
+    /// Windows (no drive), where <see cref="Path.GetFullPath(string, string)"/> rejects it. A real run's working
+    /// directory is always qualified.
+    /// </summary>
+    private static readonly string Work = Path.GetFullPath("/work");
+
     private readonly DotnetJbCleanupCodeFilter _sut = new("/test/project/root");
     private readonly string _temp = Directory.CreateTempSubdirectory("dtk-jb-").FullName;
 
@@ -210,7 +217,7 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     [Fact]
     public void SnapshotRoot_SolutionInSubfolder()
     {
-        _sut.SnapshotRoot(["sub/App.slnx", "--profile=X"], "/work").Should().Be(Path.GetFullPath("/work/sub"));
+        _sut.SnapshotRoot(["sub/App.slnx", "--profile=X"], Work).Should().Be(Path.GetFullPath(Path.Combine(Work, "sub")));
     }
 
     [Theory]
@@ -220,8 +227,8 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     [InlineData("SRC/A.CSPROJ")]
     public void SnapshotRoot_ProjectExtensions(string argument)
     {
-        _sut.SnapshotRoot([argument], "/work").Should().Be(
-            Path.GetDirectoryName(Path.GetFullPath(argument, "/work")));
+        _sut.SnapshotRoot([argument], Work).Should().Be(
+            Path.GetDirectoryName(Path.GetFullPath(argument, Work)));
     }
 
     [Fact]
@@ -235,8 +242,8 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     [Fact]
     public void SnapshotRoot_PathWithSpaces()
     {
-        _sut.SnapshotRoot(["--profile=X", "My Folder/My App.slnx"], "/work").Should().Be(
-            Path.GetFullPath("/work/My Folder"));
+        _sut.SnapshotRoot(["--profile=X", "My Folder/My App.slnx"], Work).Should().Be(
+            Path.GetFullPath(Path.Combine(Work, "My Folder")));
     }
 
     [Fact]
@@ -244,14 +251,14 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     {
         var solution = Path.Combine(_temp, "x", "A.slnx");
 
-        _sut.SnapshotRoot([solution], "/elsewhere").Should().Be(Path.Combine(_temp, "x"));
+        _sut.SnapshotRoot([solution], Path.GetFullPath("/elsewhere")).Should().Be(Path.Combine(_temp, "x"));
     }
 
     [Fact]
     public void SnapshotRoot_None_IsWorkingDirectory()
     {
-        _sut.SnapshotRoot([], "/work").Should().Be("/work");
-        _sut.SnapshotRoot(["--profile=X", "--no-build", "missing-thing"], "/work").Should().Be("/work");
+        _sut.SnapshotRoot([], Work).Should().Be(Work);
+        _sut.SnapshotRoot(["--profile=X", "--no-build", "missing-thing"], Work).Should().Be(Work);
     }
 
     private static string LoadFixture(string resourceName)
