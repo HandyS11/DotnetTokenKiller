@@ -211,12 +211,14 @@ nothing but words, quoted text and blanks. Everything else it rewrites gets `ask
 - a command with an environment-variable prefix (`FOO=1 dotnet build`) or any other word before `dotnet`;
 - a chained, piped or backgrounded command (`;`, `&&`, `||`, `|`, `&`), a subshell, or a line break;
 - a redirection (`>`, `<`, here-documents), a command substitution (`$(…)` or backticks, even inside double
-  quotes), a `${…}` expansion, a `!` outside single quotes (history expansion), a comment, or an unterminated quote.
-
+  quotes), a `${…}` expansion, a `!` outside single quotes (history expansion), a comment, or an unterminated quote;
 - a command containing `--tee`, in any quoting, which would let an auto-approved command write a file of the agent's
   choosing (`dotnet test --tee ~/.bashrc`);
-- a command the shell would expand: a `$` outside single quotes, an unquoted `*`, `?` or `[`, or any `{`, since the
-  words dtk sees are not the words that run (`--te$9e` could become `--tee`).
+- a newline or carriage return anywhere, even quoted or after a backslash, since the shell removes a backslash-newline
+  before it splits words (`--te\`, a newline and `e` reach dtk as `--tee`);
+- a brace, parameter or glob expansion: a `$` outside single quotes, an unquoted `*`, `?` or `[`, or any `{`, since
+  the words dtk sees are not the words that run (`--te$9e` could become `--tee`). A word-initial `~` is not refused:
+  it can only become a home directory.
 
 A command dtk does not rewrite gets no reply, which leaves it to your own Copilot CLI policy. `tool restore`,
 `ef migrations`, `ef database`, `stryker` and `jb cleanupcode` are rewritten but never auto-approved.
@@ -566,8 +568,9 @@ When the hook fires, Cursor's `preToolUse` reply can carry `permission: "allow"`
 prompt for the command it rewrote. dtk only takes that shortcut for a command
 `DotnetCommandRewriter.IsAutoApprovable` accepts — a single, plain `dotnet build`, `test`, `restore`, `clean`,
 `format` or `list package` invocation, the same rule Copilot CLI's `allow` reply uses — so it never auto-approves
-something riskier on Cursor's behalf. So a command containing `--tee`, or one the shell would expand (a `$` outside
-single quotes, an unquoted `*`, `?` or `[`, any `{`), stays plain `dotnet`, as do `tool restore`, `ef`, `stryker` and
+something riskier on Cursor's behalf. So a command containing `--tee`, a newline (even quoted or escaped), or a
+brace, parameter or glob expansion (a `$` outside single quotes, an unquoted `*`, `?` or `[`, any `{`) stays plain
+`dotnet`, as do `tool restore`, `ef`, `stryker` and
 `jb cleanupcode`, which are never auto-approvable. A chained, piped or backgrounded command, and `dotnet publish`/`pack` (which
 write artifacts and, with a publish profile, can deploy), run as written and are left to the rule instead. Every
 reply the hook does not rewrite is exactly `{}`, never nothing, because Cursor blocks the tool call on output that

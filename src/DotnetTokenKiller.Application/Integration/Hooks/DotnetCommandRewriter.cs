@@ -58,6 +58,9 @@ internal static class DotnetCommandRewriter
     /// <summary>The blanks the shell splits words on.</summary>
     private static readonly char[] WordSeparators = [' ', '\t', '\n'];
 
+    /// <summary>The line breaks <see cref="IsAutoApprovable"/> refuses wherever they stand.</summary>
+    private static readonly SearchValues<char> LineBreaks = SearchValues.Create("\n\r");
+
     /// <summary>Characters that may precede <c>dotnet</c> where a command starts.</summary>
     private static readonly SearchValues<char> Boundaries = SearchValues.Create(" \t;&|({`\n");
 
@@ -159,15 +162,24 @@ internal static class DotnetCommandRewriter
     /// <summary>
     /// Whether Copilot CLI may run <paramref name="command"/>'s rewrite without asking: it is
     /// <see cref="IsSimpleCommand">simple</see>, its subcommand is one of <see cref="AutoApprovableSubcommands"/>,
-    /// and the shell expands nothing in it and could not hand dtk a <c>--tee</c> option from it
-    /// (<see cref="MayPassTeeOption"/>).
+    /// it holds no newline or carriage return anywhere (quoted, escaped or not), it has no brace, parameter or glob
+    /// expansion (<see cref="ShellExpands"/>), and quote removal could not hand dtk a <c>--tee</c> option from it
+    /// (<see cref="MayPassTeeOption"/>). A word-initial <c>~</c> is not refused: tilde expansion yields a home
+    /// directory, never <c>--tee</c>, short of control over <c>HOME</c>.
     /// <c>dotnet publish</c> and <c>dotnet pack</c> are still rewritten, but they write artifacts (and a publish
     /// profile can deploy), so they are left to the user's own approval.
     /// </summary>
+    /// <remarks>
+    /// The newline rule closes line continuation: the shell removes a backslash-newline before the words are split,
+    /// even inside double quotes, so <c>--te\</c>, a newline and <c>e</c> reach dtk as <c>--tee</c>, and
+    /// <c>dotnet build\</c>, a newline and <c>-server shutdown</c> run <c>dotnet build-server shutdown</c>: words no
+    /// rule that reads the text as written can see. Refusing every newline also covers quoted ones and multi-line
+    /// commands without deciding which ones the shell would join.
+    /// </remarks>
     /// <param name="command">The original, unrewritten command.</param>
     internal static bool IsAutoApprovable(string command)
     {
-        if (!IsSimpleCommand(command) || MayPassTeeOption(command))
+        if (!IsSimpleCommand(command) || command.AsSpan().ContainsAny(LineBreaks) || MayPassTeeOption(command))
         {
             return false;
         }
@@ -196,10 +208,13 @@ internal static class DotnetCommandRewriter
     /// <c>dotnet test &gt; ~/.bashrc</c>.
     /// </para>
     /// <para>
-    /// Auto-approval never covers a command the shell expands (<c>$</c> parameters, globs, braces), because expansion
-    /// can assemble a <c>--tee</c> the text does not show: <c>--te$9e</c> is <c>--tee</c> (an unset parameter expands
+    /// Auto-approval never covers a command with a brace, parameter or glob expansion, because expansion can
+    /// assemble a <c>--tee</c> the text does not show: <c>--te$9e</c> is <c>--tee</c> (an unset parameter expands
     /// to nothing), <c>{--te,x}e</c> is <c>--tee xe</c>, and <c>--te[e]</c> matches a file named <c>--tee</c>. See
-    /// <see cref="ShellExpands"/> for what counts.
+    /// <see cref="ShellExpands"/> for what counts. A word-initial <c>~</c> is the one expansion left in: it yields a
+    /// home directory, never <c>--tee</c>, unless the caller controls <c>HOME</c>. Line continuation, which can join
+    /// <c>--te</c> and <c>e</c> across a backslash-newline, is refused before this runs
+    /// (<see cref="IsAutoApprovable"/> refuses every newline).
     /// </para>
     /// <para>
     /// Nor does it cover a command that contains <c>--tee</c> once quote removal is done, with every <c>'</c>,
@@ -227,14 +242,21 @@ internal static class DotnetCommandRewriter
     }
 
     /// <summary>
-    /// Whether the shell would expand anything in <paramref name="command"/>: a <c>{</c> anywhere (brace expansion),
-    /// a <c>$</c> anywhere outside single quotes (a parameter; double-quoted and backslash-escaped ones included,
-    /// fail-closed), or a <c>*</c>, <c>?</c> or <c>[</c> outside quotes and unescaped (a glob).
+    /// Whether <paramref name="command"/> has a brace, parameter or glob expansion: a <c>{</c> anywhere (brace
+    /// expansion), a <c>$</c> anywhere outside single quotes (a parameter; double-quoted and backslash-escaped ones
+    /// included, fail-closed), or a <c>*</c>, <c>?</c> or <c>[</c> outside quotes and unescaped (a glob).
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// Not every expansion counts. Tilde expansion is left alone: a word-initial <c>~</c> yields a home directory,
+    /// which cannot spell <c>--tee</c> without control over <c>HOME</c>. Line continuation is not this method's job
+    /// either: <see cref="IsAutoApprovable"/> refuses every newline before this runs.
+    /// </para>
+    /// <para>
     /// A walk of its own rather than <see cref="ShellScanner"/>'s, which reports no character inside double quotes,
     /// where a <c>$</c> still expands. A simple command has no <c>$'…'</c>, <c>$"…"</c>, here-document or
     /// substitution, so its quotes and backslashes are all this has to follow.
+    /// </para>
     /// </remarks>
     /// <param name="command">A <see cref="IsSimpleCommand">simple</see> command.</param>
     private static bool ShellExpands(string command)

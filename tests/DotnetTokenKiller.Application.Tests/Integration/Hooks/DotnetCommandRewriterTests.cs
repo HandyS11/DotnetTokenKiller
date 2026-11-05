@@ -316,10 +316,22 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet build $$")]
     // Fail-closed: an escaped `$` is refused too, rather than trusted to stay literal.
     [InlineData("dotnet test \\$X")]
+    // The shell removes a backslash-newline, even inside double quotes: each of these reaches dtk as `--tee`.
+    [InlineData("dotnet test --te\\\ne ~/.bashrc")]
+    [InlineData("dotnet test --t\\\nee=x")]
+    [InlineData("dotnet test -\\\n-tee x")]
+    [InlineData("dotnet test \"--te\\\ne\" x")]
+    // The same continuation turns an approvable `build` into `dotnet build-server shutdown`.
+    [InlineData("dotnet build\\\n-server shutdown")]
+    // Fail-closed: any newline or carriage return is refused, quoted or not.
+    [InlineData("dotnet test --filter \"A\nB\"")]
+    [InlineData("dotnet test --filter 'A\nB'")]
+    [InlineData("dotnet build\r")]
     public void IsAutoApprovable_IsFalse_WhenTheShellExpandsTheCommand(string command)
     {
-        // Expansion can assemble a `--tee` the text does not show, so no expanded command is auto-approved.
-        DotnetCommandRewriter.IsSimpleCommand(command).Should().BeTrue("only the expansion rule refuses it");
+        // Expansion can assemble a `--tee` the text does not show, and so can a line continuation, so neither
+        // an expanded command nor one with a newline is auto-approved.
+        DotnetCommandRewriter.IsSimpleCommand(command).Should().BeTrue("only the expansion or newline rule refuses it");
         DotnetCommandRewriter.IsAutoApprovable(command).Should().BeFalse();
     }
 
@@ -333,6 +345,8 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet test --filter 'A$B'")]
     [InlineData("dotnet test --filter \"Name~Foo*\"")]
     [InlineData("dotnet test --filter Name~Foo\\*")]
+    // A word-initial `~` is expanded but not refused: it yields a home directory, never `--tee`.
+    [InlineData("dotnet build ~/src/App.csproj")]
     public void IsAutoApprovable_StaysTrue_WithoutATeeOption(string command)
     {
         DotnetCommandRewriter.IsAutoApprovable(command).Should().BeTrue();

@@ -95,9 +95,12 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
 rather than guess a command is safe. `IsAutoApprovable` (also Cursor's gate, which rewrites only auto-approvable
 commands) is stricter still: it returns `false` for a `--tee` in any quoting, since an auto-approved `--tee <path>`
-would let the hook approve a file write, and for any command the shell would expand — a `$` outside single quotes, an
-unquoted `*`, `?` or `[`, or any `{` — because `--te$9e` defeats any narrower rule. Such commands stay plain `dotnet`
-under Cursor and get `"ask"` under Copilot CLI. The new subcommands (`tool restore`, `ef`, `stryker`, `jb cleanupcode`)
+would let the hook approve a file write; for any newline or carriage return, quoted or not, since a backslash-newline
+continuation (`--te\`, newline, `e`) reaches dtk as `--tee` and turns `build\`, newline, `-server` into
+`build-server`; and for a brace, parameter or glob expansion — a `$` outside single quotes, an unquoted `*`, `?` or
+`[`, or any `{` — because `--te$9e` defeats any narrower rule. A word-initial `~` is not refused: tilde expansion
+cannot yield `--tee` without control of `HOME`. Such commands stay plain `dotnet` under Cursor and get `"ask"` under
+Copilot CLI. The new subcommands (`tool restore`, `ef`, `stryker`, `jb cleanupcode`)
 are rewritten but never in `AutoApprovableSubcommands`.
 
 dtk's own options are `--tee <path>`, `--max-lines <n>` (value options: `ArgumentPreprocessor` moves the value with
