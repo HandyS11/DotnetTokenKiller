@@ -71,6 +71,22 @@ public sealed class RawOutputCopyFactoryTests : IDisposable
     }
 
     [Fact]
+    public void Open_Throws_WhenPathBlank_WithoutCreatingAFile()
+    {
+        // "   " is a legal file name on Linux, so without the check `--tee "$UNSET"` would create one.
+        var before = Directory.GetFiles(Environment.CurrentDirectory);
+
+        foreach (var blank in new[] { "", "   " })
+        {
+            var act = () => _sut.Open(blank);
+
+            act.Should().Throw<RawOutputCopyException>().Which.Message.Should().Be("a blank path");
+        }
+
+        Directory.GetFiles(Environment.CurrentDirectory).Should().BeEquivalentTo(before);
+    }
+
+    [Fact]
     public void Open_Throws_WhenParentMissing()
     {
         // As with shell redirection, a missing parent directory is not created for the user.

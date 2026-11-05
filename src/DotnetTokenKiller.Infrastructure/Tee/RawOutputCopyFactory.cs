@@ -11,6 +11,13 @@ public sealed class RawOutputCopyFactory : IRawOutputCopyFactory
     {
         ArgumentNullException.ThrowIfNull(path);
 
+        // Before the file system sees it: "   " is a legal file name on Linux, so `--tee "$UNSET"` would otherwise
+        // create one, and an empty path would read as ": The value cannot be an empty string".
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new RawOutputCopyException("a blank path");
+        }
+
         var options = new FileStreamOptions
         {
             // Create truncates an existing file, as `>` does; a missing parent directory is an error, as there.

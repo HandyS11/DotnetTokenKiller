@@ -69,6 +69,10 @@ public sealed class PipeFilterUseCase(
         var raw = await ReadAllAsync(input, counter, cancellationToken).ConfigureAwait(false);
         counter?.Finish(string.Empty);
 
+        // None from here on, as in a wrapped run once its child exits: the input is complete, and a cancellation
+        // landing now must not drop the filtered output, the log or the record of a run that is already over.
+        var completion = CancellationToken.None;
+
         // Piped input is read to completion before anything can be written, so this path gains no
         // durability. It uses the session API so the header format and the retention rules have a
         // single implementation rather than two that can drift.
@@ -82,9 +86,9 @@ public sealed class PipeFilterUseCase(
 
 #pragma warning disable CA2007 // await using disposal does not support ConfigureAwait
         await using var session = CopyingTeeSession.Wrap(
-            await teeService.BeginAsync(commandSlug, provisional, cancellationToken).ConfigureAwait(false), copy);
+            await teeService.BeginAsync(commandSlug, provisional, completion).ConfigureAwait(false), copy);
 #pragma warning restore CA2007
-        await session.Writer.WriteLineAsync(raw.AsMemory(), cancellationToken).ConfigureAwait(false);
+        await session.Writer.WriteLineAsync(raw.AsMemory(), completion).ConfigureAwait(false);
         if (copy is not null)
         {
             await copy.DisposeAsync().ConfigureAwait(false);
@@ -110,7 +114,7 @@ public sealed class PipeFilterUseCase(
             }
         };
 
-        return await pipeline.ProcessAsync(request, session, prepared, cancellationToken).ConfigureAwait(false);
+        return await pipeline.ProcessAsync(request, session, prepared, completion).ConfigureAwait(false);
     }
 
     private const int ReadBlockChars = 64 * 1024;

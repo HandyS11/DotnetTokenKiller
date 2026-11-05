@@ -37,15 +37,19 @@ public class DotnetToolRestoreFilterTests
     }
 
     [Fact]
-    public void Apply_PartialFailure_CountsToolsNotRestored()
+    public void Apply_PartialFailure_ReportsErrorsAndRestoredTools()
     {
+        // The output never says how many tools a failed restore attempted (SDK 10.0.403 stops at the first missing
+        // package and prints no "was restored" line), so the status counts only what it shows: the distinct error
+        // lines, and the tools that were restored.
         const string input = "Tool 'a' (version '1') was restored. Available commands: a\n" +
                              "Tool 'b' (version '1') was restored. Available commands: b\n" +
                              "Tool 'c' (version '1') was restored. Available commands: c\n" +
-                             "Version 1.0.0 of package d is not found in NuGet feeds x.\n";
+                             "Version 1.0.0 of package d is not found in NuGet feeds x.\n" +
+                             "Version 2.0.0 of package e is not found in NuGet feeds x.\n";
 
         _sut.Apply(input, exitCode: 1).Should().EndWith(
-            "✗ dotnet tool restore failed (exit 1): 1 of 4 tools not restored\n");
+            "✗ dotnet tool restore failed (exit 1): 2 errors · 3 tools restored\n");
     }
 
     [Fact]

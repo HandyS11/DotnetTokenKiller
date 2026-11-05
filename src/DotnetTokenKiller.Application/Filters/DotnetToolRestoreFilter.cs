@@ -31,6 +31,7 @@ public sealed partial class DotnetToolRestoreFilter(string? rootPath = null) : I
         var commands = new List<string>();
         var toolCount = 0;
         var errors = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var rawLine in strippedOutput.Split('\n'))
         {
             var line = rawLine.Trim();
@@ -49,7 +50,7 @@ public sealed partial class DotnetToolRestoreFilter(string? rootPath = null) : I
             }
 
             var shortened = TextHelpers.ShortenPathsInLine(line, RootPath);
-            if (!errors.Contains(shortened))
+            if (seen.Add(shortened))
             {
                 errors.Add(shortened);
             }
@@ -86,15 +87,24 @@ public sealed partial class DotnetToolRestoreFilter(string? rootPath = null) : I
         return sb.ToString();
     }
 
+    /// <summary>
+    /// What a failed restore's status line counts: the distinct error lines, and the tools restored when there were
+    /// any. Never a total of tools: the output does not say how many a failed restore attempted (SDK 10.0.403 stops
+    /// at the first missing package), and one tool's failure can span several lines.
+    /// </summary>
+    /// <param name="toolCount">The tools the output reported as restored.</param>
+    /// <param name="errorCount">The distinct error lines kept.</param>
     private static string FailureSummary(int toolCount, int errorCount)
     {
-        if (toolCount > 0)
-        {
-            return $"{errorCount} of {toolCount + errorCount} tools not restored";
-        }
-
-        return $"{errorCount} error{(errorCount == 1 ? "" : "s")}";
+        var errors = Counted(errorCount, "error");
+        return toolCount > 0 ? $"{errors} · {Counted(toolCount, "tool")} restored" : errors;
     }
+
+    /// <summary><c>1 error</c>, <c>2 errors</c>: a count and its noun, plural when it is not one.</summary>
+    /// <param name="count">The count.</param>
+    /// <param name="noun">The singular noun.</param>
+    private static string Counted(int count, string noun) =>
+        string.Create(CultureInfo.InvariantCulture, $"{count} {noun}{(count == 1 ? "" : "s")}");
 
     [GeneratedRegex(@"^Tool '[^']*' \(version '[^']*'\) was restored\. Available commands: (?<commands>.*)$")]
     private static partial Regex RestoredToolPattern();

@@ -225,6 +225,49 @@ public class PipeFilterUseCaseTests
         await _tracker.Received(1).WarmUpAsync(Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task RunAsync_CancelledOnceStdinIsRead_StillWritesTheOutputTheLogAndTheRecord()
+    {
+        // As in a wrapped run once the child exits: the input is complete, so a late cancellation must not drop
+        // the filtered output, the log or the record of a run that is already over.
+        using var cts = new CancellationTokenSource();
+        var session = Substitute.For<ITeeSession>();
+        session.Writer.Returns(new StringWriter());
+        _teeService.BeginAsync(Arg.Any<string>(), Arg.Any<TeeLogHeader>(), Arg.Any<CancellationToken>())
+            .Returns(session);
+        _filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns("condensed");
+        var output = new StringWriter();
+
+        var exitCode = await Create(new CancelAtEndReader("raw", cts), output)
+            .RunAsync(_filter, "build", 0, new OutputOptions(), cancellationToken: cts.Token);
+
+        exitCode.Should().Be(0);
+        output.ToString().Should().Be("condensed");
+        await session.Received(1).FinalizeAsync(0, Arg.Any<CancellationToken>());
+        await _tracker.Received(1).RecordAsync(Arg.Any<CommandRecord>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A stdin stand-in that cancels the run once it has handed over all of its content.</summary>
+    /// <param name="content">The content to return from the first read.</param>
+    /// <param name="cts">Cancelled when the reader reports the end of its input.</param>
+    private sealed class CancelAtEndReader(string content, CancellationTokenSource cts) : TextReader
+    {
+        private bool _consumed;
+
+        public override async ValueTask<int> ReadAsync(Memory<char> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_consumed)
+            {
+                await cts.CancelAsync();
+                return 0;
+            }
+
+            _consumed = true;
+            content.AsSpan().CopyTo(buffer.Span);
+            return content.Length;
+        }
+    }
+
     /// <summary>A stdin stand-in that records whether tracking setup had started when it was read.</summary>
     /// <param name="warmUpStarted">Completes once tracking setup has started.</param>
     /// <param name="content">The content to return from the first <see cref="ReadAsync(Memory{char}, CancellationToken)"/> call.</param>
