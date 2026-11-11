@@ -26,10 +26,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 17
+      # The scanner engine runs on this JDK: `begin` passes sonar.scanner.skipJreProvisioning=true, so the
+      # scanner never downloads its own JRE from the SonarQube server. When that download times out, the
+      # scanner falls back to JAVA_HOME, and the server's engine needs Java 21 (it provisions OpenJDK 21):
+      # on a Java 17 JDK it crashes on startup ("Pipe is broken", exit 134), as RustPlusApi's analysis did.
+      - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
-          java-version: 17
+          java-version: 21
           distribution: 'zulu'
 
       - name: Setup .NET
@@ -71,9 +75,9 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
         run: |
-          ./.sonar/scanner/dotnet-sonarscanner begin /k:"$SONAR_PROJECT_KEY" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.exclusions="samples/**/*,.claude/**/*,benchmarks/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,samples/**/*,benchmarks/**/*,docs/**/*,eng/**/*,src/DotnetTokenKiller.Cli/Program.cs,src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs"
+          ./.sonar/scanner/dotnet-sonarscanner begin /k:"$SONAR_PROJECT_KEY" /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.scanner.skipJreProvisioning=true /d:sonar.exclusions="samples/**/*,.claude/**/*,benchmarks/**/*" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" /d:sonar.coverage.exclusions=".claude/**/*,samples/**/*,benchmarks/**/*,docs/**/*,eng/**/*,src/DotnetTokenKiller.Cli/Program.cs,src/DotnetTokenKiller.Domain/Filters/FilterKeys.cs"
           dotnet build DotnetTokenKiller.slnx
-          dotnet test DotnetTokenKiller.slnx --no-build --collect:"XPlat Code Coverage" --logger trx -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          dotnet test DotnetTokenKiller.slnx --no-build --collect:"XPlat Code Coverage" --logger "junit;LogFileName={assembly}.junit.xml" -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
           ./.sonar/scanner/dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
 
       - name: Upload coverage reports to Codecov
@@ -81,6 +85,8 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      # Codecov reads test results only as JUnit XML, which it finds by name (`*junit*.xml`), hence the
+      # junit logger above (JunitXml.TestLogger, referenced by every test project) instead of trx.
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7

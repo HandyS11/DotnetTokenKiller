@@ -8,13 +8,12 @@
 
 # DocFX
 **/_site/
-**/api/
+docs/api/
 specs/toc.yml
 **.manifest
 **.pdf
 **.log
 **.mdd
-**.html
 **.cache
 **.tmp
 **.lnk
