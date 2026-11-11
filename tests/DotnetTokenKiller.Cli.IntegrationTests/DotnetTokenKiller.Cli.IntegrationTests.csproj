@@ -18,6 +18,7 @@
     <PackageReference Include="FluentAssertions"/>
     <PackageReference Include="Spectre.Console.Testing"/>
     <PackageReference Include="Verify.Xunit"/>
+    <PackageReference Include="JunitXml.TestLogger"/>
     <PackageReference Include="coverlet.collector">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
