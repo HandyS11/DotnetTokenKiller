@@ -1406,7 +1406,8 @@ public class DotnetTestFilterTests
         // Real xunit.v3.mtp-v2 4.0.2 run. Unlike MSTest, xUnit v3 prints "from <assembly>" BEFORE the message
         // and prints the message once: the report used to show a blank line for every failure. The nested
         // exception's message carries xUnit's own wrapper type, kept as printed; its "----- Inner Stack Trace
-        // -----" line belongs to the stack trace, not the message.
+        // -----" line belongs to the stack trace, not the message. With three failures, each message has 1500
+        // characters, and the long one fits whole.
         var fixture = LoadFixture("dotnet_test_mtp_xunit3_failures.txt");
 
         var result = _sut.Apply(fixture, exitCode: 2);
@@ -1418,7 +1419,7 @@ public class DotnetTestFilterTests
                 Assert.Equal() Failure: Collections differ at pos 0 — Expected: [1, 2, 3], Actual: [9, 2, 3]
                 at XV3/Tests.cs:line 29
               XV3.NestedTests.FailNestedException [11ms]
-                Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidOperationException : An error occurred while saving the entity changes while processing the order pipeline for customer 12345 in region eu-west; see the inner exception for details about the ... ---- System.ArgumentException : THE-INNER-CAUSE
+                Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidOperationException : An error occurred while saving the entity changes while processing the order pipeline for customer 12345 in region eu-west; see the inner exception for details about the operation that was attempted, the retry policy that was applied, and the transaction that was rolled back before the failure surfaced to the caller of the repository ---- System.ArgumentException : THE-INNER-CAUSE
                 at XV3/Tests.cs:line 14
               XV3.DiffTests.FailStrings [2ms]
                 Assert.Equal() Failure: Strings differ at pos 9 — Expected: "hello world", Actual: "hello wordl"
@@ -2107,10 +2108,12 @@ public class DotnetTestFilterTests
     {
         // xUnit's VSTest adapter prints "Outer : message" and, on the next line, "---- Inner : message". The
         // outer message of the real fixture is over 300 characters, so cutting the joined text at the
-        // budget used to drop the inner exception, which is usually the real cause.
-        var fixture = LoadFixture("dotnet_test_nested_exception.txt");
+        // budget of a run with many failures used to drop the inner exception, which is usually the real cause.
+        var block = LoadFixture("dotnet_test_nested_exception.txt").Split('\n')
+            .SkipWhile(l => !l.Contains("Failed XN.NestedTests", StringComparison.Ordinal))
+            .TakeWhile(l => !l.Contains("Failed!", StringComparison.Ordinal));
 
-        var result = _sut.Apply(fixture, exitCode: 1);
+        var result = _sut.Apply(ManyFailures(string.Join('\n', block), 15), exitCode: 1);
 
         result.Should().Contain("---- System.ArgumentException : THE-INNER-CAUSE");
         result.Should().Contain("System.InvalidOperationException : An error occurred while saving");
@@ -2118,21 +2121,19 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_NestedExceptionWithALongInnerMessage_CapsTheInnerAtTwoHundred()
+    public void Apply_NestedExceptionWithALongInnerMessage_CapsTheInnerAtTwoThirdsOfTheMessage()
     {
         var inner = string.Concat(Enumerable.Repeat("0123456789", 40));
-        var input = $"""
+        var block = $"""
                        Failed MyTests.Nested [1 ms]
                        Error Message:
                         System.InvalidOperationException : {new string('o', 500)}
                      ---- System.ArgumentException : {inner}
                        Stack Trace:
                           at MyTests.Nested() in /path/Test.cs:line 1
-
-                     Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                      """;
 
-        var message = MessageLine(_sut.Apply(input, exitCode: 1));
+        var message = MessageLine(_sut.Apply(ManyFailures(block, 15), exitCode: 1));
 
         const string marker = "---- System.ArgumentException : ";
         message.Should().EndWith($"{marker}{inner[..(200 - marker.Length)]}...");
@@ -2142,10 +2143,63 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_ASingleFailure_KeepsAnAggregatedMessageWhole()
+    {
+        // A FluentAssertions scope or a DI validation error aggregates several failures into one message: with one
+        // test failing, all of them fit, where a 300-character cut left the agent grepping the log for the rest.
+        var errors = Enumerable.Range(1, 6)
+            .Select(i => $"Error while validating the service descriptor 'ServiceType: App.IService{i} Lifetime: "
+                         + $"Scoped ImplementationType: App.Service{i}': Unable to resolve service for type "
+                         + $"'App.IMissing{i}' while attempting to activate 'App.Service{i}'.")
+            .ToList();
+        var input = $"""
+                       Failed MyTests.Container [1 ms]
+                       Error Message:
+                        System.AggregateException : Some services are not able to be constructed
+                     {string.Join("\n", errors)}
+                       Stack Trace:
+                          at MyTests.Container() in /path/Test.cs:line 1
+
+                     Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
+                     """;
+
+        var message = MessageLine(_sut.Apply(input, exitCode: 1));
+
+        message.Should().StartWith("System.AggregateException : Some services are not able to be constructed");
+        foreach (var error in errors)
+        {
+            message.Should().Contain(error);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, 3000)]
+    [InlineData(2, 2250)]
+    [InlineData(6, 750)]
+    [InlineData(15, 300)]
+    [InlineData(20, 300)]
+    public void Apply_FailureMessages_ShareOneBudget(int failures, int cap)
+    {
+        // The fewer tests failed, the more of each message is kept: never past 3000 characters for one, never under
+        // 300 for any, and the 15 shown (at most) never more than 4500 together.
+        var block = $"""
+                       Failed MyTests.Long [1 ms]
+                       Error Message:
+                        {new string('m', 5000)}
+                       Stack Trace:
+                          at MyTests.Long() in /path/Test.cs:line 1
+                     """;
+
+        var message = MessageLine(_sut.Apply(ManyFailures(block, failures), exitCode: 1));
+
+        message.Should().Be($"{new string('m', cap)}...");
+    }
+
+    [Fact]
     public void Apply_ThreeLevelsOfNesting_KeepsTheDeepestSegment()
     {
         // xUnit adds four dashes per level ("----", "--------"), as printed for a real three-level chain.
-        var input = $"""
+        var block = $"""
                        Failed MyTests.Deep [1 ms]
                        Error Message:
                         System.InvalidOperationException : {new string('o', 400)}
@@ -2153,11 +2207,9 @@ public class DotnetTestFilterTests
                      -------- System.TimeoutException : THE-DEEPEST-CAUSE
                        Stack Trace:
                           at MyTests.Deep() in /path/Test.cs:line 1
-
-                     Failed!  - Failed: 1, Passed: 0, Skipped: 0, Total: 1, Duration: 1 ms - Tests.dll
                      """;
 
-        var message = MessageLine(_sut.Apply(input, exitCode: 1));
+        var message = MessageLine(_sut.Apply(ManyFailures(block, 15), exitCode: 1));
 
         message.Should().EndWith("... -------- System.TimeoutException : THE-DEEPEST-CAUSE");
         message.Should().NotContain("middle");
@@ -2768,6 +2820,17 @@ public class DotnetTestFilterTests
     {
         _sut.Apply("some unrelated output\n", exitCode: 1).Should().BeEmpty();
     }
+
+    /// <summary>
+    /// A VSTest run of <paramref name="count"/> failures, each <paramref name="block"/> (one failure's lines) with
+    /// its test's name numbered.
+    /// </summary>
+    /// <param name="block">One failure's lines.</param>
+    /// <param name="count">How many failures.</param>
+    private static string ManyFailures(string block, int count) =>
+        string.Concat(Enumerable.Range(1, count).Select(i => block.Replace("Failed MyTests.", $"Failed MyTests{i}.",
+            StringComparison.Ordinal).Replace("Failed XN.", $"Failed XN{i}.", StringComparison.Ordinal) + "\n"))
+        + $"\nFailed!  - Failed: {count}, Passed: 0, Skipped: 0, Total: {count}, Duration: 1 ms - Tests.dll\n";
 
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>
     /// <param name="output">The filtered output.</param>

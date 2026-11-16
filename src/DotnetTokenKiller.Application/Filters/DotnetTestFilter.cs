@@ -16,7 +16,19 @@ namespace DotnetTokenKiller.Application.Filters;
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IContextualOutputFilter
 {
     private const int MaxFailures = 15;
+
+    /// <summary>The fewest characters a failure's message is shown with, however many tests failed.</summary>
     private const int MessageMaxLen = 300;
+
+    /// <summary>The most characters a failure's message is shown with, when it is the only one.</summary>
+    private const int SoleMessageMaxLen = 3000;
+
+    /// <summary>
+    /// The characters the messages of the failures shown share: each gets an equal part of it, between
+    /// <see cref="MessageMaxLen"/> and <see cref="SoleMessageMaxLen"/>, so a run with one or a few failures shows
+    /// a long message whole (an aggregated assertion, a container's validation errors) and one with many stays short.
+    /// </summary>
+    private const int MessageBudget = MaxFailures * MessageMaxLen;
 
     /// <summary>How many lines of a failing test's own output <c>--show-output</c> prints per test.</summary>
     private const int MaxOutputLines = 20;
@@ -24,8 +36,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <summary>How many warning codes the status line names before it trails off.</summary>
     private const int MaxWarningCodes = 3;
 
-    /// <summary>Cap on the innermost exception of a nested message, so that it survives a long outer one.</summary>
-    private const int InnerExceptionMaxLen = 200;
 
     /// <summary>What a failure reads when Reqnroll found no binding for a step, followed by the steps.</summary>
     private const string ReqnrollPendingPrefix = "No matching step definition: ";
@@ -478,9 +488,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         var (sourceRef, afterStack) = FindSourceRef(lines, i);
         i = afterStack;
 
-        var message = ReqnrollPendingMessage(msgLines, lines, detailStart, afterStack) ?? CompactMessage(msgLines);
+        var pending = ReqnrollPendingMessage(msgLines, lines, detailStart, afterStack);
         var output = CollectVsTestOutput(lines, detailStart, afterStack);
-        state.Failures.Add(new FailureInfo(testName, duration, message, sourceRef, output));
+        state.Failures.Add(new FailureInfo(testName, duration, msgLines, pending, sourceRef, output));
         return i;
     }
 
@@ -546,7 +556,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             i++;
         }
 
-        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef, output));
+        state.Failures.Add(new FailureInfo(testName, duration, msgLines, null, sourceRef, output));
         return i;
     }
 
@@ -1154,10 +1164,13 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     {
         sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({failedCount}):");
 
-        foreach (var f in state.Failures.Take(MaxFailures))
+        var shown = state.Failures.Take(MaxFailures).ToList();
+        var messageMaxLen = Math.Clamp(MessageBudget / Math.Max(shown.Count, 1), MessageMaxLen, SoleMessageMaxLen);
+        foreach (var f in shown)
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration}]")
-                .AppendLine(CultureInfo.InvariantCulture, $"    {f.Message}");
+                .AppendLine(CultureInfo.InvariantCulture,
+                    $"    {f.PresetMessage ?? CompactMessage(f.MessageLines, messageMaxLen)}");
             if (!string.IsNullOrEmpty(f.SourceRef))
             {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"    at {f.SourceRef}");
@@ -1195,24 +1208,25 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// Joins a failure's message lines into the one line the report prints. An xUnit assertion with an
     /// <c>Expected:</c>/<c>Actual:</c> pair keeps its <c>Assert.…</c> header and its <c>↓ (pos N)</c> pointer; a
     /// nested exception keeps its innermost <c>---- Type : message</c> segment, the usual real cause, up to
-    /// <see cref="InnerExceptionMaxLen"/> characters.
+    /// two thirds of <paramref name="maxLen"/>.
     /// </summary>
     /// <param name="lines">The trimmed, non-empty lines of the message.</param>
-    private static string CompactMessage(List<string> lines)
+    /// <param name="maxLen">The most characters the line may take, before the ellipsis of a cut.</param>
+    private static string CompactMessage(IReadOnlyList<string> lines, int maxLen)
     {
         if (lines.Count == 0)
         {
             return string.Empty;
         }
 
-        var expectedLine = lines.Find(l => l.StartsWith("Expected:", StringComparison.OrdinalIgnoreCase));
-        var actualLine = lines.Find(l => l.StartsWith("Actual:", StringComparison.OrdinalIgnoreCase));
+        var expectedLine = lines.FirstOrDefault(l => l.StartsWith("Expected:", StringComparison.OrdinalIgnoreCase));
+        var actualLine = lines.FirstOrDefault(l => l.StartsWith("Actual:", StringComparison.OrdinalIgnoreCase));
         if (expectedLine != null && actualLine != null)
         {
-            return CompactAssertion(lines, expectedLine, actualLine);
+            return CompactAssertion(lines, expectedLine, actualLine, maxLen);
         }
 
-        return CompactNested(lines);
+        return CompactNested(lines, maxLen);
     }
 
     /// <summary>
@@ -1223,17 +1237,19 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <param name="lines">The message lines.</param>
     /// <param name="expectedLine">The line starting with <c>Expected:</c>.</param>
     /// <param name="actualLine">The line starting with <c>Actual:</c>.</param>
-    private static string CompactAssertion(List<string> lines, string expectedLine, string actualLine)
+    /// <param name="maxLen">The most characters the line may take, before the ellipsis of a cut.</param>
+    private static string CompactAssertion(IReadOnlyList<string> lines, string expectedLine, string actualLine,
+        int maxLen)
     {
         var pair = $"{CollapsePadding(expectedLine)}, {CollapsePadding(actualLine)}";
         if (!lines[0].StartsWith("Assert.", StringComparison.Ordinal))
         {
-            return TextHelpers.Truncate(pair, MessageMaxLen);
+            return TextHelpers.Truncate(pair, maxLen);
         }
 
         var pointer = lines.Select(l => AssertionPositionPattern().Match(l)).FirstOrDefault(m => m.Success);
         var position = pointer is null ? string.Empty : $" at pos {pointer.Groups["pos"].Value}";
-        return TextHelpers.Truncate($"{lines[0]}{position} — {pair}", MessageMaxLen);
+        return TextHelpers.Truncate($"{lines[0]}{position} — {pair}", maxLen);
     }
 
     private static string CollapsePadding(string labelledLine) =>
@@ -1242,26 +1258,42 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <summary>
     /// Joins the lines with spaces. A message longer than the budget that nests exceptions (xUnit's
     /// <c>---- Type : message</c> lines) keeps its last such segment whole, capped at
-    /// <see cref="InnerExceptionMaxLen"/>, and truncates what comes before it to the rest of the budget.
+    /// two thirds of <paramref name="maxLen"/>, and truncates what comes before it to the rest of the budget.
     /// </summary>
     /// <param name="lines">The message lines.</param>
-    private static string CompactNested(List<string> lines)
+    /// <param name="maxLen">The most characters the line may take, before the ellipsis of a cut.</param>
+    private static string CompactNested(IReadOnlyList<string> lines, int maxLen)
     {
         var joined = string.Join(" ", lines);
-        if (joined.Length <= MessageMaxLen)
+        if (joined.Length <= maxLen)
         {
             return joined;
         }
 
-        var innerIndex = lines.FindLastIndex(l => InnerExceptionLinePattern().IsMatch(l));
+        var innerIndex = LastInnerExceptionLine(lines);
         if (innerIndex <= 0)
         {
-            return TextHelpers.Truncate(joined, MessageMaxLen);
+            return TextHelpers.Truncate(joined, maxLen);
         }
 
-        var inner = TextHelpers.Truncate(string.Join(" ", lines.Skip(innerIndex)), InnerExceptionMaxLen);
-        var outer = TextHelpers.Truncate(string.Join(" ", lines.Take(innerIndex)), MessageMaxLen - inner.Length - 1);
+        var inner = TextHelpers.Truncate(string.Join(" ", lines.Skip(innerIndex)), maxLen * 2 / 3);
+        var outer = TextHelpers.Truncate(string.Join(" ", lines.Take(innerIndex)), maxLen - inner.Length - 1);
         return $"{outer} {inner}";
+    }
+
+    /// <summary>The index of the last <c>---- Type : message</c> line, or <c>-1</c>.</summary>
+    /// <param name="lines">The message lines.</param>
+    private static int LastInnerExceptionLine(IReadOnlyList<string> lines)
+    {
+        for (var i = lines.Count - 1; i >= 0; i--)
+        {
+            if (InnerExceptionLinePattern().IsMatch(lines[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static double NormalizeDurationToMs(double value, string unit)
@@ -1570,6 +1602,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         public bool DurationExact { get; set; } = true;
     }
 
-    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef,
-        IReadOnlyList<string> Output);
+    /// <summary>A failed test as the report shows it.</summary>
+    /// <param name="TestName">The test's name.</param>
+    /// <param name="Duration">How long it ran, as the runner printed it.</param>
+    /// <param name="MessageLines">
+    /// The trimmed, non-empty lines of its message, compacted when the report is rendered, once the number of
+    /// failures shown, which sets how long each message may be, is known.
+    /// </param>
+    /// <param name="PresetMessage">The message to show instead, already compacted.</param>
+    /// <param name="SourceRef">Where it failed, or an empty string.</param>
+    /// <param name="Output">What it printed.</param>
+    private sealed record FailureInfo(string TestName, string Duration, IReadOnlyList<string> MessageLines,
+        string? PresetMessage, string SourceRef, IReadOnlyList<string> Output);
 }
