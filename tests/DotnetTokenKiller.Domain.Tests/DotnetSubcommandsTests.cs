@@ -132,6 +132,37 @@ public class DotnetSubcommandsTests
         match.TokenCount.Should().Be(2);
     }
 
+    [Theory]
+    [InlineData("ISDM.slnx")]
+    [InlineData("src/App/App.csproj")]
+    [InlineData("LIST")]
+    public void TryMatch_ListPackageWithItsTargetBetweenTheTokens_ConsumesAllThree(string target)
+    {
+        // dotnet takes the project or solution of `list package` between the two words, and rejects it after them.
+        DotnetSubcommands.TryMatch(["list", target, "PACKAGE", "--vulnerable"], out var match).Should().BeTrue();
+
+        match.Should().Be(new SubcommandMatch("list package", 3, TargetIndex: 1));
+    }
+
+    [Theory]
+    [InlineData("list", "--verbosity", "package")]
+    [InlineData("list", "", "package")]
+    [InlineData("list", "ISDM.slnx", "reference")]
+    [InlineData("tool", "x", "restore")]
+    public void TryMatch_AWordBetweenTokensOfAnotherShape_ReturnsFalse(string first, string second, string third)
+    {
+        DotnetSubcommands.TryMatch([first, second, third], out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void TryMatch_ContiguousTokens_HaveNoTarget()
+    {
+        DotnetSubcommands.TryMatch(["list", "package", "ISDM.slnx"], out var match).Should().BeTrue();
+
+        match.Should().Be(new SubcommandMatch("list package", 2));
+        match.TargetIndex.Should().Be(-1);
+    }
+
     [Fact]
     public void TryMatch_MultiTokenCandidate_DoesNotMatchOnFirstTokenAlone()
     {

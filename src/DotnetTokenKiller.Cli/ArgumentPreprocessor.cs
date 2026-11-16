@@ -158,10 +158,12 @@ internal static class ArgumentPreprocessor
             return args;
         }
 
-        var canonicalTokens = match.Name.Split(' ');
+        // The subcommand's words, not a project or solution dotnet takes between them (list ISDM.slnx package).
+        var words = match.Name.Split(' ').Zip(match.WordIndices, (token, index) => (Token: token, Index: 1 + index))
+            .ToList();
         var alreadyCanonical =
             string.Equals(args[0], DotnetCommand, StringComparison.Ordinal) &&
-            !canonicalTokens.Where((token, i) => !string.Equals(args[1 + i], token, StringComparison.Ordinal)).Any();
+            words.TrueForAll(word => string.Equals(args[word.Index], word.Token, StringComparison.Ordinal));
 
         if (alreadyCanonical)
         {
@@ -170,9 +172,9 @@ internal static class ArgumentPreprocessor
 
         var normalized = (string[])args.Clone();
         normalized[0] = DotnetCommand;
-        for (var i = 0; i < canonicalTokens.Length; i++)
+        foreach (var (token, index) in words)
         {
-            normalized[1 + i] = canonicalTokens[i];
+            normalized[index] = token;
         }
 
         return normalized;
@@ -387,7 +389,7 @@ internal static class ArgumentPreprocessor
         }
 
         var firstArgIndex = 1 + match.TokenCount;
-        if (args.Length <= firstArgIndex)
+        if (args.Length <= firstArgIndex && match.TargetIndex < 0)
         {
             return args;
         }
@@ -398,8 +400,10 @@ internal static class ArgumentPreprocessor
             Array.Fill(isDtkToken, true, option.Index, option.Length);
         }
 
+        // Spectre routes a subcommand by its words alone, so a project or solution dotnet takes between them
+        // (list ISDM.slnx package) leads the arguments after the separator, where the command puts it back.
         var dtkFlags = new List<string>();
-        var dotnetArgs = new List<string>();
+        var dotnetArgs = match.TargetIndex < 0 ? new List<string>() : [args[1 + match.TargetIndex]];
         for (var i = firstArgIndex; i < args.Length; i++)
         {
             (isDtkToken[i] ? dtkFlags : dotnetArgs).Add(args[i]);
@@ -410,8 +414,8 @@ internal static class ArgumentPreprocessor
             return args;
         }
 
-        var updated = new List<string>(args.Length + 1);
-        updated.AddRange(args[..firstArgIndex]);
+        var updated = new List<string>(args.Length + 1) { args[0] };
+        updated.AddRange(match.WordIndices.Select(index => args[1 + index]));
         updated.AddRange(dtkFlags);
         updated.Add("--");
         updated.AddRange(dotnetArgs);

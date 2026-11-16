@@ -36,6 +36,22 @@ public class ListPackageIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task ListPackage_WithItsTargetBetweenTheTokens_IsFiltered_AndTrackedUnderItsFullName()
+    {
+        // dotnet's own syntax, `dotnet list <PROJECT> package`, which rejects the target after `package`: dtk routes
+        // it to the filter and hands it back to dotnet in this order.
+        var (output, exitCode, dbPath) = await IntegrationTestHelper.RunDtkWithDbAsync(
+            "dotnet", "list", SampleApp, "package");
+
+        exitCode.Should().Be(0);
+        output.Should().NotContain("Top-level Package", "the raw table must not survive filtering");
+        output.Should().Contain("dotnet list package");
+
+        var commands = await IntegrationTestHelper.ReadTrackedCommandsAsync(dbPath);
+        commands.Should().Contain("list package");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
     public async Task ListReference_StillPassesThroughUnfiltered()
     {
         var (output, _, _) = await IntegrationTestHelper.RunDtkWithDbAsync("dotnet", "list", "reference");

@@ -120,6 +120,14 @@ public static class DotnetSubcommands
         new HashSet<string>(StringComparer.Ordinal) { EfMigrations, EfDatabase, Stryker, JbCleanupCode };
 
     /// <summary>
+    /// The subcommands that dotnet gives a project or solution between their words, and nowhere else:
+    /// <c>dotnet list &lt;PROJECT | SOLUTION&gt; package</c> (dotnet rejects <c>dotnet list package ISDM.slnx</c>).
+    /// <see cref="TryMatch(IReadOnlyList{string}, out SubcommandMatch)"/> matches them with that word in place.
+    /// </summary>
+    public static readonly IReadOnlySet<string> TargetBetweenWords =
+        new HashSet<string>(StringComparer.Ordinal) { ListPackage };
+
+    /// <summary>
     /// The canonical names as a case-insensitive set, for asserting membership and binding other
     /// restatements of the list back to it.
     /// </summary>
@@ -145,7 +153,10 @@ public static class DotnetSubcommands
     private static readonly IReadOnlyList<string[]> OrderedMatchers = BuildMatchers(Ordered);
 
     /// <summary>
-    /// Matches the leading tokens of <paramref name="args"/> against the canonical subcommands.
+    /// Matches the leading tokens of <paramref name="args"/> against the canonical subcommands. A subcommand in
+    /// <see cref="TargetBetweenWords"/> also matches with one word that is not an option between its own
+    /// (<c>["list", "ISDM.slnx", "package"]</c>): the match then consumes it too, and
+    /// <see cref="SubcommandMatch.TargetIndex"/> says where it is.
     /// </summary>
     /// <param name="args">Arguments starting at the subcommand, e.g. <c>["list", "package", "--outdated"]</c>.</param>
     /// <param name="match">The canonical name and consumed token count, or <see langword="default"/>.</param>
@@ -181,14 +192,44 @@ public static class DotnetSubcommands
         ArgumentNullException.ThrowIfNull(args);
 
         var tokens = matchers.FirstOrDefault(candidate => StartsWith(args, candidate));
-        if (tokens is null)
+        if (tokens is not null)
         {
-            match = default;
-            return false;
+            match = new SubcommandMatch(string.Join(' ', tokens), tokens.Length);
+            return true;
         }
 
-        match = new SubcommandMatch(string.Join(' ', tokens), tokens.Length);
-        return true;
+        tokens = matchers.FirstOrDefault(candidate => StartsWithTargetBetween(args, candidate));
+        if (tokens is not null)
+        {
+            match = new SubcommandMatch(string.Join(' ', tokens), tokens.Length + 1, TargetIndex: 1);
+            return true;
+        }
+
+        match = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="args"/> starts with a <see cref="TargetBetweenWords"/> subcommand's first word, a
+    /// project or solution (a word that is not an option), then the rest of its words.
+    /// </summary>
+    /// <param name="args">Arguments starting at the subcommand.</param>
+    /// <param name="tokens">A candidate's words.</param>
+    private static bool StartsWithTargetBetween(IReadOnlyList<string> args, string[] tokens) =>
+        tokens.Length > 1
+        && TargetBetweenWords.Contains(string.Join(' ', tokens))
+        && args.Count > tokens.Length
+        && IsTarget(args[1])
+        && string.Equals(args[0], tokens[0], StringComparison.OrdinalIgnoreCase)
+        && !tokens.Skip(1).Where((token, i) => !string.Equals(args[i + 2], token, StringComparison.OrdinalIgnoreCase))
+            .Any();
+
+    /// <summary>Whether <paramref name="token"/> can name a project or solution: it is not empty and not an option.</summary>
+    /// <param name="token">An argument.</param>
+    public static bool IsTarget(string token)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+        return token.Length > 0 && token[0] != '-';
     }
 
     private static bool StartsWith(IReadOnlyList<string> args, string[] tokens) =>

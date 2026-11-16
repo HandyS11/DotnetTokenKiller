@@ -320,8 +320,9 @@ public static class PassthroughSubcommands
 
         if (string.Equals(dotnetArgs[0], "list", StringComparison.OrdinalIgnoreCase))
         {
-            return dotnetArgs.Count > 1
-                   && string.Equals(dotnetArgs[1], "package", StringComparison.OrdinalIgnoreCase)
+            // With or without the project or solution dotnet takes between the words (list ISDM.slnx package).
+            return DotnetSubcommands.TryMatch(dotnetArgs, out var match)
+                   && match.Name == DotnetSubcommands.ListPackage
                    && RequestsJsonFormat(dotnetArgs);
         }
 
