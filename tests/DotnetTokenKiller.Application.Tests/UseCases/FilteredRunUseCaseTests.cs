@@ -1434,7 +1434,7 @@ public class FilteredRunUseCaseTests
         var root = Path.Combine(Path.GetTempPath(), "snap-root");
         var before = new FileContentSnapshot(root, new Dictionary<string, string> { ["a.cs"] = "1", ["b.cs"] = "1" });
         var after = new FileContentSnapshot(root, new Dictionary<string, string> { ["a.cs"] = "1", ["b.cs"] = "2" });
-        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        _snapshotter.Take(root, Arg.Any<Func<string, bool>?>(), Arg.Any<CancellationToken>()).Returns(before, after);
         var filter = new SnapshotFilter(root);
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
@@ -1446,7 +1446,9 @@ public class FilteredRunUseCaseTests
         filter.Seen.Computed.Should().BeTrue();
         filter.Seen.ChangedPaths.Should().Equal("b.cs");
         filter.Arguments.Should().Equal("X.slnx");
-        _snapshotter.Received(2).Take(root, Arg.Any<CancellationToken>());
+        _snapshotter.Received(2).Take(
+            root, Arg.Is<Func<string, bool>?>(f => f != null && f("a.cs") && !f("rows.csv")),
+            Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -1467,7 +1469,7 @@ public class FilteredRunUseCaseTests
             new Dictionary<string, string> { ["a.cs"] = "1", ["logs/raw.log"] = "empty" });
         var after = new FileContentSnapshot(root,
             new Dictionary<string, string> { ["a.cs"] = "2", ["logs/raw.log"] = "filled" });
-        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        _snapshotter.Take(root, Arg.Any<Func<string, bool>?>(), Arg.Any<CancellationToken>()).Returns(before, after);
         _rawOutputCopyFactory.Open(teePath).Returns(new RecordingRawOutputCopy());
         var filter = new SnapshotFilter(root);
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1486,7 +1488,7 @@ public class FilteredRunUseCaseTests
         var root = Path.Combine(Environment.CurrentDirectory, "src");
         var before = new FileContentSnapshot(root, new Dictionary<string, string> { ["raw.log"] = "1" });
         var after = new FileContentSnapshot(root, new Dictionary<string, string> { ["raw.log"] = "2" });
-        _snapshotter.Take(root, Arg.Any<CancellationToken>()).Returns(before, after);
+        _snapshotter.Take(root, Arg.Any<Func<string, bool>?>(), Arg.Any<CancellationToken>()).Returns(before, after);
         _rawOutputCopyFactory.Open("raw.log").Returns(new RecordingRawOutputCopy());
         var filter = new SnapshotFilter(root);
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1501,7 +1503,7 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_SnapshotFilter_TreeTooLarge_ReportsNotComputed()
     {
-        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((FileContentSnapshot?)null);
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<Func<string, bool>?>(), Arg.Any<CancellationToken>()).Returns((FileContentSnapshot?)null);
         var filter = new SnapshotFilter("/somewhere");
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
@@ -1523,7 +1525,7 @@ public class FilteredRunUseCaseTests
 
         await _sut.RunAsync(_filter, "dotnet", BuildArgs, new OutputOptions());
 
-        _snapshotter.DidNotReceiveWithAnyArgs().Take(default!, default);
+        _snapshotter.DidNotReceiveWithAnyArgs().Take(default!, default, default);
     }
 
     [Fact]
@@ -1535,7 +1537,7 @@ public class FilteredRunUseCaseTests
             .Returns(session);
         var copy = new RecordingRawOutputCopy();
         _rawOutputCopyFactory.Open("raw.log").Returns(copy);
-        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<Func<string, bool>?>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 cts.Cancel();
@@ -1555,7 +1557,7 @@ public class FilteredRunUseCaseTests
     [Fact]
     public async Task RunAsync_BeforeSnapshotThrows_RunCompletesWithChangesNotComputed()
     {
-        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(_ => throw new IOException("boom"));
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<Func<string, bool>?>(), Arg.Any<CancellationToken>()).Returns(_ => throw new IOException("boom"));
         var filter = new SnapshotFilter("/somewhere");
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<TextWriter>(), Arg.Any<TextWriter>(), Arg.Any<CancellationToken>())
@@ -1572,7 +1574,7 @@ public class FilteredRunUseCaseTests
     {
         var before = new FileContentSnapshot("/r", new Dictionary<string, string>());
         var calls = 0;
-        _snapshotter.Take(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _snapshotter.Take(Arg.Any<string>(), Arg.Any<Func<string, bool>?>(), Arg.Any<CancellationToken>())
             .Returns(_ => ++calls == 1 ? before : throw new UnauthorizedAccessException());
         var filter = new SnapshotFilter("/somewhere");
         _runner.RunStreamedAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(),
@@ -1612,6 +1614,8 @@ public class FilteredRunUseCaseTests
             Arguments = arguments;
             return RootFailure is null ? root : throw RootFailure;
         }
+
+        public bool CanChange(string fileName) => fileName.EndsWith(".cs", StringComparison.Ordinal);
 
         public string Apply(string strippedOutput, int exitCode) => Apply(strippedOutput, exitCode, FilterContext.Unknown).Output;
 

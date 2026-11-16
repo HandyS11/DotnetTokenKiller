@@ -3,7 +3,12 @@ using DotnetTokenKiller.Domain.Files;
 
 namespace DotnetTokenKiller.Infrastructure.Files;
 
-/// <summary>Hashes every regular file under a directory with SHA-256, within a file and byte budget.</summary>
+/// <summary>Hashes the regular files under a directory with SHA-256, within a file and byte budget.</summary>
+/// <remarks>
+/// In a git work tree it hashes only the files git does not ignore, so generated sites, scratch directories and
+/// other ignored output neither cost a read nor push the tree over its budget; elsewhere it walks the directory.
+/// Either way it skips build output, dependency and hidden directories, and files the caller leaves out.
+/// </remarks>
 public sealed class FileContentSnapshotter : IFileContentSnapshotter
 {
     internal const int DefaultMaxFiles = 20_000;
@@ -16,21 +21,31 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
 
     private readonly int _maxFiles;
     private readonly long _maxBytes;
+    private readonly IGitWorkingTree _git;
 
-    /// <summary>Creates a snapshotter with the default limits (20,000 files, 256 MiB).</summary>
+    /// <summary>Creates a snapshotter with the default limits (20,000 files, 256 MiB) and the git on <c>PATH</c>.</summary>
     public FileContentSnapshotter()
-        : this(DefaultMaxFiles, DefaultMaxBytes)
+        : this(new GitWorkingTree())
     {
     }
 
-    internal FileContentSnapshotter(int maxFiles, long maxBytes)
+    /// <summary>Creates a snapshotter with the default limits (20,000 files, 256 MiB).</summary>
+    /// <param name="git">Says which files a work tree ignores.</param>
+    public FileContentSnapshotter(IGitWorkingTree git)
+        : this(DefaultMaxFiles, DefaultMaxBytes, git)
+    {
+    }
+
+    internal FileContentSnapshotter(int maxFiles, long maxBytes, IGitWorkingTree? git = null)
     {
         _maxFiles = maxFiles;
         _maxBytes = maxBytes;
+        _git = git ?? new GitWorkingTree();
     }
 
     /// <inheritdoc />
-    public FileContentSnapshot? Take(string root, CancellationToken cancellationToken = default)
+    public FileContentSnapshot? Take(string root, Func<string, bool>? includesFile = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(root);
         if (!Directory.Exists(root))
@@ -39,7 +54,11 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
         }
 
         var rootPath = Path.GetFullPath(root);
-        var files = CollectFiles(rootPath, cancellationToken);
+        includesFile ??= static _ => true;
+        var listed = _git.UnignoredFiles(rootPath, cancellationToken);
+        var files = listed is null
+            ? CollectFiles(rootPath, includesFile, cancellationToken)
+            : ListedFiles(rootPath, listed, includesFile, cancellationToken);
         if (files is null)
         {
             return null;
@@ -69,15 +88,47 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
         Path.GetRelativePath(rootPath, path).Replace('\\', '/');
 
     /// <summary>
+    /// Lists the files worth hashing with their sizes among those git does not ignore, or <see langword="null"/>
+    /// past the file or byte limit, decided from their sizes alone so an oversized tree is never read.
+    /// </summary>
+    /// <param name="rootPath">The absolute root.</param>
+    /// <param name="listed">The files under the root that git does not ignore, relative to it.</param>
+    /// <param name="includesFile">Whether a file name is worth hashing.</param>
+    /// <param name="cancellationToken">Checked between entries.</param>
+    private List<(string Path, long Length)>? ListedFiles(string rootPath, IReadOnlyList<string> listed,
+        Func<string, bool> includesFile, CancellationToken cancellationToken)
+    {
+        var budget = new FileBudget(_maxFiles, _maxBytes);
+        foreach (var relative in listed)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var segments = relative.Split('/');
+            if (segments[..^1].Any(IsSkippedDirectoryName) || !includesFile(segments[^1]))
+            {
+                continue;
+            }
+
+            var file = new FileInfo(Path.GetFullPath(relative, rootPath));
+            if (file.Exists && !file.Attributes.HasFlag(FileAttributes.ReparsePoint) && !budget.TryAdd(file))
+            {
+                return null;
+            }
+        }
+
+        return budget.Files;
+    }
+
+    /// <summary>
     /// Lists the files worth hashing with their sizes, or <see langword="null"/> past the file or byte limit,
     /// decided from the directory entries alone so an oversized tree is never read.
     /// </summary>
     /// <param name="rootPath">The absolute root.</param>
+    /// <param name="includesFile">Whether a file name is worth hashing.</param>
     /// <param name="cancellationToken">Checked between entries.</param>
-    private List<(string Path, long Length)>? CollectFiles(string rootPath, CancellationToken cancellationToken)
+    private List<(string Path, long Length)>? CollectFiles(string rootPath, Func<string, bool> includesFile,
+        CancellationToken cancellationToken)
     {
-        var files = new List<(string Path, long Length)>();
-        long totalBytes = 0;
+        var budget = new FileBudget(_maxFiles, _maxBytes);
         var pending = new Stack<string>();
         pending.Push(rootPath);
         while (pending.Count > 0)
@@ -90,41 +141,26 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
                     continue;
                 }
 
-                if (entry is FileInfo file)
-                {
-                    var length = SizeOf(file);
-                    totalBytes += length;
-                    files.Add((file.FullName, length));
-                    if (files.Count > _maxFiles || totalBytes > _maxBytes)
-                    {
-                        return null;
-                    }
-                }
-                else
+                if (entry is not FileInfo file)
                 {
                     pending.Push(entry.FullName);
+                }
+                else if (includesFile(file.Name) && !budget.TryAdd(file))
+                {
+                    return null;
                 }
             }
         }
 
-        return files;
+        return budget.Files;
     }
 
     private static bool IsSkipped(FileSystemInfo entry) =>
         entry.Attributes.HasFlag(FileAttributes.ReparsePoint)
-        || (entry is DirectoryInfo && (entry.Name.StartsWith('.') || SkippedDirectories.Contains(entry.Name)));
+        || (entry is DirectoryInfo && IsSkippedDirectoryName(entry.Name));
 
-    private static long SizeOf(FileInfo file)
-    {
-        try
-        {
-            return file.Length;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return 0;
-        }
-    }
+    private static bool IsSkippedDirectoryName(string name) =>
+        name.StartsWith('.') || SkippedDirectories.Contains(name);
 
     private static List<FileSystemInfo> Entries(string directory)
     {
@@ -150,6 +186,38 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
         {
             hash = string.Empty;
             return false;
+        }
+    }
+
+    /// <summary>The files picked so far with their sizes, and whether they still fit the limits.</summary>
+    /// <param name="maxFiles">The most files a snapshot hashes.</param>
+    /// <param name="maxBytes">The most bytes a snapshot reads.</param>
+    private sealed class FileBudget(int maxFiles, long maxBytes)
+    {
+        private long _totalBytes;
+
+        public List<(string Path, long Length)> Files { get; } = [];
+
+        /// <summary>Adds a file, and says whether the files still fit.</summary>
+        /// <param name="file">A regular file.</param>
+        public bool TryAdd(FileInfo file)
+        {
+            var length = SizeOf(file);
+            _totalBytes += length;
+            Files.Add((file.FullName, length));
+            return Files.Count <= maxFiles && _totalBytes <= maxBytes;
+        }
+
+        private static long SizeOf(FileInfo file)
+        {
+            try
+            {
+                return file.Length;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return 0;
+            }
         }
     }
 }

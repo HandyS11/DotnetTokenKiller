@@ -72,6 +72,41 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     }
 
     [Fact]
+    public void Apply_NoFileList_ListsChangedFilesWithoutCounts()
+    {
+        // jb's --verbosity=ERROR prints nothing at all on success, so there are no files to count: zero processed
+        // would read as jb having done nothing.
+        var context = new FilterContext { Changes = new FileChangeSet(["src/A.cs"]) };
+
+        _sut.Apply(string.Empty, 0, context).Output
+            .Should().Be("src/A.cs\n✓ dotnet jb cleanupcode: 1 file changed\n");
+    }
+
+    [Fact]
+    public void Apply_NoFileList_NoChanges()
+    {
+        var context = new FilterContext { Changes = new FileChangeSet([]) };
+
+        _sut.Apply(string.Empty, 0, context).Output.Should().Be("✓ dotnet jb cleanupcode: no changes\n");
+    }
+
+    [Fact]
+    public void Apply_NoFileList_TreeTooLarge()
+    {
+        var context = new FilterContext { Changes = FileChangeSet.NotComputed("tree too large") };
+
+        _sut.Apply(string.Empty, 0, context).Output
+            .Should().Be("✓ dotnet jb cleanupcode: changed files not computed (tree too large)\n");
+    }
+
+    [Fact]
+    public void Apply_NoFileList_Piped()
+    {
+        _sut.Apply(string.Empty, 0, FilterContext.Unknown).Output
+            .Should().Be("✓ dotnet jb cleanupcode: changed files unknown (piped)\n");
+    }
+
+    [Fact]
     public void Apply_CapsAt30Changed()
     {
         var paths = Enumerable.Range(1, 35).Select(i => $"src/F{i:00}.cs").ToList();
@@ -212,6 +247,29 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
 
         result.Should().NotContain("\r");
         result.Should().Be(_sut.Apply(fixture, exitCode, context).Output);
+    }
+
+    [Theory]
+    [InlineData("Program.cs", true)]
+    [InlineData("Module.VB", true)]
+    [InlineData("MainWindow.xaml", true)]
+    [InlineData("Index.cshtml", true)]
+    [InlineData("App.razor", true)]
+    [InlineData("site.ts", true)]
+    [InlineData("site.css", true)]
+    [InlineData("appsettings.json", true)]
+    [InlineData("App.csproj", true)]
+    [InlineData("Directory.Build.props", true)]
+    [InlineData("Strings.resx", true)]
+    [InlineData("rows.csv", false)]
+    [InlineData("logo.png", false)]
+    [InlineData("README.md", false)]
+    [InlineData("tool.dll", false)]
+    [InlineData("Makefile", false)]
+    public void CanChange_OnlyTheLanguagesCleanupKnows(string fileName, bool expected)
+    {
+        // The snapshot hashes only what jb can rewrite, so sample data or binaries never make the tree too large.
+        _sut.CanChange(fileName).Should().Be(expected);
     }
 
     [Fact]

@@ -179,8 +179,8 @@ public sealed class FilteredRunUseCase(
         try
         {
             var root = snapshotFilter.SnapshotRoot(ArgumentsAfterSubcommand(args), Environment.CurrentDirectory);
-            var before = fileSnapshotter.Take(root, token);
-            return new SnapshotRun(root, before, before is null ? TreeTooLarge : null);
+            var before = fileSnapshotter.Take(root, snapshotFilter.CanChange, token);
+            return new SnapshotRun(root, before, before is null ? TreeTooLarge : null, snapshotFilter.CanChange);
         }
 #pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -210,7 +210,7 @@ public sealed class FilteredRunUseCase(
 
         try
         {
-            var after = fileSnapshotter.Take(run.Root);
+            var after = fileSnapshotter.Take(run.Root, run.CanChange);
             if (after is null)
             {
                 return FileChangeSet.NotComputed(TreeTooLarge);
@@ -281,5 +281,6 @@ public sealed class FilteredRunUseCase(
     private const string TreeTooLarge = "tree too large";
     private const string SnapshotFailed = "snapshot failed";
 
-    private readonly record struct SnapshotRun(string? Root, FileContentSnapshot? Before, string? FailureReason);
+    private readonly record struct SnapshotRun(
+        string? Root, FileContentSnapshot? Before, string? FailureReason, Func<string, bool>? CanChange = null);
 }
