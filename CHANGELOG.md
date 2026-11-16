@@ -7,15 +7,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-16
+
 ### Added
 
 - In a git work tree with changes, a build, test, publish or pack run without errors lists only the warnings of the
   files the work in progress changed (committed since the branch left `origin/HEAD`, or not committed yet, or
-  untracked), and counts the others on one line with their top codes and the command that lists them all
-  (`dtk log build --full | dtk pipe build`). The status line says how many are in changed files
-  (`✓ dotnet build: 0 errors, 336 warnings (165 distinct), 1 in changed files`). `dotnet test`'s warning count covers
-  only the projects the run compiled, so it moved from run to run; `1 in changed files` does not. A clean checkout
-  lists every warning as before.
+  untracked and not ignored), and counts the others on one line with their top codes and the command that lists them
+  all (`dtk log build --full | dtk pipe build`). The status line says how many are in changed files
+  (`✓ dotnet build: 0 errors, 336 warnings (165 distinct), 1 in changed files`, or `none in changed files`).
+  `dotnet test` lists them above its status line, which ends `· 2 build warnings (CS0219×2), 1 in changed files`;
+  like its warning count, they come only from the projects that run compiled, so a run that compiled nothing reports
+  none. A clean checkout, a run outside a git work tree, a run that failed with errors and `dtk pipe` list every
+  warning as before. dtk runs the `git` found on `PATH` to find the changes, only when a report has warnings to list;
+  if git does not answer within 10 seconds, every warning is listed.
 
 ### Changed
 
@@ -399,7 +404,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - JSON configuration support.
 - Packaging as a .NET tool (`dotnet tool install DotnetTokenKiller`).
 
-[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.8.0...v0.9.0
