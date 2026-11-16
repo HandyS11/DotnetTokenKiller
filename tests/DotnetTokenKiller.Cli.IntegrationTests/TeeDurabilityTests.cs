@@ -28,10 +28,10 @@ public sealed class TeeDurabilityTests
 
         try
         {
-            // The log exists from BeginAsync, before the child process even starts, so this waits
+            // BeginAsync writes the log's header before the child process even starts, so this waits
             // on the guarantee itself rather than on the build producing output.
             var logPath = await WaitForLogAsync(teeDir, TimeSpan.FromSeconds(30));
-            logPath.Should().NotBeNull("dtk must open the tee log before running the command");
+            logPath.Should().NotBeNull("dtk must write the tee log's header before running the command");
 
             process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync();
@@ -56,6 +56,15 @@ public sealed class TeeDurabilityTests
         }
     }
 
+    /// <summary>Waits for a tee log whose header is complete.</summary>
+    /// <remarks>
+    /// Not merely for the file: BeginAsync creates it and then writes the header, so it is empty for a moment. A kill
+    /// in that moment, before the run has started, left an empty log and failed this test under the SonarQube job's
+    /// coverage instrumentation, which slows dtk down; <c>dtk log</c> skips such a file.
+    /// </remarks>
+    /// <param name="teeDir">The tee directory the run writes to.</param>
+    /// <param name="timeout">How long to wait.</param>
+    /// <returns>The log's path, or <see langword="null"/> when none had a complete header in time.</returns>
     private static async Task<string?> WaitForLogAsync(string teeDir, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
@@ -63,10 +72,12 @@ public sealed class TeeDurabilityTests
         {
             if (Directory.Exists(teeDir))
             {
-                var files = Directory.GetFiles(teeDir, "*.log");
-                if (files.Length > 0)
+                foreach (var file in Directory.GetFiles(teeDir, "*.log"))
                 {
-                    return files[0];
+                    if (TeeLogHeader.TryParse(await File.ReadAllTextAsync(file), out _))
+                    {
+                        return file;
+                    }
                 }
             }
 
