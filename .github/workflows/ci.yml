@@ -3,11 +3,27 @@ name: CI
 permissions:
   contents: read
 
+# A change to Markdown alone (the changelog, a design spec) skips the run. Markdown the build or the tests read
+# still runs it: README.md (DocsBindingTests, ExamplesBindingTests), docs/articles (DocsBindingTests),
+# .github/copilot-instructions.md (SubcommandBindingTests), and any under src, tests, benchmarks and samples
+# (the package readme, the example pages). Order matters: a later pattern re-includes a path that '!**.md'
+# excluded. Nothing requires this check, so a skipped run blocks no merge; Publish builds and tests on its own.
 on:
   push:
     branches:
       - develop
+    paths: &paths
+      - '**'
+      - '!**.md'
+      - 'README.md'
+      - 'docs/articles/**'
+      - '.github/copilot-instructions.md'
+      - 'src/**'
+      - 'tests/**'
+      - 'benchmarks/**'
+      - 'samples/**'
   pull_request:
+    paths: *paths
   # GitHub does not backfill events dropped during an Actions outage, so without a manual
   # trigger a run skipped that way stays missing until the next push.
   workflow_dispatch:
