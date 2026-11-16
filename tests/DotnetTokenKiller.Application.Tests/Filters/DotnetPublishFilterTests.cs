@@ -159,7 +159,7 @@ public class DotnetPublishFilterTests
         var result = _sut.Apply(input, 0, context).Output;
 
         result.Should().Contain("A.cs(1,1) CS0168").And.NotContain("B.cs");
-        result.Should().Contain("1 warning in unchanged files not shown (dtk log publish --full): CS0219 (1x)");
+        result.Should().Contain("1 warning in unchanged files not shown (dtk log publish --full | dtk pipe publish): CS0219 (1x)");
         result.Should().EndWith("2 warnings, 1 in changed files (1 project)\n");
         _sut.Apply(input, 0).Should().Contain("B.cs(2,1) CS0219");
     }

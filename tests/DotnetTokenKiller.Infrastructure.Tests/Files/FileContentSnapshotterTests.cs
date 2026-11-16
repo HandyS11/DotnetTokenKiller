@@ -159,6 +159,23 @@ public sealed class FileContentSnapshotterTests : IDisposable
     }
 
     [Fact]
+    public void Take_InAWorkTree_WalksASubmodule()
+    {
+        // git lists a submodule as one entry, its directory: the files in it are walked as outside a work tree.
+        Write("a.cs", "a");
+        Write("lib/src/b.cs", "b");
+        Write("lib/obj/skipped.cs", "x");
+        var git = new FakeGitWorkingTree(["a.cs", "lib"]);
+        var before = new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!;
+
+        Write("lib/src/b.cs", "changed");
+        Write("lib/obj/skipped.cs", "changed");
+
+        new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!.ChangedSince(before)
+            .Should().Equal("lib/src/b.cs");
+    }
+
+    [Fact]
     public void Take_WhenGitCannotAnswer_WalksTheTree()
     {
         Write("a.cs", "a");

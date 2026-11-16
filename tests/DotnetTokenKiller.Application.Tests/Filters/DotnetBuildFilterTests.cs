@@ -1974,7 +1974,7 @@ public class DotnetBuildFilterTests
         var result = _sut.Apply(input, 0, context).Output;
 
         result.Should().Contain("A.cs(1,1) CS0168").And.NotContain("B.cs");
-        result.Should().Contain("1 warning in unchanged files not shown (dtk log build --full): CS0219 (1x)");
+        result.Should().Contain("1 warning in unchanged files not shown (dtk log build --full | dtk pipe build): CS0219 (1x)");
         result.Should().EndWith("2 warnings, 1 in changed files (1 project)\n");
         _sut.Apply(input, 0).Should().Contain("B.cs(2,1) CS0219");
     }
@@ -1993,5 +1993,33 @@ public class DotnetBuildFilterTests
         var act = () => _sut.Apply(LoadFixture(fixture), exitCode, context);
 
         act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Apply_WithNoChangedFile_ListsEveryWarningAsBefore()
+    {
+        // A clean checkout (a fresh clone, CI, the default branch after a pull) has nothing to single out: listing
+        // nothing would leave only the raw log to read the warnings in.
+        var context = new FilterContext { WorkTreeChanges = new Lazy<WorkTreeChanges?>(new WorkTreeChanges([])) };
+        var fixture = LoadFixture("dotnet_build_warnings.txt");
+
+        _sut.Apply(fixture, 0, context).Output.Should().Be(_sut.Apply(fixture, 0));
+    }
+
+    [Fact]
+    public void Apply_FailedRunWhoseErrorsMatchedNoPattern_NeverNarrowsItsWarnings()
+    {
+        // MSBuild declared an error no pattern read: the warnings are the only body there is, so all of them stay.
+        const string input = """
+                             /p/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/p/P.csproj]
+                                 1 Warning(s)
+                                 1 Error(s)
+                             """;
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(() => throw new InvalidOperationException("git ran"))
+        };
+
+        new DotnetBuildFilter("/p").Apply(input, 1, context).Output.Should().Contain("A.cs(1,1) CS0168");
     }
 }

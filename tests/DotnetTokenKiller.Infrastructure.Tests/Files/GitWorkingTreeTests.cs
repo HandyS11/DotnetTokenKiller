@@ -127,6 +127,70 @@ public sealed class GitWorkingTreeTests : IDisposable
         _sut.ChangedFiles(_root).Should().Equal(Absolute("a.cs"));
     }
 
+    [Fact]
+    public void ChangedFiles_ThroughASymbolicLink_AreSpelledAsTheCallerReachedThem()
+    {
+        // git prints its top directory resolved (a symbolic link on Unix; an 8.3 name, a junction or a subst drive on
+        // Windows), but MSBuild names files under the directory it was started in: the paths must use that one.
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        InitRepository();
+        Write("src/a.cs", "a");
+        Git("add", ".");
+        Git("commit", "-q", "-m", "init");
+        Write("src/a.cs", "changed");
+        var link = _root + "-link";
+        Directory.CreateSymbolicLink(link, _root);
+        try
+        {
+            _sut.ChangedFiles(Path.Combine(link, "src"))
+                .Should().Equal(Path.GetFullPath(Path.Combine(link, "src", "a.cs")));
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
+    }
+
+    [Fact]
+    public void ChangedFiles_WhenGitCannotCompareWithHead_AreUnknownRatherThanEveryFile()
+    {
+        // Only a repository without a commit lists every tracked file as changed; a diff that fails for another
+        // reason (here, a HEAD naming a missing object) says nothing.
+        InitRepository();
+        Write("a.cs", "a");
+        Git("add", ".");
+        Git("commit", "-q", "-m", "init");
+        File.WriteAllText(Path.Combine(_root, ".git", "refs", "heads", "main"), new string('1', 40) + "\n");
+
+        _sut.ChangedFiles(_root).Should().BeNull();
+    }
+
+    [Fact]
+    public void ChangedFiles_Cancelled_Throws()
+    {
+        InitRepository();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = () => _sut.ChangedFiles(_root, cts.Token);
+
+        act.Should().Throw<OperationCanceledException>();
+    }
+
+    [Fact]
+    public void Answers_WithoutGit_AreUnknown()
+    {
+        var withoutGit = new GitWorkingTree(gitPath: null);
+        InitRepository();
+
+        withoutGit.ChangedFiles(_root).Should().BeNull();
+        withoutGit.UnignoredFiles(_root).Should().BeNull();
+    }
+
     private string Absolute(string relative) => Path.GetFullPath(Path.Combine(_root, relative));
 
     private void Write(string relative, string content)

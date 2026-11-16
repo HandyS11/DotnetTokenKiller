@@ -214,18 +214,23 @@ public class DotnetBuildIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Build_SampleAppWarnings_InThisWorkTree_SaysHowManyAreInChangedFiles()
+    public async Task Build_SampleAppWarnings_InThisWorkTree_ListsTheChangedFilesWarningsOrAll()
     {
-        // The sample lives in this repository: what counts as changed depends on the checkout, so only the shape is
-        // pinned. Warnings outside the changed files are counted on one line naming the full log.
+        // The sample lives in this repository, and what counts as changed depends on the checkout: a clean one (CI)
+        // lists every warning; one with changes elsewhere counts the sample's on one line naming the full list.
         var (output, _) = await IntegrationTestHelper.RunDtkAsync(
             "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
         output.Trim().Split('\n')[^1].Should().MatchRegex(
-            @"^✓ dotnet build: 0 errors, \d+ warnings( \(\d+ (distinct|shown)\))?, (none|\d+) in changed files ");
+            @"^✓ dotnet build: 0 errors, \d+ warnings( \(\d+ (distinct|shown)\))?(, (none|\d+) in changed files)? ");
         if (output.Contains(", none in changed files", StringComparison.Ordinal))
         {
-            output.Should().MatchRegex(@"\d+ warnings in unchanged files not shown \(dtk log build --full\): ");
+            output.Should().MatchRegex(
+                @"\d+ warnings in unchanged files not shown \(dtk log build --full \| dtk pipe build\): ");
+        }
+        else if (!output.Contains(" in changed files", StringComparison.Ordinal))
+        {
+            output.Should().Contain("CS0162");
         }
     }
 

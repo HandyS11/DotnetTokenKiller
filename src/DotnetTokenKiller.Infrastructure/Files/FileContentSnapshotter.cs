@@ -89,7 +89,8 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
 
     /// <summary>
     /// Lists the files worth hashing with their sizes among those git does not ignore, or <see langword="null"/>
-    /// past the file or byte limit, decided from their sizes alone so an oversized tree is never read.
+    /// past the file or byte limit, decided from their sizes alone so an oversized tree is never read. A submodule,
+    /// which git lists as its directory, is walked.
     /// </summary>
     /// <param name="rootPath">The absolute root.</param>
     /// <param name="listed">The files under the root that git does not ignore, relative to it.</param>
@@ -102,14 +103,18 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
         foreach (var relative in listed)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var segments = relative.Split('/');
-            if (segments[..^1].Any(IsSkippedDirectoryName) || !includesFile(segments[^1]))
+            var segments = relative.TrimEnd('/').Split('/');
+            if (segments[..^1].Any(IsSkippedDirectoryName))
             {
                 continue;
             }
 
-            var file = new FileInfo(Path.GetFullPath(relative, rootPath));
-            if (file.Exists && !file.Attributes.HasFlag(FileAttributes.ReparsePoint) && !budget.TryAdd(file))
+            var path = Path.GetFullPath(relative, rootPath);
+            var directory = new DirectoryInfo(path);
+            var fits = directory.Exists && !directory.Attributes.HasFlag(FileAttributes.ReparsePoint)
+                ? IsSkippedDirectoryName(segments[^1]) || Walk(path, includesFile, budget, cancellationToken)
+                : !includesFile(segments[^1]) || TryAddListed(new FileInfo(path), budget);
+            if (!fits)
             {
                 return null;
             }
@@ -129,8 +134,19 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
         CancellationToken cancellationToken)
     {
         var budget = new FileBudget(_maxFiles, _maxBytes);
+        return Walk(rootPath, includesFile, budget, cancellationToken) ? budget.Files : null;
+    }
+
+    /// <summary>Adds the files worth hashing under a directory, and says whether they still fit the limits.</summary>
+    /// <param name="directory">The absolute directory to walk.</param>
+    /// <param name="includesFile">Whether a file name is worth hashing.</param>
+    /// <param name="budget">The files picked so far.</param>
+    /// <param name="cancellationToken">Checked between entries.</param>
+    private static bool Walk(string directory, Func<string, bool> includesFile, FileBudget budget,
+        CancellationToken cancellationToken)
+    {
         var pending = new Stack<string>();
-        pending.Push(rootPath);
+        pending.Push(directory);
         while (pending.Count > 0)
         {
             foreach (var entry in Entries(pending.Pop()))
@@ -147,13 +163,19 @@ public sealed class FileContentSnapshotter : IFileContentSnapshotter
                 }
                 else if (includesFile(file.Name) && !budget.TryAdd(file))
                 {
-                    return null;
+                    return false;
                 }
             }
         }
 
-        return budget.Files;
+        return true;
     }
+
+    /// <summary>Adds a listed file unless it is gone or a link, and says whether the files still fit.</summary>
+    /// <param name="file">A file git listed.</param>
+    /// <param name="budget">The files picked so far.</param>
+    private static bool TryAddListed(FileInfo file, FileBudget budget) =>
+        !file.Exists || file.Attributes.HasFlag(FileAttributes.ReparsePoint) || budget.TryAdd(file);
 
     private static bool IsSkipped(FileSystemInfo entry) =>
         entry.Attributes.HasFlag(FileAttributes.ReparsePoint)

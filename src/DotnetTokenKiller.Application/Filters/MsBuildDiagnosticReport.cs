@@ -97,10 +97,11 @@ internal sealed partial class MsBuildDiagnosticReport
     public int WarningTotal { get; }
 
     /// <summary>
-    /// Whether the report lists warnings, which it does when it parsed some and no error: the only report that the
-    /// files the work in progress changed can shape, so a caller asks for them (git runs) only then.
+    /// Whether the report lists warnings, which it does when it parsed some and the build declared no error: the only
+    /// report that the files the work in progress changed can shape, so a caller asks for them (git runs) only then. A
+    /// failed build whose errors matched no pattern keeps every warning, the only body it has.
     /// </summary>
-    public bool ListsWarnings => _errors.Count == 0 && _warnings.Count > 0;
+    public bool ListsWarnings => ErrorTotal == 0 && _warnings.Count > 0;
 
     /// <summary>
     /// How many distinct projects reported an error, named by the project file without its extension
@@ -260,13 +261,14 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>
     /// The files the work in progress changed, from <paramref name="context"/>, when the report lists warnings
-    /// (<see cref="ListsWarnings"/>); otherwise <see langword="null"/>, without working them out.
+    /// (<see cref="ListsWarnings"/>); otherwise <see langword="null"/>, without working them out. A work tree with no
+    /// change (a fresh clone, CI) singles nothing out either, and every warning is listed as without one.
     /// </summary>
     /// <param name="context">The run's context.</param>
     public WorkTreeChanges? ChangesFor(FilterContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return ListsWarnings ? context.WorkTreeChanges?.Value : null;
+        return ListsWarnings && context.WorkTreeChanges?.Value is { Count: > 0 } changes ? changes : null;
     }
 
     private List<Diagnostic> WarningsIn(WorkTreeChanges changes) =>
@@ -299,7 +301,7 @@ internal sealed partial class MsBuildDiagnosticReport
         {
             var inChanges = WarningsIn(changes);
             AppendGroupedByFile(sb, inChanges, WarningLevel);
-            AppendWarningsElsewhere(sb, [.. _warnings.Except(inChanges)], command);
+            AppendWarningsElsewhere(sb, [.. _warnings.Where(d => !changes.Contains(d.FullPath))], command);
             return;
         }
 
@@ -449,7 +451,7 @@ internal sealed partial class MsBuildDiagnosticReport
             ProjectName(DropProperties(simpleDiagMatch.Groups["project"].Value)));
 
         // Keyed off the message as printed for the same reason as the file-anchored diagnostics.
-        found.Add(simpleDiagnostic, $"{simpleDiagnostic.Code}:{rawMessage}");
+        found.Add(simpleDiagnostic, $"{simpleDiagnostic.Code}:{rawMessage}", lines[index].Trim());
 
         return switchIndex;
     }
@@ -516,7 +518,8 @@ internal sealed partial class MsBuildDiagnosticReport
         // losing one. The message is in the key because the code is optional: without it, two unrelated
         // codeless diagnostics reported at the same position would collapse into one.
         found.Add(diagnostic,
-            $"{projectPath}:{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{rawMessage}");
+            $"{projectPath}:{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{rawMessage}",
+            line.Trim());
         return true;
     }
 
@@ -702,8 +705,9 @@ internal sealed partial class MsBuildDiagnosticReport
     }
 
     /// <summary>
-    /// Counts the warnings outside the changed files on one line, with their most frequent codes and the log that
-    /// holds them: <c>164 warnings in unchanged files not shown (dtk log build --full): CA1822 (50x), …</c>.
+    /// Counts the warnings outside the changed files on one line, with their most frequent codes and the command
+    /// that lists them all, laid out as without changes:
+    /// <c>164 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): CA1822 (50x), …</c>.
     /// </summary>
     /// <param name="sb">The rendered report.</param>
     /// <param name="warnings">The warnings outside the changed files.</param>
@@ -725,7 +729,7 @@ internal sealed partial class MsBuildDiagnosticReport
         var more = codes.Count > 5 ? ", …" : string.Empty;
         var verb = command.StartsWith("dotnet ", StringComparison.Ordinal) ? command["dotnet ".Length..] : command;
         sb.AppendLine(CultureInfo.InvariantCulture,
-            $"{CountLabel(warnings.Count, WarningLevel)} in unchanged files not shown (dtk log {verb} --full): {string.Join(", ", named)}{more}");
+            $"{CountLabel(warnings.Count, WarningLevel)} in unchanged files not shown (dtk log {verb} --full | dtk pipe {verb}): {string.Join(", ", named)}{more}");
     }
 
     /// <summary>Renders a diagnostic count with its noun, singular for one: "1 warning", "6 warnings".</summary>
@@ -901,9 +905,9 @@ internal sealed partial class MsBuildDiagnosticReport
     [GeneratedRegex(@"^Switch: \S.*$")]
     private static partial Regex SwitchContinuationPattern();
 
-    // What MSBuild prints between MSB1001 and its "Switch:" line: the command line it was given and the
-    // heading of the switches its response files added.
-    [GeneratedRegex(@"^\s+(?:Full command line: |Switches appended by response files:)")]
+    // What MSBuild prints between MSB1001 and its "Switch:" line: the command line it was given, the heading of
+    // the switches its response files added, and each of those ("'-p:Foo=Bar' came from '/r/Directory.Build.rsp'").
+    [GeneratedRegex(@"^(?:\s+(?:Full command line: |Switches appended by response files:)|'.*' came from '.*'$)")]
     private static partial Regex CommandLineEchoPattern();
 
     // A URL with the whitespace before it: inside parentheses that hold nothing else (or only the word that
@@ -1001,10 +1005,16 @@ internal sealed partial class MsBuildDiagnosticReport
         int RepeatedErrors,
         int RepeatedWarnings);
 
-    /// <summary>The distinct diagnostics parsed so far, and how many lines of each level repeated one of them.</summary>
+    /// <summary>
+    /// The distinct diagnostics parsed so far, and how many lines of each level repeated one of them in another
+    /// form: a multi-targeted project's copy for another target framework, which MSBuild counts. A line printed
+    /// again word for word (the console logger's echo of every diagnostic under <c>Build succeeded.</c> or
+    /// <c>Build FAILED.</c>) is no such repeat: MSBuild counted it once.
+    /// </summary>
     private sealed class DiagnosticSet
     {
         private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _lines = new(StringComparer.Ordinal);
 
         public List<Diagnostic> Items { get; } = [];
 
@@ -1012,20 +1022,27 @@ internal sealed partial class MsBuildDiagnosticReport
 
         public int RepeatedWarnings { get; private set; }
 
-        /// <summary>Adds a diagnostic, or counts it as a repeat of the one already added under its key.</summary>
+        /// <summary>
+        /// Adds a diagnostic, or counts it as a repeat of the one already added under its key when its line is new.
+        /// </summary>
         /// <param name="diagnostic">The diagnostic.</param>
         /// <param name="key">What makes it the same diagnostic as another.</param>
-        public void Add(Diagnostic diagnostic, string key)
+        /// <param name="line">The line it was read from, trimmed.</param>
+        public void Add(Diagnostic diagnostic, string key, string line)
         {
+            var newLine = _lines.Add(line);
             if (_keys.Add(key))
             {
                 Items.Add(diagnostic);
+                return;
             }
-            else if (diagnostic.Level == ErrorLevel)
+
+            // An echo of a line already read stands for nothing MSBuild counted twice.
+            if (newLine && diagnostic.Level == ErrorLevel)
             {
                 RepeatedErrors++;
             }
-            else
+            else if (newLine)
             {
                 RepeatedWarnings++;
             }

@@ -261,6 +261,8 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     [InlineData("App.csproj", true)]
     [InlineData("Directory.Build.props", true)]
     [InlineData("Strings.resx", true)]
+    [InlineData("App.slnx", true)]
+    [InlineData("tests.runsettings", true)]
     [InlineData("rows.csv", false)]
     [InlineData("logo.png", false)]
     [InlineData("README.md", false)]

@@ -129,8 +129,9 @@ says git does not ignore; skipping `bin`, `obj`, hidden directories, `node_modul
 bounded to 20,000 files and 256 MiB, else `changed files not computed`), because jb rewrites every file it processes.
 `GitWorkingTree` starts the `git` it finds in a `PATH` directory, never a bare `git` (Windows would try the working
 directory first). The build, test, publish and pack filters read `FilterContext.WorkTreeChanges` (git's changed files:
-since the merge base with `origin/HEAD`, plus uncommitted and untracked) only when the report lists warnings
-(`MsBuildDiagnosticReport.ChangesFor`): they list those files' warnings and count the rest. `dtk pipe` has none. Stryker's survivors
+since the merge base with `origin/HEAD`, plus uncommitted and untracked, spelled from the working directory as given)
+only when the report lists warnings and declared no error (`MsBuildDiagnosticReport.ChangesFor`): they list those
+files' warnings and count the rest. No changed file, `dtk pipe` or no work tree lists every warning, as before. Stryker's survivors
 are not on stdout: `StrykerReport` reads `mutation-report.json` through `IArtifactFileReader` (the path Stryker prints,
 rejoined from its 80-column wrap, else the newest under `StrykerOutput`, or under `-O <dir>`); without the json
 reporter survivors are not listed. A localized `dtk pipe test` is recognised, not parsed: `LocalizedTestOutput` matches

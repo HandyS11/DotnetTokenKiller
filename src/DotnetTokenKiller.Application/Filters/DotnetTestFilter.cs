@@ -89,7 +89,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
         // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
         var buildReport = MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
-        var changes = buildReport.ChangesFor(context);
+        var changes = new Lazy<WorkTreeChanges?>(() => buildReport.ChangesFor(context));
         var result = FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty, changes);
 
         // Nothing recognised, and the output is not in English: the raw tail the pipeline would show, under a
@@ -878,14 +878,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     }
 
     private static FilterResult FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport,
-        bool failOnEmpty, WorkTreeChanges? changes)
+        bool failOnEmpty, Lazy<WorkTreeChanges?> changes)
     {
         var elapsed = DurationFormat.Format(state.TotalDurationMs, state.DurationExact);
 
-        // A run that knows which files the work in progress changed lists their warnings first, and its status line
-        // says how many there are; a project that did not build reports its errors instead.
-        var warnings = DescribeBuildWarnings(buildReport, changes);
-        var changedWarnings = changes is null ? string.Empty : buildReport.RenderWarningsIn(changes);
+        // A run that knows which files the work in progress changed lists their warnings right above its status line,
+        // which says how many there are; a project that did not build reports its errors instead. git runs only for
+        // the verdicts that carry the build's warnings.
+        string Warnings() => DescribeBuildWarnings(buildReport, changes.Value);
+        string ChangedWarnings() =>
+            changes.Value is { } changed ? buildReport.RenderWarningsIn(changed) : string.Empty;
 
         // A project that did not compile never ran its tests, and says why in the same diagnostics a
         // build prints; that comes first, with whatever the other projects' tests reported after it. Only
@@ -905,7 +907,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // because a stray line happened to match a failure-shaped pattern.
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
-            return new FilterResult(changedWarnings + FormatFailures(state, elapsed, warnings: warnings));
+            return new FilterResult(
+                BeforeStatusLine(FormatFailures(state, elapsed, warnings: Warnings()), ChangedWarnings()));
         }
 
         // A listing that found names wins even beside a "No test matches" line: that one is another
@@ -927,9 +930,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             return new FilterResult(string.Empty);
         }
 
-        if (FormatMtpAllSkipped(state, exitCode, elapsed, warnings) is { } allSkipped)
+        if (FormatMtpAllSkipped(state, exitCode, elapsed, Warnings) is { } allSkipped)
         {
-            return new FilterResult(changedWarnings + allSkipped);
+            return new FilterResult(ChangedWarnings() + allSkipped);
         }
 
         if (exitCode != 0)
@@ -944,7 +947,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
         return new FilterResult(
-            $"{changedWarnings}{PassedNamesBlock(state)}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n");
+            $"{PassedNamesBlock(state)}{ChangedWarnings()}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){Warnings()}\n");
     }
 
     /// <summary>
@@ -1028,8 +1031,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <param name="state">The parsed run.</param>
     /// <param name="exitCode">The run's exit code.</param>
     /// <param name="elapsed">The run's duration.</param>
-    /// <param name="warnings">What the status line says of the build's warnings.</param>
-    private static string? FormatMtpAllSkipped(ParseState state, int exitCode, string elapsed, string warnings)
+    /// <param name="warnings">What the status line says of the build's warnings, worked out only for such a run.</param>
+    private static string? FormatMtpAllSkipped(ParseState state, int exitCode, string elapsed, Func<string> warnings)
     {
         if (exitCode != MtpZeroTestsExitCode
             || state is not { MtpZeroTestsVerdict: true, TotalPassed: 0, TotalFailed: 0, TotalSkipped: > 0 })
@@ -1038,7 +1041,21 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         }
 
         return
-            $"\u26a0 dotnet test: 0 passed, {state.TotalSkipped} skipped ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings} \u00b7 no test ran (exit {MtpZeroTestsExitCode})\n";
+            $"\u26a0 dotnet test: 0 passed, {state.TotalSkipped} skipped ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings()} \u00b7 no test ran (exit {MtpZeroTestsExitCode})\n";
+    }
+
+    /// <summary>Puts <paramref name="block"/> between a report's body and its status line, its last line.</summary>
+    /// <param name="report">A report ending with its status line and <c>\n</c>.</param>
+    /// <param name="block">Whole lines, or an empty string.</param>
+    private static string BeforeStatusLine(string report, string block)
+    {
+        if (block.Length == 0)
+        {
+            return report;
+        }
+
+        var statusLine = report.LastIndexOf('\n', report.Length - 2) + 1;
+        return string.Concat(report.AsSpan(0, statusLine), block, report.AsSpan(statusLine));
     }
 
     /// <summary>The "0 tests found" verdict, or <see langword="null"/> when the run is not one.</summary>

@@ -32,7 +32,8 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
 
     /// <summary>
     /// The extensions of the files ReSharper's code cleanup can rewrite: C#, Visual Basic, XAML, Razor and Web Forms,
-    /// HTML, JavaScript and TypeScript, CSS, JSON, XML (project files and resources included), C++, T4 and protobuf.
+    /// HTML, JavaScript and TypeScript, CSS, JSON, XML (project and solution files, resources, run settings, WiX and
+    /// the other XML formats of a .NET repository included), C++, T4 and protobuf.
     /// Anything else, sample data, images and binaries above all, it leaves as it is.
     /// </summary>
     private static readonly HashSet<string> CleanedExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -40,7 +41,8 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         ".cs", ".csx", ".vb", ".xaml", ".axaml", ".razor", ".cshtml", ".vbhtml", ".aspx", ".ascx", ".asax",
         ".ashx", ".asmx", ".master", ".skin", ".html", ".htm", ".xhtml", ".js", ".jsx", ".mjs", ".cjs", ".ts",
         ".tsx", ".mts", ".cts", ".css", ".scss", ".less", ".json", ".jsonc", ".xml", ".xsd", ".xsl", ".xslt",
-        ".config", ".resx", ".nuspec", ".csproj", ".vbproj", ".proj", ".props", ".targets", ".c", ".cc", ".cpp",
+        ".config", ".resx", ".nuspec", ".csproj", ".vbproj", ".fsproj", ".vcxproj", ".sqlproj", ".proj", ".props",
+        ".targets", ".slnx", ".runsettings", ".ruleset", ".manifest", ".vsct", ".wxs", ".wxi", ".edmx", ".c", ".cc", ".cpp",
         ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ixx", ".cppm", ".tt", ".ttinclude", ".t4", ".proto"
     };
 

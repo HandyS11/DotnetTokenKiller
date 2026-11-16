@@ -159,7 +159,8 @@ public sealed class FilteredRunUseCase(
                 StartedUtc = startedUtc,
                 Test = test ?? TestOptions.None,
                 Changes = changes,
-                WorkTreeChanges = new Lazy<WorkTreeChanges?>(() => WorkTreeChangesOf(Environment.CurrentDirectory))
+                WorkTreeChanges = new Lazy<WorkTreeChanges?>(() =>
+                    WorkTreeChangesOf(Environment.CurrentDirectory, cancellationToken))
             }
         };
 
@@ -170,14 +171,15 @@ public sealed class FilteredRunUseCase(
 
     /// <summary>
     /// The files the work in progress changed, from git, or <see langword="null"/> outside a work tree or when git
-    /// fails: a filter then renders as under <c>dtk pipe</c>. Never fails the run.
+    /// fails or is stopped: a filter then renders as under <c>dtk pipe</c>. Never fails the run.
     /// </summary>
     /// <param name="workingDirectory">The run's working directory.</param>
-    private WorkTreeChanges? WorkTreeChangesOf(string workingDirectory)
+    /// <param name="cancellationToken">The run's cancellation: Ctrl+C stops git, and the output is still rendered.</param>
+    private WorkTreeChanges? WorkTreeChangesOf(string workingDirectory, CancellationToken cancellationToken)
     {
         try
         {
-            return git.ChangedFiles(workingDirectory) is { } files ? new WorkTreeChanges(files) : null;
+            return git.ChangedFiles(workingDirectory, cancellationToken) is { } files ? new WorkTreeChanges(files) : null;
         }
 #pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
         catch (Exception)

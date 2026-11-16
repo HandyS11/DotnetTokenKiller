@@ -38,14 +38,15 @@ those are the ones the change may have caused, and counts the others on one line
 
 ```text
 src/App/OrderService.cs(42,13) CS0219: The variable 'total' is assigned but its value is never used
-164 warnings in unchanged files not shown (dtk log build --full): CA1822 (50x), CS8618 (30x), IDE0005 (12x), …
+164 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): CA1822 (50x), CS8618 (30x), IDE0005 (12x), …
 ✓ dotnet build: 0 errors, 336 warnings (165 distinct), 1 in changed files (14 projects, 45.20s)
 ```
 
 A changed file is one that differs from where the current branch left the default branch (`origin/HEAD`), committed
 or not, or an untracked file git does not ignore; without an `origin/HEAD`, the changes not committed yet. The status
-line ends `, none in changed files` when none of them has a warning. Outside a git work tree, or when git cannot be run,
-every warning is listed as before; `dtk log build --full` always holds them all. `dtk dotnet publish` and
+line ends `, none in changed files` when none of them has a warning. With no changed file at all (a fresh clone, a CI
+checkout), outside a git work tree, when git cannot be run, or when the build declared an error, every warning is listed
+as before; `dtk log build --full | dtk pipe build` lists them all, grouped, at any time. `dtk dotnet publish` and
 `dtk dotnet pack` do the same.
 The summary is always the last line (`✓ dotnet build …`, or `✗ dotnet build failed (exit 1): 3 errors, 1 warning …`
 when the exit code is non-zero), so `| tail -1` carries the verdict. A coding agent should read the whole (short) output instead of piping it into `tail` or `grep`, which would drop the diagnostics above the status line or the status line itself.

@@ -9,11 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- In a git work tree, a build, test, publish or pack run without errors lists only the warnings of the files the work
-  in progress changed (committed since the branch left `origin/HEAD`, or not committed yet, or untracked), and counts
-  the others on one line with their top codes and `dtk log build --full`. The status line says how many are in
-  changed files (`✓ dotnet build: 0 errors, 336 warnings (165 distinct), 1 in changed files`). `dotnet test`'s
-  warning count covers only the projects the run compiled, so it moved from run to run; `1 in changed files` does not.
+- In a git work tree with changes, a build, test, publish or pack run without errors lists only the warnings of the
+  files the work in progress changed (committed since the branch left `origin/HEAD`, or not committed yet, or
+  untracked), and counts the others on one line with their top codes and the command that lists them all
+  (`dtk log build --full | dtk pipe build`). The status line says how many are in changed files
+  (`✓ dotnet build: 0 errors, 336 warnings (165 distinct), 1 in changed files`). `dotnet test`'s warning count covers
+  only the projects the run compiled, so it moved from run to run; `1 in changed files` does not. A clean checkout
+  lists every warning as before.
 
 ### Changed
 
@@ -30,7 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   compares only the file types code cleanup rewrites, and only files git does not ignore. At `--verbosity=ERROR`, which
   prints no file list, it no longer reports `0 processed, 0 skipped`.
 - MSBuild's `MSB1001: Unknown switch.` names the switch (`Switch: --no-incremental`), which MSBuild prints after
-  echoing the command line.
+  echoing the command line and the switches a `Directory.Build.rsp` added.
 
 ## [0.11.0] - 2026-11-05
 

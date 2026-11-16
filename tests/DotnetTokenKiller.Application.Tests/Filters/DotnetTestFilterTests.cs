@@ -2080,15 +2080,32 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_FailingRunWithTheWorkTreeChanges_ListsTheWarningsBeforeTheFailures()
+    public void Apply_FailingRunWithTheWorkTreeChanges_ListsTheWarningsAfterTheFailures()
     {
+        // Above the status line, not above the failures: --max-lines keeps the head, and the failures matter more.
         var fixture = LoadFixture("dotnet_test_failures_with_warnings.txt");
 
         var result = _sut.Apply(fixture, 1, WithChanges("Warn.Tests/WarnTests.cs")).Output;
 
-        result.Should().StartWith("Warn.Tests/WarnTests.cs (3 warnings)\n");
-        result.Should().Contain("\nFAILURES (1):\n  Warn.Tests.WarnTests.Measures");
+        result.Should().StartWith("FAILURES (1):\n  Warn.Tests.WarnTests.Measures");
+        var lines = result.TrimEnd('\n').Split('\n');
+        lines[^5].Should().Be("Warn.Tests/WarnTests.cs (3 warnings)");
         LastLine(result).Should().EndWith($"{BuildWarningsOfTheFixtures}, 3 in changed files");
+    }
+
+    [Fact]
+    public void Apply_ZeroTestsWithBuildWarnings_NeverAsksForTheWorkTreeChanges()
+    {
+        // A verdict that carries no build warnings needs no git.
+        var fixture = WithLinesFirst(LoadFixture("dotnet_test_zero.txt"), WarnLine("CS0219", 5));
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(() => throw new InvalidOperationException("git ran"))
+        };
+
+        var act = () => _sut.Apply(fixture, 0, context);
+
+        act.Should().NotThrow();
     }
 
     [Fact]
