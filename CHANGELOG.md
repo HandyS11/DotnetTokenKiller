@@ -33,6 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   prints no file list, it no longer reports `0 processed, 0 skipped`.
 - MSBuild's `MSB1001: Unknown switch.` names the switch (`Switch: --no-incremental`), which MSBuild prints after
   echoing the command line and the switches a `Directory.Build.rsp` added.
+- When the user's data folder did not exist yet (`~/.local/share` in a fresh container or under a sandboxed `HOME`),
+  dtk wrote its tracking database and tee logs to a `dtk/` folder in the working directory, which a git work tree then
+  counted as changes; `dtk config set` did the same with `~/.config`. dtk now creates those folders and keeps its
+  files there. A `dtk/` folder an earlier version left in a project can be deleted.
 
 ## [0.11.0] - 2026-11-05
 

@@ -250,6 +250,57 @@ internal static class IntegrationTestHelper
     }
 
     /// <summary>
+    /// Runs dtk with its default state paths, which every other helper overrides: no <c>DTK_DB_PATH</c>,
+    /// <c>DTK_TEE_DIR</c>, <c>DTK_CONFIG_PATH</c>, <c>XDG_DATA_HOME</c> or <c>XDG_CONFIG_HOME</c>, and <c>HOME</c>
+    /// (<c>USERPROFILE</c> on Windows) at <paramref name="home"/>.
+    /// </summary>
+    /// <param name="home">The home directory dtk sees.</param>
+    /// <param name="workingDirectory">The directory dtk runs in.</param>
+    /// <param name="stdin">Text to pipe to dtk, or <see langword="null"/> to leave standard input alone.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
+    /// <returns>Stdout and stderr together, and the exit code.</returns>
+    /// <exception cref="InvalidOperationException">The process could not be started.</exception>
+    internal static async Task<(string Output, int ExitCode)> RunDtkWithDefaultStateAsync(
+        string home, string workingDirectory, string? stdin, params string[] args)
+    {
+        var psi = new ProcessStartInfo(Launcher.Executable)
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardInput = stdin is not null,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        foreach (var name in (string[])
+                 ["DTK_DB_PATH", "DTK_TEE_DIR", "DTK_CONFIG_PATH", "XDG_DATA_HOME", "XDG_CONFIG_HOME"])
+        {
+            psi.Environment.Remove(name);
+        }
+
+        psi.Environment["HOME"] = home;
+        psi.Environment["USERPROFILE"] = home;
+        foreach (var arg in Launcher.PrefixArguments.Concat(args))
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Failed to start dtk");
+        if (stdin is not null)
+        {
+            await process.StandardInput.WriteAsync(stdin).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
+        await process.WaitForExitAsync().ConfigureAwait(false);
+        return (await stdoutTask.ConfigureAwait(false) + await stderrTask.ConfigureAwait(false), process.ExitCode);
+    }
+
+    /// <summary>
     /// Runs dtk with a fake <c>dotnet</c> first on its <c>PATH</c>, keeping stdout and stderr apart. The fake, a shell
     /// script (so Unix only), records the arguments it was given and exits 0, so a test can tell whether dtk ran the
     /// child at all and with what. It prints <see cref="FakeDotnetStdoutVariable"/>'s value verbatim, when a test

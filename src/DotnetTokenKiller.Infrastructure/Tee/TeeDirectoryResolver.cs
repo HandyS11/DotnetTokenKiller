@@ -35,9 +35,14 @@ public static class TeeDirectoryResolver
 
     /// <summary>Returns the platform-default tee directory.</summary>
     /// <returns>The default directory used when nothing is configured.</returns>
+    /// <remarks>
+    /// <see cref="Environment.SpecialFolderOption.DoNotVerify"/>: without it a data folder that does not exist yet
+    /// (<c>~/.local/share</c> in a fresh container) reads as an empty string, and the logs land in the working directory.
+    /// </remarks>
     public static string GetDefault()
     {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var localAppData = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
         return Path.Combine(localAppData, "dtk", "tee");
     }
 }
