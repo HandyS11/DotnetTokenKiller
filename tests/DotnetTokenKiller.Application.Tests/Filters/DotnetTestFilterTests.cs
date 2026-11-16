@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Tests.Helpers;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
@@ -2045,6 +2046,62 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(WithLinesFirst(fixture, repeats), exitCode: 0);
 
         LastLine(result).Should().EndWith(BuildWarningsOfTheFixtures);
+    }
+
+    private static FilterContext WithChanges(params string[] relativePaths) => new()
+    {
+        WorkTreeChanges = new Lazy<WorkTreeChanges?>(new WorkTreeChanges(
+            relativePaths.Select(path => Path.GetFullPath(path, Path.GetFullPath("/test/project/root")))))
+    };
+
+    [Fact]
+    public void Apply_WithTheWorkTreeChanges_ListsTheChangedFilesWarningsAboveTheStatusLine()
+    {
+        // The count covers only the projects this run compiled, so it moves from run to run; which warnings sit in
+        // the files the work changed is what an agent wants to know, and those are listed.
+        var fixture = LoadFixture("dotnet_test_pass_with_warnings.txt");
+
+        var result = _sut.Apply(fixture, 0, WithChanges("Warn.Tests/WarnTests.cs")).Output;
+
+        result.Should().StartWith("Warn.Tests/WarnTests.cs (3 warnings)\n")
+            .And.Contain("  (20,25) CS8602: Dereference of a possibly null reference.\n");
+        LastLine(result).Should().EndWith($"{BuildWarningsOfTheFixtures}, 3 in changed files");
+    }
+
+    [Fact]
+    public void Apply_WithChangesThatRaisedNoWarning_SaysSo()
+    {
+        var fixture = LoadFixture("dotnet_test_pass_with_warnings.txt");
+
+        var result = _sut.Apply(fixture, 0, WithChanges("Warn.Tests/Other.cs")).Output;
+
+        result.Should().MatchRegex(
+            @"^✓ dotnet test: 2 passed \(1 project, [^)]+\) · 3 build warnings \(CS0219×2, CS8602\), none in changed files\n$");
+    }
+
+    [Fact]
+    public void Apply_FailingRunWithTheWorkTreeChanges_ListsTheWarningsBeforeTheFailures()
+    {
+        var fixture = LoadFixture("dotnet_test_failures_with_warnings.txt");
+
+        var result = _sut.Apply(fixture, 1, WithChanges("Warn.Tests/WarnTests.cs")).Output;
+
+        result.Should().StartWith("Warn.Tests/WarnTests.cs (3 warnings)\n");
+        result.Should().Contain("\nFAILURES (1):\n  Warn.Tests.WarnTests.Measures");
+        LastLine(result).Should().EndWith($"{BuildWarningsOfTheFixtures}, 3 in changed files");
+    }
+
+    [Fact]
+    public void Apply_RunWithoutBuildWarnings_NeverAsksForTheWorkTreeChanges()
+    {
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(() => throw new InvalidOperationException("git ran"))
+        };
+
+        var act = () => _sut.Apply(LoadFixture("dotnet_test_all_pass.txt"), 0, context);
+
+        act.Should().NotThrow();
     }
 
     [Fact]

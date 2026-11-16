@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
+using DotnetTokenKiller.Domain.Files;
+using DotnetTokenKiller.Domain.Filters;
 
 namespace DotnetTokenKiller.Application.Filters;
 
@@ -48,11 +50,15 @@ internal sealed partial class MsBuildDiagnosticReport
     private readonly List<Diagnostic> _errors;
     private readonly List<Diagnostic> _warnings;
     private readonly string _context;
+    private readonly int _repeatedErrors;
+    private readonly int _repeatedWarnings;
 
     private MsBuildDiagnosticReport(ParsedOutput parsed)
     {
         _errors = [.. parsed.Diagnostics.Where(d => d.Level == ErrorLevel)];
         _warnings = [.. parsed.Diagnostics.Where(d => d.Level == WarningLevel)];
+        _repeatedErrors = parsed.RepeatedErrors;
+        _repeatedWarnings = parsed.RepeatedWarnings;
         _context = BuildContext(CountProjects(parsed), parsed.Elapsed);
         ErrorTotal = Math.Max(parsed.DeclaredErrors ?? 0, _errors.Count);
         WarningTotal = Math.Max(parsed.DeclaredWarnings ?? 0, _warnings.Count);
@@ -91,6 +97,12 @@ internal sealed partial class MsBuildDiagnosticReport
     public int WarningTotal { get; }
 
     /// <summary>
+    /// Whether the report lists warnings, which it does when it parsed some and no error: the only report that the
+    /// files the work in progress changed can shape, so a caller asks for them (git runs) only then.
+    /// </summary>
+    public bool ListsWarnings => _errors.Count == 0 && _warnings.Count > 0;
+
+    /// <summary>
     /// How many distinct projects reported an error, named by the project file without its extension
     /// from the diagnostic's trailing <c>[path/X.csproj]</c> suffix; a target framework or other
     /// property after <c>::</c> is dropped, so one multi-targeted project counts once. A suffix that is
@@ -118,8 +130,7 @@ internal sealed partial class MsBuildDiagnosticReport
     {
         ArgumentNullException.ThrowIfNull(strippedOutput);
 
-        var diagnostics = new List<Diagnostic>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var found = new DiagnosticSet();
         var outputProjects = new HashSet<string>(StringComparer.Ordinal);
         var elapsed = string.Empty;
         int? declaredErrors = null;
@@ -168,14 +179,14 @@ internal sealed partial class MsBuildDiagnosticReport
             }
 
             // Skip noise lines, then parse diagnostic lines with and without a file/line/col anchor
-            if (!IsNoiseLine(line) && !TryAddDiagnosticLine(line, rootPath, seen, diagnostics))
+            if (!IsNoiseLine(line) && !TryAddDiagnosticLine(line, rootPath, found))
             {
-                takenThrough = AddSimpleDiagnosticLine(lines, index, seen, diagnostics);
+                takenThrough = AddSimpleDiagnosticLine(lines, index, found);
             }
         }
 
-        return new MsBuildDiagnosticReport(
-            new ParsedOutput(diagnostics, outputProjects, elapsed, declaredErrors, declaredWarnings));
+        return new MsBuildDiagnosticReport(new ParsedOutput(found.Items, outputProjects, elapsed, declaredErrors,
+            declaredWarnings, found.RepeatedErrors, found.RepeatedWarnings));
     }
 
     /// <summary>
@@ -189,8 +200,13 @@ internal sealed partial class MsBuildDiagnosticReport
     /// Lines naming what a successful run produced, rendered directly above the status line. Ignored
     /// when <paramref name="exitCode"/> is non-zero: a failed run's report is the same as a failed build's.
     /// </param>
+    /// <param name="changes">
+    /// The files the work in progress changed, when known. A report with no error then lists only the warnings of
+    /// those files, counts the others on one line, and says in its status line how many are in changed files.
+    /// </param>
     /// <returns>The report, or an empty string when the output could not be read.</returns>
-    public string Render(string command, int exitCode, IReadOnlyList<string> outputs)
+    public string Render(string command, int exitCode, IReadOnlyList<string> outputs,
+        WorkTreeChanges? changes = null)
     {
         ArgumentNullException.ThrowIfNull(outputs);
 
@@ -212,12 +228,49 @@ internal sealed partial class MsBuildDiagnosticReport
             return Normalize(sb);
         }
 
-        AppendDiagnostics(sb);
+        AppendDiagnostics(sb, command, changes);
         AppendOutputs(sb, shownOutputs);
-        sb.AppendLine(StatusLine(command, exitCode));
+        sb.AppendLine(StatusLine(command, exitCode, changes));
 
         return Normalize(sb);
     }
+
+    /// <summary>
+    /// Renders the warnings of the files the work in progress changed, laid out by file as
+    /// <see cref="RenderDiagnostics"/> does, for a caller that reports the rest of the build its own way.
+    /// </summary>
+    /// <param name="changes">The changed files.</param>
+    /// <returns>The lines, or an empty string when none of those files has a warning.</returns>
+    public string RenderWarningsIn(WorkTreeChanges changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+
+        var sb = new StringBuilder();
+        AppendGroupedByFile(sb, WarningsIn(changes), WarningLevel);
+        return Normalize(sb);
+    }
+
+    /// <summary>How many of the parsed warnings are in the files the work in progress changed.</summary>
+    /// <param name="changes">The changed files.</param>
+    public int WarningCountIn(WorkTreeChanges changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        return WarningsIn(changes).Count;
+    }
+
+    /// <summary>
+    /// The files the work in progress changed, from <paramref name="context"/>, when the report lists warnings
+    /// (<see cref="ListsWarnings"/>); otherwise <see langword="null"/>, without working them out.
+    /// </summary>
+    /// <param name="context">The run's context.</param>
+    public WorkTreeChanges? ChangesFor(FilterContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return ListsWarnings ? context.WorkTreeChanges?.Value : null;
+    }
+
+    private List<Diagnostic> WarningsIn(WorkTreeChanges changes) =>
+        [.. _warnings.Where(d => changes.Contains(d.FullPath))];
 
     /// <summary>
     /// Renders the diagnostics alone, for a caller that supplies its own status line: the errors
@@ -229,14 +282,27 @@ internal sealed partial class MsBuildDiagnosticReport
     public string RenderDiagnostics()
     {
         var sb = new StringBuilder();
-        AppendDiagnostics(sb);
+        AppendDiagnostics(sb, string.Empty, null);
         return Normalize(sb);
     }
 
-    private void AppendDiagnostics(StringBuilder sb)
+    /// <summary>Renders the diagnostics body: the errors, or else the warnings, laid out by file.</summary>
+    /// <param name="sb">The rendered report.</param>
+    /// <param name="command">The command the report is about, e.g. <c>dotnet build</c>, whose log the report names.</param>
+    /// <param name="changes">The files the work in progress changed, when known.</param>
+    private void AppendDiagnostics(StringBuilder sb, string command, WorkTreeChanges? changes)
     {
         // Errors and warnings are laid out the same way. A build with errors lists only those, so the
-        // warnings do not bury them; it says how many it left out.
+        // warnings do not bury them; it says how many it left out. Without errors, a run that knows which files
+        // changed lists their warnings, which the change may have caused, and only counts the others.
+        if (_errors.Count == 0 && changes is not null)
+        {
+            var inChanges = WarningsIn(changes);
+            AppendGroupedByFile(sb, inChanges, WarningLevel);
+            AppendWarningsElsewhere(sb, [.. _warnings.Except(inChanges)], command);
+            return;
+        }
+
         if (_errors.Count == 0)
         {
             AppendGroupedByFile(sb, _warnings, WarningLevel);
@@ -264,12 +330,13 @@ internal sealed partial class MsBuildDiagnosticReport
     /// </summary>
     /// <param name="command">The command named in the line.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the verdict.</param>
-    private string StatusLine(string command, int exitCode)
+    /// <param name="changes">The files the work in progress changed, when known.</param>
+    private string StatusLine(string command, int exitCode, WorkTreeChanges? changes)
     {
         var warningTally = _errors.Count > 0
             ? CountLabel(WarningTotal, WarningLevel)
-            : Tally(WarningTotal, _warnings.Count, WarningLevel);
-        var tally = $"{Tally(ErrorTotal, _errors.Count, ErrorLevel)}, {warningTally}";
+            : Tally(WarningTotal, _warnings.Count, _repeatedWarnings, WarningLevel) + InChangedFiles(changes);
+        var tally = $"{Tally(ErrorTotal, _errors.Count, _repeatedErrors, ErrorLevel)}, {warningTally}";
         if (exitCode != 0)
         {
             return $"✗ {command} failed (exit {exitCode.ToString(CultureInfo.InvariantCulture)}): {tally}{_context}";
@@ -350,14 +417,12 @@ internal sealed partial class MsBuildDiagnosticReport
     /// </summary>
     /// <param name="lines">The output's lines.</param>
     /// <param name="index">The index of the line to parse.</param>
-    /// <param name="seen">The keys of the diagnostics already added.</param>
-    /// <param name="diagnostics">The diagnostics parsed so far.</param>
+    /// <param name="found">The diagnostics parsed so far.</param>
     /// <returns>
     /// The index of the <c>Switch:</c> line taken into the message, through which the following lines are consumed,
     /// or <c>-1</c> when none was.
     /// </returns>
-    private static int AddSimpleDiagnosticLine(string[] lines, int index, HashSet<string> seen,
-        List<Diagnostic> diagnostics)
+    private static int AddSimpleDiagnosticLine(string[] lines, int index, DiagnosticSet found)
     {
         var simpleDiagMatch = SimpleDiagnosticPattern().Match(lines[index].TrimEnd('\r'));
         if (!simpleDiagMatch.Success)
@@ -377,16 +442,14 @@ internal sealed partial class MsBuildDiagnosticReport
             string.Empty,
             string.Empty,
             string.Empty,
+            string.Empty,
             level,
             simpleDiagMatch.Groups["code"].Value,
             RenderMessage(rawMessage, level),
             ProjectName(DropProperties(simpleDiagMatch.Groups["project"].Value)));
 
         // Keyed off the message as printed for the same reason as the file-anchored diagnostics.
-        if (seen.Add($"{simpleDiagnostic.Code}:{rawMessage}"))
-        {
-            diagnostics.Add(simpleDiagnostic);
-        }
+        found.Add(simpleDiagnostic, $"{simpleDiagnostic.Code}:{rawMessage}");
 
         return switchIndex;
     }
@@ -417,8 +480,7 @@ internal sealed partial class MsBuildDiagnosticReport
         return -1;
     }
 
-    private static bool TryAddDiagnosticLine(string line, string rootPath, HashSet<string> seen,
-        List<Diagnostic> diagnostics)
+    private static bool TryAddDiagnosticLine(string line, string rootPath, DiagnosticSet found)
     {
         var diagMatch = DiagnosticPattern().Match(line);
         if (!diagMatch.Success)
@@ -436,8 +498,10 @@ internal sealed partial class MsBuildDiagnosticReport
 
         var rawMessage = diagMatch.Groups["message"].Value.Trim();
         var level = diagMatch.Groups["level"].Value;
+        var file = diagMatch.Groups["file"].Value.Trim();
         var diagnostic = new Diagnostic(
-            TextHelpers.ShortenPath(diagMatch.Groups["file"].Value.Trim(), rootPath),
+            TextHelpers.ShortenPath(file, rootPath),
+            FullPathOf(file, rootPath),
             diagMatch.Groups["line"].Value,
             diagMatch.Groups["col"].Value,
             level,
@@ -451,13 +515,27 @@ internal sealed partial class MsBuildDiagnosticReport
         // messages differing past the cap) are two, and the report groups them with a count rather than
         // losing one. The message is in the key because the code is optional: without it, two unrelated
         // codeless diagnostics reported at the same position would collapse into one.
-        if (seen.Add(
-                $"{projectPath}:{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{rawMessage}"))
-        {
-            diagnostics.Add(diagnostic);
-        }
-
+        found.Add(diagnostic,
+            $"{projectPath}:{diagnostic.File}({diagnostic.Line},{diagnostic.Col}):{diagnostic.Code}:{rawMessage}");
         return true;
+    }
+
+    /// <summary>
+    /// <paramref name="file"/> as a full path, resolved against <paramref name="rootPath"/> when relative, or an
+    /// empty string when it is no valid path; it tells whether the file is one the work in progress changed.
+    /// </summary>
+    /// <param name="file">The file a diagnostic names, as MSBuild printed it.</param>
+    /// <param name="rootPath">The root the report shortens paths against.</param>
+    private static string FullPathOf(string file, string rootPath)
+    {
+        try
+        {
+            return Path.GetFullPath(file, Path.GetFullPath(rootPath));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>
@@ -587,11 +665,67 @@ internal sealed partial class MsBuildDiagnosticReport
     /// </summary>
     /// <param name="total">The count the build reported.</param>
     /// <param name="shown">The number of distinct entries rendered above the status line.</param>
+    /// <param name="repeated">How many lines repeated an entry already parsed.</param>
     /// <param name="noun">The singular noun to render ("error" or "warning").</param>
-    private static string Tally(int total, int shown, string noun)
+    /// <remarks>
+    /// "(N distinct)" when the lines that repeated an entry account for the difference: MSBuild counts a
+    /// multi-targeted project's diagnostic once per target framework, so every one it counted is listed, once, and
+    /// nothing is missing. "(N shown)" otherwise: some of what MSBuild counted matched no pattern.
+    /// </remarks>
+    private static string Tally(int total, int shown, int repeated, string noun)
     {
         var label = CountLabel(total, noun);
-        return total == shown ? label : $"{label} ({shown} shown)";
+        if (total == shown)
+        {
+            return label;
+        }
+
+        return shown + repeated >= total ? $"{label} ({shown} distinct)" : $"{label} ({shown} shown)";
+    }
+
+    /// <summary>
+    /// What the status line says of the warnings in changed files: <c>, 2 in changed files</c>, or
+    /// <c>, none in changed files</c>. Nothing when the changes are unknown or no warning was parsed.
+    /// </summary>
+    /// <param name="changes">The files the work in progress changed, when known.</param>
+    private string InChangedFiles(WorkTreeChanges? changes)
+    {
+        if (changes is null || _warnings.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var count = WarningsIn(changes).Count;
+        return count == 0
+            ? ", none in changed files"
+            : string.Create(CultureInfo.InvariantCulture, $", {count} in changed files");
+    }
+
+    /// <summary>
+    /// Counts the warnings outside the changed files on one line, with their most frequent codes and the log that
+    /// holds them: <c>164 warnings in unchanged files not shown (dtk log build --full): CA1822 (50x), …</c>.
+    /// </summary>
+    /// <param name="sb">The rendered report.</param>
+    /// <param name="warnings">The warnings outside the changed files.</param>
+    /// <param name="command">The command the report is about, e.g. <c>dotnet build</c>.</param>
+    private static void AppendWarningsElsewhere(StringBuilder sb, List<Diagnostic> warnings, string command)
+    {
+        if (warnings.Count == 0)
+        {
+            return;
+        }
+
+        var codes = warnings
+            .GroupBy(d => CodeLabel(d.Code))
+            .Select(g => (Code: g.Key, Count: g.Count()))
+            .OrderByDescending(c => c.Count)
+            .ThenBy(c => c.Code, StringComparer.Ordinal)
+            .ToList();
+        var named = codes.Take(5).Select(c => $"{c.Code} ({c.Count}x)");
+        var more = codes.Count > 5 ? ", …" : string.Empty;
+        var verb = command.StartsWith("dotnet ", StringComparison.Ordinal) ? command["dotnet ".Length..] : command;
+        sb.AppendLine(CultureInfo.InvariantCulture,
+            $"{CountLabel(warnings.Count, WarningLevel)} in unchanged files not shown (dtk log {verb} --full): {string.Join(", ", named)}{more}");
     }
 
     /// <summary>Renders a diagnostic count with its noun, singular for one: "1 warning", "6 warnings".</summary>
@@ -833,6 +967,7 @@ internal sealed partial class MsBuildDiagnosticReport
 
     /// <summary>One diagnostic as it is rendered, plus the project that reported it.</summary>
     /// <param name="File">The source file, shortened against the root; empty for tool- and project-level diagnostics.</param>
+    /// <param name="FullPath">The source file as a full path; empty when <paramref name="File"/> is.</param>
     /// <param name="Line">The line, empty when the diagnostic has no position.</param>
     /// <param name="Col">The column, empty when the diagnostic has no position.</param>
     /// <param name="Level">Either <c>error</c> or <c>warning</c>.</param>
@@ -841,6 +976,7 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <param name="Project">The project's file name without extension, empty when the diagnostic named none.</param>
     private sealed record Diagnostic(
         string File,
+        string FullPath,
         string Line,
         string Col,
         string Level,
@@ -854,10 +990,45 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <param name="Elapsed">The formatted build duration, empty when absent.</param>
     /// <param name="DeclaredErrors">MSBuild's own error tally, null when the output carried none.</param>
     /// <param name="DeclaredWarnings">MSBuild's own warning tally, null when the output carried none.</param>
+    /// <param name="RepeatedErrors">How many error lines repeated one already parsed.</param>
+    /// <param name="RepeatedWarnings">How many warning lines repeated one already parsed.</param>
     private sealed record ParsedOutput(
         List<Diagnostic> Diagnostics,
         IReadOnlyCollection<string> OutputProjects,
         string Elapsed,
         int? DeclaredErrors,
-        int? DeclaredWarnings);
+        int? DeclaredWarnings,
+        int RepeatedErrors,
+        int RepeatedWarnings);
+
+    /// <summary>The distinct diagnostics parsed so far, and how many lines of each level repeated one of them.</summary>
+    private sealed class DiagnosticSet
+    {
+        private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
+
+        public List<Diagnostic> Items { get; } = [];
+
+        public int RepeatedErrors { get; private set; }
+
+        public int RepeatedWarnings { get; private set; }
+
+        /// <summary>Adds a diagnostic, or counts it as a repeat of the one already added under its key.</summary>
+        /// <param name="diagnostic">The diagnostic.</param>
+        /// <param name="key">What makes it the same diagnostic as another.</param>
+        public void Add(Diagnostic diagnostic, string key)
+        {
+            if (_keys.Add(key))
+            {
+                Items.Add(diagnostic);
+            }
+            else if (diagnostic.Level == ErrorLevel)
+            {
+                RepeatedErrors++;
+            }
+            else
+            {
+                RepeatedWarnings++;
+            }
+        }
+    }
 }

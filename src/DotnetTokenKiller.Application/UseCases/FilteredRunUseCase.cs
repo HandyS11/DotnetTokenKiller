@@ -14,6 +14,7 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <param name="teeService">Opens the log the run streams into.</param>
 /// <param name="rawOutputCopyFactory">Creates the file <c>--tee &lt;path&gt;</c> copies the raw output into.</param>
 /// <param name="fileSnapshotter">Hashes the tree around a run for filters that need the changed files.</param>
+/// <param name="git">Says which files the work in progress changed, for filters that single out their warnings.</param>
 /// <param name="pipeline">The shared output-filtering pipeline.</param>
 /// <param name="output">The text writer for user-facing output.</param>
 public sealed class FilteredRunUseCase(
@@ -21,6 +22,7 @@ public sealed class FilteredRunUseCase(
     ITeeService teeService,
     IRawOutputCopyFactory rawOutputCopyFactory,
     IFileContentSnapshotter fileSnapshotter,
+    IGitWorkingTree git,
     FilteredOutputPipeline pipeline,
     TextWriter output)
 {
@@ -156,13 +158,33 @@ public sealed class FilteredRunUseCase(
                 WorkingDirectory = Environment.CurrentDirectory,
                 StartedUtc = startedUtc,
                 Test = test ?? TestOptions.None,
-                Changes = changes
+                Changes = changes,
+                WorkTreeChanges = new Lazy<WorkTreeChanges?>(() => WorkTreeChangesOf(Environment.CurrentDirectory))
             }
         };
 
         // None: the child has exited, and a cancellation landing now (Ctrl+C's grace period elapsing)
         // must not drop the filtered output, the log or the record of a run that finished on its own.
         return await pipeline.ProcessAsync(request, session, prepared, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The files the work in progress changed, from git, or <see langword="null"/> outside a work tree or when git
+    /// fails: a filter then renders as under <c>dtk pipe</c>. Never fails the run.
+    /// </summary>
+    /// <param name="workingDirectory">The run's working directory.</param>
+    private WorkTreeChanges? WorkTreeChangesOf(string workingDirectory)
+    {
+        try
+        {
+            return git.ChangedFiles(workingDirectory) is { } files ? new WorkTreeChanges(files) : null;
+        }
+#pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return null;
+        }
     }
 
     /// <summary>Hashes the tree before the child starts, for a filter that asks for it; never fails the run.</summary>

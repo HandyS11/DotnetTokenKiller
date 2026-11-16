@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 
 namespace DotnetTokenKiller.Application.Filters;
@@ -71,7 +72,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// </summary>
     /// <param name="strippedOutput">The test output to filter, with ANSI escape sequences already stripped.</param>
     /// <param name="exitCode">The process exit code, as for <see cref="Apply(string, int)"/>.</param>
-    /// <param name="context">The run's context; only its test options are read.</param>
+    /// <param name="context">The run's context: its test options, and the files the work in progress changed.</param>
     public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -88,7 +89,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
         // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
         var buildReport = MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
-        var result = FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty);
+        var changes = buildReport.ChangesFor(context);
+        var result = FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty, changes);
 
         // Nothing recognised, and the output is not in English: the raw tail the pipeline would show, under a
         // status line that says why and what to do instead of "not recognized".
@@ -876,10 +878,14 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     }
 
     private static FilterResult FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport,
-        bool failOnEmpty)
+        bool failOnEmpty, WorkTreeChanges? changes)
     {
         var elapsed = DurationFormat.Format(state.TotalDurationMs, state.DurationExact);
-        var warnings = DescribeBuildWarnings(buildReport);
+
+        // A run that knows which files the work in progress changed lists their warnings first, and its status line
+        // says how many there are; a project that did not build reports its errors instead.
+        var warnings = DescribeBuildWarnings(buildReport, changes);
+        var changedWarnings = changes is null ? string.Empty : buildReport.RenderWarningsIn(changes);
 
         // A project that did not compile never ran its tests, and says why in the same diagnostics a
         // build prints; that comes first, with whatever the other projects' tests reported after it. Only
@@ -889,7 +895,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // nothing else to report, yields to the raw tail.
         if (exitCode != 0 && buildReport.ParsedErrorCount > 0)
         {
-            return new FilterResult(FormatBuildFailure(state, buildReport, elapsed, warnings));
+            return new FilterResult(FormatBuildFailure(state, buildReport, elapsed, DescribeBuildWarnings(buildReport)));
         }
 
         // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
@@ -899,7 +905,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // because a stray line happened to match a failure-shaped pattern.
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
-            return new FilterResult(FormatFailures(state, elapsed, warnings: warnings));
+            return new FilterResult(changedWarnings + FormatFailures(state, elapsed, warnings: warnings));
         }
 
         // A listing that found names wins even beside a "No test matches" line: that one is another
@@ -923,7 +929,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
 
         if (FormatMtpAllSkipped(state, exitCode, elapsed, warnings) is { } allSkipped)
         {
-            return new FilterResult(allSkipped);
+            return new FilterResult(changedWarnings + allSkipped);
         }
 
         if (exitCode != 0)
@@ -938,7 +944,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
         return new FilterResult(
-            $"{PassedNamesBlock(state)}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n");
+            $"{changedWarnings}{PassedNamesBlock(state)}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n");
     }
 
     /// <summary>
@@ -948,9 +954,14 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// with <c>, …</c> when more codes exist. A warning that carries no code counts toward the total but is
     /// not named, and the list is left out when no warning carries one. A run without warnings adds nothing.
     /// A <c>--list-tests</c> listing and a zero-tests verdict are no verdict on the build and do not carry it.
+    /// With the files the work in progress changed known, it ends with how many of the warnings are in them:
+    /// <c>, 2 in changed files</c> or <c>, none in changed files</c>. The total covers only the projects this run
+    /// compiled (MSBuild repeats no warning of a project it found up to date), so it moves from run to run; that
+    /// part does not.
     /// </summary>
     /// <param name="report">The run's build diagnostics.</param>
-    private static string DescribeBuildWarnings(MsBuildDiagnosticReport report)
+    /// <param name="changes">The files the work in progress changed, when known.</param>
+    private static string DescribeBuildWarnings(MsBuildDiagnosticReport report, WorkTreeChanges? changes = null)
     {
         var total = report.WarningTotal;
         if (total == 0)
@@ -963,15 +974,35 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             .ToList();
         var counted = string.Create(CultureInfo.InvariantCulture,
             $" \u00b7 {total} build warning{(total == 1 ? "" : "s")}");
+        var inChanges = InChangedFiles(report, changes);
         if (codes.Count == 0)
         {
-            return counted;
+            return counted + inChanges;
         }
 
         var named = codes.Take(MaxWarningCodes).Select(c =>
             c.Count == 1 ? c.Code : string.Create(CultureInfo.InvariantCulture, $"{c.Code}\u00d7{c.Count}"));
         var more = codes.Count > MaxWarningCodes ? ", \u2026" : string.Empty;
-        return $"{counted} ({string.Join(", ", named)}{more})";
+        return $"{counted} ({string.Join(", ", named)}{more}){inChanges}";
+    }
+
+    /// <summary>
+    /// <c>, 2 in changed files</c>, <c>, none in changed files</c>, or nothing when the changes are unknown or no
+    /// warning was parsed.
+    /// </summary>
+    /// <param name="report">The run's build diagnostics.</param>
+    /// <param name="changes">The files the work in progress changed, when known.</param>
+    private static string InChangedFiles(MsBuildDiagnosticReport report, WorkTreeChanges? changes)
+    {
+        if (changes is null || report.WarningCodes.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var count = report.WarningCountIn(changes);
+        return count == 0
+            ? ", none in changed files"
+            : string.Create(CultureInfo.InvariantCulture, $", {count} in changed files");
     }
 
     /// <summary>The names a <c>--list-tests</c> run listed, one per line in listed order, then its status line.</summary>
