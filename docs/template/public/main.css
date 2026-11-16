@@ -173,10 +173,6 @@ header .navbar {
   backdrop-filter: blur(10px);
 }
 
-header {
-  border-bottom-color: var(--dtk-hairline) !important;
-}
-
 .navbar-brand {
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -372,7 +368,6 @@ article blockquote > :last-child {
 /* ---------------------------------------------------------------- footer -- */
 
 footer {
-  border-top-color: var(--dtk-hairline) !important;
   background-color: var(--dtk-surface);
   font-family: var(--dtk-mono);
   font-size: 0.82rem;
