@@ -10,7 +10,11 @@ public sealed class GitWorkingTreeTests : IDisposable
     private readonly string _root = Path.GetFullPath(
         Path.Combine(Path.GetTempPath(), "dtk-git-" + Guid.NewGuid().ToString("N")));
 
-    private readonly GitWorkingTree _sut = new();
+    /// <summary>
+    /// A deadline far past the production one: a CI runner busy building other tests' projects can take seconds to
+    /// start each git command, and the answer must not be given up as it would be on a machine that slow in real use.
+    /// </summary>
+    private readonly GitWorkingTree _sut = new(GitWorkingTree.FindOnPath(), TimeSpan.FromMinutes(2));
 
     public GitWorkingTreeTests() => Directory.CreateDirectory(_root);
 

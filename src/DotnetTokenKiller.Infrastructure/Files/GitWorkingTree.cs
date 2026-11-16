@@ -9,22 +9,34 @@ namespace DotnetTokenKiller.Infrastructure.Files;
 public sealed class GitWorkingTree : IGitWorkingTree
 {
     /// <summary>How long the git commands of one answer may take together before git is killed and the answer given up.</summary>
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>The git executable's full path, or <see langword="null"/> when there is none; found on first use.</summary>
     private readonly Lazy<string?> _gitPath;
+
+    private readonly TimeSpan _timeout;
 
     /// <summary>Uses the first <c>git</c> on <c>PATH</c>, looked up the first time git is asked something.</summary>
     public GitWorkingTree()
     {
         _gitPath = new Lazy<string?>(FindOnPath);
+        _timeout = DefaultTimeout;
     }
 
     /// <summary>Uses the given git.</summary>
     /// <param name="gitPath">The git executable's full path, or <see langword="null"/> when there is none.</param>
     public GitWorkingTree(string? gitPath)
+        : this(gitPath, DefaultTimeout)
+    {
+    }
+
+    /// <summary>Uses the given git, with the given deadline for each answer.</summary>
+    /// <param name="gitPath">The git executable's full path, or <see langword="null"/> when there is none.</param>
+    /// <param name="timeout">How long the git commands of one answer may take together.</param>
+    internal GitWorkingTree(string? gitPath, TimeSpan timeout)
     {
         _gitPath = new Lazy<string?>(gitPath);
+        _timeout = timeout;
     }
 
     /// <summary>
@@ -103,31 +115,34 @@ public sealed class GitWorkingTree : IGitWorkingTree
         }
 
         var top = Path.GetFullPath(cdup.Length == 0 ? "." : cdup, directory);
-        var mergeBase = Run(top, token, "merge-base", "HEAD", "refs/remotes/origin/HEAD")?.Trim();
-        var changed = Paths(Run(top, token, "diff", "--name-only", "-z", "--no-renames",
-            string.IsNullOrEmpty(mergeBase) ? "HEAD" : mergeBase, "--"));
-        if (changed is null && Run(top, token, "rev-parse", "-q", "--verify", "HEAD") is null
-                            && !token.IsCancellationRequested)
-        {
-            // No commit yet: every tracked file is new. Any other failure leaves the answer unknown.
-            changed = Paths(Run(top, token, "ls-files", "-z", "--cached"));
-        }
 
-        var untracked = Paths(Run(top, token, "ls-files", "-z", "--others", "--exclude-standard"));
-        if (changed is null || untracked is null || token.IsCancellationRequested)
+        // What the branch changed since it left the default branch, committed or not; none without an origin/HEAD.
+        var mergeBase = Run(top, token, "merge-base", "HEAD", "refs/remotes/origin/HEAD")?.Trim();
+        var sinceBase = string.IsNullOrEmpty(mergeBase)
+            ? []
+            : Paths(Run(top, token, "diff", "--name-only", "-z", "--no-renames", mergeBase, "--"));
+
+        // What is not committed yet, staged or not, and the untracked files no ignore rule matches: "XY path" entries,
+        // their paths from the top whatever the directory. It also answers before the first commit, and fails on a
+        // HEAD it cannot read, which leaves the answer unknown.
+        var status = Run(top, token, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames");
+        if (sinceBase is null || status is null || token.IsCancellationRequested)
         {
             return null;
         }
 
-        return [.. changed.Concat(untracked).Distinct(StringComparer.Ordinal).Select(path => Path.GetFullPath(path, top))];
+        var uncommitted = status.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Where(entry => entry.Length > 3)
+            .Select(entry => entry[3..]);
+        return [.. sinceBase.Concat(uncommitted).Distinct(StringComparer.Ordinal).Select(path => Path.GetFullPath(path, top))];
     }
 
-    /// <summary>The caller's cancellation, and <see cref="Timeout"/> for every git command an answer takes together.</summary>
+    /// <summary>The caller's cancellation, and the deadline for every git command an answer takes together.</summary>
     /// <param name="cancellationToken">The caller's cancellation.</param>
-    private static CancellationTokenSource Deadline(CancellationToken cancellationToken)
+    private CancellationTokenSource Deadline(CancellationToken cancellationToken)
     {
         var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(Timeout);
+        deadline.CancelAfter(_timeout);
         return deadline;
     }
 
