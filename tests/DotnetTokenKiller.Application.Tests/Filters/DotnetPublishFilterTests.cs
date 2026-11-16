@@ -1,4 +1,6 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Domain.Files;
+using DotnetTokenKiller.Domain.Filters;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -137,5 +139,28 @@ public class DotnetPublishFilterTests
         using var stream = assembly.GetManifestResourceStream(fullName)!;
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    [Fact]
+    public void Apply_WithTheWorkTreeChanges_ListsOnlyTheWarningsOfChangedFiles()
+    {
+        var root = Path.GetFullPath("/repo");
+        var input = $"""
+                     {root}/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [{root}/P.csproj]
+                     {root}/B.cs(2,1): warning CS0219: The variable 'x' is assigned but its value is never used [{root}/P.csproj]
+                         2 Warning(s)
+                         0 Error(s)
+                     """;
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(new WorkTreeChanges([Path.Combine(root, "A.cs")]))
+        };
+
+        var result = _sut.Apply(input, 0, context).Output;
+
+        result.Should().Contain("A.cs(1,1) CS0168").And.NotContain("B.cs");
+        result.Should().Contain("1 warning in unchanged files not shown (dtk log publish --full | dtk pipe publish): CS0219 (1x)");
+        result.Should().EndWith("2 warnings, 1 in changed files (1 project)\n");
+        _sut.Apply(input, 0).Should().Contain("B.cs(2,1) CS0219");
     }
 }

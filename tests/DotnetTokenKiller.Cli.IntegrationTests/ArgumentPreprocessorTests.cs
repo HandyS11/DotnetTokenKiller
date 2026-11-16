@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using DotnetTokenKiller.Cli.Commands;
 using DotnetTokenKiller.Cli.Commands.Settings;
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using DotnetTokenKiller.Domain.Execution;
@@ -178,6 +179,62 @@ public sealed class ArgumentPreprocessorTests
             ["dotnet", "build", "MyProject.slnx"]);
 
         result.Should().Equal("dotnet", "build", "--", "MyProject.slnx");
+    }
+
+    [Fact]
+    public void InsertSeparator_ListPackageTargetBetweenTheTokens_MovesAfterTheSeparator()
+    {
+        // Spectre routes `dotnet list package` by its two words, so the project or solution dotnet takes between
+        // them goes after the separator, where the command finds it and puts it back between them.
+        var result = ArgumentPreprocessor.InsertSeparator(
+            ["dotnet", "list", "ISDM.slnx", "package", "--vulnerable", "--tee", "out.log"]);
+
+        result.Should().Equal("dotnet", "list", "package", "--tee", "out.log", "--", "ISDM.slnx", "--vulnerable");
+    }
+
+    [Fact]
+    public void InsertSeparator_ListPackageTargetAlone_MovesAfterTheSeparator()
+    {
+        var result = ArgumentPreprocessor.InsertSeparator(["dotnet", "list", "ISDM.slnx", "package"]);
+
+        result.Should().Equal("dotnet", "list", "package", "--", "ISDM.slnx");
+    }
+
+    [Fact]
+    public void PassthroughArguments_ListPackageTargetBetweenTheTokens_KeepsDotnetsOrder()
+    {
+        string[] args = ["dotnet", "list", "ISDM.slnx", "package", "--format", "json", "--max-lines", "5"];
+
+        ArgumentPreprocessor.IsPassthrough(args).Should().BeTrue();
+        ArgumentPreprocessor.PassthroughArguments(args)
+            .Should().Equal("list", "ISDM.slnx", "package", "--format", "json");
+    }
+
+    [Fact]
+    public void IsPassthrough_ReturnsFalse_ForListPackageWithItsTargetBetweenTheTokens()
+    {
+        ArgumentPreprocessor.IsPassthrough(["dotnet", "list", "ISDM.slnx", "package", "--vulnerable"])
+            .Should().BeFalse();
+    }
+
+    [Fact]
+    public void PassthroughArguments_ListReferenceWithItsTarget_IsForwardedVerbatim()
+    {
+        string[] args = ["dotnet", "list", "ISDM.slnx", "reference", "--max-lines", "5"];
+
+        ArgumentPreprocessor.IsPassthrough(args).Should().BeTrue();
+        ArgumentPreprocessor.PassthroughArguments(args)
+            .Should().Equal("list", "ISDM.slnx", "reference", "--max-lines", "5");
+    }
+
+    [Theory]
+    [InlineData(new[] { "ISDM.slnx", "--vulnerable" }, new[] { "list", "ISDM.slnx", "package", "--vulnerable" })]
+    [InlineData(new[] { "--vulnerable" }, new[] { "list", "package", "--vulnerable" })]
+    [InlineData(new string[0], new[] { "list", "package" })]
+    [InlineData(new[] { "--", "x" }, new[] { "list", "package", "--", "x" })]
+    public void ListPackageCommand_PutsALeadingTargetBetweenTheWords(string[] rest, string[] expected)
+    {
+        DotnetListPackageCommand.DotnetArguments(rest).Should().Equal(expected);
     }
 
     [Fact]
@@ -1065,6 +1122,8 @@ public sealed class ArgumentPreprocessorTests
     [InlineData("DOTNET BUILD MyProject.slnx", "dotnet build MyProject.slnx")]
     [InlineData("Dotnet Test", "dotnet test")]
     [InlineData("dotnet BUILD x", "dotnet build x")]
+    [InlineData("DOTNET LIST ISDM.slnx PACKAGE --vulnerable", "dotnet list ISDM.slnx package --vulnerable")]
+    [InlineData("LIST ISDM.slnx Package", "dotnet list ISDM.slnx package")]
     public void Normalize_CanonicalizesKnownInvocationCasing(string input, string expected)
     {
         ArgumentNullException.ThrowIfNull(input);

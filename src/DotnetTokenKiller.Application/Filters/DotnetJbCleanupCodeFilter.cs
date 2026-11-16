@@ -13,7 +13,8 @@ namespace DotnetTokenKiller.Application.Filters;
 /// what changed: the changed files come from <see cref="FilterContext.Changes"/>, found by hashing the target's tree
 /// before and after the run. The filter counts the skipped and processed files and drops the lists, and the
 /// <c>Analyzing file N of M</c> progress lines jb prints while it works. Under <c>dtk pipe</c> there is no such
-/// context and it says so.
+/// context and it says so. jb prints no list at all below its default verbosity (<c>--verbosity=ERROR</c> prints
+/// nothing on success), and then the counts are left out rather than reported as zero.
 /// </para>
 /// <para>
 /// A failed run keeps the <c>[MsBuild]</c>, <c>Warning:</c> and <c>No items were found</c> lines before the
@@ -28,6 +29,22 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
     private const int MaxChangedPaths = 30;
     private const string ProcessingHeader = "Cleaning up using profile";
     private static readonly string[] ProjectExtensions = [".sln", ".slnx", ".slnf", ".csproj"];
+
+    /// <summary>
+    /// The extensions of the files ReSharper's code cleanup can rewrite: C#, Visual Basic, XAML, Razor and Web Forms,
+    /// HTML, JavaScript and TypeScript, CSS, JSON, XML (project and solution files, resources, run settings, WiX and
+    /// the other XML formats of a .NET repository included), C++, T4 and protobuf.
+    /// Anything else, sample data, images and binaries above all, it leaves as it is.
+    /// </summary>
+    private static readonly HashSet<string> CleanedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".cs", ".csx", ".vb", ".xaml", ".axaml", ".razor", ".cshtml", ".vbhtml", ".aspx", ".ascx", ".asax",
+        ".ashx", ".asmx", ".master", ".skin", ".html", ".htm", ".xhtml", ".js", ".jsx", ".mjs", ".cjs", ".ts",
+        ".tsx", ".mts", ".cts", ".css", ".scss", ".less", ".json", ".jsonc", ".xml", ".xsd", ".xsl", ".xslt",
+        ".config", ".resx", ".nuspec", ".csproj", ".vbproj", ".fsproj", ".vcxproj", ".sqlproj", ".proj", ".props",
+        ".targets", ".slnx", ".runsettings", ".ruleset", ".manifest", ".vsct", ".wxs", ".wxi", ".edmx", ".c", ".cc", ".cpp",
+        ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".ixx", ".cppm", ".tt", ".ttinclude", ".t4", ".proto"
+    };
 
     /// <summary>The root that paths are shown relative to: the given one, else the working directory.</summary>
     internal string RootPath => rootPath ?? Environment.CurrentDirectory;
@@ -60,6 +77,13 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         return workingDirectory;
     }
 
+    /// <inheritdoc />
+    public bool CanChange(string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
+        return CleanedExtensions.Contains(Path.GetExtension(fileName));
+    }
+
     /// <summary>Applies the filter to the cleanupcode output, with nothing known about the run.</summary>
     /// <param name="strippedOutput">The cleanupcode output to filter, with ANSI escapes already stripped.</param>
     /// <param name="exitCode">The process exit code; the sole source of truth for the success/failure verdict.</param>
@@ -75,7 +99,7 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         ArgumentNullException.ThrowIfNull(strippedOutput);
         ArgumentNullException.ThrowIfNull(context);
 
-        var (processed, skipped, kept, loadErrors) = Parse(strippedOutput);
+        var (processed, skipped, kept, loadErrors, listed) = Parse(strippedOutput);
 
         var sb = new StringBuilder();
         if (exitCode != 0)
@@ -95,17 +119,20 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
             return new FilterResult(sb.ToString());
         }
 
-        var counts = string.Create(CultureInfo.InvariantCulture, $"{processed} processed, {skipped} skipped");
+        var counts = listed
+            ? string.Create(CultureInfo.InvariantCulture, $"{processed} processed, {skipped} skipped")
+            : null;
+        var countsThen = counts is null ? string.Empty : $"{counts} · ";
         var changes = context.Changes;
         if (changes is null)
         {
             sb.Append(CultureInfo.InvariantCulture,
-                $"✓ dotnet jb cleanupcode: {counts} · changed files unknown (piped)\n");
+                $"✓ dotnet jb cleanupcode: {countsThen}changed files unknown (piped)\n");
         }
         else if (!changes.Computed)
         {
             sb.Append(CultureInfo.InvariantCulture,
-                $"✓ dotnet jb cleanupcode: {counts} · changed files not computed ({changes.NotComputedReason})\n");
+                $"✓ dotnet jb cleanupcode: {countsThen}changed files not computed ({changes.NotComputedReason})\n");
         }
         else
         {
@@ -115,7 +142,13 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         return new FilterResult(sb.ToString());
     }
 
-    private (int Processed, int Skipped, List<string> Kept, int LoadErrors) Parse(string output)
+    /// <summary>
+    /// Counts the processed and skipped files and keeps the lines worth showing on a failure. <c>Listed</c> says
+    /// whether jb printed its file list at all: it does under the <c>Cleaning up using profile</c> header, which a
+    /// verbosity below the default leaves out.
+    /// </summary>
+    /// <param name="output">The cleanupcode output.</param>
+    private (int Processed, int Skipped, List<string> Kept, int LoadErrors, bool Listed) Parse(string output)
     {
         var skipped = 0;
         var processed = 0;
@@ -145,7 +178,7 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
             }
         }
 
-        return (processed, skipped, kept, loadErrors);
+        return (processed, skipped, kept, loadErrors, inProcessed);
     }
 
     private static bool IsKeptLine(string line) =>
@@ -185,11 +218,12 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         return true;
     }
 
-    private static void AppendChanged(StringBuilder sb, IReadOnlyList<string> paths, string counts)
+    private static void AppendChanged(StringBuilder sb, IReadOnlyList<string> paths, string? counts)
     {
+        var inParentheses = counts is null ? string.Empty : $" ({counts})";
         if (paths.Count == 0)
         {
-            sb.Append(CultureInfo.InvariantCulture, $"✓ dotnet jb cleanupcode: no changes ({counts})\n");
+            sb.Append(CultureInfo.InvariantCulture, $"✓ dotnet jb cleanupcode: no changes{inParentheses}\n");
             return;
         }
 
@@ -204,7 +238,7 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
         }
 
         sb.Append(CultureInfo.InvariantCulture,
-            $"✓ dotnet jb cleanupcode: {paths.Count} file{(paths.Count == 1 ? "" : "s")} changed ({counts})\n");
+            $"✓ dotnet jb cleanupcode: {paths.Count} file{(paths.Count == 1 ? "" : "s")} changed{inParentheses}\n");
     }
 
     private static string FailureSummary(int loadErrors, List<string> kept)

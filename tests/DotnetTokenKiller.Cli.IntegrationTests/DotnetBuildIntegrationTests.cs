@@ -198,15 +198,40 @@ public class DotnetBuildIntegrationTests
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
-    public async Task Build_SampleAppWarnings_Success_ContainsWarningCodes()
+    public async Task Build_SampleAppWarnings_OutsideAWorkTree_ContainsWarningCodes()
     {
-        var (output, _) = await IntegrationTestHelper.RunDtkAsync(
+        // Every warning is listed when git cannot say which files changed: GIT_DIR names no repository, as for a
+        // build outside any work tree.
+        var (output, _, _) = await IntegrationTestHelper.RunDtkWithDbAsync(
+            new Dictionary<string, string> { ["GIT_DIR"] = Path.Combine(Path.GetTempPath(), "dtk-no-repository") },
             "dotnet", "build", SampleAppWarnings, "--no-incremental");
 
         // CS-level compiler warnings
         output.Should().Contain("CS0162");
         output.Should().Contain("CS0168");
         output.Should().Contain("CS8600");
+        output.Should().NotContain("changed files");
+    }
+
+    [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Build_SampleAppWarnings_InThisWorkTree_ListsTheChangedFilesWarningsOrAll()
+    {
+        // The sample lives in this repository, and what counts as changed depends on the checkout: a clean one (CI)
+        // lists every warning; one with changes elsewhere counts the sample's on one line naming the full list.
+        var (output, _) = await IntegrationTestHelper.RunDtkAsync(
+            "dotnet", "build", SampleAppWarnings, "--no-incremental");
+
+        output.Trim().Split('\n')[^1].Should().MatchRegex(
+            @"^✓ dotnet build: 0 errors, \d+ warnings( \(\d+ (distinct|shown)\))?(, (none|\d+) in changed files)? ");
+        if (output.Contains(", none in changed files", StringComparison.Ordinal))
+        {
+            output.Should().MatchRegex(
+                @"\d+ warnings in unchanged files not shown \(dtk log build --full \| dtk pipe build\): ");
+        }
+        else if (!output.Contains(" in changed files", StringComparison.Ordinal))
+        {
+            output.Should().Contain("CS0162");
+        }
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

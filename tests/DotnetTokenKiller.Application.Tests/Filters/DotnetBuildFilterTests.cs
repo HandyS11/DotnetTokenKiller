@@ -1,5 +1,7 @@
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Application.Tests.Helpers;
+using DotnetTokenKiller.Domain.Files;
+using DotnetTokenKiller.Domain.Filters;
 using DotnetTokenKiller.Domain.Text;
 using FluentAssertions;
 
@@ -154,7 +156,7 @@ public class DotnetBuildFilterTests
         var result = _sut.Apply(fixture, exitCode: 1);
 
         result.TrimEnd('\n').Split('\n')[^1]
-            .Should().Be("✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project, 1.13s)");
+            .Should().Be("✗ dotnet build failed (exit 1): 2 errors (1 distinct), 0 warnings (1 project, 1.13s)");
     }
 
     [Fact]
@@ -365,7 +367,7 @@ public class DotnetBuildFilterTests
         result.Should().Be(
             "A.cs (2 errors)\n  (1,1) CS0001: one\n  (2,1) CS0001: two\nB.cs(3,1) CS0002: three\n"
             + "Top codes: CS0001 (2x), CS0002 (1x)\n"
-            + "✗ dotnet build failed (exit 1): 6 errors (3 shown), 0 warnings (1 project)\n");
+            + "✗ dotnet build failed (exit 1): 6 errors (3 distinct), 0 warnings (1 project)\n");
     }
 
     [Fact]
@@ -1304,11 +1306,12 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
-    public void Apply_DiagnosticRepeatedPerTargetFramework_ReportsMsbuildTotalAndShownCount()
+    public void Apply_DiagnosticRepeatedPerTargetFramework_ReportsMsbuildTotalAndDistinctCount()
     {
         // A multi-targeted project reports each diagnostic once per TFM and MSBuild counts them all.
         // Collapsing them keeps the output small, but the verdict line must not silently claim there was
-        // only one: it reports MSBuild's total and annotates how many distinct entries are shown.
+        // only one: it reports MSBuild's total and how many distinct entries it stands for. "distinct", not
+        // "shown": every one MSBuild counted is listed, so nothing is left to look for in the log.
         const string input = """
                              /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net8.0]
                              /p/Bad.cs(1,52): error CS0029: Cannot implicitly convert type 'string' to 'int' [/p/m.csproj::TargetFramework=net10.0]
@@ -1318,7 +1321,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
-        result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project)\n");
+        result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 distinct), 0 warnings (1 project)\n");
         result.Should().Contain("Bad.cs(1,52) CS0029: Cannot implicitly convert type 'string' to 'int'\n");
     }
 
@@ -1358,7 +1361,7 @@ public class DotnetBuildFilterTests
 
         var result = new DotnetBuildFilter("/p").Apply(input, exitCode: 1);
 
-        result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 shown), 0 warnings (1 project)\n");
+        result.Should().EndWith("✗ dotnet build failed (exit 1): 2 errors (1 distinct), 0 warnings (1 project)\n");
         result.Should().Contain("Bad.cs(1,52) CS0029: Cannot implicitly convert type 'string' to 'int'\n");
     }
 
@@ -1951,5 +1954,72 @@ public class DotnetBuildFilterTests
         using var stream = assembly.GetManifestResourceStream(fullName)!;
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    [Fact]
+    public void Apply_WithTheWorkTreeChanges_ListsOnlyTheWarningsOfChangedFiles()
+    {
+        var root = Path.GetFullPath("/test/project/root");
+        var input = $"""
+                     {root}/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [{root}/P.csproj]
+                     {root}/B.cs(2,1): warning CS0219: The variable 'x' is assigned but its value is never used [{root}/P.csproj]
+                         2 Warning(s)
+                         0 Error(s)
+                     """;
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(new WorkTreeChanges([Path.Combine(root, "A.cs")]))
+        };
+
+        var result = _sut.Apply(input, 0, context).Output;
+
+        result.Should().Contain("A.cs(1,1) CS0168").And.NotContain("B.cs");
+        result.Should().Contain("1 warning in unchanged files not shown (dtk log build --full | dtk pipe build): CS0219 (1x)");
+        result.Should().EndWith("2 warnings, 1 in changed files (1 project)\n");
+        _sut.Apply(input, 0).Should().Contain("B.cs(2,1) CS0219");
+    }
+
+    [Theory]
+    [InlineData("dotnet_build_success.txt", 0)]
+    [InlineData("dotnet_build_errors.txt", 1)]
+    public void Apply_WithNoWarningToList_NeverAsksForTheWorkTreeChanges(string fixture, int exitCode)
+    {
+        // Working out the changes runs git: a build with no warnings, or whose errors hide them, does without.
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(() => throw new InvalidOperationException("git ran"))
+        };
+
+        var act = () => _sut.Apply(LoadFixture(fixture), exitCode, context);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void Apply_WithNoChangedFile_ListsEveryWarningAsBefore()
+    {
+        // A clean checkout (a fresh clone, CI, the default branch after a pull) has nothing to single out: listing
+        // nothing would leave only the raw log to read the warnings in.
+        var context = new FilterContext { WorkTreeChanges = new Lazy<WorkTreeChanges?>(new WorkTreeChanges([])) };
+        var fixture = LoadFixture("dotnet_build_warnings.txt");
+
+        _sut.Apply(fixture, 0, context).Output.Should().Be(_sut.Apply(fixture, 0));
+    }
+
+    [Fact]
+    public void Apply_FailedRunWhoseErrorsMatchedNoPattern_NeverNarrowsItsWarnings()
+    {
+        // MSBuild declared an error no pattern read: the warnings are the only body there is, so all of them stay.
+        const string input = """
+                             /p/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/p/P.csproj]
+                                 1 Warning(s)
+                                 1 Error(s)
+                             """;
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(() => throw new InvalidOperationException("git ran"))
+        };
+
+        new DotnetBuildFilter("/p").Apply(input, 1, context).Output.Should().Contain("A.cs(1,1) CS0168");
     }
 }

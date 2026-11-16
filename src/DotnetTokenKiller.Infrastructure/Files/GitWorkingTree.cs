@@ -1,0 +1,217 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Text;
+using DotnetTokenKiller.Domain.Files;
+
+namespace DotnetTokenKiller.Infrastructure.Files;
+
+/// <summary>Asks the <c>git</c> on <c>PATH</c> about a work tree, giving up on any failure.</summary>
+public sealed class GitWorkingTree : IGitWorkingTree
+{
+    /// <summary>How long the git commands of one answer may take together before git is killed and the answer given up.</summary>
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>The git executable's full path, or <see langword="null"/> when there is none; found on first use.</summary>
+    private readonly Lazy<string?> _gitPath;
+
+    private readonly TimeSpan _timeout;
+
+    /// <summary>Uses the first <c>git</c> on <c>PATH</c>, looked up the first time git is asked something.</summary>
+    public GitWorkingTree()
+    {
+        _gitPath = new Lazy<string?>(FindOnPath);
+        _timeout = DefaultTimeout;
+    }
+
+    /// <summary>Uses the given git.</summary>
+    /// <param name="gitPath">The git executable's full path, or <see langword="null"/> when there is none.</param>
+    public GitWorkingTree(string? gitPath)
+        : this(gitPath, DefaultTimeout)
+    {
+    }
+
+    /// <summary>Uses the given git, with the given deadline for each answer.</summary>
+    /// <param name="gitPath">The git executable's full path, or <see langword="null"/> when there is none.</param>
+    /// <param name="timeout">How long the git commands of one answer may take together.</param>
+    internal GitWorkingTree(string? gitPath, TimeSpan timeout)
+    {
+        _gitPath = new Lazy<string?>(gitPath);
+        _timeout = timeout;
+    }
+
+    /// <summary>
+    /// The first <c>git</c> (<c>git.exe</c> on Windows) in a <c>PATH</c> directory, as a shell finds it. A bare name
+    /// handed to <c>Process.Start</c> would be looked up in dtk's own directory first, and on Windows in the current
+    /// one, which is the repository dtk runs in: a <c>git.exe</c> committed there would run.
+    /// </summary>
+    internal static string? FindOnPath()
+    {
+        var name = OperatingSystem.IsWindows() ? "git.exe" : "git";
+        var entries = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? [];
+        return entries
+            .Select(entry => entry.Trim().Trim('"'))
+            .Where(Path.IsPathFullyQualified)
+            .Select(directory => Path.Combine(directory, name))
+            .FirstOrDefault(IsExecutableFile);
+    }
+
+    private static bool IsExecutableFile(string candidate)
+    {
+        try
+        {
+            if (!File.Exists(candidate))
+            {
+                return false;
+            }
+
+            const UnixFileMode anyExecute =
+                UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+            return OperatingSystem.IsWindows() || (File.GetUnixFileMode(candidate) & anyExecute) != 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string>? UnignoredFiles(string directory, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+
+        using var deadline = Deadline(cancellationToken);
+        var files = Paths(Run(directory, deadline.Token,
+            "ls-files", "-z", "--cached", "--others", "--exclude-standard"));
+        cancellationToken.ThrowIfCancellationRequested();
+        return files;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string>? ChangedFiles(string directory, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(directory);
+
+        using var deadline = Deadline(cancellationToken);
+        var files = ListChangedFiles(directory, deadline.Token);
+        cancellationToken.ThrowIfCancellationRequested();
+        return files;
+    }
+
+    /// <summary>
+    /// The changed files, or <see langword="null"/> when any git command fails or <paramref name="token"/> stops it.
+    /// </summary>
+    /// <param name="directory">A directory in the work tree.</param>
+    /// <param name="token">The caller's cancellation and the deadline together.</param>
+    private List<string>? ListChangedFiles(string directory, CancellationToken token)
+    {
+        // The top of the work tree reached from the directory as the caller spelled it: git's --show-toplevel is
+        // resolved (an 8.3 name, a junction or a subst drive on Windows, a symbolic link elsewhere), while MSBuild
+        // names files under the directory it was started in. Running from the top also makes the paths git prints
+        // relative to it, whatever diff.relative says.
+        var cdup = Run(directory, token, "rev-parse", "--show-cdup")?.TrimEnd('\n', '\r');
+        if (cdup is null)
+        {
+            return null;
+        }
+
+        var top = Path.GetFullPath(cdup.Length == 0 ? "." : cdup, directory);
+
+        // What the branch changed since it left the default branch, committed or not; none without an origin/HEAD.
+        var mergeBase = Run(top, token, "merge-base", "HEAD", "refs/remotes/origin/HEAD")?.Trim();
+        var sinceBase = string.IsNullOrEmpty(mergeBase)
+            ? []
+            : Paths(Run(top, token, "diff", "--name-only", "-z", "--no-renames", mergeBase, "--"));
+
+        // What is not committed yet, staged or not, and the untracked files no ignore rule matches: "XY path" entries,
+        // their paths from the top whatever the directory. It also answers before the first commit, and fails on a
+        // HEAD it cannot read, which leaves the answer unknown.
+        var status = Run(top, token, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames");
+        if (sinceBase is null || status is null || token.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        var uncommitted = status.Split('\0', StringSplitOptions.RemoveEmptyEntries)
+            .Where(entry => entry.Length > 3)
+            .Select(entry => entry[3..]);
+        return [.. sinceBase.Concat(uncommitted).Distinct(StringComparer.Ordinal).Select(path => Path.GetFullPath(path, top))];
+    }
+
+    /// <summary>The caller's cancellation, and the deadline for every git command an answer takes together.</summary>
+    /// <param name="cancellationToken">The caller's cancellation.</param>
+    private CancellationTokenSource Deadline(CancellationToken cancellationToken)
+    {
+        var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(_timeout);
+        return deadline;
+    }
+
+    private static List<string>? Paths(string? output) =>
+        output?.Split('\0', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+    /// <summary>
+    /// Runs git in <paramref name="directory"/> and returns what it printed, or <see langword="null"/> when it
+    /// cannot be run, fails, or <paramref name="token"/> stops it (it is then killed).
+    /// </summary>
+    /// <param name="directory">The working directory.</param>
+    /// <param name="token">Kills git.</param>
+    /// <param name="arguments">git's arguments.</param>
+    private string? Run(string directory, CancellationToken token, params string[] arguments)
+    {
+        if (token.IsCancellationRequested || _gitPath.Value is not { } gitPath)
+        {
+            return null;
+        }
+
+        var startInfo = new ProcessStartInfo(gitPath)
+        {
+            WorkingDirectory = directory,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = new UTF8Encoding(false)
+        };
+        // Never a prompt, and no lock a concurrent git command would trip on.
+        startInfo.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        startInfo.Environment["GIT_OPTIONAL_LOCKS"] = "0";
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        try
+        {
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                return null;
+            }
+
+            using var kill = token.Register(() => Kill(process));
+            process.StandardInput.Close();
+            process.ErrorDataReceived += static (_, _) => { };
+            process.BeginErrorReadLine();
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            return process.ExitCode == 0 && !token.IsCancellationRequested ? output : null;
+        }
+        catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static void Kill(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
+        {
+            // Already gone.
+        }
+    }
+}

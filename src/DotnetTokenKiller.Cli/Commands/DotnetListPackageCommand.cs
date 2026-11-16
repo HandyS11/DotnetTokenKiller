@@ -1,5 +1,6 @@
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Cli.Commands.Settings;
+using DotnetTokenKiller.Domain;
 using DotnetTokenKiller.Domain.Filters;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console.Cli;
@@ -21,14 +22,25 @@ internal sealed class DotnetListPackageCommand(
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(context);
 
-        // Both tokens are prepended: the child process must receive `dotnet list package ...`, and
-        // FilteredRunUseCase derives the tracking slug by matching this same argument list.
-        var args = settings.PositionalArgs
-            .Prepend("package")
-            .Prepend("list")
-            .Concat(context.Remaining.Raw)
-            .ToArray();
+        var args = DotnetArguments([.. settings.PositionalArgs.Concat(context.Remaining.Raw)]);
 
         return filteredRun.RunAsync(filter, "dotnet", args, settings.ToOutputOptions(), cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// The child's arguments, <c>list package …</c>, with both words prepended, since FilteredRunUseCase derives
+    /// the tracking slug by matching this same argument list. A leading project or solution goes between the words,
+    /// where dotnet takes it (<c>dotnet list ISDM.slnx package</c>; it rejects one after <c>package</c>), whether it
+    /// was typed there, and moved behind the words for routing by <c>ArgumentPreprocessor.InsertSeparator</c>, or
+    /// typed after them.
+    /// </summary>
+    /// <param name="rest">The arguments after <c>list package</c>.</param>
+    internal static string[] DotnetArguments(IReadOnlyList<string> rest)
+    {
+        ArgumentNullException.ThrowIfNull(rest);
+
+        return rest.Count > 0 && DotnetSubcommands.IsTarget(rest[0])
+            ? ["list", rest[0], "package", .. rest.Skip(1)]
+            : ["list", "package", .. rest];
     }
 }

@@ -812,9 +812,9 @@
       "exitCode": 2,
       "rawBytes": 2418,
       "rawTokens": 638,
-      "filteredTokens": 232,
-      "savedTokens": 406,
-      "savingsPercent": 63.6
+      "filteredTokens": 260,
+      "savedTokens": 378,
+      "savingsPercent": 59.2
     },
     {
       "id": "test/mtp-xunit3-timeout",
@@ -900,9 +900,9 @@
       "exitCode": 1,
       "rawBytes": 1350,
       "rawTokens": 342,
-      "filteredTokens": 114,
-      "savedTokens": 228,
-      "savingsPercent": 66.7
+      "filteredTokens": 134,
+      "savedTokens": 208,
+      "savingsPercent": 60.8
     },
     {
       "id": "test/no-test-available",
@@ -958,6 +958,17 @@
       "filteredTokens": 23,
       "savedTokens": 214,
       "savingsPercent": 90.3
+    },
+    {
+      "id": "test/unknown-switch",
+      "fixture": "dotnet_test_unknown_switch.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 1146,
+      "rawTokens": 332,
+      "filteredTokens": 31,
+      "savedTokens": 301,
+      "savingsPercent": 90.7
     },
     {
       "id": "test/zero",

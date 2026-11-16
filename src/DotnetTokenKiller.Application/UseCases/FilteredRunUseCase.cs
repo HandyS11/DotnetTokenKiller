@@ -14,6 +14,7 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <param name="teeService">Opens the log the run streams into.</param>
 /// <param name="rawOutputCopyFactory">Creates the file <c>--tee &lt;path&gt;</c> copies the raw output into.</param>
 /// <param name="fileSnapshotter">Hashes the tree around a run for filters that need the changed files.</param>
+/// <param name="git">Says which files the work in progress changed, for filters that single out their warnings.</param>
 /// <param name="pipeline">The shared output-filtering pipeline.</param>
 /// <param name="output">The text writer for user-facing output.</param>
 public sealed class FilteredRunUseCase(
@@ -21,6 +22,7 @@ public sealed class FilteredRunUseCase(
     ITeeService teeService,
     IRawOutputCopyFactory rawOutputCopyFactory,
     IFileContentSnapshotter fileSnapshotter,
+    IGitWorkingTree git,
     FilteredOutputPipeline pipeline,
     TextWriter output)
 {
@@ -156,13 +158,35 @@ public sealed class FilteredRunUseCase(
                 WorkingDirectory = Environment.CurrentDirectory,
                 StartedUtc = startedUtc,
                 Test = test ?? TestOptions.None,
-                Changes = changes
+                Changes = changes,
+                WorkTreeChanges = new Lazy<WorkTreeChanges?>(() =>
+                    WorkTreeChangesOf(Environment.CurrentDirectory, cancellationToken))
             }
         };
 
         // None: the child has exited, and a cancellation landing now (Ctrl+C's grace period elapsing)
         // must not drop the filtered output, the log or the record of a run that finished on its own.
         return await pipeline.ProcessAsync(request, session, prepared, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The files the work in progress changed, from git, or <see langword="null"/> outside a work tree or when git
+    /// fails or is stopped: a filter then renders as under <c>dtk pipe</c>. Never fails the run.
+    /// </summary>
+    /// <param name="workingDirectory">The run's working directory.</param>
+    /// <param name="cancellationToken">The run's cancellation: Ctrl+C stops git, and the output is still rendered.</param>
+    private WorkTreeChanges? WorkTreeChangesOf(string workingDirectory, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return git.ChangedFiles(workingDirectory, cancellationToken) is { } files ? new WorkTreeChanges(files) : null;
+        }
+#pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            return null;
+        }
     }
 
     /// <summary>Hashes the tree before the child starts, for a filter that asks for it; never fails the run.</summary>
@@ -179,8 +203,8 @@ public sealed class FilteredRunUseCase(
         try
         {
             var root = snapshotFilter.SnapshotRoot(ArgumentsAfterSubcommand(args), Environment.CurrentDirectory);
-            var before = fileSnapshotter.Take(root, token);
-            return new SnapshotRun(root, before, before is null ? TreeTooLarge : null);
+            var before = fileSnapshotter.Take(root, snapshotFilter.CanChange, token);
+            return new SnapshotRun(root, before, before is null ? TreeTooLarge : null, snapshotFilter.CanChange);
         }
 #pragma warning disable CA1031 // A filter's file bookkeeping must never break the user's command.
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -210,7 +234,7 @@ public sealed class FilteredRunUseCase(
 
         try
         {
-            var after = fileSnapshotter.Take(run.Root);
+            var after = fileSnapshotter.Take(run.Root, run.CanChange);
             if (after is null)
             {
                 return FileChangeSet.NotComputed(TreeTooLarge);
@@ -281,5 +305,6 @@ public sealed class FilteredRunUseCase(
     private const string TreeTooLarge = "tree too large";
     private const string SnapshotFailed = "snapshot failed";
 
-    private readonly record struct SnapshotRun(string? Root, FileContentSnapshot? Before, string? FailureReason);
+    private readonly record struct SnapshotRun(
+        string? Root, FileContentSnapshot? Before, string? FailureReason, Func<string, bool>? CanChange = null);
 }

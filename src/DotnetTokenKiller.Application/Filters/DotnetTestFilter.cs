@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using DotnetTokenKiller.Application.Helpers;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Domain.Filters;
 
 namespace DotnetTokenKiller.Application.Filters;
@@ -16,7 +17,19 @@ namespace DotnetTokenKiller.Application.Filters;
 public sealed partial class DotnetTestFilter(string? rootPath = null) : IContextualOutputFilter
 {
     private const int MaxFailures = 15;
+
+    /// <summary>The fewest characters a failure's message is shown with, however many tests failed.</summary>
     private const int MessageMaxLen = 300;
+
+    /// <summary>The most characters a failure's message is shown with, when it is the only one.</summary>
+    private const int SoleMessageMaxLen = 3000;
+
+    /// <summary>
+    /// The characters the messages of the failures shown share: each gets an equal part of it, between
+    /// <see cref="MessageMaxLen"/> and <see cref="SoleMessageMaxLen"/>, so a run with one or a few failures shows
+    /// a long message whole (an aggregated assertion, a container's validation errors) and one with many stays short.
+    /// </summary>
+    private const int MessageBudget = MaxFailures * MessageMaxLen;
 
     /// <summary>How many lines of a failing test's own output <c>--show-output</c> prints per test.</summary>
     private const int MaxOutputLines = 20;
@@ -24,8 +37,6 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <summary>How many warning codes the status line names before it trails off.</summary>
     private const int MaxWarningCodes = 3;
 
-    /// <summary>Cap on the innermost exception of a nested message, so that it survives a long outer one.</summary>
-    private const int InnerExceptionMaxLen = 200;
 
     /// <summary>What a failure reads when Reqnroll found no binding for a step, followed by the steps.</summary>
     private const string ReqnrollPendingPrefix = "No matching step definition: ";
@@ -61,7 +72,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// </summary>
     /// <param name="strippedOutput">The test output to filter, with ANSI escape sequences already stripped.</param>
     /// <param name="exitCode">The process exit code, as for <see cref="Apply(string, int)"/>.</param>
-    /// <param name="context">The run's context; only its test options are read.</param>
+    /// <param name="context">The run's context: its test options, and the files the work in progress changed.</param>
     public FilterResult Apply(string strippedOutput, int exitCode, FilterContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -78,7 +89,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // The build `dotnet test` runs prints the same diagnostics `dotnet build` does, so they are read the
         // same way: a project that fails to compile, and the warnings of the ones that do, on any exit code.
         var buildReport = MsBuildDiagnosticReport.Parse(strippedOutput, RootPath, IsTestTextDiagnostic);
-        var result = FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty);
+        var changes = new Lazy<WorkTreeChanges?>(() => buildReport.ChangesFor(context));
+        var result = FormatOutput(state, exitCode, buildReport, context.Test.FailOnEmpty, changes);
 
         // Nothing recognised, and the output is not in English: the raw tail the pipeline would show, under a
         // status line that says why and what to do instead of "not recognized".
@@ -478,9 +490,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         var (sourceRef, afterStack) = FindSourceRef(lines, i);
         i = afterStack;
 
-        var message = ReqnrollPendingMessage(msgLines, lines, detailStart, afterStack) ?? CompactMessage(msgLines);
+        var pending = ReqnrollPendingMessage(msgLines, lines, detailStart, afterStack);
         var output = CollectVsTestOutput(lines, detailStart, afterStack);
-        state.Failures.Add(new FailureInfo(testName, duration, message, sourceRef, output));
+        state.Failures.Add(new FailureInfo(testName, duration, msgLines, pending, sourceRef, output));
         return i;
     }
 
@@ -546,7 +558,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             i++;
         }
 
-        state.Failures.Add(new FailureInfo(testName, duration, CompactMessage(msgLines), sourceRef, output));
+        state.Failures.Add(new FailureInfo(testName, duration, msgLines, null, sourceRef, output));
         return i;
     }
 
@@ -866,10 +878,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     }
 
     private static FilterResult FormatOutput(ParseState state, int exitCode, MsBuildDiagnosticReport buildReport,
-        bool failOnEmpty)
+        bool failOnEmpty, Lazy<WorkTreeChanges?> changes)
     {
         var elapsed = DurationFormat.Format(state.TotalDurationMs, state.DurationExact);
-        var warnings = DescribeBuildWarnings(buildReport);
+
+        // A run that knows which files the work in progress changed lists their warnings right above its status line,
+        // which says how many there are; a project that did not build reports its errors instead. git runs only for
+        // the verdicts that carry the build's warnings.
+        string Warnings() => DescribeBuildWarnings(buildReport, changes.Value);
+        string ChangedWarnings() =>
+            changes.Value is { } changed ? buildReport.RenderWarningsIn(changed) : string.Empty;
 
         // A project that did not compile never ran its tests, and says why in the same diagnostics a
         // build prints; that comes first, with whatever the other projects' tests reported after it. Only
@@ -879,7 +897,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // nothing else to report, yields to the raw tail.
         if (exitCode != 0 && buildReport.ParsedErrorCount > 0)
         {
-            return new FilterResult(FormatBuildFailure(state, buildReport, elapsed, warnings));
+            return new FilterResult(FormatBuildFailure(state, buildReport, elapsed, DescribeBuildWarnings(buildReport)));
         }
 
         // A failed run (non-zero exit) with any parsed failure — from a summary or from failure
@@ -889,7 +907,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         // because a stray line happened to match a failure-shaped pattern.
         if (exitCode != 0 && (state.TotalFailed > 0 || state.Failures.Count > 0))
         {
-            return new FilterResult(FormatFailures(state, elapsed, warnings: warnings));
+            return new FilterResult(
+                BeforeStatusLine(FormatFailures(state, elapsed, warnings: Warnings()), ChangedWarnings()));
         }
 
         // A listing that found names wins even beside a "No test matches" line: that one is another
@@ -911,9 +930,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             return new FilterResult(string.Empty);
         }
 
-        if (FormatMtpAllSkipped(state, exitCode, elapsed, warnings) is { } allSkipped)
+        if (FormatMtpAllSkipped(state, exitCode, elapsed, Warnings) is { } allSkipped)
         {
-            return new FilterResult(allSkipped);
+            return new FilterResult(ChangedWarnings() + allSkipped);
         }
 
         if (exitCode != 0)
@@ -928,7 +947,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
         return new FilterResult(
-            $"{PassedNamesBlock(state)}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings}\n");
+            $"{PassedNamesBlock(state)}{ChangedWarnings()}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){Warnings()}\n");
     }
 
     /// <summary>
@@ -938,9 +957,14 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// with <c>, …</c> when more codes exist. A warning that carries no code counts toward the total but is
     /// not named, and the list is left out when no warning carries one. A run without warnings adds nothing.
     /// A <c>--list-tests</c> listing and a zero-tests verdict are no verdict on the build and do not carry it.
+    /// With the files the work in progress changed known, it ends with how many of the warnings are in them:
+    /// <c>, 2 in changed files</c> or <c>, none in changed files</c>. The total covers only the projects this run
+    /// compiled (MSBuild repeats no warning of a project it found up to date), so it moves from run to run; that
+    /// part does not.
     /// </summary>
     /// <param name="report">The run's build diagnostics.</param>
-    private static string DescribeBuildWarnings(MsBuildDiagnosticReport report)
+    /// <param name="changes">The files the work in progress changed, when known.</param>
+    private static string DescribeBuildWarnings(MsBuildDiagnosticReport report, WorkTreeChanges? changes = null)
     {
         var total = report.WarningTotal;
         if (total == 0)
@@ -953,15 +977,35 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             .ToList();
         var counted = string.Create(CultureInfo.InvariantCulture,
             $" \u00b7 {total} build warning{(total == 1 ? "" : "s")}");
+        var inChanges = InChangedFiles(report, changes);
         if (codes.Count == 0)
         {
-            return counted;
+            return counted + inChanges;
         }
 
         var named = codes.Take(MaxWarningCodes).Select(c =>
             c.Count == 1 ? c.Code : string.Create(CultureInfo.InvariantCulture, $"{c.Code}\u00d7{c.Count}"));
         var more = codes.Count > MaxWarningCodes ? ", \u2026" : string.Empty;
-        return $"{counted} ({string.Join(", ", named)}{more})";
+        return $"{counted} ({string.Join(", ", named)}{more}){inChanges}";
+    }
+
+    /// <summary>
+    /// <c>, 2 in changed files</c>, <c>, none in changed files</c>, or nothing when the changes are unknown or no
+    /// warning was parsed.
+    /// </summary>
+    /// <param name="report">The run's build diagnostics.</param>
+    /// <param name="changes">The files the work in progress changed, when known.</param>
+    private static string InChangedFiles(MsBuildDiagnosticReport report, WorkTreeChanges? changes)
+    {
+        if (changes is null || report.WarningCodes.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var count = report.WarningCountIn(changes);
+        return count == 0
+            ? ", none in changed files"
+            : string.Create(CultureInfo.InvariantCulture, $", {count} in changed files");
     }
 
     /// <summary>The names a <c>--list-tests</c> run listed, one per line in listed order, then its status line.</summary>
@@ -987,8 +1031,8 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <param name="state">The parsed run.</param>
     /// <param name="exitCode">The run's exit code.</param>
     /// <param name="elapsed">The run's duration.</param>
-    /// <param name="warnings">What the status line says of the build's warnings.</param>
-    private static string? FormatMtpAllSkipped(ParseState state, int exitCode, string elapsed, string warnings)
+    /// <param name="warnings">What the status line says of the build's warnings, worked out only for such a run.</param>
+    private static string? FormatMtpAllSkipped(ParseState state, int exitCode, string elapsed, Func<string> warnings)
     {
         if (exitCode != MtpZeroTestsExitCode
             || state is not { MtpZeroTestsVerdict: true, TotalPassed: 0, TotalFailed: 0, TotalSkipped: > 0 })
@@ -997,7 +1041,21 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         }
 
         return
-            $"\u26a0 dotnet test: 0 passed, {state.TotalSkipped} skipped ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings} \u00b7 no test ran (exit {MtpZeroTestsExitCode})\n";
+            $"\u26a0 dotnet test: 0 passed, {state.TotalSkipped} skipped ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){warnings()} \u00b7 no test ran (exit {MtpZeroTestsExitCode})\n";
+    }
+
+    /// <summary>Puts <paramref name="block"/> between a report's body and its status line, its last line.</summary>
+    /// <param name="report">A report ending with its status line and <c>\n</c>.</param>
+    /// <param name="block">Whole lines, or an empty string.</param>
+    private static string BeforeStatusLine(string report, string block)
+    {
+        if (block.Length == 0)
+        {
+            return report;
+        }
+
+        var statusLine = report.LastIndexOf('\n', report.Length - 2) + 1;
+        return string.Concat(report.AsSpan(0, statusLine), block, report.AsSpan(statusLine));
     }
 
     /// <summary>The "0 tests found" verdict, or <see langword="null"/> when the run is not one.</summary>
@@ -1154,10 +1212,13 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     {
         sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({failedCount}):");
 
-        foreach (var f in state.Failures.Take(MaxFailures))
+        var shown = state.Failures.Take(MaxFailures).ToList();
+        var messageMaxLen = Math.Clamp(MessageBudget / Math.Max(shown.Count, 1), MessageMaxLen, SoleMessageMaxLen);
+        foreach (var f in shown)
         {
             sb.AppendLine(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration}]")
-                .AppendLine(CultureInfo.InvariantCulture, $"    {f.Message}");
+                .AppendLine(CultureInfo.InvariantCulture,
+                    $"    {f.PresetMessage ?? CompactMessage(f.MessageLines, messageMaxLen)}");
             if (!string.IsNullOrEmpty(f.SourceRef))
             {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"    at {f.SourceRef}");
@@ -1195,24 +1256,25 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// Joins a failure's message lines into the one line the report prints. An xUnit assertion with an
     /// <c>Expected:</c>/<c>Actual:</c> pair keeps its <c>Assert.…</c> header and its <c>↓ (pos N)</c> pointer; a
     /// nested exception keeps its innermost <c>---- Type : message</c> segment, the usual real cause, up to
-    /// <see cref="InnerExceptionMaxLen"/> characters.
+    /// two thirds of <paramref name="maxLen"/>.
     /// </summary>
     /// <param name="lines">The trimmed, non-empty lines of the message.</param>
-    private static string CompactMessage(List<string> lines)
+    /// <param name="maxLen">The most characters the line may take, before the ellipsis of a cut.</param>
+    private static string CompactMessage(IReadOnlyList<string> lines, int maxLen)
     {
         if (lines.Count == 0)
         {
             return string.Empty;
         }
 
-        var expectedLine = lines.Find(l => l.StartsWith("Expected:", StringComparison.OrdinalIgnoreCase));
-        var actualLine = lines.Find(l => l.StartsWith("Actual:", StringComparison.OrdinalIgnoreCase));
+        var expectedLine = lines.FirstOrDefault(l => l.StartsWith("Expected:", StringComparison.OrdinalIgnoreCase));
+        var actualLine = lines.FirstOrDefault(l => l.StartsWith("Actual:", StringComparison.OrdinalIgnoreCase));
         if (expectedLine != null && actualLine != null)
         {
-            return CompactAssertion(lines, expectedLine, actualLine);
+            return CompactAssertion(lines, expectedLine, actualLine, maxLen);
         }
 
-        return CompactNested(lines);
+        return CompactNested(lines, maxLen);
     }
 
     /// <summary>
@@ -1223,17 +1285,19 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <param name="lines">The message lines.</param>
     /// <param name="expectedLine">The line starting with <c>Expected:</c>.</param>
     /// <param name="actualLine">The line starting with <c>Actual:</c>.</param>
-    private static string CompactAssertion(List<string> lines, string expectedLine, string actualLine)
+    /// <param name="maxLen">The most characters the line may take, before the ellipsis of a cut.</param>
+    private static string CompactAssertion(IReadOnlyList<string> lines, string expectedLine, string actualLine,
+        int maxLen)
     {
         var pair = $"{CollapsePadding(expectedLine)}, {CollapsePadding(actualLine)}";
         if (!lines[0].StartsWith("Assert.", StringComparison.Ordinal))
         {
-            return TextHelpers.Truncate(pair, MessageMaxLen);
+            return TextHelpers.Truncate(pair, maxLen);
         }
 
         var pointer = lines.Select(l => AssertionPositionPattern().Match(l)).FirstOrDefault(m => m.Success);
         var position = pointer is null ? string.Empty : $" at pos {pointer.Groups["pos"].Value}";
-        return TextHelpers.Truncate($"{lines[0]}{position} — {pair}", MessageMaxLen);
+        return TextHelpers.Truncate($"{lines[0]}{position} — {pair}", maxLen);
     }
 
     private static string CollapsePadding(string labelledLine) =>
@@ -1242,26 +1306,42 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <summary>
     /// Joins the lines with spaces. A message longer than the budget that nests exceptions (xUnit's
     /// <c>---- Type : message</c> lines) keeps its last such segment whole, capped at
-    /// <see cref="InnerExceptionMaxLen"/>, and truncates what comes before it to the rest of the budget.
+    /// two thirds of <paramref name="maxLen"/>, and truncates what comes before it to the rest of the budget.
     /// </summary>
     /// <param name="lines">The message lines.</param>
-    private static string CompactNested(List<string> lines)
+    /// <param name="maxLen">The most characters the line may take, before the ellipsis of a cut.</param>
+    private static string CompactNested(IReadOnlyList<string> lines, int maxLen)
     {
         var joined = string.Join(" ", lines);
-        if (joined.Length <= MessageMaxLen)
+        if (joined.Length <= maxLen)
         {
             return joined;
         }
 
-        var innerIndex = lines.FindLastIndex(l => InnerExceptionLinePattern().IsMatch(l));
+        var innerIndex = LastInnerExceptionLine(lines);
         if (innerIndex <= 0)
         {
-            return TextHelpers.Truncate(joined, MessageMaxLen);
+            return TextHelpers.Truncate(joined, maxLen);
         }
 
-        var inner = TextHelpers.Truncate(string.Join(" ", lines.Skip(innerIndex)), InnerExceptionMaxLen);
-        var outer = TextHelpers.Truncate(string.Join(" ", lines.Take(innerIndex)), MessageMaxLen - inner.Length - 1);
+        var inner = TextHelpers.Truncate(string.Join(" ", lines.Skip(innerIndex)), maxLen * 2 / 3);
+        var outer = TextHelpers.Truncate(string.Join(" ", lines.Take(innerIndex)), maxLen - inner.Length - 1);
         return $"{outer} {inner}";
+    }
+
+    /// <summary>The index of the last <c>---- Type : message</c> line, or <c>-1</c>.</summary>
+    /// <param name="lines">The message lines.</param>
+    private static int LastInnerExceptionLine(IReadOnlyList<string> lines)
+    {
+        for (var i = lines.Count - 1; i >= 0; i--)
+        {
+            if (InnerExceptionLinePattern().IsMatch(lines[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static double NormalizeDurationToMs(double value, string unit)
@@ -1570,6 +1650,16 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         public bool DurationExact { get; set; } = true;
     }
 
-    private sealed record FailureInfo(string TestName, string Duration, string Message, string SourceRef,
-        IReadOnlyList<string> Output);
+    /// <summary>A failed test as the report shows it.</summary>
+    /// <param name="TestName">The test's name.</param>
+    /// <param name="Duration">How long it ran, as the runner printed it.</param>
+    /// <param name="MessageLines">
+    /// The trimmed, non-empty lines of its message, compacted when the report is rendered, once the number of
+    /// failures shown, which sets how long each message may be, is known.
+    /// </param>
+    /// <param name="PresetMessage">The message to show instead, already compacted.</param>
+    /// <param name="SourceRef">Where it failed, or an empty string.</param>
+    /// <param name="Output">What it printed.</param>
+    private sealed record FailureInfo(string TestName, string Duration, IReadOnlyList<string> MessageLines,
+        string? PresetMessage, string SourceRef, IReadOnlyList<string> Output);
 }

@@ -37,8 +37,8 @@ The innermost layer defines core abstractions with no external dependencies.
 |--------|----------|
 | `Configuration/` | `DtkConfig` (configuration model), `IConfigProvider` (config loading interface) |
 | `Execution/` | `CommandResult` (return value from running a command), `ICommandRunner` (process execution interface) |
-| `Files/` | `IFileContentSnapshotter` and `FileContentSnapshot` (hash a tree before and after a run), `IArtifactFileReader` (read a report a tool writes beside its output) |
-| `Filters/` | `IOutputFilter` (contract for transforming raw output to filtered output), `IContextualOutputFilter` and `FilterContext` (what a filter may know of the run: source, arguments, working directory, start time, test options, changed files), `ISnapshotFilter` (names the directory to snapshot) |
+| `Files/` | `IFileContentSnapshotter` and `FileContentSnapshot` (hash a tree before and after a run), `IGitWorkingTree` and `WorkTreeChanges` (the files git does not ignore, and those the work in progress changed), `IArtifactFileReader` (read a report a tool writes beside its output) |
+| `Filters/` | `IOutputFilter` (contract for transforming raw output to filtered output), `IContextualOutputFilter` and `FilterContext` (what a filter may know of the run: source, arguments, working directory, start time, test options, the files the run changed, the files the work in progress changed), `ISnapshotFilter` (names the directory to snapshot and the file types the tool can change) |
 | `Tracking/` | `CommandRecord`, `CommandGainDetail`, `GainSummary` (tracking models), `ITracker` (persistence interface) |
 | `Tee/` | `ITeeService` (raw output logging interface), `IRawOutputCopy` (the `--tee <path>` copy of the raw output) |
 
@@ -75,7 +75,7 @@ Each supported `dotnet` subcommand has a dedicated filter implementing `IOutputF
 
 These filters parse the raw `dotnet` output and produce compact, LLM-friendly summaries — stripping MSBuild noise, adapter banners, absolute paths, and duplicate information.
 
-A filter that needs more than the captured text implements `IContextualOutputFilter` and receives a `FilterContext`. `DotnetTestFilter` reads the test options and reports its "no test matched" verdict in its `FilterResult`, so the use case can decide `--fail-on-empty`'s exit code once, before the tee log is finalized and the run is tracked. `DotnetStrykerFilter` reads the json mutation report through `IArtifactFileReader`. `DotnetJbCleanupCodeFilter` is an `ISnapshotFilter`: `FilteredRunUseCase` hashes the tree under the directory it names with `IFileContentSnapshotter` before the child starts and again after it exits, and the difference reaches the filter as `FilterContext.Changes`. Under `dtk pipe` there is no context (`FilterContext.Unknown`), so each filter prints what the text alone supports and says what it could not compute.
+A filter that needs more than the captured text implements `IContextualOutputFilter` and receives a `FilterContext`. `DotnetTestFilter` reads the test options and reports its "no test matched" verdict in its `FilterResult`, so the use case can decide `--fail-on-empty`'s exit code once, before the tee log is finalized and the run is tracked. `DotnetStrykerFilter` reads the json mutation report through `IArtifactFileReader`. `DotnetJbCleanupCodeFilter` is an `ISnapshotFilter`: `FilteredRunUseCase` hashes the files of the types it can change under the directory it names with `IFileContentSnapshotter` (in a git work tree, only those git does not ignore) before the child starts and again after it exits, and the difference reaches the filter as `FilterContext.Changes`. The build, test, publish and pack filters read `FilterContext.WorkTreeChanges`, which asks git for the files the work in progress changed the first time a filter reads it, and only a report that lists warnings does: it lists the warnings of those files and counts the others. Under `dtk pipe` there is no context (`FilterContext.Unknown`), so each filter prints what the text alone supports and says what it could not compute.
 
 `FilteredOutputPipeline` applies `--max-lines` last (`OutputCap`), keeping the status line in place. Piped test output in another language, which `DotnetTestFilter` cannot read, is recognised by `LocalizedTestOutput` against `LocalizedTestSummaryStrings`, a table generated from the .NET SDK's satellite resource assemblies by `eng/localization/ExtractTestSummaryStrings.cs`.
 
@@ -88,6 +88,8 @@ Implements domain interfaces with concrete external integrations.
 | `ProcessCommandRunner` | `ICommandRunner` | Spawns `dotnet` as a child process and captures output |
 | `SqliteTracker` | `ITracker` | Persists command records and token counts in SQLite |
 | `JsonConfigProvider` | `IConfigProvider` | Reads and deserializes `~/.config/dtk/config.json` |
+| `FileContentSnapshotter` | `IFileContentSnapshotter` | Hashes a tree's files, within a file and byte budget |
+| `GitWorkingTree` | `IGitWorkingTree` | Asks the `git` found on `PATH` (never one in the working directory) which files it ignores and which changed |
 
 ## CLI
 

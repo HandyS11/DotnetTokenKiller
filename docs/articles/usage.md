@@ -31,7 +31,23 @@ dtk dotnet build --no-restore
 dtk dotnet build -q                  # quiet: filtered content only, no DTK meta-output
 ```
 
-On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths, each as `(line,col) CODE: message`; a build that only warns lists its warnings the same way. A file's diagnostics that share a code and a message read once, with each position, in line order, and a count (`(96,59) (99,59) (111,59) CS1503 ×3: message`; a line lists at most 20 positions and then counts the rest, `… +N more`, with the count and the file's heading keeping the full numbers), and a file that comes to a single line is printed on it, led by its name (`src/Foo.cs(8,10) CS1002: ; expected`), with no heading. Messages are printed whole, up to 400 characters for an error and 160 for a warning; links are removed with the "see …" that introduced them, and the `System.` and `Microsoft.` namespaces inside a quoted type name are dropped (`'System.Collections.Generic.IEnumerable<int>'` reads `'IEnumerable<int>'`; a quoted package, assembly, path or file name is left as written). A `Top codes:` line, ranking the codes among the diagnostics listed, follows only when the build reported more diagnostics than are listed (a project built for several target frameworks reports each diagnostic once per framework, and dtk shows it once) and more than one code is listed. The summary counts the projects involved, those that failed as well as those that built, by project file (a solution is not a project), and a multi-targeted project counts once.
+On success, output is reduced to a single summary line. On failure, errors are grouped by file with workspace-relative paths, each as `(line,col) CODE: message`; a build that only warns lists its warnings the same way. A file's diagnostics that share a code and a message read once, with each position, in line order, and a count (`(96,59) (99,59) (111,59) CS1503 ×3: message`; a line lists at most 20 positions and then counts the rest, `… +N more`, with the count and the file's heading keeping the full numbers), and a file that comes to a single line is printed on it, led by its name (`src/Foo.cs(8,10) CS1002: ; expected`), with no heading. Messages are printed whole, up to 400 characters for an error and 160 for a warning; links are removed with the "see …" that introduced them, and the `System.` and `Microsoft.` namespaces inside a quoted type name are dropped (`'System.Collections.Generic.IEnumerable<int>'` reads `'IEnumerable<int>'`; a quoted package, assembly, path or file name is left as written). A `Top codes:` line, ranking the codes among the diagnostics listed, follows only when the build reported more diagnostics than are listed (a project built for several target frameworks reports each diagnostic once per framework, and dtk shows it once) and more than one code is listed. The status line then says `6 warnings (3 distinct)` when the repeats account for the difference, and `4 warnings (3 shown)` when some of what MSBuild counted matched no pattern. The summary counts the projects involved, those that failed as well as those that built, by project file (a solution is not a project), and a multi-targeted project counts once.
+
+In a git work tree, a build without errors lists only the warnings of the files the work in progress changed, since
+those are the ones the change may have caused, and counts the others on one line with their most frequent codes:
+
+```text
+src/App/OrderService.cs(42,13) CS0219: The variable 'total' is assigned but its value is never used
+164 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): CA1822 (50x), CS8618 (30x), IDE0005 (12x), …
+✓ dotnet build: 0 errors, 336 warnings (165 distinct), 1 in changed files (14 projects, 45.20s)
+```
+
+A changed file is one that differs from where the current branch left the default branch (`origin/HEAD`), committed
+or not, or an untracked file git does not ignore; without an `origin/HEAD`, the changes not committed yet. The status
+line ends `, none in changed files` when none of them has a warning. With no changed file at all (a fresh clone, a CI
+checkout), outside a git work tree, when git cannot be run, or when the build declared an error, every warning is listed
+as before; `dtk log build --full | dtk pipe build` lists them all, grouped, at any time. `dtk dotnet publish` and
+`dtk dotnet pack` do the same.
 The summary is always the last line (`✓ dotnet build …`, or `✗ dotnet build failed (exit 1): 3 errors, 1 warning …`
 when the exit code is non-zero), so `| tail -1` carries the verdict. A coding agent should read the whole (short) output instead of piping it into `tail` or `grep`, which would drop the diagnostics above the status line or the status line itself.
 
@@ -47,7 +63,7 @@ dtk dotnet test src/MyProject.Tests/MyProject.Tests.csproj
 dtk dotnet test -q                   # quiet mode
 ```
 
-Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths; the status line of a failing run opens with `✗` (`✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`). xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
+Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none, so the count covers only the projects this run compiled and moves from one run to the next. In a git work tree the warnings of the files the work in progress changed (as for `dtk dotnet build`) are listed above the report, and the status line says how many there are (`· 3 build warnings (CS0219×2, CS8602), 1 in changed files`, or `, none in changed files`): that, not the count, says whether a change added one. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths; the status line of a failing run opens with `✗` (`✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`). The messages of the failures shown (at most 15) share 4,500 characters: a single failure keeps up to 3,000, enough for an aggregated assertion or a container's validation errors, and none gets fewer than 300; a nested exception's innermost cause keeps two thirds of its message's share. xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
 
 Three options belong to `dtk dotnet test` (and `dtk pipe test`) alone; see [Test options](#test-options) for `--names`, `--show-output` and `--fail-on-empty`. `--list-tests` prints the test names as before.
 
@@ -132,27 +148,23 @@ signal available: a clean `✓` from dtk always means dtk read the tables, never
 
 #### Which spellings are filtered
 
-Only the two-tokens-adjacent form is filtered. These are:
+dotnet takes the project or solution of `list package` between the two words, and rejects it after them. dtk filters
+both spellings, and hands dotnet the target between the words either way:
 
 ```sh
 dtk dotnet list package                 # filtered
 dtk dotnet list package --outdated      # filtered
-dtk dotnet list package MyApp.sln       # filtered (target after the two tokens)
+dtk dotnet list MyApp.sln package       # filtered (dotnet's own spelling)
+dtk dotnet list package MyApp.sln       # filtered (runs dotnet list MyApp.sln package)
 ```
 
-These pass through to `dotnet` **unfiltered**, with the raw output shown as-is:
+The target must be one word that is not an option; a quoted path with a blank in it is fine on the command line, but
+the generated agent hooks leave such a command as written. The noun-first spelling .NET 10 added is not matched yet,
+and passes through to `dotnet` **unfiltered**, recorded under `package` in `dtk gain --coverage`:
 
 ```sh
-dtk dotnet list MyApp.sln package       # NOT filtered — target between the two tokens
 dtk dotnet package list                 # NOT filtered — noun-first spelling
 ```
-
-`dotnet list <PROJECT|SOLUTION|FILE> package` is the SDK's primary documented synopsis, and
-`dotnet package list` exists in .NET 10, so both are legitimate spellings — dtk simply does not
-match them yet, because its subcommand matcher requires the tokens to be adjacent at the front of
-the argument list. Passthrough is safe (the output is correct, just unfiltered) and these runs are
-recorded under `list` and `package` respectively in `dtk gain --coverage`. The generated agent hooks
-do not rewrite them either.
 
 ### `dtk dotnet publish`
 
@@ -271,7 +283,7 @@ No coverage: 7 (Calc/Calculator.cs ×7)
 
 Stryker prints the survivors to no stream; dtk reads them from the json report, at the path Stryker names (`Your json report has been generated at:`), else the newest `mutation-report.json` under `StrykerOutput` written after the run started. With `-O`/`--output <dir>` the report is searched under `<dir>`. Without the json reporter the survivors are not listed, and dtk says so (`survivors: enable the json reporter to list them here`). At most 20 survivors are listed, grouped by file, then `… N more (report)`. A score below `--break-at` ends `✗ dotnet stryker: mutation score 37.50% below break threshold 90% (exit 2) …`; a failed initial build shows the build's diagnostics grouped as `dtk dotnet build` groups them, then `✗ dotnet stryker failed (exit 1): initial build failed · 1 error`.
 
-**`jb cleanupcode`** prints every file it processed, changed or not, and rewrites them all, so neither its output nor file times say what changed. dtk hashes the files under the target's directory (the solution or project argument's directory, else the working directory) before the run and again after it, skipping `bin`, `obj`, hidden directories, `node_modules`, `artifacts` and `StrykerOutput`, and lists the files whose content changed:
+**`jb cleanupcode`** prints every file it processed, changed or not, and rewrites them all, so neither its output nor file times say what changed. dtk hashes the files under the target's directory (the solution or project argument's directory, else the working directory) before the run and again after it, and lists the files whose content changed. It hashes only the file types code cleanup can rewrite (C#, Visual Basic, XAML, Razor and Web Forms, HTML, JavaScript and TypeScript, CSS, JSON, XML and project files, C++, T4 and protobuf), and, in a git work tree, only files git does not ignore; it skips `bin`, `obj`, hidden directories, `node_modules`, `artifacts` and `StrykerOutput`:
 
 ```text
 src/DotnetTokenKiller.Domain/DotnetSubcommands.cs
@@ -279,7 +291,7 @@ src/DotnetTokenKiller.Infrastructure/Tracking/TrackerFactory.cs
 ✓ dotnet jb cleanupcode: 2 files changed (356 processed, 314 skipped)
 ```
 
-At most 30 files are listed, then `… N more (git status)`; no change reads `✓ dotnet jb cleanupcode: no changes (356 processed, 314 skipped)`. A tree of more than 20,000 files or 256 MiB is not snapshotted, and the status line says `changed files not computed (tree too large)`. Under `dtk pipe` there is no before-state: only the counts are printed, with `changed files unknown (piped)`. A failure (exit 3 or 4) keeps the `Warning:` and `[MsBuild]` lines, and any line after the `Cleaning up using profile` header that is not a processed file, and ends `✗ dotnet jb cleanupcode failed (exit 4): 1 project load error`. A failure with none of those (jb not restored, say) shows the raw tail of the output above the `✗ … failed (exit 1)` status line.
+At most 30 files are listed, then `… N more (git status)`; no change reads `✓ dotnet jb cleanupcode: no changes (356 processed, 314 skipped)`. More than 20,000 such files or 256 MiB of them are not snapshotted, and the status line says `changed files not computed (tree too large)`. Under `dtk pipe` there is no before-state: only the counts are printed, with `changed files unknown (piped)`. The counts come from the file list jb prints at its default verbosity; with `--verbosity=ERROR` it prints none, and the status line leaves them out (`✓ dotnet jb cleanupcode: 1 file changed`). A failure (exit 3 or 4) keeps the `Warning:` and `[MsBuild]` lines, and any line after the `Cleaning up using profile` header that is not a processed file, and ends `✗ dotnet jb cleanupcode failed (exit 4): 1 project load error`. A failure with none of those (jb not restored, say) shows the raw tail of the output above the `✗ … failed (exit 1)` status line.
 
 ### Options the tool owns
 

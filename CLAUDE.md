@@ -124,8 +124,14 @@ belong to the tool (`--help` passes through unfiltered); dtk honours only `--vv`
 `--max-lines` there, and the test-only options are a usage error. Filters needing more than the text implement
 `IContextualOutputFilter` and get a `FilterContext` (`FilterContext.Unknown` under `dtk pipe`, where they say what they
 could not compute). `jb cleanupcode` is an `ISnapshotFilter`: `FileContentSnapshotter` hashes the target's tree before
-and after (skipping `bin`, `obj`, hidden directories, `node_modules`, `artifacts`, `StrykerOutput`; bounded to 20,000
-files and 256 MiB, else `changed files not computed`), because jb rewrites every file it processes. Stryker's survivors
+and after (only the file types `ISnapshotFilter.CanChange` names and, in a git work tree, only files `IGitWorkingTree`
+says git does not ignore; skipping `bin`, `obj`, hidden directories, `node_modules`, `artifacts`, `StrykerOutput`;
+bounded to 20,000 files and 256 MiB, else `changed files not computed`), because jb rewrites every file it processes.
+`GitWorkingTree` starts the `git` it finds in a `PATH` directory, never a bare `git` (Windows would try the working
+directory first). The build, test, publish and pack filters read `FilterContext.WorkTreeChanges` (git's changed files:
+since the merge base with `origin/HEAD`, plus uncommitted and untracked, spelled from the working directory as given)
+only when the report lists warnings and declared no error (`MsBuildDiagnosticReport.ChangesFor`): they list those
+files' warnings and count the rest. No changed file, `dtk pipe` or no work tree lists every warning, as before. Stryker's survivors
 are not on stdout: `StrykerReport` reads `mutation-report.json` through `IArtifactFileReader` (the path Stryker prints,
 rejoined from its 80-column wrap, else the newest under `StrykerOutput`, or under `-O <dir>`); without the json
 reporter survivors are not listed. A localized `dtk pipe test` is recognised, not parsed: `LocalizedTestOutput` matches

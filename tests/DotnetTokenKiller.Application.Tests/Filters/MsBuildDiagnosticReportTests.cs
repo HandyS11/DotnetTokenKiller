@@ -1,4 +1,5 @@
 using DotnetTokenKiller.Application.Filters;
+using DotnetTokenKiller.Domain.Files;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -209,6 +210,144 @@ public class MsBuildDiagnosticReportTests
         MsBuildDiagnosticReport.Parse("garbled output\n", Root).RenderDiagnostics().Should().BeEmpty();
     }
 
+    // ── Warnings and the files the work in progress changed ──────────────────
+
+    private const string FourWarnings = """
+                                           /test/project/root/src/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/test/project/root/src/App.csproj]
+                                           /test/project/root/src/A.cs(9,5): warning CA1822: Member 'M' does not access instance data [/test/project/root/src/App.csproj]
+                                           /test/project/root/src/B.cs(2,1): warning CA1822: Member 'N' does not access instance data [/test/project/root/src/App.csproj]
+                                           /test/project/root/tests/C.cs(3,1): warning CS0219: The variable 'x' is assigned but its value is never used [/test/project/root/tests/T.csproj]
+                                             App -> /test/project/root/src/bin/App.dll
+                                             T -> /test/project/root/tests/bin/T.dll
+                                               4 Warning(s)
+                                               0 Error(s)
+                                           """;
+
+    [Fact]
+    public void Render_WithChanges_ListsTheWarningsOfChangedFilesAndCountsTheRest()
+    {
+        var changes = Changes("src/A.cs");
+
+        MsBuildDiagnosticReport.Parse(FourWarnings, Root).Render("dotnet build", 0, [], changes).Should().Be(
+            """
+            src/A.cs (2 warnings)
+              (1,1) CS0168: The variable 'e' is declared but never used
+              (9,5) CA1822: Member 'M' does not access instance data
+            2 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): CA1822 (1x), CS0219 (1x)
+            ✓ dotnet build: 0 errors, 4 warnings, 2 in changed files (2 projects)
+
+            """);
+    }
+
+    [Fact]
+    public void Render_WithChangesThatRaisedNoWarning_SaysSo()
+    {
+        MsBuildDiagnosticReport.Parse(FourWarnings, Root).Render("dotnet build", 0, [], Changes("README.md"))
+            .Should().Be(
+                """
+                4 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): CA1822 (2x), CS0168 (1x), CS0219 (1x)
+                ✓ dotnet build: 0 errors, 4 warnings, none in changed files (2 projects)
+
+                """);
+    }
+
+    [Fact]
+    public void Render_WithEveryWarningInChangedFiles_ListsThemAll()
+    {
+        var changes = Changes("src/A.cs", "src/B.cs", "tests/C.cs");
+
+        var result = MsBuildDiagnosticReport.Parse(FourWarnings, Root).Render("dotnet build", 0, [], changes);
+
+        result.Should().NotContain("not shown");
+        result.Should().Contain("tests/C.cs(3,1) CS0219");
+        result.Should().EndWith("✓ dotnet build: 0 errors, 4 warnings, 4 in changed files (2 projects)\n");
+    }
+
+    [Fact]
+    public void Render_WithChanges_NamesTheLogOfItsOwnVerb()
+    {
+        MsBuildDiagnosticReport.Parse(FourWarnings, Root).Render("dotnet publish", 0, [], Changes())
+            .Should().StartWith("4 warnings in unchanged files not shown (dtk log publish --full | dtk pipe publish): ");
+    }
+
+    [Fact]
+    public void Render_WithChanges_StillListsEveryError()
+    {
+        const string output = """
+                              /test/project/root/src/B.cs(2,1): error CS0103: The name 'y' does not exist in the current context [/test/project/root/src/App.csproj]
+                              /test/project/root/src/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/test/project/root/src/App.csproj]
+                                  1 Warning(s)
+                                  1 Error(s)
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).Render("dotnet build", 1, [], Changes("src/A.cs")).Should().Be(
+            """
+            src/B.cs(2,1) CS0103: The name 'y' does not exist in the current context
+            1 warning not shown (dtk log)
+            ✗ dotnet build failed (exit 1): 1 error, 1 warning (1 project)
+
+            """);
+    }
+
+    [Fact]
+    public void Render_WithoutChanges_ListsEveryWarning()
+    {
+        MsBuildDiagnosticReport.Parse(FourWarnings, Root).Render("dotnet build", 0, [])
+            .Should().Contain("tests/C.cs(3,1) CS0219").And.EndWith("✓ dotnet build: 0 errors, 4 warnings (2 projects)\n");
+    }
+
+    [Fact]
+    public void RenderWarningsIn_ListsOnlyTheChangedFilesWarnings()
+    {
+        var report = MsBuildDiagnosticReport.Parse(FourWarnings, Root);
+
+        report.RenderWarningsIn(Changes("src/B.cs", "tests/C.cs")).Should().Be(
+            "src/B.cs(2,1) CA1822: Member 'N' does not access instance data\n"
+            + "tests/C.cs(3,1) CS0219: The variable 'x' is assigned but its value is never used\n");
+        report.WarningCountIn(Changes("src/B.cs", "tests/C.cs")).Should().Be(2);
+        report.WarningCountIn(Changes()).Should().Be(0);
+    }
+
+    [Fact]
+    public void Render_WarningRepeatedPerTargetFrameworkAndInTheSummary_IsCountedAsDistinct()
+    {
+        // MSBuild counts a multi-targeted project's warning once per target framework, and its console logger
+        // repeats each one under "Build succeeded."; every one it counted is listed, just once.
+        const string output = """
+                              /test/project/root/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/test/project/root/App.csproj::TargetFramework=net8.0]
+                              /test/project/root/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/test/project/root/App.csproj::TargetFramework=net10.0]
+                              Build succeeded.
+                              /test/project/root/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/test/project/root/App.csproj::TargetFramework=net8.0]
+                              /test/project/root/A.cs(1,1): warning CS0168: The variable 'e' is declared but never used [/test/project/root/App.csproj::TargetFramework=net10.0]
+                                  2 Warning(s)
+                                  0 Error(s)
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).Render("dotnet build", 0, [])
+            .Should().EndWith("✓ dotnet build: 0 errors, 2 warnings (1 distinct) (1 project)\n");
+    }
+
+    [Fact]
+    public void Render_SummaryEchoesBesideAnUnparsedError_StillSaysShown()
+    {
+        // The console logger prints every diagnostic again under "Build FAILED."; those echoes repeat a line already
+        // read, word for word, and stand for nothing MSBuild counted twice. The third error matched no pattern, so
+        // the list is short of one, and the count must not read as complete.
+        const string output = """
+                              /test/project/root/A.cs(1,1): error CS0103: The name 'a' does not exist in the current context [/test/project/root/App.csproj]
+                              /test/project/root/B.cs(2,1): error CS0103: The name 'b' does not exist in the current context [/test/project/root/App.csproj]
+                              EXEC : the tool failed in a way no pattern reads [/test/project/root/App.csproj]
+                              Build FAILED.
+                                /test/project/root/A.cs(1,1): error CS0103: The name 'a' does not exist in the current context [/test/project/root/App.csproj]
+                                /test/project/root/B.cs(2,1): error CS0103: The name 'b' does not exist in the current context [/test/project/root/App.csproj]
+                                  0 Warning(s)
+                                  3 Error(s)
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).Render("dotnet build", 1, [])
+            .Should().EndWith("✗ dotnet build failed (exit 1): 3 errors (2 shown), 0 warnings (1 project)\n");
+    }
+
     [Fact]
     public void RenderDiagnostics_SwitchLineAfterASimpleDiagnostic_JoinsItsMessage()
     {
@@ -216,6 +355,49 @@ public class MsBuildDiagnosticReportTests
         // its MSB1009, and that line is where the cause is, so it belongs to the message.
         Parse("dotnet_test_missing_project.txt").RenderDiagnostics()
             .Should().Be("(no file) MSB1009: Project file does not exist. Switch: nothere.csproj\n");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_SwitchLineAfterTheCommandLineEcho_JoinsItsMessage()
+    {
+        // The real `dotnet test --no-incremental`: MSB1001 echoes the full command line and a response-file
+        // heading before the Switch: line, which still names the switch MSBuild rejected.
+        Parse("dotnet_test_unknown_switch.txt").RenderDiagnostics()
+            .Should().Be("(no file) MSB1001: Unknown switch. Switch: --no-incremental\n");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_SwitchLineAfterAResponseFilesSwitches_JoinsItsMessage()
+    {
+        // The real `dotnet build App --bogus` beside a Directory.Build.rsp: MSBuild names each switch the response
+        // file added, and where it came from, before the Switch: line.
+        const string output = """
+                              Some command line switches were read from this response file:
+                                /work/Directory.Build.rsp
+                              MSBUILD : error MSB1001: Unknown switch.
+                                  Full command line: '/usr/share/dotnet/sdk/10.0.404/MSBuild -maxcpucount App --bogus'
+                                Switches appended by response files:
+                              '-p:Foo=Bar' came from '/work/Directory.Build.rsp'
+                              Switch: --bogus
+
+                              For switch syntax, type "MSBuild -help"
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).RenderDiagnostics()
+            .Should().Be("(no file) MSB1001: Unknown switch. Switch: --bogus\n");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_SwitchLineAfterAnUnrelatedLine_IsNotJoined()
+    {
+        const string output = """
+                              MSBUILD : error MSB1001: Unknown switch.
+                              Some other output
+                              Switch: --no-incremental
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).RenderDiagnostics()
+            .Should().Be("(no file) MSB1001: Unknown switch.\n");
     }
 
     [Fact]
@@ -290,6 +472,9 @@ public class MsBuildDiagnosticReportTests
         rendered.Should().StartWith(report.RenderDiagnostics());
         rendered.Should().EndWith("✗ dotnet pack failed (exit 3): 3 errors, 1 warning (2 projects, 1.89s)\n");
     }
+
+    private static WorkTreeChanges Changes(params string[] relativePaths) =>
+        new(relativePaths.Select(path => Path.GetFullPath(path, Path.GetFullPath(Root))));
 
     private static MsBuildDiagnosticReport Parse(string fixtureName) =>
         MsBuildDiagnosticReport.Parse(LoadFixture(fixtureName), Root);

@@ -55,6 +55,13 @@ internal static class DotnetCommandRewriter
     /// <summary>The characters that make a word a glob pattern the shell may replace with file names.</summary>
     private static readonly SearchValues<char> GlobCharacters = SearchValues.Create("*?[");
 
+    /// <summary>
+    /// Characters a project or solution between a subcommand's words (<c>dotnet list ISDM.slnx package</c>) may not
+    /// hold: quoting, expansion, operators and line breaks, which a plain path does not need. Such a word is not
+    /// read as one, and the command stays as it is.
+    /// </summary>
+    private static readonly SearchValues<char> NotInTarget = SearchValues.Create("\"'\\`$;&|()<>{}*?[]!#\n\r");
+
     /// <summary>The blanks the shell splits words on.</summary>
     private static readonly char[] WordSeparators = [' ', '\t', '\n'];
 
@@ -188,7 +195,7 @@ internal static class DotnetCommandRewriter
         var subcommandStart = SkipSpaces(command, position);
         foreach (var tokens in AutoApprovableTokens)
         {
-            if (TryMatchTokens(command, subcommandStart, tokens, out var end) && !IsWordAt(command, end))
+            if (TryMatchSubcommandTokens(command, subcommandStart, tokens, out var end) && !IsWordAt(command, end))
             {
                 return true;
             }
@@ -310,13 +317,58 @@ internal static class DotnetCommandRewriter
 
         foreach (var tokens in SubcommandTokens)
         {
-            if (TryMatchTokens(command, subcommandStart, tokens, out end) && !IsWordAt(command, end))
+            if (TryMatchSubcommandTokens(command, subcommandStart, tokens, out end) && !IsWordAt(command, end))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Matches a subcommand's words at <paramref name="position"/>: contiguous, or, for one of
+    /// <see cref="DotnetSubcommands.TargetBetweenWords"/>, with the project or solution dotnet takes between them
+    /// (<c>list ISDM.slnx package</c>).
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="position">Where the subcommand starts.</param>
+    /// <param name="tokens">The subcommand's words.</param>
+    /// <param name="end">Where the match ends.</param>
+    private static bool TryMatchSubcommandTokens(string command, int position, string[] tokens, out int end) =>
+        TryMatchTokens(command, position, tokens, out end)
+        || (tokens.Length > 1
+            && DotnetSubcommands.TargetBetweenWords.Contains(string.Join(' ', tokens))
+            && TryMatchTokensAroundTarget(command, position, tokens, out end));
+
+    /// <summary>
+    /// Matches <paramref name="tokens"/>' first word, blanks, a plain word that is not an option (no character of
+    /// <see cref="NotInTarget"/>), blanks, then the rest of its words.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="position">Where the subcommand starts.</param>
+    /// <param name="tokens">The subcommand's words, at least two.</param>
+    /// <param name="end">Where the match ends.</param>
+    private static bool TryMatchTokensAroundTarget(string command, int position, string[] tokens, out int end)
+    {
+        if (!TryMatchTokens(command, position, tokens[..1], out end))
+        {
+            return false;
+        }
+
+        var targetStart = SkipSpaces(command, end);
+        var targetEnd = targetStart;
+        while (targetEnd < command.Length && !IsBlank(command[targetEnd]) && !NotInTarget.Contains(command[targetEnd]))
+        {
+            targetEnd++;
+        }
+
+        var restStart = SkipSpaces(command, targetEnd);
+        return targetStart > end
+               && targetEnd > targetStart
+               && command[targetStart] != '-'
+               && restStart > targetEnd
+               && TryMatchTokens(command, restStart, tokens[1..], out end);
     }
 
     private static bool TryMatchTokens(string command, int position, string[] tokens, out int end)

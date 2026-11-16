@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DotnetTokenKiller.Domain.Files;
 using DotnetTokenKiller.Infrastructure.Files;
 using FluentAssertions;
 using Xunit;
@@ -12,6 +13,8 @@ public sealed class FileContentSnapshotterTests : IDisposable
     public FileContentSnapshotterTests() => Directory.CreateDirectory(_root);
 
     public void Dispose() => Directory.Delete(_root, true);
+
+    private static bool IsCSharp(string fileName) => fileName.EndsWith(".cs", StringComparison.Ordinal);
 
     private void Write(string relative, string content)
     {
@@ -98,6 +101,94 @@ public sealed class FileContentSnapshotterTests : IDisposable
     }
 
     [Fact]
+    public void Take_WithAFileFilter_HashesOnlyTheFilesItIncludes()
+    {
+        Write("a.cs", "a");
+        Write("data/rows.csv", "1,2");
+        var before = new FileContentSnapshotter().Take(_root, IsCSharp)!;
+
+        Write("a.cs", "changed");
+        Write("data/rows.csv", "3,4");
+
+        new FileContentSnapshotter().Take(_root, IsCSharp)!.ChangedSince(before).Should().Equal("a.cs");
+    }
+
+    [Fact]
+    public void Take_WithAFileFilter_CountsOnlyIncludedFilesAgainstTheLimits()
+    {
+        // Sample data the tool never rewrites must not make the tree too large to compare.
+        Write("a.cs", "a");
+        Write("data/rows.csv", new string('x', 100));
+
+        new FileContentSnapshotter(maxFiles: 1, maxBytes: 50).Take(_root, IsCSharp).Should().NotBeNull();
+        new FileContentSnapshotter(maxFiles: 1, maxBytes: 50).Take(_root).Should().BeNull();
+    }
+
+    [Fact]
+    public void Take_InAWorkTree_HashesOnlyWhatGitDoesNotIgnore()
+    {
+        Write("a.cs", "a");
+        Write("src/b.cs", "b");
+        Write("tmp/ignored.cs", new string('x', 100));
+        var git = new FakeGitWorkingTree(["a.cs", "src/b.cs", "gone.cs"]);
+        var before = new FileContentSnapshotter(maxFiles: 10, maxBytes: 50, git).Take(_root);
+
+        before.Should().NotBeNull("the ignored file counts toward no limit");
+        Write("a.cs", "changed");
+        Write("tmp/ignored.cs", "changed");
+        new FileContentSnapshotter(maxFiles: 10, maxBytes: 50, git).Take(_root)!.ChangedSince(before)
+            .Should().Equal("a.cs");
+        git.Directories.Should().AllBe(_root);
+    }
+
+    [Fact]
+    public void Take_InAWorkTree_StillSkipsBuildOutputAndHiddenDirectories()
+    {
+        Write("a.cs", "a");
+        Write("obj/generated.cs", "g");
+        Write(".github/x.cs", "x");
+        var git = new FakeGitWorkingTree(["a.cs", "obj/generated.cs", ".github/x.cs"]);
+        var before = new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!;
+
+        Write("a.cs", "changed");
+        Write("obj/generated.cs", "changed");
+        Write(".github/x.cs", "changed");
+
+        new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!.ChangedSince(before)
+            .Should().Equal("a.cs");
+    }
+
+    [Fact]
+    public void Take_InAWorkTree_WalksASubmodule()
+    {
+        // git lists a submodule as one entry, its directory: the files in it are walked as outside a work tree.
+        Write("a.cs", "a");
+        Write("lib/src/b.cs", "b");
+        Write("lib/obj/skipped.cs", "x");
+        var git = new FakeGitWorkingTree(["a.cs", "lib"]);
+        var before = new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!;
+
+        Write("lib/src/b.cs", "changed");
+        Write("lib/obj/skipped.cs", "changed");
+
+        new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!.ChangedSince(before)
+            .Should().Equal("lib/src/b.cs");
+    }
+
+    [Fact]
+    public void Take_WhenGitCannotAnswer_WalksTheTree()
+    {
+        Write("a.cs", "a");
+        var git = new FakeGitWorkingTree(null);
+        var before = new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!;
+
+        Write("a.cs", "changed");
+
+        new FileContentSnapshotter(maxFiles: 10, maxBytes: 1024, git).Take(_root)!.ChangedSince(before)
+            .Should().Equal("a.cs");
+    }
+
+    [Fact]
     public void Take_MissingRoot_ReturnsNull()
     {
         new FileContentSnapshotter().Take(Path.Combine(_root, "nope")).Should().BeNull();
@@ -110,7 +201,7 @@ public sealed class FileContentSnapshotterTests : IDisposable
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var act = () => new FileContentSnapshotter().Take(_root, cts.Token);
+        var act = () => new FileContentSnapshotter().Take(_root, cancellationToken: cts.Token);
 
         act.Should().Throw<OperationCanceledException>();
     }
@@ -163,5 +254,19 @@ public sealed class FileContentSnapshotterTests : IDisposable
         before.Should().NotBeNull();
         Write("a.cs", "b");
         new FileContentSnapshotter().Take(_root)!.ChangedSince(before).Should().Equal("a.cs");
+    }
+
+    private sealed class FakeGitWorkingTree(IReadOnlyList<string>? files) : IGitWorkingTree
+    {
+        public List<string> Directories { get; } = [];
+
+        public IReadOnlyList<string>? UnignoredFiles(string directory, CancellationToken cancellationToken = default)
+        {
+            Directories.Add(directory);
+            return files;
+        }
+
+        public IReadOnlyList<string>? ChangedFiles(string directory, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }
