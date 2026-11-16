@@ -126,13 +126,13 @@ internal sealed partial class MsBuildDiagnosticReport
         int? declaredWarnings = null;
 
         var lines = strippedOutput.Split('\n');
-        var lineTaken = false;
+        var takenThrough = -1;
         foreach (var (index, rawLine) in lines.Index())
         {
-            // A "Switch:" line was joined into the diagnostic before it, which is all it is.
-            if (lineTaken)
+            // A "Switch:" line was joined into the diagnostic before it, which is all it is, and so was
+            // the command-line echo between them.
+            if (index <= takenThrough)
             {
-                lineTaken = false;
                 continue;
             }
 
@@ -170,8 +170,7 @@ internal sealed partial class MsBuildDiagnosticReport
             // Skip noise lines, then parse diagnostic lines with and without a file/line/col anchor
             if (!IsNoiseLine(line) && !TryAddDiagnosticLine(line, rootPath, seen, diagnostics))
             {
-                var next = index + 1 < lines.Length ? lines[index + 1].TrimEnd('\r') : string.Empty;
-                lineTaken = AddSimpleDiagnosticLine(line, next, seen, diagnostics);
+                takenThrough = AddSimpleDiagnosticLine(lines, index, seen, diagnostics);
             }
         }
 
@@ -346,27 +345,31 @@ internal sealed partial class MsBuildDiagnosticReport
     /// <summary>
     /// Parses a diagnostic without file/line/col (e.g., "MSBUILD : error MSB1001: message"). MSBuild names the
     /// argument it rejected on a line of its own after such a diagnostic (<c>Switch: nothere.csproj</c> after
-    /// MSB1009), and that line is where the cause is: it joins the message.
+    /// MSB1009), and that line is where the cause is: it joins the message. MSB1001 echoes the full command line
+    /// and a <c>Switches appended by response files:</c> heading first; the <c>Switch:</c> line after them joins too.
     /// </summary>
-    /// <param name="line">The output line.</param>
-    /// <param name="nextLine">The line after it, with its trailing <c>'\r'</c> removed.</param>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="index">The index of the line to parse.</param>
     /// <param name="seen">The keys of the diagnostics already added.</param>
     /// <param name="diagnostics">The diagnostics parsed so far.</param>
-    /// <returns>Whether <paramref name="nextLine"/> was a <c>Switch:</c> line and has been taken into the message.</returns>
-    private static bool AddSimpleDiagnosticLine(string line, string nextLine, HashSet<string> seen,
+    /// <returns>
+    /// The index of the <c>Switch:</c> line taken into the message, through which the following lines are consumed,
+    /// or <c>-1</c> when none was.
+    /// </returns>
+    private static int AddSimpleDiagnosticLine(string[] lines, int index, HashSet<string> seen,
         List<Diagnostic> diagnostics)
     {
-        var simpleDiagMatch = SimpleDiagnosticPattern().Match(line);
+        var simpleDiagMatch = SimpleDiagnosticPattern().Match(lines[index].TrimEnd('\r'));
         if (!simpleDiagMatch.Success)
         {
-            return false;
+            return -1;
         }
 
         var rawMessage = simpleDiagMatch.Groups["message"].Value.Trim();
-        var continuation = SwitchContinuationPattern().Match(nextLine);
-        if (continuation.Success)
+        var switchIndex = FindSwitchLine(lines, index + 1);
+        if (switchIndex >= 0)
         {
-            rawMessage = $"{rawMessage} {continuation.Value.Trim()}";
+            rawMessage = $"{rawMessage} {lines[switchIndex].Trim()}";
         }
 
         var level = simpleDiagMatch.Groups["level"].Value;
@@ -385,7 +388,33 @@ internal sealed partial class MsBuildDiagnosticReport
             diagnostics.Add(simpleDiagnostic);
         }
 
-        return continuation.Success;
+        return switchIndex;
+    }
+
+    /// <summary>
+    /// Finds the <c>Switch:</c> line that names what a command-line diagnostic rejected: the line at
+    /// <paramref name="start"/>, or the first after MSBuild's echo of the command line and its response-file heading.
+    /// </summary>
+    /// <param name="lines">The output's lines.</param>
+    /// <param name="start">The index of the line after the diagnostic.</param>
+    /// <returns>The index of the <c>Switch:</c> line, or <c>-1</c> when another line comes first.</returns>
+    private static int FindSwitchLine(string[] lines, int start)
+    {
+        for (var i = start; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (SwitchContinuationPattern().IsMatch(line))
+            {
+                return i;
+            }
+
+            if (!CommandLineEchoPattern().IsMatch(line))
+            {
+                return -1;
+            }
+        }
+
+        return -1;
     }
 
     private static bool TryAddDiagnosticLine(string line, string rootPath, HashSet<string> seen,
@@ -737,6 +766,11 @@ internal sealed partial class MsBuildDiagnosticReport
     // "Switch: nothere.csproj".
     [GeneratedRegex(@"^Switch: \S.*$")]
     private static partial Regex SwitchContinuationPattern();
+
+    // What MSBuild prints between MSB1001 and its "Switch:" line: the command line it was given and the
+    // heading of the switches its response files added.
+    [GeneratedRegex(@"^\s+(?:Full command line: |Switches appended by response files:)")]
+    private static partial Regex CommandLineEchoPattern();
 
     // A URL with the whitespace before it: inside parentheses that hold nothing else (or only the word that
     // introduces it), inside brackets that hold nothing else, with its introduction and the sentence it

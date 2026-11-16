@@ -1,0 +1,6 @@
+MSBUILD : error MSB1001: Unknown switch.
+    Full command line: '/usr/share/dotnet/sdk/10.0.404/MSBuild -maxcpucount --verbosity:m -tlp:default=auto --property:VSTestNoLogo=true --property:NuGetInteractive=false --property:VSTestArtifactsProcessingMode=collect --property:VSTestSessionCorrelationId=662014_4aed5093-7600-4767-8ba1-82bff0aa3581 --restoreProperty:VSTestNoLogo=true --restoreProperty:NuGetInteractive=false --restoreProperty:VSTestArtifactsProcessingMode=collect --restoreProperty:VSTestSessionCorrelationId=662014_4aed5093-7600-4767-8ba1-82bff0aa3581 --restoreProperty:EnableDefaultCompileItems=false --restoreProperty:EnableDefaultEmbeddedResourceItems=false --restoreProperty:EnableDefaultNoneItems=false --target:VSTest --nologo -nodereuse:false examples/ --no-incremental -restore -distributedlogger:Microsoft.DotNet.Cli.Commands.MSBuild.MSBuildLogger,/usr/share/dotnet/sdk/10.0.404/dotnet.dll*Microsoft.DotNet.Cli.Commands.MSBuild.MSBuildForwardingLogger,/usr/share/dotnet/sdk/10.0.404/dotnet.dll -tlp:DISABLENODEDISPLAY'
+  Switches appended by response files:
+Switch: --no-incremental
+
+For switch syntax, type "MSBuild -help"

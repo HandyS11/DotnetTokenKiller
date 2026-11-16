@@ -219,6 +219,28 @@ public class MsBuildDiagnosticReportTests
     }
 
     [Fact]
+    public void RenderDiagnostics_SwitchLineAfterTheCommandLineEcho_JoinsItsMessage()
+    {
+        // The real `dotnet test --no-incremental`: MSB1001 echoes the full command line and a response-file
+        // heading before the Switch: line, which still names the switch MSBuild rejected.
+        Parse("dotnet_test_unknown_switch.txt").RenderDiagnostics()
+            .Should().Be("(no file) MSB1001: Unknown switch. Switch: --no-incremental\n");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_SwitchLineAfterAnUnrelatedLine_IsNotJoined()
+    {
+        const string output = """
+                              MSBUILD : error MSB1001: Unknown switch.
+                              Some other output
+                              Switch: --no-incremental
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).RenderDiagnostics()
+            .Should().Be("(no file) MSB1001: Unknown switch.\n");
+    }
+
+    [Fact]
     public void RenderDiagnostics_SwitchLineBesideNoDiagnostic_IsDropped()
     {
         MsBuildDiagnosticReport.Parse("Some output\nSwitch: nothere.csproj\n", Root).RenderDiagnostics()
