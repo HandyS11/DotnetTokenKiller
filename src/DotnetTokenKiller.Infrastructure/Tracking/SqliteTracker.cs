@@ -305,9 +305,14 @@ public sealed class SqliteTracker(
 
     /// <summary>Returns the default tracking-database path used when no override is configured.</summary>
     /// <returns>The platform-default database path.</returns>
+    /// <remarks>
+    /// <see cref="Environment.SpecialFolderOption.DoNotVerify"/>: without it a data folder that does not exist yet
+    /// reads as an empty string, and the database lands in the working directory.
+    /// </remarks>
     public static string GetDefaultDbPath()
     {
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var baseDir = Environment.GetFolderPath(
+            Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
         return Path.Combine(baseDir, "dtk", "tracking.db");
     }
 

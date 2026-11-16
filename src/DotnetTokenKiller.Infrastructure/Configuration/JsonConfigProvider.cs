@@ -99,7 +99,10 @@ public sealed class JsonConfigProvider(string configPath) : IConfigProvider
             return envPath;
         }
 
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        // DoNotVerify: without it a config folder that does not exist yet (~/.config in a fresh container) reads as an
+        // empty string, and dtk would read and write a dtk/config.json in the working directory.
+        var appData = Environment.GetFolderPath(
+            Environment.SpecialFolder.ApplicationData, Environment.SpecialFolderOption.DoNotVerify);
         return Path.Combine(appData, "dtk", "config.json");
     }
 
