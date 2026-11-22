@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-22
+
 ### Added
 
 - Every Claude Code agent in a .NET project now starts knowing dtk's rules — run it plainly, without `| tail` or
@@ -21,9 +23,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- The dtk section of `AGENTS.md` and `GEMINI.md`, the Copilot instructions and the Cursor, Devin and Aider rule files
-  lead with the same three rules. `dtk init <provider> --uninstall` still recognises the unedited rule files 0.11.0
-  and 0.12.0 wrote.
+- The dtk section of `AGENTS.md` and `GEMINI.md`, the Copilot instructions, JetBrains AI's `.junie/guidelines.md` and
+  the Cursor, Devin and Aider rule files lead with the same three rules (`dtk log --list` is now in the skill only).
+  They change only when `dtk init <provider>` runs again. `dtk init <provider> --uninstall` still recognises the
+  unedited rule files 0.11.0 and 0.12.0 wrote.
 - The `dotnet-token-killer` skill is now the reference for what the rules leave out, and its description triggers on
   those options (`--tee`, `--show-output`, `--names`, `--fail-on-empty`, `--max-lines`, `dtk log`, `dtk pipe`, every
   warning of a build, `dtk gain`) instead of on every `dotnet` command, which loaded the whole skill at the start of most
@@ -456,7 +459,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - JSON configuration support.
 - Packaging as a .NET tool (`dotnet tool install DotnetTokenKiller`).
 
-[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/HandyS11/DotnetTokenKiller/compare/v0.9.0...v0.10.0
