@@ -14,8 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   included, which never loaded the skill. `dtk init claude` registers `dtk hook claude` for `SessionStart`
   (`startup|clear|compact`) and `SubagentStart` beside `PreToolUse`, and the hook adds those four lines to the agent's
   context only when its working directory is in a .NET project (a solution or project file, `global.json` or
-  `Directory.Build.props` in it or a parent, or a solution or project file at most two levels below), in 10–19 ms per
-  start. Re-run `dtk init claude` (or `--global`) to add the two hooks to an existing install; `dtk doctor` warns until
+  `Directory.Build.props` in it or a parent, or a solution or project file at most two levels below; or a project whose
+  own `.claude/settings.json` registers the hook), in 10–19 ms per start with the native binary. Re-run `dtk init claude` (or `--global`) to add the two hooks to an existing install; `dtk doctor` warns until
   then and checks that the dtk on `PATH` answers them. When Cursor runs these Claude Code hooks, it gets a reply in its
   own schema.
 

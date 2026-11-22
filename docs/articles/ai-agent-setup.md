@@ -136,7 +136,9 @@ A directory is in a .NET project when it or a parent holds a solution or project
 answering no. Elsewhere nothing is added, so a `--global` install costs nothing outside .NET work. Every subagent
 gets the rules, Explore and Plan included (they skip CLAUDE.md), except the built-in `web-fetch` and
 `statusline-setup`, which have no shell; a custom agent without a shell gets them too, since the hook cannot see an
-agent's tools. A resumed session keeps the lines it was given. Each start costs one `dtk hook` run, 10–19 ms (see
+agent's tools. A project where `dtk init claude` was run (its `.claude/settings.json` registers the hook) counts as
+.NET work wherever its projects lie. A resumed session keeps the lines it was given. Each start costs one `dtk hook`
+run, 10–19 ms with the native binary (see
 [Performance](performance.md#dtk-hook)).
 
 Re-running the command refreshes `SKILL.md` if dtk wrote it and leaves an edited copy alone unless you
@@ -651,8 +653,11 @@ both rewrite it.
 
 Cursor imports hooks from a Claude settings file (`~/.claude/settings.json`, `.claude/settings*.json`) by default.
 When dtk's Claude hook is also registered in a settings file Cursor imports, the install prints a note about it; a
-double rewrite is harmless, because the rewriter skips commands `dtk` already ran. `dtk doctor` probes the Cursor
-hook with one simple command per auto-approvable subcommand.
+double rewrite is harmless, because the rewriter skips commands `dtk` already ran. If Cursor also runs the Claude
+hook's `SessionStart` and `SubagentStart` entries, dtk answers them in Cursor's own schema (`{"permission":"allow"}`
+for a subagent, `{}` for a session), so a subagent is never blocked; Cursor reads dtk's rules from its rule file
+(see [Harness verification](harness-verification.md)). `dtk doctor` probes the Cursor hook with one simple command
+per auto-approvable subcommand.
 
 > [!NOTE]
 > Not verified against a live run — see [Harness verification](harness-verification.md).
@@ -727,7 +732,8 @@ run.
 
 Devin also imports hooks from a Claude settings file (`~/.claude/settings.json`, `.claude/settings*.json`) by
 default; when dtk's Claude hook is registered there too, the install prints a note — a double rewrite is harmless,
-because the rewriter skips commands `dtk` already ran.
+because the rewriter skips commands `dtk` already ran. Devin runs that hook's `SessionStart` entry too, which adds
+dtk's rules to a Devin session in a .NET project; it has no `SubagentStart`.
 
 > [!NOTE]
 > Not verified against a live run — see [Harness verification](harness-verification.md).

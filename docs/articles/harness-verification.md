@@ -4,6 +4,11 @@ Some integrations could not be run against the real harness when they were writt
 account. Their hooks follow the harness's documentation and are covered by payload tests, but the points below are
 unconfirmed. If you can run one, please report the result in an issue.
 
+## Claude Code
+
+1. On Windows, which form the `SessionStart`/`SubagentStart` payload's `cwd` takes (`C:\…`, or Git Bash's `/c/…`,
+   which dtk does not read as a path): the context hooks were run against the real Claude Code on Linux only.
+
 ## Cursor
 
 1. `{}` is accepted as a neutral reply: with the hook installed, ask the agent to run `ls`; it must run normally.

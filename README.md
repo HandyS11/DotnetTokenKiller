@@ -272,7 +272,7 @@ For the other providers â€” or when you want dtk scoped to a single repository â
 
 | Provider               | Command                     | What it creates                                            |
 |------------------------|-----------------------------|------------------------------------------------------------|
-| **Claude Code**        | `dtk init claude`      | Skill file, PreToolUse hook running dtk hook claude, settings merge |
+| **Claude Code**        | `dtk init claude`      | Skill file, `dtk hook claude` for PreToolUse (the rewrite) and SessionStart/SubagentStart (dtk's rules for every agent in a .NET project), settings merge |
 | **GitHub Copilot**     | `dtk init copilot`     | Section in `.github/copilot-instructions.md`               |
 | **GitHub Copilot CLI** | `dtk init copilot-cli` | preToolUse hook in .github/hooks/ running dtk hook copilot-cli + instructions section |
 | **Gemini CLI**         | `dtk init gemini`      | BeforeTool hook running dtk hook gemini, settings merge, GEMINI.md section |
