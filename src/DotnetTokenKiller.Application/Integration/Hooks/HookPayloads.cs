@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -69,6 +70,28 @@ internal static class HookPayloads
     /// <summary>The tool input property holding the shell command.</summary>
     private const string CommandProperty = "command";
 
+    /// <summary>The reply property holding a Claude-shaped hook's event-specific output.</summary>
+    private const string HookSpecificOutputProperty = "hookSpecificOutput";
+
+    /// <summary>The property of <see cref="HookSpecificOutputProperty"/> naming the event it answers.</summary>
+    private const string HookEventNameOutputProperty = "hookEventName";
+
+    /// <summary>The payload property naming the hook event in Claude Code's payloads.</summary>
+    private const string HookEventNameProperty = "hook_event_name";
+
+    /// <summary>Claude Code's event at the start of a session (startup, clear, compact).</summary>
+    private const string SessionStartEvent = "SessionStart";
+
+    /// <summary>Claude Code's event at the start of each subagent.</summary>
+    private const string SubagentStartEvent = "SubagentStart";
+
+    /// <summary>
+    /// The built-in Claude Code subagents that have no shell tool, which dtk's rules would only cost tokens. A custom
+    /// or plugin agent without one still gets them: the payload names the agent, not its tools.
+    /// </summary>
+    internal static readonly FrozenSet<string> AgentTypesWithoutShell =
+        new[] { "web-fetch", "statusline-setup" }.ToFrozenSet(StringComparer.Ordinal);
+
     /// <summary>
     /// The decision value a reply uses to accept the rewritten command. Whether it also skips the harness's own
     /// permission check depends on the harness: Codex still applies its approval policy, and Gemini ignores it.
@@ -129,7 +152,7 @@ internal static class HookPayloads
         {
             return kind switch
             {
-                HookPayloadKind.ClaudeCode => ReplyWithUpdatedInput(root, expectedTool: null),
+                HookPayloadKind.ClaudeCode => ReplyToClaude(root),
                 HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool),
                 HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool),
                 HookPayloadKind.Cursor => ReplyToCursor(root),
@@ -158,6 +181,58 @@ internal static class HookPayloads
     }
 
     /// <summary>
+    /// Replies to Claude Code: dtk's rules for <c>SessionStart</c> and <c>SubagentStart</c>
+    /// (<see cref="ReplyWithContext"/>), and today's rewrite for every other payload — <c>PreToolUse</c>, a payload with
+    /// no event name (doctor's probe), or another harness's own event name (Cursor and Devin run Claude Code's hooks).
+    /// </summary>
+    /// <param name="root">The parsed payload.</param>
+    private static string? ReplyToClaude(JsonNode? root)
+    {
+        if (root is JsonObject payload
+            && payload[HookEventNameProperty] is JsonValue eventValue
+            && eventValue.TryGetValue<string>(out var eventName)
+            && eventName is SessionStartEvent or SubagentStartEvent)
+        {
+            return ReplyWithContext(payload, eventName);
+        }
+
+        return ReplyWithUpdatedInput(root, expectedTool: null);
+    }
+
+    /// <summary>
+    /// <see cref="IntegrationInstructions.AgentRules"/> as the context Claude Code adds before the agent's first prompt,
+    /// when the payload's <c>cwd</c> is in a .NET project and the agent is not one of
+    /// <see cref="AgentTypesWithoutShell"/>; nothing otherwise.
+    /// </summary>
+    /// <param name="payload">The parsed payload.</param>
+    /// <param name="eventName">Either <see cref="SessionStartEvent"/> or <see cref="SubagentStartEvent"/>.</param>
+    private static string? ReplyWithContext(JsonObject payload, string eventName)
+    {
+        if (eventName == SubagentStartEvent
+            && payload["agent_type"] is JsonValue agentValue
+            && agentValue.TryGetValue<string>(out var agentType)
+            && AgentTypesWithoutShell.Contains(agentType))
+        {
+            return null;
+        }
+
+        var cwd = payload["cwd"] is JsonValue cwdValue && cwdValue.TryGetValue<string>(out var directory) ? directory : null;
+        if (!DotnetProjectDetector.IsDotnetProject(cwd))
+        {
+            return null;
+        }
+
+        return new JsonObject
+        {
+            [HookSpecificOutputProperty] = new JsonObject
+            {
+                [HookEventNameOutputProperty] = eventName,
+                ["additionalContext"] = IntegrationInstructions.AgentRules
+            }
+        }.ToJsonString();
+    }
+
+    /// <summary>
     /// Claude Code's reply, which Devin Local and Devin CLI share: the whole tool input with the command replaced, and
     /// no permission decision, so the harness still applies its own approval to the rewritten command.
     /// </summary>
@@ -180,9 +255,9 @@ internal static class HookPayloads
         updatedInput[CommandProperty] = rewritten;
         return new JsonObject
         {
-            ["hookSpecificOutput"] = new JsonObject
+            [HookSpecificOutputProperty] = new JsonObject
             {
-                ["hookEventName"] = "PreToolUse",
+                [HookEventNameOutputProperty] = "PreToolUse",
                 ["updatedInput"] = updatedInput
             }
         }.ToJsonString();
@@ -241,7 +316,7 @@ internal static class HookPayloads
             && payload[ToolInputProperty] is JsonObject toolInput
             && TryRewrite(toolInput, out _, out var rewritten))
         {
-            reply["hookSpecificOutput"] = new JsonObject
+            reply[HookSpecificOutputProperty] = new JsonObject
             {
                 [ToolInputProperty] = new JsonObject { [CommandProperty] = rewritten }
             };
@@ -294,9 +369,9 @@ internal static class HookPayloads
         updatedInput[CommandProperty] = rewritten;
         return new JsonObject
         {
-            ["hookSpecificOutput"] = new JsonObject
+            [HookSpecificOutputProperty] = new JsonObject
             {
-                ["hookEventName"] = "PreToolUse",
+                [HookEventNameOutputProperty] = "PreToolUse",
                 // Codex rejects updatedInput unless the reply also allows; it still applies its approval policy and
                 // sandbox to the rewritten command.
                 ["permissionDecision"] = AllowDecision,

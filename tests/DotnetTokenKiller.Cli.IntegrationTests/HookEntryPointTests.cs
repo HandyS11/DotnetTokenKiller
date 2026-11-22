@@ -18,6 +18,56 @@ public sealed class HookEntryPointTests
     }
 
     [Fact]
+    public void Hook_Claude_SubagentStartInADotnetProject_PrintsTheRules()
+    {
+        var project = Directory.CreateTempSubdirectory("dtk-hook-context-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(project, "App.slnx"), string.Empty);
+            var payload = new System.Text.Json.Nodes.JsonObject
+            {
+                ["hook_event_name"] = "SubagentStart",
+                ["agent_type"] = "Explore",
+                ["cwd"] = project
+            }.ToJsonString();
+
+            var (exitCode, stdout, stderr) = Run(["claude"], payload);
+
+            exitCode.Should().Be(0);
+            stdout.Should().Contain("\"additionalContext\":").And.Contain("instead of running it again").And.EndWith("\n");
+            stderr.Should().BeEmpty();
+        }
+        finally
+        {
+            Directory.Delete(project, true);
+        }
+    }
+
+    [Fact]
+    public void Hook_Claude_SessionStartElsewhere_PrintsNothing()
+    {
+        var folder = Directory.CreateTempSubdirectory("dtk-hook-plain-").FullName;
+        try
+        {
+            var payload = new System.Text.Json.Nodes.JsonObject
+            {
+                ["hook_event_name"] = "SessionStart",
+                ["source"] = "startup",
+                ["cwd"] = folder
+            }.ToJsonString();
+
+            var (exitCode, stdout, _) = Run(["claude"], payload);
+
+            exitCode.Should().Be(0);
+            stdout.Should().BeEmpty();
+        }
+        finally
+        {
+            Directory.Delete(folder, true);
+        }
+    }
+
+    [Fact]
     public void Run_NothingToRewrite_PrintsNothing()
     {
         var (exitCode, stdout, _) = Run(["claude"], """{"tool_input":{"command":"ls"}}""");
