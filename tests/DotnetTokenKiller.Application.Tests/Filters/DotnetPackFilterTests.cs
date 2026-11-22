@@ -77,7 +77,7 @@ public class DotnetPackFilterTests
     }
 
     [Fact]
-    public void Apply_NuGetPackWarningWithoutAFile_IsReported()
+    public void Apply_NuGetPackWarningOfAProject_IsFiledUnderItsProjectFile()
     {
         const string input = """
                                Lib -> /repo/Lib/bin/Release/net10.0/Lib.dll
@@ -88,7 +88,7 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(input, exitCode: 0);
 
         result.Should().Be(
-            "(no file) NU5104: A stable release of a package should not have a prerelease dependency.\n"
+            "Lib/Lib.csproj NU5104: A stable release of a package should not have a prerelease dependency.\n"
             + "  Lib/bin/Release/Lib.1.0.0.nupkg\n"
             + "✓ dotnet pack: 0 errors, 1 warning (1 project)\n");
     }
@@ -104,7 +104,7 @@ public class DotnetPackFilterTests
         var result = _sut.Apply(input, exitCode: 1);
 
         result.Should().NotContain(".nupkg");
-        result.Should().StartWith("(no file) NU5017: Cannot create a package that has no dependencies nor content.\n");
+        result.Should().StartWith("B/B.csproj NU5017: Cannot create a package that has no dependencies nor content.\n");
         result.Should().EndWith("✗ dotnet pack failed (exit 1): 1 error, 0 warnings (1 project)\n");
     }
 

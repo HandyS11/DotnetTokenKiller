@@ -116,15 +116,19 @@ public sealed class GitWorkingTree : IGitWorkingTree
 
         var top = Path.GetFullPath(cdup.Length == 0 ? "." : cdup, directory);
 
-        // What the branch changed since it left the default branch, committed or not; none without an origin/HEAD.
+        // What the branch changed since it left the default branch, committed or not. Without that point (no
+        // origin/HEAD, as after a hand-made git remote add; one naming a pruned branch; no commit yet) the answer is
+        // unknown: the uncommitted files alone would pass for every change and hide what the branch committed.
         var mergeBase = Run(top, token, "merge-base", "HEAD", "refs/remotes/origin/HEAD")?.Trim();
-        var sinceBase = string.IsNullOrEmpty(mergeBase)
-            ? []
-            : Paths(Run(top, token, "diff", "--name-only", "-z", "--no-renames", mergeBase, "--"));
+        if (string.IsNullOrEmpty(mergeBase))
+        {
+            return null;
+        }
+
+        var sinceBase = Paths(Run(top, token, "diff", "--name-only", "-z", "--no-renames", mergeBase, "--"));
 
         // What is not committed yet, staged or not, and the untracked files no ignore rule matches: "XY path" entries,
-        // their paths from the top whatever the directory. It also answers before the first commit, and fails on a
-        // HEAD it cannot read, which leaves the answer unknown.
+        // their paths from the top whatever the directory.
         var status = Run(top, token, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames");
         if (sinceBase is null || status is null || token.IsCancellationRequested)
         {

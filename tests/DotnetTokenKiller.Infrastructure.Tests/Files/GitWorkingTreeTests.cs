@@ -69,7 +69,27 @@ public sealed class GitWorkingTreeTests : IDisposable
     }
 
     [Fact]
-    public void ChangedFiles_WithoutADefaultBranch_AreTheUncommittedOnes()
+    public void ChangedFiles_WithoutADefaultBranch_AreUnknownRatherThanTheUncommittedOnes()
+    {
+        // A remote added by hand (git remote add, then fetch) has no origin/HEAD. Without it, what a branch committed
+        // cannot be told from what it inherited, and the uncommitted files alone would leave its commits out: a
+        // warning in a file it committed would be counted among the unchanged ones and hidden.
+        InitRepository();
+        Write("base.cs", "b");
+        Git("add", ".");
+        Git("commit", "-q", "-m", "init");
+        Git("update-ref", "refs/remotes/origin/main", "HEAD");
+        Git("switch", "-q", "-c", "feature");
+        Write("committed.cs", "c");
+        Git("add", ".");
+        Git("commit", "-q", "-m", "work");
+        Write("stray.txt", "s");
+
+        _sut.ChangedFiles(_root).Should().BeNull();
+    }
+
+    [Fact]
+    public void ChangedFiles_OnTheDefaultBranch_AreTheUncommittedOnes()
     {
         InitRepository();
         Write(".gitignore", "tmp/\n");
@@ -78,6 +98,7 @@ public sealed class GitWorkingTreeTests : IDisposable
         Write("staged.cs", "s");
         Git("add", ".");
         Git("commit", "-q", "-m", "init");
+        PointOriginHeadAtHead();
         Write("edited.cs", "edited");
         Write("staged.cs", "staged");
         Git("add", "staged.cs");
@@ -89,6 +110,20 @@ public sealed class GitWorkingTreeTests : IDisposable
     }
 
     [Fact]
+    public void ChangedFiles_WithAnOriginHeadNamingAMissingBranch_AreUnknown()
+    {
+        // origin/HEAD left behind by a default branch the remote renamed, then pruned.
+        InitRepository();
+        Write("a.cs", "a");
+        Git("add", ".");
+        Git("commit", "-q", "-m", "init");
+        Git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone");
+        Write("a.cs", "changed");
+
+        _sut.ChangedFiles(_root).Should().BeNull();
+    }
+
+    [Fact]
     public void ChangedFiles_OnABranch_IncludeWhatItCommittedSinceTheDefaultBranch()
     {
         InitRepository();
@@ -96,8 +131,7 @@ public sealed class GitWorkingTreeTests : IDisposable
         Write("touched.cs", "t");
         Git("add", ".");
         Git("commit", "-q", "-m", "init");
-        Git("update-ref", "refs/remotes/origin/main", "HEAD");
-        Git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+        PointOriginHeadAtHead();
         Git("switch", "-q", "-c", "feature");
         Write("touched.cs", "touched");
         Write("added.cs", "a");
@@ -117,18 +151,20 @@ public sealed class GitWorkingTreeTests : IDisposable
         Write("b.cs", "b");
         Git("add", ".");
         Git("commit", "-q", "-m", "init");
+        PointOriginHeadAtHead();
         Write("b.cs", "changed");
 
         _sut.ChangedFiles(Path.Combine(_root, "src")).Should().Equal(Absolute("b.cs"));
     }
 
     [Fact]
-    public void ChangedFiles_BeforeTheFirstCommit_AreEveryUnignoredFile()
+    public void ChangedFiles_BeforeTheFirstCommit_AreUnknown()
     {
+        // Every file is new, which a caller that does without the answer treats alike: it lists every warning.
         InitRepository();
         Write("a.cs", "a");
 
-        _sut.ChangedFiles(_root).Should().Equal(Absolute("a.cs"));
+        _sut.ChangedFiles(_root).Should().BeNull();
     }
 
     [Fact]
@@ -145,6 +181,7 @@ public sealed class GitWorkingTreeTests : IDisposable
         Write("src/a.cs", "a");
         Git("add", ".");
         Git("commit", "-q", "-m", "init");
+        PointOriginHeadAtHead();
         Write("src/a.cs", "changed");
         var link = _root + "-link";
         Directory.CreateSymbolicLink(link, _root);
@@ -160,14 +197,14 @@ public sealed class GitWorkingTreeTests : IDisposable
     }
 
     [Fact]
-    public void ChangedFiles_WhenGitCannotCompareWithHead_AreUnknownRatherThanEveryFile()
+    public void ChangedFiles_WhenGitCannotReadHead_AreUnknownRatherThanEveryFile()
     {
-        // Only a repository without a commit lists every tracked file as changed; a diff that fails for another
-        // reason (here, a HEAD naming a missing object) says nothing.
+        // A HEAD naming a missing object, with an origin/HEAD that resolves: git cannot compare the two.
         InitRepository();
         Write("a.cs", "a");
         Git("add", ".");
         Git("commit", "-q", "-m", "init");
+        PointOriginHeadAtHead();
         File.WriteAllText(Path.Combine(_root, ".git", "refs", "heads", "main"), new string('1', 40) + "\n");
 
         _sut.ChangedFiles(_root).Should().BeNull();
@@ -193,6 +230,13 @@ public sealed class GitWorkingTreeTests : IDisposable
 
         withoutGit.ChangedFiles(_root).Should().BeNull();
         withoutGit.UnignoredFiles(_root).Should().BeNull();
+    }
+
+    /// <summary>Gives the repository the origin/HEAD a clone has, on the commit checked out.</summary>
+    private void PointOriginHeadAtHead()
+    {
+        Git("update-ref", "refs/remotes/origin/main", "HEAD");
+        Git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
     }
 
     private string Absolute(string relative) => Path.GetFullPath(Path.Combine(_root, relative));

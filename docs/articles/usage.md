@@ -43,11 +43,19 @@ src/App/OrderService.cs(42,13) CS0219: The variable 'total' is assigned but its 
 ```
 
 A changed file is one that differs from where the current branch left the default branch (`origin/HEAD`), committed
-or not, or an untracked file git does not ignore; without an `origin/HEAD`, the changes not committed yet. The status
-line ends `, none in changed files` when none of them has a warning. With no changed file at all (a fresh clone, a CI
-checkout), outside a git work tree, when git cannot be run, or when the build declared an error, every warning is listed
-as before; `dtk log build --full | dtk pipe build` lists them all, grouped, at any time. `dtk dotnet publish` and
-`dtk dotnet pack` do the same.
+or not, or an untracked file git does not ignore. The status line ends `, none in changed files` when none of them has
+a warning. A project-level warning, which MSBuild prints without a position (`App.csproj : warning NU1903: …`), is
+filed under its project file; a warning that names no file at all (`CSC : warning CS8032: …`) is listed too, since
+nothing says the change did not cause it. When some of the warnings MSBuild counted matched no pattern, the count says
+how many were read, `6 warnings (4 parsed)`, since they cannot be placed in a changed file or out of one.
+
+Every warning is listed as before when the work in progress changed the build's configuration, which can raise a
+warning in any file: a project file, a `.props` or `.targets` file (`Directory.Build.props`,
+`Directory.Packages.props`), `.editorconfig`, a `.globalconfig` or `.ruleset`, `global.json`, `nuget.config` or
+`Directory.Build.rsp`. So it is with no changed file at all (a fresh clone, a CI checkout), without an `origin/HEAD`
+(a clone has one; a remote added with `git remote add` has none until `git remote set-head origin --auto`), outside a
+git work tree, when git cannot be run, or when the build declared an error. `dtk log build --full | dtk pipe build`
+lists them all, grouped, at any time. `dtk dotnet publish` and `dtk dotnet pack` do the same.
 The summary is always the last line (`✓ dotnet build …`, or `✗ dotnet build failed (exit 1): 3 errors, 1 warning …`
 when the exit code is non-zero), so `| tail -1` carries the verdict. A coding agent should read the whole (short) output instead of piping it into `tail` or `grep`, which would drop the diagnostics above the status line or the status line itself.
 
@@ -570,7 +578,7 @@ export DTK_RAW=1
 
 dtk then runs `dotnet` as a passthrough (recorded like any other, and without dtk's own `-q`, `-v` and `--show-log`). Any non-empty value except `0` and `false` turns it on. As with `--interactive` runs, `--tee` and `--fail-on-empty` are refused (`dtk: --fail-on-empty needs a filtered run, but DTK_RAW=1 is set`), and `--max-lines`, `--names` and `--show-output` are dropped with a warning.
 
-An agent hook rewrites plain `dotnet build|test|…` to `dtk dotnet …`, and leaves alone a `dotnet` that the command asks for raw: `DTK_RAW=1 dotnet test`, `\dotnet test`, `command dotnet test` and `rtk proxy dotnet test`. See [AI Agent Setup](ai-agent-setup.md).
+An agent hook rewrites plain `dotnet build|test|…` to `dtk dotnet …`, and leaves alone a `dotnet` that the command asks for raw: `DTK_RAW=1 dotnet test`, `\dotnet test`, `command dotnet test` and `rtk proxy dotnet test`. Before `dotnet`, it rewrites past assignments (`CI=1 dotnet test`), shell keywords (`if`, `then`, `!`, `do`, …) and the launchers that run it here with the same `PATH` (`env`, `time`, `timeout 600`, `nice -n 10`, `nohup`, `exec`), and leaves any other word alone: `$D dotnet build`, `echo dotnet build`, `ssh host dotnet build`, `docker run … dotnet build` and `sudo dotnet build`, whose `PATH` may hold no dtk. It also leaves alone a `dotnet` whose output goes to a text filter or a file, which expects MSBuild's own lines: `dotnet build 2>&1 | grep -E "error|warn"` (or `rg`, `awk`, `sed`, `cut`) would find nothing in dtk's `(12,5) CS0029: …`, and `dotnet build > build.log` is read afterwards. A pipe into `tail`, `head` or `tee` is still rewritten, since dtk's verdict is its last line. See [AI Agent Setup](ai-agent-setup.md).
 
 ## Interrupting a run
 

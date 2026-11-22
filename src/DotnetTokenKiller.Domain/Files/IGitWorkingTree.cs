@@ -19,8 +19,9 @@ public interface IGitWorkingTree
     /// <summary>
     /// The files the work in progress changed, as full paths: those that differ from the default branch where the
     /// current one left it (the merge base with <c>origin/HEAD</c>), committed or not, and untracked files no
-    /// ignore rule matches. Without an <c>origin/HEAD</c> they are the changes not committed yet; before the first
-    /// commit, every file git does not ignore.
+    /// ignore rule matches. <see langword="null"/> when there is no such merge base (no <c>origin/HEAD</c>, as after
+    /// <c>git remote add</c>; one naming a missing branch; no commit yet): the changes not committed yet would leave
+    /// out what the branch committed.
     /// </summary>
     /// <param name="directory">A directory in the work tree; the answer covers the whole work tree.</param>
     /// <param name="cancellationToken">Stops git.</param>

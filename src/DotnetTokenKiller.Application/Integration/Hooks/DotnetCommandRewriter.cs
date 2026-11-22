@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using DotnetTokenKiller.Domain;
@@ -16,7 +17,12 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// subcommand's tokens, the longest subcommand tried first, a word boundary after it). It is left alone when
 /// the character before it cannot end a previous command (a path such as <c>/usr/lib/dotnet/dotnet build</c>),
 /// when <c>dtk</c> already runs it, when it asks for dotnet's raw output (<c>rtk proxy dotnet …</c>,
-/// <c>command dotnet …</c>, <c>DTK_RAW=1 dotnet …</c>), or when it is not shell code at all.
+/// <c>command dotnet …</c>, <c>DTK_RAW=1 dotnet …</c>), when it is not shell code at all, and when a word before it
+/// is anything but an assignment, a shell keyword or a launcher known to run it here with the same <c>PATH</c>
+/// (<see cref="RunsHereWithTheSamePath"/>): <c>$D dotnet build</c>, <c>echo dotnet build</c>,
+/// <c>ssh host dotnet build</c> and <c>sudo dotnet build</c> stay as they are. So does one whose output goes to a text
+/// filter or a file (<see cref="SendsOutputToATextFilterOrFile"/>): <c>dotnet build 2&gt;&amp;1 | grep -E "error|warn"</c>
+/// and <c>dotnet build &gt; x.log</c> expect MSBuild's own lines.
 /// <see cref="IsPythonWord"/> keeps the Unicode-aware <c>\w</c> of the Python hooks dtk generated before
 /// <c>dtk hook</c>, which this class started as a port of.
 /// </para>
@@ -71,8 +77,35 @@ internal static class DotnetCommandRewriter
     /// <summary>Characters that may precede <c>dotnet</c> where a command starts.</summary>
     private static readonly SearchValues<char> Boundaries = SearchValues.Create(" \t;&|({`\n");
 
+    /// <summary><see cref="Boundaries"/> without the blanks: the characters that end the command before a word.</summary>
+    private static readonly SearchValues<char> CommandSeparators = SearchValues.Create(";&|({`\n");
+
+    /// <summary>
+    /// The programs that pick lines out of text by what they say: written after <c>dotnet build |</c>, they look for
+    /// MSBuild's <c>error</c>, <c>warning</c> or <c>Build succeeded</c>, which dtk's lines do not carry.
+    /// </summary>
+    private static readonly FrozenSet<string> TextFilters =
+        new[] { "grep", "egrep", "fgrep", "rg", "ag", "ack", "awk", "gawk", "mawk", "nawk", "sed", "cut" }
+            .ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>The reserved words that may stand before a command, which they run in this shell.</summary>
+    private static readonly FrozenSet<string> ShellKeywords =
+        new[] { "!", "if", "then", "else", "elif", "do", "while", "until" }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>The options of <c>timeout</c> that take a value in the next word.</summary>
+    private static readonly FrozenSet<string> TimeoutValueOptions =
+        new[] { "-s", "-k", "--signal", "--kill-after" }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>The options of <c>timeout</c> that take none, or carry theirs after <c>=</c>.</summary>
+    private static readonly FrozenSet<string> TimeoutFlags =
+        new[] { "--foreground", "--preserve-status", "-v", "--verbose" }.ToFrozenSet(StringComparer.Ordinal);
+
     /// <summary>Unquoted characters that chain, pipe, subshell or redirect, none of which a simple command has.</summary>
     private static readonly SearchValues<char> NotSimple = SearchValues.Create(";&|`\n()<>");
+
+    /// <summary>The characters of a shell variable's name.</summary>
+    private static readonly SearchValues<char> VariableNameCharacters =
+        SearchValues.Create("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_");
 
     /// <summary>Characters that make an assignment's value something other than its literal text.</summary>
     private static readonly SearchValues<char> ShellValueCharacters = SearchValues.Create("\"'\\$`");
@@ -120,7 +153,8 @@ internal static class DotnetCommandRewriter
                 && command.AsSpan(start).StartsWith(Dotnet, StringComparison.Ordinal)
                 && !IsWordBefore(command, start)
                 && TryMatchSubcommand(command, start + Dotnet.Length, out var subcommandStart, out var end)
-                && IsCommandPosition(command, start))
+                && IsCommandPosition(command, start)
+                && !SendsOutputToATextFilterOrFile(command, end))
             {
                 rewritten ??= new StringBuilder(command.Length + 4);
                 rewritten.Append(command, copied, start - copied)
@@ -419,7 +453,257 @@ internal static class DotnetCommandRewriter
             return false;
         }
 
-        return word is not "proxy" || ProgramName(LastWord(beforeWord, out _)) is not ("rtk" or "rtk.exe");
+        return (word is not "proxy" || ProgramName(LastWord(beforeWord, out _)) is not ("rtk" or "rtk.exe"))
+               && RunsHereWithTheSamePath(command, start);
+    }
+
+    /// <summary>
+    /// Whether the <c>dotnet</c> command whose subcommand ends at <paramref name="end"/> sends its standard output to a
+    /// text filter (<c>| grep</c>, <c>|&amp; awk</c>, … <see cref="TextFilters"/>) or to a file (<c>&gt; x.log</c>,
+    /// <c>&gt;&gt;</c>, <c>1&gt;</c>, <c>&amp;&gt;</c>, <c>&gt;&amp; x.log</c>), which expect MSBuild's lines. The first
+    /// unquoted operator after its arguments decides: a pipe into anything else (<c>tail</c>, <c>head</c>, <c>tee</c>),
+    /// <c>||</c>, <c>&amp;&amp;</c>, <c>;</c>, <c>&amp;</c>, a line break or a closing <c>)</c> does not, and neither
+    /// does a redirection of another descriptor (<c>2&gt; err.log</c>, <c>2&gt;&amp;1</c>) or a copy of standard output
+    /// onto one (<c>&gt;&amp;2</c>). An argument holding a command substitution ends the search, and the command is
+    /// rewritten as before.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="end">Where the matched subcommand ends.</param>
+    private static bool SendsOutputToATextFilterOrFile(string command, int end)
+    {
+        var rest = command[end..];
+        var scanner = new ShellScanner(rest);
+        var skipThrough = -1;
+        while (scanner.MoveNext(out var index, out var token))
+        {
+            if (token == ShellToken.Substitution)
+            {
+                return false;
+            }
+
+            if (index > skipThrough && token == ShellToken.Code
+                                    && ReadOperator(rest, index, ref skipThrough) is { } sendsIt)
+            {
+                return sendsIt;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// What the unquoted character at <paramref name="index"/> says of where the output goes: <see langword="true"/>
+    /// to a text filter or a file, <see langword="false"/> elsewhere or nowhere yet, or <see langword="null"/> when it
+    /// says nothing (a character of an argument, a redirection of another descriptor).
+    /// </summary>
+    /// <param name="text">The command after the subcommand.</param>
+    /// <param name="index">The index of the character.</param>
+    /// <param name="skipThrough">Moved past a redirection's operator characters, which say nothing more.</param>
+    private static bool? ReadOperator(string text, int index, ref int skipThrough)
+    {
+        var next = index + 1 < text.Length ? text[index + 1] : '\0';
+        return text[index] switch
+        {
+            '|' => next != '|' && PipesIntoATextFilter(text, next == '&' ? index + 2 : index + 1),
+            '&' => next == '>',
+            '>' => RedirectsStandardOutputToAFile(text, index, out skipThrough) ? true : null,
+            ';' or '\n' or ')' => false,
+            _ => null
+        };
+    }
+
+    /// <summary>Whether the first word after a pipe at <paramref name="start"/> names one of <see cref="TextFilters"/>.</summary>
+    /// <param name="text">The command after the subcommand.</param>
+    /// <param name="start">The index after the pipe.</param>
+    private static bool PipesIntoATextFilter(string text, int start)
+    {
+        var wordStart = SkipSpaces(text, start);
+        var wordEnd = wordStart;
+        while (wordEnd < text.Length && !IsBlank(text[wordEnd]) && !NotSimple.Contains(text[wordEnd]))
+        {
+            wordEnd++;
+        }
+
+        return TextFilters.Contains(ProgramName(text.AsSpan(wordStart, wordEnd - wordStart)).ToString());
+    }
+
+    /// <summary>
+    /// Whether the <c>&gt;</c> at <paramref name="index"/> sends standard output to a file: it names no descriptor or
+    /// names <c>1</c>, and is not a copy onto a descriptor (<c>&gt;&amp;2</c>, <c>&gt;&amp;-</c>).
+    /// </summary>
+    /// <param name="text">The command after the subcommand.</param>
+    /// <param name="index">The index of the <c>&gt;</c>.</param>
+    /// <param name="redirectEnd">Set to the index of the redirection's last operator character.</param>
+    private static bool RedirectsStandardOutputToAFile(string text, int index, out int redirectEnd)
+    {
+        var descriptorStart = index;
+        while (descriptorStart > 0 && char.IsAsciiDigit(text[descriptorStart - 1]))
+        {
+            descriptorStart--;
+        }
+
+        var namesADescriptor = descriptorStart < index && (descriptorStart == 0 || IsBlank(text[descriptorStart - 1]));
+        var ofStandardOutput = !namesADescriptor || text.AsSpan(descriptorStart, index - descriptorStart) is "1";
+
+        redirectEnd = index + 1 < text.Length && text[index + 1] == '>' ? index + 1 : index;
+        var copiesADescriptor = redirectEnd + 2 < text.Length
+                                && text[redirectEnd + 1] == '&'
+                                && (char.IsAsciiDigit(text[redirectEnd + 2]) || text[redirectEnd + 2] == '-');
+        if (copiesADescriptor)
+        {
+            redirectEnd += 2;
+        }
+
+        return ofStandardOutput && !copiesADescriptor;
+    }
+
+    /// <summary>
+    /// Whether every word between the start of the command and the <c>dotnet</c> at <paramref name="start"/> runs it
+    /// here, where the <c>dtk</c> on this shell's <c>PATH</c> can: an assignment (<c>X=1</c>), a shell keyword
+    /// (<c>if</c>, <c>then</c>, <c>!</c>, <c>do</c>, …), or <c>env</c>, <c>time</c>, <c>timeout</c>, <c>nice</c>,
+    /// <c>nohup</c> or <c>exec</c> with the plain arguments they are known to take. Any other word, or an argument
+    /// they are not known to take, leaves the command as it is: a word that expands to a program (<c>$D</c>, whose
+    /// <c>$D dtk dotnet build</c> hands dtk the unknown command <c>dtk</c>), text (<c>echo</c>), another machine or
+    /// user (<c>ssh</c>, <c>docker run</c>, <c>sudo</c>, which resets <c>PATH</c>), or <c>env -i</c>, which clears it.
+    /// Words are split on blanks alone, so a quoted value with a blank (<c>X="a b" dotnet build</c>) also leaves it.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="start">The index of the <c>dotnet</c> token being considered.</param>
+    private static bool RunsHereWithTheSamePath(string command, int start)
+    {
+        var before = command.AsSpan(0, start);
+        var words = before[(before.LastIndexOfAny(CommandSeparators) + 1)..].ToString()
+            .Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        var index = 0;
+        while (index < words.Length)
+        {
+            index = SkipRunner(words, index);
+            if (index < 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// The index of the word after the assignment, keyword or launcher with its arguments at <paramref name="index"/>,
+    /// or <c>-1</c> when that word is none of them, or a launcher's argument is not one it is known to take.
+    /// </summary>
+    /// <param name="words">The words before <c>dotnet</c>.</param>
+    /// <param name="index">The index of the word to read.</param>
+    private static int SkipRunner(string[] words, int index)
+    {
+        var word = words[index];
+        if (ShellKeywords.Contains(word) || IsAssignment(word))
+        {
+            return index + 1;
+        }
+
+        return ProgramName(word) switch
+        {
+            "env" => SkipEnvOptions(words, index + 1),
+            "time" => index + 1 < words.Length && words[index + 1] == "-p" ? index + 2 : index + 1,
+            "timeout" => SkipTimeoutArguments(words, index + 1),
+            "nice" => SkipNiceOptions(words, index + 1),
+            "nohup" or "exec" => index + 1,
+            _ => -1
+        };
+    }
+
+    /// <summary><c>env</c>'s <c>-u NAME</c> and <c>--unset=NAME</c>; any other option (<c>-i</c> clears <c>PATH</c>) fails.</summary>
+    /// <param name="words">The words before <c>dotnet</c>.</param>
+    /// <param name="index">The index of the word after <c>env</c>.</param>
+    private static int SkipEnvOptions(string[] words, int index)
+    {
+        while (index < words.Length && words[index].StartsWith('-'))
+        {
+            if (words[index] == "-u" && index + 1 < words.Length)
+            {
+                index += 2;
+            }
+            else if (words[index].StartsWith("--unset=", StringComparison.Ordinal))
+            {
+                index++;
+            }
+            else
+            {
+                return -1;
+            }
+        }
+
+        return index;
+    }
+
+    /// <summary><c>timeout</c>'s options, then the duration it requires (<c>600</c>, <c>1.5m</c>, <c>1h</c>).</summary>
+    /// <param name="words">The words before <c>dotnet</c>.</param>
+    /// <param name="index">The index of the word after <c>timeout</c>.</param>
+    private static int SkipTimeoutArguments(string[] words, int index)
+    {
+        while (index < words.Length && words[index].StartsWith('-'))
+        {
+            var word = words[index];
+            var name = word.Split('=', 2)[0];
+            if (TimeoutValueOptions.Contains(word) && index + 1 < words.Length)
+            {
+                index += 2;
+            }
+            else if (TimeoutFlags.Contains(word) || (word.Contains('=', StringComparison.Ordinal)
+                                                     && TimeoutValueOptions.Contains(name)))
+            {
+                index++;
+            }
+            else
+            {
+                return -1;
+            }
+        }
+
+        return index < words.Length && IsDuration(words[index]) ? index + 1 : -1;
+    }
+
+    /// <summary><c>nice</c>'s <c>-n N</c>, <c>-N</c> and <c>--adjustment=N</c>.</summary>
+    /// <param name="words">The words before <c>dotnet</c>.</param>
+    /// <param name="index">The index of the word after <c>nice</c>.</param>
+    private static int SkipNiceOptions(string[] words, int index)
+    {
+        if (index >= words.Length || !words[index].StartsWith('-'))
+        {
+            return index;
+        }
+
+        var word = words[index];
+        if (word == "-n")
+        {
+            return index + 1 < words.Length && IsInteger(words[index + 1]) ? index + 2 : -1;
+        }
+
+        return IsInteger(word[1..]) || word.StartsWith("--adjustment=", StringComparison.Ordinal) ? index + 1 : -1;
+    }
+
+    /// <summary>Whether <paramref name="word"/> assigns a variable: a name, then <c>=</c>.</summary>
+    /// <param name="word">A word of the command.</param>
+    private static bool IsAssignment(string word)
+    {
+        var equals = word.IndexOf('=', StringComparison.Ordinal);
+        return equals > 0
+               && (char.IsAsciiLetter(word[0]) || word[0] == '_')
+               && !word.AsSpan(0, equals).ContainsAnyExcept(VariableNameCharacters);
+    }
+
+    /// <summary>Whether <paramref name="word"/> is a whole number, with an optional sign.</summary>
+    /// <param name="word">A word of the command.</param>
+    private static bool IsInteger(string word) =>
+        int.TryParse(word, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _);
+
+    /// <summary>Whether <paramref name="word"/> is a <c>timeout</c> duration: a number, then <c>s</c>, <c>m</c>, <c>h</c> or <c>d</c>.</summary>
+    /// <param name="word">A word of the command.</param>
+    private static bool IsDuration(string word)
+    {
+        var number = word.Length > 0 && word[^1] is 's' or 'm' or 'h' or 'd' ? word[..^1] : word;
+        return number.Length > 0
+               && double.TryParse(number, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out _);
     }
 
     /// <summary>

@@ -1,0 +1,18 @@
+  Determining projects to restore...
+/test/project/root/app/App.csproj : warning NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability, https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+  All projects are up-to-date for restore.
+/test/project/root/app/App.csproj : warning NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability, https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+/test/project/root/app/A.cs(6,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/test/project/root/app/App.csproj]
+/test/project/root/app/B.cs(6,13): warning CS0219: The variable 'unusedToo' is assigned but its value is never used [/test/project/root/app/App.csproj]
+  App -> /test/project/root/app/bin/Debug/net10.0/App.dll
+
+Build succeeded.
+
+/test/project/root/app/App.csproj : warning NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability, https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+/test/project/root/app/App.csproj : warning NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability, https://github.com/advisories/GHSA-5crp-9r3c-p9vr
+/test/project/root/app/A.cs(6,13): warning CS0219: The variable 'unused' is assigned but its value is never used [/test/project/root/app/App.csproj]
+/test/project/root/app/B.cs(6,13): warning CS0219: The variable 'unusedToo' is assigned but its value is never used [/test/project/root/app/App.csproj]
+    4 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.83
