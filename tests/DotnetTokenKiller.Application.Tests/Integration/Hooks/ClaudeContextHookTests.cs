@@ -110,6 +110,45 @@ public sealed class ClaudeContextHookTests : IDisposable
         output["additionalContext"]!.GetValue<string>().Should().Be(IntegrationInstructions.AgentRules);
     }
 
+    [Theory]
+    [InlineData("subagentStart", true, """{"permission":"allow"}""")]
+    [InlineData("SubagentStart", true, """{"permission":"allow"}""")]
+    [InlineData("subagentStart", false, """{"permission":"allow"}""")]
+    [InlineData("sessionStart", true, "{}")]
+    [InlineData("SessionStart", false, "{}")]
+    public void Claude_ContextEventFromCursor_GetsAReplyInCursorsSchema(string eventName, bool inADotnetProject, string expected)
+    {
+        // Cursor runs the hooks of Claude Code's settings files and stamps its payloads with cursor_version. Its
+        // subagentStart is a permission hook that blocks the subagent on output outside its schema, which requires
+        // "permission"; its sessionStart takes optional fields only. So Cursor gets those, never Claude's reply.
+        var payload = new JsonObject
+        {
+            ["hook_event_name"] = eventName,
+            ["cursor_version"] = "2.4.0",
+            ["workspace_roots"] = new JsonArray(_dotnetProject),
+            ["cwd"] = inADotnetProject ? _dotnetProject : _plainFolder
+        }.ToJsonString();
+
+        Reply(payload).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Claude_PreToolUseFromCursor_KeepsTodaysRewrite()
+    {
+        var payload = new JsonObject
+        {
+            ["hook_event_name"] = "preToolUse",
+            ["cursor_version"] = "2.4.0",
+            ["tool_name"] = "Shell",
+            ["tool_input"] = new JsonObject { ["command"] = "dotnet build" }
+        }.ToJsonString();
+
+        JsonNode.Parse(Reply(payload)!)!["hookSpecificOutput"]!["updatedInput"]!["command"]!.GetValue<string>()
+            .Should().Be("dtk dotnet build");
+        Reply(new JsonObject { ["hook_event_name"] = "stop", ["cursor_version"] = "2.4.0" }.ToJsonString())
+            .Should().BeNull();
+    }
+
     [Fact]
     public void Devin_ContextEventName_IsNotAnsweredWithTheRules()
     {

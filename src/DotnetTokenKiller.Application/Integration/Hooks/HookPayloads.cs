@@ -49,6 +49,16 @@ internal static class HookPayloads
     /// </summary>
     internal const string CursorNeutralReply = "{}";
 
+    /// <summary>
+    /// The reply to Cursor's <c>subagentStart</c> when it runs dtk's Claude Code hook: a permission hook, which blocks
+    /// the subagent on output outside its schema, and whose schema requires <c>permission</c>. <c>allow</c> only lets
+    /// the subagent start, as it would without the hook.
+    /// </summary>
+    internal const string CursorSubagentStartReply = """{"permission":"allow"}""";
+
+    /// <summary>The payload property Cursor stamps on every hook input, and Claude Code never sends.</summary>
+    private const string CursorVersionProperty = "cursor_version";
+
     /// <summary>Cursor's shell tool.</summary>
     private const string CursorShellTool = "Shell";
 
@@ -184,20 +194,38 @@ internal static class HookPayloads
     /// Replies to Claude Code: dtk's rules for <c>SessionStart</c> and <c>SubagentStart</c>
     /// (<see cref="ReplyWithContext"/>), and today's rewrite for every other payload — <c>PreToolUse</c>, a payload with
     /// no event name (doctor's probe), or another harness's own event name (Cursor and Devin run Claude Code's hooks).
+    /// Cursor's own session and subagent start events, recognised by <c>cursor_version</c>, get a reply in Cursor's
+    /// schema instead (<see cref="CursorSubagentStartReply"/>, <see cref="CursorNeutralReply"/>): its
+    /// <c>subagentStart</c> blocks the subagent on any other output. Cursor reads its own dtk rule file.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
     private static string? ReplyToClaude(JsonNode? root)
     {
         if (root is JsonObject payload
             && payload[HookEventNameProperty] is JsonValue eventValue
-            && eventValue.TryGetValue<string>(out var eventName)
-            && eventName is SessionStartEvent or SubagentStartEvent)
+            && eventValue.TryGetValue<string>(out var eventName))
         {
-            return ReplyWithContext(payload, eventName);
+            if (payload.ContainsKey(CursorVersionProperty) && IsContextEvent(eventName, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(eventName, SubagentStartEvent, StringComparison.OrdinalIgnoreCase)
+                    ? CursorSubagentStartReply
+                    : CursorNeutralReply;
+            }
+
+            if (IsContextEvent(eventName, StringComparison.Ordinal))
+            {
+                return ReplyWithContext(payload, eventName);
+            }
         }
 
         return ReplyWithUpdatedInput(root, expectedTool: null);
     }
+
+    /// <summary>Whether <paramref name="eventName"/> is <c>SessionStart</c> or <c>SubagentStart</c>.</summary>
+    /// <param name="eventName">The payload's event name.</param>
+    /// <param name="comparison">Ordinal for Claude Code's names; ignoring case for Cursor's camelCase ones.</param>
+    private static bool IsContextEvent(string eventName, StringComparison comparison) =>
+        string.Equals(eventName, SessionStartEvent, comparison) || string.Equals(eventName, SubagentStartEvent, comparison);
 
     /// <summary>
     /// <see cref="IntegrationInstructions.AgentRules"/> as the context Claude Code adds before the agent's first prompt,
