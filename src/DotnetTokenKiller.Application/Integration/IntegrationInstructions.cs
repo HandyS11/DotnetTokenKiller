@@ -68,6 +68,30 @@ internal static class IntegrationInstructions
         """;
 
     /// <summary>
+    /// How dtk hands commands and their results through: arguments, exit codes, and what it does not filter. Part of
+    /// <see cref="UsageBody"/>, and embedded as is by the skill, so the two never drift.
+    /// </summary>
+    internal const string PassthroughBullets =
+        """
+        - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
+        - Exit codes are preserved.
+        - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
+        """;
+
+    /// <summary>dtk's own options, in one line each: <c>dtk pipe</c> and <c>-q</c>, then the evidence and test options.</summary>
+    internal const string OptionBullets =
+        """
+        - `dtk pipe <subcommand>` filters stdin. `-q` (dotnet subcommands) prints only the filtered output.
+        - `--tee <file>` keeps raw output as evidence; for test: `--show-output`, `--fail-on-empty`.
+        """;
+
+    /// <summary>How to get dotnet's own output, past dtk or past a hook. Embedded as is by the skill.</summary>
+    internal const string RawOutputBullet =
+        """
+        - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
+        """;
+
+    /// <summary>
     /// Example command block plus the notes common to every provider's dtk usage instructions: the
     /// <see cref="AgentRuleBullets"/> first, then forwarding, exit codes, passthrough, <c>dtk pipe</c>, dtk's own options
     /// and the raw-output switch. Every sentence costs tokens on each agent session, so a note belongs here only if
@@ -92,12 +116,9 @@ internal static class IntegrationInstructions
         ```
 
         {AgentRuleBullets}
-        - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
-        - Exit codes are preserved.
-        - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
-        - `dtk pipe <subcommand>` filters stdin. `-q` (dotnet subcommands) prints only the filtered output.
-        - `--tee <file>` keeps raw output as evidence; for test: `--show-output`, `--fail-on-empty`.
-        - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
+        {PassthroughBullets}
+        {OptionBullets}
+        {RawOutputBullet}
         """;
 
     /// <summary>

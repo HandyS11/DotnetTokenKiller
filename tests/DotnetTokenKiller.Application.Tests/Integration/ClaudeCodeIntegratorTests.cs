@@ -84,7 +84,7 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
             Path.Combine(_tempDir, ".claude", "skills", "dotnet-token-killer", "SKILL.md"));
 
         content.Should().Contain("dotnet-token-killer");
-        content.Should().Contain("dtk dotnet build");
+        content.Should().Contain("dtk log build --full | dtk pipe build");
         content.Should().NotContain("dtk dtk");
     }
 

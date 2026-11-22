@@ -54,10 +54,51 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
         "Don't pipe it into `tail` or `grep`",
         "instead of running it again");
 
+    /// <summary>What the skill, the reference for dtk's options beyond plain use, keeps.</summary>
+    public static TheoryData<string> ReferencePoints() => new(
+        "`--tee <file>`",
+        "`--show-output`",
+        "`--fail-on-empty`",
+        "`--names`",
+        "`--max-lines N`",
+        "`dtk log [build|test]`",
+        "`--list`",
+        "`dtk pipe <subcommand>`",
+        "`-q`",
+        "DTK_RAW=1",
+        "`\\dotnet …`",
+        "`command dotnet …`",
+        "`rtk proxy dotnet …`",
+        "`dtk test`, `dtk build`",
+        "dtk gain");
+
     [Theory]
-    [MemberData(nameof(TaughtPoints))]
-    public void SkillMarkdown_TeachesTheLogTheBypassAndNotToPipe(string point) =>
+    [MemberData(nameof(ReferencePoints))]
+    public void Skill_Body_KeepsTheReference(string point) =>
         SharedInstructionArtifacts.SkillMarkdown.Should().Contain(point);
+
+    [Fact]
+    public void Skill_Body_LeavesTheRulesToTheContext()
+    {
+        // Every agent gets the rules at its start (Claude Code's context hooks) or in its instructions file; the skill,
+        // loaded on demand, does not repeat them, nor tell an agent that already runs dtk how to install it.
+        foreach (var rule in IntegrationInstructions.AgentRuleBullets.Split('\n'))
+        {
+            SharedInstructionArtifacts.SkillMarkdown.Should().NotContain(rule);
+        }
+
+        SharedInstructionArtifacts.SkillMarkdown.Should().NotContain("## Installation");
+    }
+
+    [Fact]
+    public void Skill_Body_ExplainsTheChangedFilesNarrowing()
+    {
+        SharedInstructionArtifacts.SkillMarkdown.Should()
+            .Contain("in unchanged files not shown")
+            .And.Contain("dtk log build --full | dtk pipe build")
+            .And.Contain("`origin/HEAD`")
+            .And.Contain("`.editorconfig`");
+    }
 
     [Theory]
     [MemberData(nameof(TaughtPoints))]
