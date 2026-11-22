@@ -148,6 +148,28 @@ public sealed class DotnetProjectDetectorTests : IDisposable
     }
 
     [Fact]
+    public void IsDotnetProject_UnreadableDirectory_IsFalse()
+    {
+        // A working directory dtk may not list holds no match it can see, and the hook must not throw.
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root")
+        {
+            return;
+        }
+
+        var locked = Directory.CreateDirectory(Path.Combine(_root, "locked")).FullName;
+        File.WriteAllText(Path.Combine(locked, "App.csproj"), string.Empty);
+        File.SetUnixFileMode(locked, UnixFileMode.None);
+        try
+        {
+            DotnetProjectDetector.IsDotnetProject(locked).Should().BeFalse();
+        }
+        finally
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
     public void AgentRules_AreFourLines()
     {
         IntegrationInstructions.AgentRules.Split('\n').Should().HaveCount(4);

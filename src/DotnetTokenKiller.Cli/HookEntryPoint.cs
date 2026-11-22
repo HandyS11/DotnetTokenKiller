@@ -21,11 +21,16 @@ internal static class HookEntryPoint
         "usage: dtk hook <claude|gemini|copilot-cli|codex|opencode|antigravity|pi|oh-my-pi|cursor|devin|droid|crush|kilo|amp> "
         + "(run by an AI agent's pre-tool hook; reads the payload on stdin)";
 
+    /// <summary>The variable Claude Code sets, for every hook command, to the project it runs in.</summary>
+    private const string ClaudeProjectDirectoryVariable = "CLAUDE_PROJECT_DIR";
+
     /// <summary>Handles <c>dtk hook</c> with the process's own standard streams.</summary>
     /// <param name="args">The arguments after <c>hook</c>.</param>
     /// <returns>Always 0.</returns>
     internal static int Run(IReadOnlyList<string> args) =>
-        Run(args, Console.IsInputRedirected, Console.OpenStandardInput, Console.OpenStandardOutput, Console.Error);
+        Run(args, Console.IsInputRedirected, Console.OpenStandardInput, Console.OpenStandardOutput, Console.Error,
+            Environment.GetEnvironmentVariable(ClaudeProjectDirectoryVariable));
+
 
     /// <summary>Handles <c>dtk hook</c> with the given streams.</summary>
     /// <param name="args">The arguments after <c>hook</c>.</param>
@@ -33,13 +38,15 @@ internal static class HookEntryPoint
     /// <param name="openInput">Opens stdin; not called when <paramref name="isInputRedirected"/> is false.</param>
     /// <param name="openOutput">Opens stdout; only called when there is a reply to print.</param>
     /// <param name="error">Receives the usage line.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
     /// <returns>Always 0.</returns>
     internal static int Run(
         IReadOnlyList<string> args,
         bool isInputRedirected,
         Func<Stream> openInput,
         Func<Stream> openOutput,
-        TextWriter error)
+        TextWriter error,
+        string? claudeProjectDirectory = null)
     {
         HookPayloadKind? kind = null;
         try
@@ -58,7 +65,7 @@ internal static class HookEntryPoint
                 input.CopyTo(buffer);
             }
 
-            var reply = HookPayloads.Reply(resolvedKind, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+            var reply = HookPayloads.Reply(resolvedKind, buffer.GetBuffer().AsSpan(0, (int)buffer.Length), claudeProjectDirectory);
             if (reply is null)
             {
                 return 0;

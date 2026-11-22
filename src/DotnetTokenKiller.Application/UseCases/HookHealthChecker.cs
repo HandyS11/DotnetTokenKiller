@@ -25,12 +25,22 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <param name="locateDtk">
 /// Returns the absolute path of the <c>dtk</c> a harness would run, or <see langword="null"/> when <c>PATH</c> has none.
 /// </param>
-internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> locateDtk)
+/// <param name="createProbeDirectory">Creates the temporary project Claude Code's context probe runs from.</param>
+internal sealed class HookHealthChecker(
+    ICommandRunner runner, Func<string?> locateDtk, Func<DirectoryInfo> createProbeDirectory)
 {
     /// <summary>Creates a checker that resolves <c>dtk</c> from this process's <c>PATH</c>.</summary>
     /// <param name="runner">Runs the installed hook for the probe.</param>
     public HookHealthChecker(ICommandRunner runner)
         : this(runner, static () => ExecutableSearch.FindOnProcessPath(DtkCommand))
+    {
+    }
+
+    /// <summary>Creates a checker that probes the given <c>dtk</c>, from a project under the temp directory.</summary>
+    /// <param name="runner">Runs the installed hook for the probe.</param>
+    /// <param name="locateDtk">Returns the absolute path of the <c>dtk</c> a harness would run, or <see langword="null"/>.</param>
+    internal HookHealthChecker(ICommandRunner runner, Func<string?> locateDtk)
+        : this(runner, locateDtk, static () => Directory.CreateTempSubdirectory("dtk-doctor-probe-"))
     {
     }
 
@@ -416,7 +426,16 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         }
 
         var name = CheckName(installation, "context probe");
-        var project = Directory.CreateTempSubdirectory("dtk-doctor-probe-");
+        DirectoryInfo project;
+        try
+        {
+            project = createProbeDirectory();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [new DiagnosticCheck(name, false, $"could not create a temporary project to probe with: {ex.Message}.")];
+        }
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(ProbeTimeout);
         try

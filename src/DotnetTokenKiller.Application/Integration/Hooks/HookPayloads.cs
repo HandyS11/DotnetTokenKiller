@@ -11,7 +11,7 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// never block the tool call. This also covers a payload with a duplicate JSON object key: <see cref="JsonNode"/>
 /// builds a <see cref="JsonObject"/>'s property dictionary lazily, so parsing such a payload succeeds and the
 /// <see cref="ArgumentException"/> only surfaces the first time something here indexes into the duplicated
-/// object — <see cref="Reply"/> guards the per-provider dispatch, not just the initial parse, so that still
+/// object — <see cref="Reply(HookPayloadKind, ReadOnlySpan{byte}, string)"/> guards the per-provider dispatch, not just the initial parse, so that still
 /// yields the provider's no-rewrite result instead of an unhandled exception.
 /// </remarks>
 internal static class HookPayloads
@@ -141,7 +141,18 @@ internal static class HookPayloads
     /// <param name="kind">The harness that sent the payload.</param>
     /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
     /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
-    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload)
+    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload) =>
+        Reply(kind, payload, claudeProjectDirectory: null);
+
+    /// <summary>Builds the reply for one payload, knowing the project Claude Code runs the hook for.</summary>
+    /// <param name="kind">The harness that sent the payload.</param>
+    /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
+    /// <param name="claudeProjectDirectory">
+    /// Claude Code's <c>CLAUDE_PROJECT_DIR</c>, which it sets for every hook command, or <see langword="null"/>: a
+    /// project whose <c>.claude/settings.json</c> registers dtk's hook gets dtk's rules wherever its projects lie.
+    /// </param>
+    /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
+    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory)
     {
         if (payload.StartsWith("\uFEFF"u8))
         {
@@ -162,7 +173,7 @@ internal static class HookPayloads
         {
             return kind switch
             {
-                HookPayloadKind.ClaudeCode => ReplyToClaude(root),
+                HookPayloadKind.ClaudeCode => ReplyToClaude(root, claudeProjectDirectory),
                 HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool),
                 HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool),
                 HookPayloadKind.Cursor => ReplyToCursor(root),
@@ -199,7 +210,8 @@ internal static class HookPayloads
     /// <c>subagentStart</c> blocks the subagent on any other output. Cursor reads its own dtk rule file.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string? ReplyToClaude(JsonNode? root)
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
+    private static string? ReplyToClaude(JsonNode? root, string? claudeProjectDirectory)
     {
         if (root is JsonObject payload
             && payload[HookEventNameProperty] is JsonValue eventValue
@@ -214,7 +226,7 @@ internal static class HookPayloads
 
             if (IsContextEvent(eventName, StringComparison.Ordinal))
             {
-                return ReplyWithContext(payload, eventName);
+                return ReplyWithContext(payload, eventName, claudeProjectDirectory);
             }
         }
 
@@ -229,12 +241,15 @@ internal static class HookPayloads
 
     /// <summary>
     /// <see cref="IntegrationInstructions.AgentRules"/> as the context Claude Code adds before the agent's first prompt,
-    /// when the payload's <c>cwd</c> is in a .NET project and the agent is not one of
-    /// <see cref="AgentTypesWithoutShell"/>; nothing otherwise.
+    /// when the agent is not one of <see cref="AgentTypesWithoutShell"/> and either the payload's <c>cwd</c> is in a
+    /// .NET project (<see cref="DotnetProjectDetector"/>) or the project Claude Code runs in registers dtk's hook in its
+    /// own <c>.claude/settings.json</c> — a project-scope <c>dtk init claude</c>, which says it is .NET work even where
+    /// its projects lie deeper than the detector reads. Nothing otherwise.
     /// </summary>
     /// <param name="payload">The parsed payload.</param>
     /// <param name="eventName">Either <see cref="SessionStartEvent"/> or <see cref="SubagentStartEvent"/>.</param>
-    private static string? ReplyWithContext(JsonObject payload, string eventName)
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
+    private static string? ReplyWithContext(JsonObject payload, string eventName, string? claudeProjectDirectory)
     {
         if (eventName == SubagentStartEvent
             && payload["agent_type"] is JsonValue agentValue
@@ -245,7 +260,7 @@ internal static class HookPayloads
         }
 
         var cwd = payload["cwd"] is JsonValue cwdValue && cwdValue.TryGetValue<string>(out var directory) ? directory : null;
-        if (!DotnetProjectDetector.IsDotnetProject(cwd))
+        if (!DotnetProjectDetector.IsDotnetProject(cwd) && !RegistersDtkForTheProject(claudeProjectDirectory))
         {
             return null;
         }
@@ -259,6 +274,13 @@ internal static class HookPayloads
             }
         }.ToJsonString();
     }
+
+    /// <summary>Whether a project's own <c>.claude/settings.json</c> runs <c>dtk hook claude</c>.</summary>
+    /// <param name="projectDirectory">Claude Code's project directory, when known.</param>
+    private static bool RegistersDtkForTheProject(string? projectDirectory) =>
+        !string.IsNullOrEmpty(projectDirectory)
+        && Path.IsPathFullyQualified(projectDirectory)
+        && ImportedClaudeHook.IsRegisteredIn([Path.Combine(projectDirectory, ".claude", "settings.json")]);
 
     /// <summary>
     /// Claude Code's reply, which Devin Local and Devin CLI share: the whole tool input with the command replaced, and

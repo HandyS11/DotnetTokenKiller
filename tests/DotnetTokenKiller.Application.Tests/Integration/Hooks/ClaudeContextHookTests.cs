@@ -110,6 +110,43 @@ public sealed class ClaudeContextHookTests : IDisposable
         output["additionalContext"]!.GetValue<string>().Should().Be(IntegrationInstructions.AgentRules);
     }
 
+    [Fact]
+    public void Claude_ContextEventInAProjectWhereDtkIsInstalled_InjectsTheRulesWhereNoProjectIsDetected()
+    {
+        // A polyglot repository with no root solution, global.json or Directory.Build.props, and its projects deeper
+        // than the walk reads: a project-scope `dtk init claude` there says it is .NET work.
+        var deep = Directory.CreateDirectory(Path.Combine(_plainFolder, "apps", "api", "src")).FullName;
+        File.WriteAllText(Path.Combine(_plainFolder, "apps", "api", "src", "Api.cs"), string.Empty);
+        WriteClaudeSettings(_plainFolder, """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"dtk hook claude"}]}]}}""");
+
+        foreach (var eventName in new[] { "SessionStart", "SubagentStart" })
+        {
+            var reply = Reply(Payload(eventName, deep, eventName == "SubagentStart" ? "general-purpose" : null), _plainFolder);
+
+            JsonNode.Parse(reply!)!["hookSpecificOutput"]!["additionalContext"]!.GetValue<string>()
+                .Should().Be(IntegrationInstructions.AgentRules);
+        }
+    }
+
+    [Fact]
+    public void Claude_ContextEventInAProjectWithoutDtksHook_RepliesNothing()
+    {
+        WriteClaudeSettings(_plainFolder, """{"theme":"dark"}""");
+
+        Reply(Payload("SessionStart", _plainFolder), _plainFolder).Should().BeNull();
+        Reply(Payload("SessionStart", _plainFolder), claudeProjectDirectory: null).Should().BeNull();
+        Reply(Payload("SessionStart", _plainFolder), Path.Combine(_plainFolder, "missing")).Should().BeNull();
+        Reply(Payload("SessionStart", _plainFolder), "relative/dir").Should().BeNull();
+    }
+
+    [Fact]
+    public void Claude_SubagentWithoutAShell_GetsNoRulesEvenWhereDtkIsInstalled()
+    {
+        WriteClaudeSettings(_plainFolder, """{"hooks":{"SubagentStart":[{"hooks":[{"type":"command","command":"dtk hook claude"}]}]}}""");
+
+        Reply(Payload("SubagentStart", _plainFolder, "web-fetch"), _plainFolder).Should().BeNull();
+    }
+
     [Theory]
     [InlineData("subagentStart", true, """{"permission":"allow"}""")]
     [InlineData("SubagentStart", true, """{"permission":"allow"}""")]
@@ -180,4 +217,13 @@ public sealed class ClaudeContextHookTests : IDisposable
 
     private static string? Reply(string payload) =>
         HookPayloads.Reply(HookPayloadKind.ClaudeCode, Encoding.UTF8.GetBytes(payload));
+
+    private static string? Reply(string payload, string? claudeProjectDirectory) =>
+        HookPayloads.Reply(HookPayloadKind.ClaudeCode, Encoding.UTF8.GetBytes(payload), claudeProjectDirectory);
+
+    private static void WriteClaudeSettings(string project, string json)
+    {
+        Directory.CreateDirectory(Path.Combine(project, ".claude"));
+        File.WriteAllText(Path.Combine(project, ".claude", "settings.json"), json);
+    }
 }

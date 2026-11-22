@@ -211,6 +211,21 @@ public sealed class HookHealthCheckerTests : IDisposable
     }
 
     [Fact]
+    public async Task Claude_ContextProbe_WithAnUnusableTempDirectory_FailsTheCheckRatherThanDoctor()
+    {
+        // Doctor exists to diagnose a broken environment: a temp directory it cannot write to is a finding, not a crash.
+        await Claude.IntegrateAsync(_tempDir, force: false, default);
+        var sut = new HookHealthChecker(_runner, () => _dtkOnPath, () => throw new IOException("No space left on device"));
+
+        var checks = await sut.RunAsync([Claude], _tempDir, default);
+
+        var probe = checks.Single(c => c.Name == "claude context probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Be("could not create a temporary project to probe with: No space left on device.");
+        checks.Single(c => c.Name == "claude hook probe (project)").Passed.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task NonClaudeHooks_GetNoContextProbe()
     {
         await IntegrateAsync(HookScope.Project);
