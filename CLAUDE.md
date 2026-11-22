@@ -95,7 +95,12 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 `env`/`time`/`timeout`/`nice`/`nohup`/`exec` with arguments it knows, never behind another word (`$D`, `echo`, `ssh`,
 `sudo`), which may not run it here or with the same `PATH`, and never when its output goes to a text filter or a file
 (`SendsOutputToATextFilterOrFile`: `| grep`/`rg`/`awk`/`sed`/`cut`, `> x.log`), which expects MSBuild's lines;
-`| tail`, `| head` and `| tee` are still rewritten. Its reply's
+`| tail`, `| head` and `| tee` are still rewritten. `dtk init claude` also registers `dtk hook claude` for
+`SessionStart` and `SubagentStart`; `HookPayloads.ReplyToClaude` answers only those two event names with
+`IntegrationInstructions.AgentRules` as `additionalContext`, when `DotnetProjectDetector` (bounded: ancestors, then two
+levels below, 2,000 entries) finds a .NET project, and gives every other payload today's rewrite path; a payload with
+`cursor_version` (Cursor running Claude Code's hooks) gets Cursor's schema instead. The skill is the on-demand
+reference, triggered by the options the rules leave out. Its reply's
 `permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any
 command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
 rather than guess a command is safe. `IsAutoApprovable` (also Cursor's gate, which rewrites only auto-approvable
