@@ -45,6 +45,29 @@ internal static class IntegrationInstructions
         """;
 
     /// <summary>
+    /// The three rules every agent working in a .NET project needs, whatever loaded it: run dtk plainly, read
+    /// <c>dtk log</c> instead of re-running, and the two switches agents reach past dtk for. They are what
+    /// <see cref="AgentRules"/> tells a Claude Code agent at its start, and they lead the usage notes every other
+    /// harness reads. Every line costs tokens at each session and subagent start.
+    /// </summary>
+    internal const string AgentRuleBullets =
+        """
+        - Run them plainly: dtk's output is already short and its last line is the verdict. Don't pipe it into `tail` or `grep`; `--max-lines N` caps it.
+        - To see more of a run, or what a cap cut, use `dtk log build` / `dtk log test` (`--full` for all) instead of running it again.
+        - `dtk dotnet test --names` lists the tests that passed; `DTK_RAW=1` gives dotnet's own output.
+        """;
+
+    /// <summary>
+    /// What <c>dtk hook claude</c> adds to a Claude Code agent's context at session and subagent start, in a .NET
+    /// project: one lead line naming dtk and its hook, then <see cref="AgentRuleBullets"/>. Four lines, on purpose.
+    /// </summary>
+    internal const string AgentRules =
+        $"""
+        dtk (DotnetTokenKiller) filters this project's dotnet commands; a hook runs `dotnet build|test|…` through it.
+        {AgentRuleBullets}
+        """;
+
+    /// <summary>
     /// Example command block plus the notes common to every provider's dtk usage instructions: forwarding, exit
     /// codes, passthrough, the status line, <c>dtk log</c>, <c>dtk pipe</c> and the raw-output switch. Every sentence
     /// costs tokens on each agent session, so a note belongs here only if every harness benefits from it.
