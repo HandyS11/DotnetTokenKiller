@@ -36,10 +36,18 @@ public sealed class HookHealthCheckerTests : IDisposable
         _sut = new HookHealthChecker(_runner, () => _dtkOnPath);
         Directory.CreateDirectory(_tempDir);
 
-        // Default: the probe succeeds, so status-check tests are not perturbed by it.
+        // Default: the probe succeeds, so status-check tests are not perturbed by it; so does Claude Code's context probe.
         _runner.RunCapturedWithInputAsync(null!, null!, null!)
             .ReturnsForAnyArgs(new CommandResult(RewrittenPayload(), string.Empty, 0));
+        _runner.RunCapturedWithInputAsync(
+                Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Is<string>(p => p.Contains("SubagentStart")),
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(ContextReply, string.Empty, 0));
     }
+
+    /// <summary>What a dtk that injects the agent rules prints for a <c>SubagentStart</c> in a .NET project.</summary>
+    private const string ContextReply =
+        """{"hookSpecificOutput":{"hookEventName":"SubagentStart","additionalContext":"dtk (DotnetTokenKiller) …"}}""";
 
     public void Dispose()
     {
@@ -137,9 +145,82 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         var checks = await _sut.RunAsync([Claude], Home.Home, default);
 
-        checks.Select(c => c.Name).Should().Equal("claude hook (project)", "claude hook probe (project)");
-        await _runner.Received(1).RunCapturedWithInputAsync(
+        checks.Select(c => c.Name).Should().Equal(ClaudeChecks("project"));
+        await _runner.Received(2).RunCapturedWithInputAsync(
             Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The checks a healthy Claude Code install gets in one scope, in order.</summary>
+    /// <param name="scope">The scope label, <c>project</c> or <c>global</c>.</param>
+    private static string[] ClaudeChecks(string scope) =>
+    [
+        $"claude hook ({scope})", $"claude hook probe ({scope})", $"claude context probe ({scope})",
+        $"claude context hooks ({scope})"
+    ];
+
+    [Fact]
+    public async Task Claude_ContextProbe_PassesOnAContextReply()
+    {
+        await Claude.IntegrateAsync(_tempDir, force: false, default);
+
+        var checks = await _sut.RunAsync([Claude], _tempDir, default);
+
+        checks.Should().OnlyContain(c => c.Passed);
+        checks.Single(c => c.Name == "claude context probe (project)").Message
+            .Should().Be($"{_dtkOnPath} injects dtk's rules at session and subagent start");
+    }
+
+    [Fact]
+    public async Task Claude_ContextProbe_SendsASubagentStartFromATemporaryDotnetProject()
+    {
+        await Claude.IntegrateAsync(_tempDir, force: false, default);
+        string? cwd = null;
+        var projectFileExisted = false;
+        _runner.When(r => r.RunCapturedWithInputAsync(
+                Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Is<string>(p => p.Contains("SubagentStart")),
+                Arg.Any<CancellationToken>()))
+            .Do(call =>
+            {
+                var payload = JsonNode.Parse(call.ArgAt<string>(2))!;
+                payload["agent_type"]!.GetValue<string>().Should().Be("general-purpose");
+                cwd = payload["cwd"]!.GetValue<string>();
+                projectFileExisted = File.Exists(Path.Combine(cwd, "probe.csproj"));
+            });
+
+        await _sut.RunAsync([Claude], _tempDir, default);
+
+        projectFileExisted.Should().BeTrue();
+        Directory.Exists(cwd).Should().BeFalse("the probe's temporary project is deleted after the probe");
+    }
+
+    [Fact]
+    public async Task Claude_ContextProbe_FailsOnNoReply()
+    {
+        await Claude.IntegrateAsync(_tempDir, force: false, default);
+        _runner.RunCapturedWithInputAsync(
+                Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Is<string>(p => p.Contains("SubagentStart")),
+                Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(string.Empty, string.Empty, 0));
+
+        var checks = await _sut.RunAsync([Claude], _tempDir, default);
+
+        var probe = checks.Single(c => c.Name == "claude context probe (project)");
+        probe.Passed.Should().BeFalse();
+        probe.Message.Should().Be(
+            $"{_dtkOnPath} does not inject dtk's rules. It is older than this dtk; run 'dotnet tool update -g DotnetTokenKiller'.");
+    }
+
+    [Fact]
+    public async Task NonClaudeHooks_GetNoContextProbe()
+    {
+        await IntegrateAsync(HookScope.Project);
+
+        var checks = await _sut.RunAsync(Integrators, _tempDir, default);
+
+        checks.Should().NotContain(c => c.Name.Contains("context", StringComparison.Ordinal));
+        await _runner.DidNotReceive().RunCapturedWithInputAsync(
+            Arg.Any<string>(), Arg.Any<IReadOnlyList<string>>(), Arg.Is<string>(p => p.Contains("SubagentStart")),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -149,7 +230,7 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         var checks = await _sut.RunAsync([Claude], Home.Home + Path.DirectorySeparatorChar + ".", default);
 
-        checks.Select(c => c.Name).Should().Equal("claude hook (project)", "claude hook probe (project)");
+        checks.Select(c => c.Name).Should().Equal(ClaudeChecks("project"));
     }
 
     [Fact]
@@ -160,8 +241,7 @@ public sealed class HookHealthCheckerTests : IDisposable
 
         var checks = await _sut.RunAsync([Claude], _tempDir, default);
 
-        checks.Select(c => c.Name).Should().Equal(
-            "claude hook (project)", "claude hook probe (project)", "claude hook (global)", "claude hook probe (global)");
+        checks.Select(c => c.Name).Should().Equal([.. ClaudeChecks("project"), .. ClaudeChecks("global")]);
     }
 
     [Fact]

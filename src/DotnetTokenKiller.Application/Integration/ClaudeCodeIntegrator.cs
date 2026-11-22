@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain.Integration;
 
@@ -30,8 +32,13 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <c>InternalsVisibleTo</c>.
 /// </remarks>
 internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths home)
-    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator
+    : IProviderIntegrator, IGlobalIntegrator, IHookIntegrator, IUninstallIntegrator, IHookApprovalInspector
 {
+    /// <summary>The doctor check reporting the two hooks that give agents dtk's rules.</summary>
+    private const string ContextHooksLabel = "context hooks";
+
+    /// <summary>The events whose registration gives every agent dtk's rules, in the order doctor names them.</summary>
+    private static readonly string[] ContextEvents = ["SessionStart", "SubagentStart"];
     /// <summary>The per-user settings file Claude Code reads beside <c>settings.json</c>, which dtk never edits.</summary>
     private const string LocalSettingsFileName = "settings.local.json";
 
@@ -105,6 +112,59 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
     /// <inheritdoc/>
     public IReadOnlyList<string> SharedArtifactPaths(string directory, HookScope scope) => [];
+
+    /// <summary>
+    /// Whether the settings file that registers the rewrite also registers <c>dtk hook claude</c> for
+    /// <c>SessionStart</c> and <c>SubagentStart</c>, without which agents never get dtk's rules: an install made before
+    /// those hooks existed has only <c>PreToolUse</c>, and re-running <c>dtk init claude</c> adds them.
+    /// </summary>
+    /// <param name="installation">A registration doctor found current.</param>
+    /// <param name="projectDirectory">The directory doctor treats as the project root; unused.</param>
+    public IReadOnlyList<HookApprovalFinding> InspectApproval(HookInstallation installation, string projectDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(installation);
+
+        var path = installation.RegistrationPath;
+        List<string> missing;
+        try
+        {
+            var hooks = JsonNode.Parse(File.ReadAllText(path), documentOptions: IntegratorHelpers.LenientJson)?["hooks"];
+            missing = [.. ContextEvents.Where(eventName => !Registers(hooks, eventName, installation.Command))];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException
+                                       or InvalidOperationException or ArgumentException)
+        {
+            return [new HookApprovalFinding(ContextHooksLabel, false, $"{path} could not be read: {ex.Message}")];
+        }
+
+        if (missing.Count == 0)
+        {
+            return
+            [
+                new HookApprovalFinding(
+                    ContextHooksLabel, true, "SessionStart and SubagentStart registered: agents in .NET projects get dtk's rules")
+            ];
+        }
+
+        var scopeFlag = installation.Scope == HookScope.Global ? " --global" : string.Empty;
+        return
+        [
+            new HookApprovalFinding(
+                ContextHooksLabel,
+                false,
+                $"{string.Join(" and ", missing)} not registered in {path}: agents will not get dtk's rules. "
+                + $"Run 'dtk init {ProviderName}{scopeFlag}'.")
+        ];
+    }
+
+    /// <summary>Whether the hooks object registers <paramref name="command"/>, or an equivalent of it, for an event.</summary>
+    /// <param name="hooks">The settings file's <c>hooks</c> object, if any.</param>
+    /// <param name="eventName">The event.</param>
+    /// <param name="command">The command dtk registers.</param>
+    private static bool Registers(JsonNode? hooks, string eventName, string command) =>
+        hooks is JsonObject events
+        && events[eventName] is JsonArray entries
+        && IntegratorHelpers.FindEquivalentEntries(entries, command).Count > 0;
 
     /// <inheritdoc/>
     public async Task<IntegrationResult> UninstallAsync(

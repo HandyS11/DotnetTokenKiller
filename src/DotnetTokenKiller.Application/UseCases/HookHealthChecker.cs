@@ -130,6 +130,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
             [
                 new DiagnosticCheck(name, true, "registered"),
                 await ProbeAsync(installation, cancellationToken).ConfigureAwait(false),
+                .. await ContextProbeAsync(installation, cancellationToken).ConfigureAwait(false),
                 .. ApprovalChecks(integrator, installation, projectDirectory)
             ],
             RegistrationKind.Stale => [new DiagnosticCheck(name, false, registration.Problem + ".")],
@@ -137,6 +138,7 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
             [
                 new DiagnosticCheck(name, true, "registered (modified locally)"),
                 await ProbeAsync(installation, cancellationToken).ConfigureAwait(false),
+                .. await ContextProbeAsync(installation, cancellationToken).ConfigureAwait(false),
                 .. ApprovalChecks(integrator, installation, projectDirectory)
             ],
             _ => [new DiagnosticCheck(name, false, $"{registration.Problem}. Run '{RemedyCommand(installation)}'.")]
@@ -395,6 +397,75 @@ internal sealed class HookHealthChecker(ICommandRunner runner, Func<string?> loc
         {
             return new DiagnosticCheck(name, false, $"could not run {dtk}: {ex.Message}.");
         }
+    }
+
+    /// <summary>
+    /// For Claude Code only, feeds the <c>dtk</c> on <c>PATH</c> a <c>SubagentStart</c> from a temporary directory holding
+    /// a project file, and checks it answers with dtk's rules (<c>additionalContext</c>): a dtk older than the context
+    /// hooks answers nothing, and agents then get no rules. Nothing when dtk is not on <c>PATH</c>, which
+    /// <see cref="ProbeAsync"/> reports already.
+    /// </summary>
+    /// <param name="installation">The installation to probe.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<IReadOnlyList<DiagnosticCheck>> ContextProbeAsync(
+        HookInstallation installation, CancellationToken cancellationToken)
+    {
+        if (installation.PayloadKind != HookPayloadKind.ClaudeCode || locateDtk() is not { } dtk)
+        {
+            return [];
+        }
+
+        var name = CheckName(installation, "context probe");
+        var project = Directory.CreateTempSubdirectory("dtk-doctor-probe-");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(ProbeTimeout);
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(project.FullName, "probe.csproj"), string.Empty, cancellationToken)
+                .ConfigureAwait(false);
+            var payload = new JsonObject
+            {
+                ["hook_event_name"] = "SubagentStart",
+                ["agent_type"] = "general-purpose",
+                ["cwd"] = project.FullName
+            }.ToJsonString();
+
+            var result = await runner
+                .RunCapturedWithInputAsync(dtk, [HookCommands.Verb, installation.ProviderName], payload, timeout.Token)
+                .ConfigureAwait(false);
+
+            return result.ExitCode == 0 && result.StdOut.Contains("\"additionalContext\"", StringComparison.Ordinal)
+                ? [new DiagnosticCheck(name, true, $"{dtk} injects dtk's rules at session and subagent start")]
+                : [new DiagnosticCheck(name, false, $"{dtk} does not inject dtk's rules. It is older than this dtk; run '{UpdateCommand}'.")];
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return [new DiagnosticCheck(name, false, $"'{dtk} {HookCommands.Verb} {installation.ProviderName}' did not respond within {ProbeTimeout.TotalSeconds:F0}s")];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return [new DiagnosticCheck(name, false, $"could not run {dtk}: {ex.Message}.")];
+        }
+        finally
+        {
+            TryDelete(project);
+        }
+    }
+
+    /// <summary>Deletes the probe's temporary project, best effort: a leftover in the temp directory harms nothing.</summary>
+    /// <param name="project">The temporary directory.</param>
+    private static void TryDelete(DirectoryInfo project)
+    {
+        try
+        {
+            project.Delete(recursive: true);
+        }
+#pragma warning disable RCS1075 // Intentionally empty catch (comment below satisfies S2486's "explain why").
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The temp directory is the operating system's to clean; doctor's verdict does not depend on it.
+        }
+#pragma warning restore RCS1075
     }
 
     /// <summary>

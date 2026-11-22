@@ -214,6 +214,63 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
         result.UnchangedFiles.Should().NotContain(ProjectSettings);
     }
 
+    [Fact]
+    public async Task InspectApproval_BothContextHooksRegistered_IsSatisfied()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var finding = _sut.InspectApproval(_sut.DescribeHooks(_tempDir, HookScope.Project)[0], _tempDir)
+            .Should().ContainSingle().Subject;
+
+        finding.Should().Be(new HookApprovalFinding(
+            "context hooks", true, "SessionStart and SubagentStart registered: agents in .NET projects get dtk's rules"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InspectApproval_OnlyPreToolUse_NamesBothMissingEventsAndTheRemedy(bool global)
+    {
+        var settings = global ? GlobalSettings : ProjectSettings;
+        Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+        await File.WriteAllTextAsync(settings,
+            """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"dtk hook claude"}]}]}}""");
+        var installation = _sut.DescribeHooks(_tempDir, global ? HookScope.Global : HookScope.Project)[0];
+
+        var finding = _sut.InspectApproval(installation, _tempDir).Should().ContainSingle().Subject;
+
+        finding.Satisfied.Should().BeFalse();
+        finding.Message.Should().Be(
+            $"SessionStart and SubagentStart not registered in {settings}: agents will not get dtk's rules. "
+            + $"Run 'dtk init claude{(global ? " --global" : string.Empty)}'.");
+    }
+
+    [Fact]
+    public async Task InspectApproval_OneContextHookMissing_NamesIt()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(ProjectSettings))!;
+        root["hooks"]!.AsObject().Remove("SubagentStart");
+        await File.WriteAllTextAsync(ProjectSettings, root.ToJsonString());
+
+        var finding = _sut.InspectApproval(_sut.DescribeHooks(_tempDir, HookScope.Project)[0], _tempDir).Single();
+
+        finding.Satisfied.Should().BeFalse();
+        finding.Message.Should().StartWith($"SubagentStart not registered in {ProjectSettings}:");
+    }
+
+    [Fact]
+    public async Task InspectApproval_UnreadableFile_IsNotSatisfied()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ProjectSettings)!);
+        await File.WriteAllTextAsync(ProjectSettings, "not json");
+
+        var finding = _sut.InspectApproval(_sut.DescribeHooks(_tempDir, HookScope.Project)[0], _tempDir).Single();
+
+        finding.Satisfied.Should().BeFalse();
+        finding.Message.Should().Contain("could not be read");
+    }
+
     private string ProjectSettings => Path.Combine(_tempDir, ".claude", "settings.json");
 
     private string GlobalSettings => Path.Combine(_isolatedHome, ".claude", "settings.json");
