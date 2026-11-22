@@ -7,6 +7,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A build, test, publish or pack run in a git work tree hid warnings the work in progress caused, counting them among
+  the `warnings in unchanged files not shown`:
+  - a project-level warning such as NuGet's `App.csproj : warning NU1903` (a vulnerable package), which carries no
+    position, was in no file at all. It is now filed under its project file, and an error of that kind reads
+    `src/App.csproj NU1101: …` instead of `(no file) NU1101: …`; the same warning raised by two projects is listed
+    for each. A warning that names no file (`CSC : warning CS8032`) is listed, since nothing says the change did not
+    cause it;
+  - a change to the build's configuration (a project file, a `.props` or `.targets` file, `.editorconfig`, a
+    `.globalconfig` or `.ruleset`, `global.json`, `nuget.config`, `Directory.Build.rsp`) can raise a warning in any
+    file (`<Nullable>enable</Nullable>`, an analyzer's severity, a package); every warning is now listed then;
+  - without an `origin/HEAD`, which a remote added with `git remote add` lacks, only the files not committed yet
+    counted as changed, so a warning in a file the branch had committed was hidden. dtk now lists every warning, as it
+    does outside a work tree; `git remote set-head origin --auto` gives the repository its `origin/HEAD`.
+- A status line that lists only the warnings of changed files no longer says `5 warnings (3 shown)` when it shows none
+  of them: it reads `(3 parsed)` when some of what MSBuild counted matched no pattern. A warning NuGet reports twice
+  word for word (at restore, then when the build reads the assets file), which MSBuild counts twice, reads
+  `4 warnings (3 distinct)` rather than `(3 shown)`.
+- The agent hooks rewrote a `dotnet` command whatever word stood before it, so `$D dotnet build` with `D` set to a dtk
+  binary became `$D dtk dotnet build` and failed with `Unknown command 'dtk'`; `echo dotnet build`,
+  `ssh host dotnet build` and `sudo dotnet build` were rewritten too. A hook now rewrites past assignments, shell
+  keywords (`if`, `then`, `!`, `do`, …) and the launchers that run the command here with the same `PATH` (`env`,
+  `time`, `timeout`, `nice`, `nohup`, `exec`), and leaves the command as it is behind any other word.
+- The agent hooks rewrote `dotnet build 2>&1 | grep -E "error|warn"`, whose filter, written for MSBuild's lines, found
+  nothing in dtk's (`(12,5) CS0029: …`) and left only the status line; an agent that met it stopped trusting dtk. A
+  `dotnet` whose output goes to `grep`, `egrep`, `fgrep`, `rg`, `ag`, `ack`, `awk`, `sed` or `cut`, or to a file
+  (`> build.log`, `>>`, `1>`, `&>`), is now left as it is. A pipe into `tail`, `head` or `tee`, and `2>&1` or
+  `2> err.log` alone, are still rewritten.
+
 ## [0.12.0] - 2026-11-16
 
 ### Added

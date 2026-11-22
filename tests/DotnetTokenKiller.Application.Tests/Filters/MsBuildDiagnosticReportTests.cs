@@ -1,5 +1,6 @@
 using DotnetTokenKiller.Application.Filters;
 using DotnetTokenKiller.Domain.Files;
+using DotnetTokenKiller.Domain.Filters;
 using FluentAssertions;
 
 namespace DotnetTokenKiller.Application.Tests.Filters;
@@ -346,6 +347,175 @@ public class MsBuildDiagnosticReportTests
 
         MsBuildDiagnosticReport.Parse(output, Root).Render("dotnet build", 1, [])
             .Should().EndWith("✗ dotnet build failed (exit 1): 3 errors (2 shown), 0 warnings (1 project)\n");
+    }
+
+    // ── Diagnostics without a position ────────────────────────────────────────
+
+    [Fact]
+    public void RenderDiagnostics_ProjectLevelWarning_IsFiledUnderItsProjectFile()
+    {
+        // The real `dotnet build` of a project referencing a vulnerable package: NuGet names the project file
+        // before the level, with no position and no [project] suffix.
+        Parse("dotnet_build_project_level_warning.txt").RenderDiagnostics().Should().Be(
+            """
+            app/App.csproj NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability
+            app/A.cs(6,13) CS0219: The variable 'unused' is assigned but its value is never used
+            app/B.cs(6,13) CS0219: The variable 'unusedToo' is assigned but its value is never used
+            Top codes: CS0219 (2x), NU1903 (1x)
+
+            """);
+    }
+
+    [Fact]
+    public void Render_ProjectLevelWarningPrintedTwiceBeforeTheSummary_IsCountedAsDistinct()
+    {
+        // NuGet reports NU1903 at restore and again when the build reads the assets file, word for word, and MSBuild
+        // counts both: 4 warnings, of which 3 are distinct. Only the copies under "Build succeeded." are echoes.
+        Parse("dotnet_build_project_level_warning.txt").Render("dotnet build", 0, [])
+            .Should().EndWith("✓ dotnet build: 0 errors, 4 warnings (3 distinct) (1 project, 0.83s)\n");
+    }
+
+    [Fact]
+    public void RenderDiagnostics_SameProjectLevelWarningOfTwoProjects_IsListedForEach()
+    {
+        const string output = """
+                              /test/project/root/src/App.csproj : warning NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability
+                              /test/project/root/src/Lib.csproj : warning NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability
+                                  2 Warning(s)
+                                  0 Error(s)
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).RenderDiagnostics().Should().Be(
+            """
+            src/App.csproj NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability
+            src/Lib.csproj NU1903: Package 'Newtonsoft.Json' 12.0.1 has a known high severity vulnerability
+
+            """);
+    }
+
+    [Fact]
+    public void RenderDiagnostics_ProjectLevelErrorWithARelativeProjectFile_IsFiledUnderIt()
+    {
+        const string output = "src/App.csproj : error NU1101: Unable to find package Nope. No packages exist with this id in source(s): nuget.org";
+
+        MsBuildDiagnosticReport.Parse(output, Root).RenderDiagnostics()
+            .Should().Be("src/App.csproj NU1101: Unable to find package Nope. No packages exist with this id in source(s): nuget.org\n");
+    }
+
+    [Theory]
+    [InlineData("MSBUILD : warning MSB4011: Imported twice.")]
+    [InlineData("CSC : warning CS8032: An instance of analyzer Foo cannot be created.")]
+    [InlineData("EXEC : warning : The tool printed a warning. [/test/project/root/src/App.csproj]")]
+    [InlineData(" : warning MSB4011: Imported twice.")]
+    public void RenderDiagnostics_ToolLevelWarning_NamesNoFile(string line)
+    {
+        MsBuildDiagnosticReport.Parse(line, Root).RenderDiagnostics().Should().StartWith("(no file) ");
+    }
+
+    [Fact]
+    public void Render_WithChanges_HidesTheProjectLevelWarningOfAnUnchangedProjectFile()
+    {
+        Parse("dotnet_build_project_level_warning.txt").Render("dotnet build", 0, [], Changes("app/A.cs")).Should().Be(
+            """
+            app/A.cs(6,13) CS0219: The variable 'unused' is assigned but its value is never used
+            2 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): CS0219 (1x), NU1903 (1x)
+            ✓ dotnet build: 0 errors, 4 warnings (3 distinct), 1 in changed files (1 project, 0.83s)
+
+            """);
+    }
+
+    [Fact]
+    public void Render_WithChanges_CountsEveryUnchangedWarningThatRendersAlike()
+    {
+        // Two advisories for one package differ only by their link, which rendering removes: two warnings, not one.
+        const string output = """
+                              /test/project/root/src/App.csproj : warning NU1903: Package 'X' 1.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-aaaa
+                              /test/project/root/src/App.csproj : warning NU1903: Package 'X' 1.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-bbbb
+                                  2 Warning(s)
+                                  0 Error(s)
+                              """;
+
+        MsBuildDiagnosticReport.Parse(output, Root).Render("dotnet build", 0, [], Changes("src/A.cs")).Should()
+            .StartWith("2 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): NU1903 (2x)\n");
+    }
+
+    [Fact]
+    public void Render_WithChanges_ListsAWarningThatNamesNoFile()
+    {
+        // Nothing says which file a tool-level warning comes from, so nothing says the change did not cause it.
+        const string output = FourWarnings + "\nCSC : warning CS8032: An instance of analyzer Foo cannot be created.";
+
+        MsBuildDiagnosticReport.Parse(output, Root).Render("dotnet build", 0, [], Changes("src/A.cs")).Should().Be(
+            """
+            src/A.cs (2 warnings)
+              (1,1) CS0168: The variable 'e' is declared but never used
+              (9,5) CA1822: Member 'M' does not access instance data
+            (no file) CS8032: An instance of analyzer Foo cannot be created.
+            2 warnings in unchanged files not shown (dtk log build --full | dtk pipe build): CA1822 (1x), CS0219 (1x)
+            ✓ dotnet build: 0 errors, 5 warnings, 2 in changed files (2 projects)
+
+            """);
+    }
+
+    [Fact]
+    public void RenderWarningsIn_ListsAWarningThatNamesNoFile()
+    {
+        const string output = FourWarnings + "\nCSC : warning CS8032: An instance of analyzer Foo cannot be created.";
+        var report = MsBuildDiagnosticReport.Parse(output, Root);
+
+        report.RenderWarningsIn(Changes()).Should().Be("(no file) CS8032: An instance of analyzer Foo cannot be created.\n");
+        report.WarningCountIn(Changes()).Should().Be(0);
+    }
+
+    [Fact]
+    public void Render_WithChangesAndAWarningNoPatternMatched_SaysHowManyItParsed()
+    {
+        // None of the warnings is shown, so "(4 shown)" would contradict the line above it; what the count must still
+        // say is that two warnings MSBuild counted were never read, and may be in a changed file.
+        var output = FourWarnings.Replace("4 Warning(s)", "6 Warning(s)", StringComparison.Ordinal);
+
+        MsBuildDiagnosticReport.Parse(output, Root).Render("dotnet build", 0, [], Changes("README.md"))
+            .Should().EndWith("✓ dotnet build: 0 errors, 6 warnings (4 parsed), none in changed files (2 projects)\n");
+    }
+
+    [Theory]
+    [InlineData("src/App.csproj")]
+    [InlineData("src/App.fsproj")]
+    [InlineData("Directory.Build.props")]
+    [InlineData("Directory.Packages.props")]
+    [InlineData("build/Analyzers.targets")]
+    [InlineData("Directory.Build.rsp")]
+    [InlineData(".editorconfig")]
+    [InlineData("src/.editorconfig")]
+    [InlineData("src/.EditorConfig")]
+    [InlineData("analyzers.globalconfig")]
+    [InlineData("global.json")]
+    [InlineData("NuGet.Config")]
+    [InlineData("nuget.config")]
+    [InlineData("rules.ruleset")]
+    public void ChangesFor_AChangeToTheBuildConfiguration_SinglesNoFileOut(string changed)
+    {
+        // A project file, an imported .props/.targets, .editorconfig or global.json can raise or silence a warning in
+        // any file (enabling <Nullable>, an analyzer's severity, a package): every warning may be the change's.
+        var context = new FilterContext
+        {
+            WorkTreeChanges = new Lazy<WorkTreeChanges?>(Changes("src/A.cs", changed))
+        };
+
+        MsBuildDiagnosticReport.Parse(FourWarnings, Root).ChangesFor(context).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("src/A.cs")]
+    [InlineData("README.md")]
+    [InlineData("src/appsettings.json")]
+    [InlineData("docs/editorconfig.md")]
+    public void ChangesFor_ChangesToSourcesAlone_AreTheChanges(string changed)
+    {
+        var changes = Changes(changed);
+        var context = new FilterContext { WorkTreeChanges = new Lazy<WorkTreeChanges?>(changes) };
+
+        MsBuildDiagnosticReport.Parse(FourWarnings, Root).ChangesFor(context).Should().BeSameAs(changes);
     }
 
     [Fact]

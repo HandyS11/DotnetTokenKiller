@@ -26,6 +26,14 @@ public sealed class WorkTreeChanges
     /// <summary>How many files changed.</summary>
     public int Count => _paths.Count;
 
+    /// <summary>Whether any changed file, as a full path, satisfies <paramref name="predicate"/>.</summary>
+    /// <param name="predicate">The test of a file's full path.</param>
+    public bool Any(Func<string, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return _paths.Any(predicate);
+    }
+
     /// <summary>Whether <paramref name="path"/>, resolved to a full path, is one of the changed files.</summary>
     /// <param name="path">A file's path.</param>
     public bool Contains(string path)

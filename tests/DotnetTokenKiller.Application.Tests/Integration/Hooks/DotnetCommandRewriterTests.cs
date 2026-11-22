@@ -40,9 +40,6 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("echo \u00e9 && dotnet build", "echo \u00e9 && dtk dotnet build")]
     [InlineData("echo \"a\\\" b\"; dotnet build", "echo \"a\\\" b\"; dtk dotnet build")]
     [InlineData("x=1 dotnet build", "x=1 dtk dotnet build")]
-    [InlineData("sudo dotnet build", "sudo dtk dotnet build")]
-    [InlineData("DTK dotnet build", "DTK dtk dotnet build")]
-    [InlineData("dtk.EXE dotnet build", "dtk.EXE dtk dotnet build")]
     [InlineData("dotnet build-server shutdown", "dtk dotnet build-server shutdown")]
     [InlineData("out=\"$(dotnet build 2>&1)\"", "out=\"$(dtk dotnet build 2>&1)\"")]
     [InlineData("echo \"$(echo \"$(dotnet test)\")\"", "echo \"$(echo \"$(dtk dotnet test)\")\"")]
@@ -163,17 +160,134 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("rtk proxy ls && dotnet build", "rtk proxy ls && dtk dotnet build")]
     [InlineData("rtk proxy dotnet build && dotnet test", "rtk proxy dotnet build && dtk dotnet test")]
     [InlineData("command dotnet build; dotnet test", "command dotnet build; dtk dotnet test")]
-    [InlineData("proxy dotnet build", "proxy dtk dotnet build")]
-    [InlineData("rtk; proxy dotnet build", "rtk; proxy dtk dotnet build")]
-    [InlineData("myrtk proxy dotnet build", "myrtk proxy dtk dotnet build")]
+    [InlineData("rtk; dotnet build", "rtk; dtk dotnet build")]
     [InlineData("env dotnet build", "env dtk dotnet build")]
     [InlineData("exec dotnet build", "exec dtk dotnet build")]
-    [InlineData("sudo dotnet build", "sudo dtk dotnet build")]
     [InlineData("time dotnet build", "time dtk dotnet build")]
     public void Rewrite_NotARawOutputRequest_IsStillPrefixedWithDtk(string command, string expected)
     {
         // Only the dotnet that rtk proxy, command or a raw-enabling DTK_RAW runs directly is left alone; a
         // DTK_RAW the rewriter cannot read for certain is left for dtk to honour at run time.
+        DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("A=1 B=2 dotnet test", "A=1 B=2 dtk dotnet test")]
+    [InlineData("env A=1 dotnet build", "env A=1 dtk dotnet build")]
+    [InlineData("env -u A B=1 dotnet build", "env -u A B=1 dtk dotnet build")]
+    [InlineData("env --unset=A dotnet build", "env --unset=A dtk dotnet build")]
+    [InlineData("time -p dotnet build", "time -p dtk dotnet build")]
+    [InlineData("/usr/bin/time dotnet build", "/usr/bin/time dtk dotnet build")]
+    [InlineData("timeout 600 dotnet test", "timeout 600 dtk dotnet test")]
+    [InlineData("timeout 1.5m dotnet test", "timeout 1.5m dtk dotnet test")]
+    [InlineData("timeout -k 5 1h dotnet test", "timeout -k 5 1h dtk dotnet test")]
+    [InlineData("timeout --foreground -s KILL 30s dotnet test", "timeout --foreground -s KILL 30s dtk dotnet test")]
+    [InlineData("timeout --kill-after=5s 10m dotnet test", "timeout --kill-after=5s 10m dtk dotnet test")]
+    [InlineData("nice dotnet build", "nice dtk dotnet build")]
+    [InlineData("nice -n 10 dotnet build", "nice -n 10 dtk dotnet build")]
+    [InlineData("nice -5 dotnet build", "nice -5 dtk dotnet build")]
+    [InlineData("nohup dotnet test", "nohup dtk dotnet test")]
+    [InlineData("time timeout 60 dotnet test", "time timeout 60 dtk dotnet test")]
+    [InlineData("x=1 timeout 60 dotnet test", "x=1 timeout 60 dtk dotnet test")]
+    [InlineData("if dotnet build; then echo ok; fi", "if dtk dotnet build; then echo ok; fi")]
+    [InlineData("if ! dotnet build; then exit 1; fi", "if ! dtk dotnet build; then exit 1; fi")]
+    [InlineData("while ! dotnet test; do :; done", "while ! dtk dotnet test; do :; done")]
+    [InlineData("until dotnet test; do sleep 1; done", "until dtk dotnet test; do sleep 1; done")]
+    [InlineData("if x; then dotnet build; else dotnet test; fi", "if x; then dtk dotnet build; else dtk dotnet test; fi")]
+    [InlineData("if a; then :; elif dotnet build; then :; fi", "if a; then :; elif dtk dotnet build; then :; fi")]
+    [InlineData("for p in a b; do dotnet build $p; done", "for p in a b; do dtk dotnet build $p; done")]
+    public void Rewrite_BehindWhatRunsItHereWithTheSamePath_IsPrefixedWithDtk(string command, string expected)
+    {
+        // Assignments, shell keywords, and the launchers that run their command in this shell's environment.
+        DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
+    }
+
+    [Theory]
+    // A word that expands to a program: `$D dtk dotnet build` hands dtk the arguments `dtk dotnet build` when $D is a
+    // dtk binary, which it rejects as an unknown command.
+    [InlineData("$D dotnet build")]
+    [InlineData("\"$D\" dotnet build")]
+    [InlineData("${DTK} dotnet build")]
+    [InlineData("$(which dtk) dotnet build")]
+    // Text, not a command.
+    [InlineData("echo dotnet build")]
+    [InlineData("printf '%s' x; echo dotnet build")]
+    // Another machine, container or user, which may have no dtk: sudo resets PATH to its secure_path.
+    [InlineData("ssh host dotnet build")]
+    [InlineData("docker run --rm sdk dotnet build")]
+    [InlineData("sudo dotnet build")]
+    [InlineData("sudo -E dotnet build")]
+    // Programs that are not dtk under another spelling, or not rtk's raw-output request.
+    [InlineData("DTK dotnet build")]
+    [InlineData("dtk.EXE dotnet build")]
+    [InlineData("proxy dotnet build")]
+    [InlineData("myrtk proxy dotnet build")]
+    [InlineData("rtk; proxy dotnet build")]
+    [InlineData("echo x | xargs dotnet build")]
+    [InlineData("rm -rf ~ dotnet build")]
+    // A launcher whose arguments are not the plain ones it is known to take.
+    [InlineData("env -i dotnet build")]
+    [InlineData("env -C src dotnet build")]
+    [InlineData("time -o out.txt dotnet build")]
+    [InlineData("timeout dotnet build")]
+    [InlineData("timeout -s dotnet build")]
+    [InlineData("nice -n dotnet build")]
+    [InlineData("exec -a name dotnet build")]
+    public void Rewrite_BehindAnyOtherWord_IsReturnedUnchanged(string command)
+    {
+        DotnetCommandRewriter.Rewrite(command).Should().BeSameAs(command);
+    }
+
+    [Theory]
+    // A text filter written for MSBuild's lines: dtk's `(12,5) CS0029: …` has neither "error" nor "warn".
+    [InlineData("dotnet build 2>&1 | grep -E \"error|warn\"")]
+    [InlineData("dotnet build | grep error")]
+    [InlineData("dotnet build |& grep error")]
+    [InlineData("dotnet build | /usr/bin/grep error")]
+    [InlineData("dotnet build 2>&1 | egrep 'error|warning'")]
+    [InlineData("dotnet test 2>&1 | rg Failed")]
+    [InlineData("dotnet build 2>&1 | awk '/error/'")]
+    [InlineData("dotnet build | sed -n '/Build succeeded/,$p'")]
+    [InlineData("dotnet build | cut -c1-200")]
+    [InlineData("dotnet test --filter \"A|B\" --logger \"console;verbosity=normal\" | grep Passed")]
+    [InlineData("cd src && dotnet build 2>&1 | grep -c warning")]
+    // A file read afterwards: `dotnet build > x.log; grep … x.log`.
+    [InlineData("dotnet build > build.log")]
+    [InlineData("dotnet build >build.log 2>&1; grep error build.log")]
+    [InlineData("dotnet build >> build.log 2>&1")]
+    [InlineData("dotnet build 2>&1 >build.log")]
+    [InlineData("dotnet build 1>build.log")]
+    [InlineData("dotnet build &> build.log")]
+    [InlineData("dotnet build >& build.log")]
+    public void Rewrite_OutputForATextFilterOrAFile_IsReturnedUnchanged(string command)
+    {
+        // What the command does with dotnet's output expects MSBuild's own text: it gets it.
+        DotnetCommandRewriter.Rewrite(command).Should().BeSameAs(command);
+    }
+
+    [Theory]
+    // The verdict is dtk's last line, so its tail and head keep it.
+    [InlineData("dotnet build | tail -5", "dtk dotnet build | tail -5")]
+    [InlineData("dotnet build 2>&1 | tail -30", "dtk dotnet build 2>&1 | tail -30")]
+    [InlineData("dotnet test 2>&1 | head -50", "dtk dotnet test 2>&1 | head -50")]
+    [InlineData("dotnet build | tail -5 | grep error", "dtk dotnet build | tail -5 | grep error")]
+    [InlineData("dotnet build 2>&1 | tee build.log | tail", "dtk dotnet build 2>&1 | tee build.log | tail")]
+    // Only standard error goes elsewhere, or standard output joins it.
+    [InlineData("dotnet build 2> err.log", "dtk dotnet build 2> err.log")]
+    [InlineData("dotnet build 2>&1", "dtk dotnet build 2>&1")]
+    [InlineData("dotnet build 1>&2", "dtk dotnet build 1>&2")]
+    [InlineData("dotnet build >&2", "dtk dotnet build >&2")]
+    // Not a pipe: what follows runs after it, or beside it.
+    [InlineData("dotnet build || echo failed | grep x", "dtk dotnet build || echo failed | grep x")]
+    [InlineData("dotnet build && dotnet test | grep Failed", "dtk dotnet build && dotnet test | grep Failed")]
+    [InlineData("dotnet build | grep error; dotnet test", "dotnet build | grep error; dtk dotnet test")]
+    [InlineData("dotnet build; echo x | grep y", "dtk dotnet build; echo x | grep y")]
+    [InlineData("dotnet build & wait", "dtk dotnet build & wait")]
+    [InlineData("out=\"$(dotnet build 2>&1)\"; echo \"$out\" | grep x", "out=\"$(dtk dotnet build 2>&1)\"; echo \"$out\" | grep x")]
+    [InlineData("dotnet test --filter \"A|B\" | tail", "dtk dotnet test --filter \"A|B\" | tail")]
+    [InlineData("dotnet test --filter 'x>1' | tail", "dtk dotnet test --filter 'x>1' | tail")]
+    public void Rewrite_OutputForDtksReader_IsPrefixedWithDtk(string command, string expected)
+    {
         DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
     }
 

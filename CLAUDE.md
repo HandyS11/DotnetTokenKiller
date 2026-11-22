@@ -90,7 +90,12 @@ there, as `DTK_RAW=1` does.
 
 `dtk init copilot-cli` (alias `dtk integrate`) installs a GitHub Copilot CLI `preToolUse` hook (`.github/hooks/`)
 that runs `dtk hook copilot-cli`, rewriting `dotnet …` to `dtk dotnet …`. Supports `--global` (`~/.copilot/hooks/`).
-Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is `dtk hook <provider>`. Its reply's
+Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is `dtk hook <provider>`; the rewrite
+(`DotnetCommandRewriter.RunsHereWithTheSamePath`) prefixes a `dotnet` only behind assignments, shell keywords and
+`env`/`time`/`timeout`/`nice`/`nohup`/`exec` with arguments it knows, never behind another word (`$D`, `echo`, `ssh`,
+`sudo`), which may not run it here or with the same `PATH`, and never when its output goes to a text filter or a file
+(`SendsOutputToATextFilterOrFile`: `| grep`/`rg`/`awk`/`sed`/`cut`, `> x.log`), which expects MSBuild's lines;
+`| tail`, `| head` and `| tee` are still rewritten. Its reply's
 `permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any
 command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
 rather than guess a command is safe. `IsAutoApprovable` (also Cursor's gate, which rewrites only auto-approvable
@@ -129,9 +134,12 @@ says git does not ignore; skipping `bin`, `obj`, hidden directories, `node_modul
 bounded to 20,000 files and 256 MiB, else `changed files not computed`), because jb rewrites every file it processes.
 `GitWorkingTree` starts the `git` it finds in a `PATH` directory, never a bare `git` (Windows would try the working
 directory first). The build, test, publish and pack filters read `FilterContext.WorkTreeChanges` (git's changed files:
-since the merge base with `origin/HEAD`, plus uncommitted and untracked, spelled from the working directory as given)
-only when the report lists warnings and declared no error (`MsBuildDiagnosticReport.ChangesFor`): they list those
-files' warnings and count the rest. No changed file, `dtk pipe` or no work tree lists every warning, as before. Stryker's survivors
+since the merge base with `origin/HEAD`, plus uncommitted and untracked, spelled from the working directory as given;
+unknown, not "uncommitted only", without that merge base) only when the report lists warnings and declared no error
+(`MsBuildDiagnosticReport.ChangesFor`): they list those files' warnings, and those naming no file, and count the rest.
+A project-level diagnostic (`App.csproj : warning NU1903`) is filed under the file before its level. No changed file,
+a changed build configuration file (project, `.props`/`.targets`, `.editorconfig`, `global.json`, …), `dtk pipe` or no
+work tree lists every warning, as before. Stryker's survivors
 are not on stdout: `StrykerReport` reads `mutation-report.json` through `IArtifactFileReader` (the path Stryker prints,
 rejoined from its 80-column wrap, else the newest under `StrykerOutput`, or under `-O <dir>`); without the json
 reporter survivors are not listed. A localized `dtk pipe test` is recognised, not parsed: `LocalizedTestOutput` matches

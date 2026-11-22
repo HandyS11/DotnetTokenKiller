@@ -36,6 +36,17 @@
       "savingsPercent": 76.8
     },
     {
+      "id": "build/project-level-warning",
+      "fixture": "dotnet_build_project_level_warning.txt",
+      "filterKey": "build",
+      "exitCode": 0,
+      "rawBytes": 1521,
+      "rawTokens": 436,
+      "filteredTokens": 136,
+      "savedTokens": 300,
+      "savingsPercent": 68.8
+    },
+    {
       "id": "build/success",
       "fixture": "dotnet_build_success.txt",
       "filterKey": "build",
@@ -84,7 +95,7 @@
       "fixture": "dotnet_ef_database_update_error.txt",
       "filterKey": "ef database",
       "exitCode": 1,
-      "rawBytes": 2584,
+      "rawBytes": 2578,
       "rawTokens": 509,
       "filteredTokens": 393,
       "savedTokens": 116,
@@ -95,7 +106,7 @@
       "fixture": "dotnet_ef_database_update_logging.txt",
       "filterKey": "ef database",
       "exitCode": 0,
-      "rawBytes": 3218,
+      "rawBytes": 3214,
       "rawTokens": 726,
       "filteredTokens": 32,
       "savedTokens": 694,
