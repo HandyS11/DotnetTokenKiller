@@ -41,8 +41,7 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
 
     /// <summary>What an agent needs from the shared instructions beyond the commands themselves.</summary>
     public static TheoryData<string> TaughtPoints() => new(
-        "`dtk log [build|test]`",
-        "`--list`",
+        "`dtk log build`",
         "`dtk pipe <subcommand>`",
         "`-q`",
         "`--tee <file>`",
@@ -52,7 +51,8 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
         "`command dotnet …`",
         "`rtk proxy dotnet …`",
         "`dtk test`, `dtk build`",
-        "Don't pipe dtk output into tail or grep: its last line is the status.");
+        "Don't pipe it into `tail` or `grep`",
+        "instead of running it again");
 
     [Theory]
     [MemberData(nameof(TaughtPoints))]
@@ -69,9 +69,11 @@ public sealed class SharedInstructionArtifactsTests : IDisposable
     {
         // Loaded into every agent session, often next to the skill: every added sentence is paid for each time. The
         // bound was 1200 for 0.10's eight subcommands (1120 bytes); 0.11's five more add 183 bytes of names and examples,
-        // and the options line (one line for five options, 1431 bytes in all) cannot be cut further without losing an option:
-        // the bound is the size plus a little room.
-        System.Text.Encoding.UTF8.GetByteCount(SharedInstructionArtifacts.Section).Should().BeLessThan(1450);
+        // and the options line (one line for five options, 1431 bytes in all) cannot be cut further without losing an option.
+        // The agent rules every Claude Code agent also gets at session start lead the section since 0.13: they replace
+        // the two bullets on tail/grep and dtk log and take 1574 bytes in all, which is the point of the section. The
+        // bound is the size plus a little room.
+        System.Text.Encoding.UTF8.GetByteCount(SharedInstructionArtifacts.Section).Should().BeLessThan(1600);
 
         // Only publish, pack and tool restore pass --interactive through; build and restore still filter it.
         SharedInstructionArtifacts.Section.Should().NotContain("--interactive");
