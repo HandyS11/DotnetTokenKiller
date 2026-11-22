@@ -11,8 +11,9 @@ namespace DotnetTokenKiller.Application.Integration;
 /// <list type="bullet">
 ///   <item><description><c>.claude/skills/dotnet-token-killer/SKILL.md</c></description></item>
 ///   <item><description>
-///     <c>.claude/settings.json</c> registering <c>dtk hook claude</c> (merged, never overwritten); a Python
-///     hook left by an older dtk is migrated
+///     <c>.claude/settings.json</c> registering <c>dtk hook claude</c> (merged, never overwritten) for
+///     <c>PreToolUse</c> (the rewrite) and for <c>SessionStart</c> and <c>SubagentStart</c> (dtk's rules for every
+///     agent, see <see cref="IntegrationInstructions.AgentRules"/>); a Python hook left by an older dtk is migrated
 ///   </description></item>
 ///   <item><description>
 ///     When an rtk PreToolUse hook is detected, merges <c>exclude_commands = ["dotnet"]</c> into the config file rtk
@@ -33,6 +34,12 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 {
     /// <summary>The per-user settings file Claude Code reads beside <c>settings.json</c>, which dtk never edits.</summary>
     private const string LocalSettingsFileName = "settings.local.json";
+
+    /// <summary>
+    /// The <c>SessionStart</c> sources dtk's rules are injected on: a new session, <c>/clear</c>, and a compaction,
+    /// which may summarize them away. Not <c>resume</c>, whose transcript keeps the context it was given.
+    /// </summary>
+    internal const string SessionStartMatcher = "startup|clear|compact";
 
     /// <inheritdoc/>
     public string ProviderName => "claude";
@@ -76,8 +83,16 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
 
-        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(Registration(hook), context, cancellationToken)
+        var registrations = Registrations(hook);
+        var replacedLegacy = await IntegratorHelpers.WriteHookRegistrationAsync(registrations[0], context, cancellationToken)
             .ConfigureAwait(false);
+        foreach (var contextRegistration in registrations.Skip(1))
+        {
+            await IntegratorHelpers.WriteHookRegistrationAsync(contextRegistration, context, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        context.SettleOutcome(hook.RegistrationPath);
 
         await IntegratorHelpers.RetireLegacyHookScriptAsync(
             hook.LegacyScriptPath!, replacedLegacy, HookFiles(hook), context, cancellationToken).ConfigureAwait(false);
@@ -104,7 +119,12 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
             .ConfigureAwait(false);
 
         var hook = DescribeHooks(hookDirectory, scope)[0];
-        await UninstallHelpers.RemoveHookRegistrationAsync(Registration(hook), context, cancellationToken).ConfigureAwait(false);
+        foreach (var registration in Registrations(hook))
+        {
+            await UninstallHelpers.RemoveHookRegistrationAsync(registration, context, cancellationToken).ConfigureAwait(false);
+        }
+
+        context.SettleOutcome(hook.RegistrationPath);
         await UninstallHelpers.RemoveLegacyHookScriptAsync(hook.LegacyScriptPath!, HookFiles(hook), context, cancellationToken)
             .ConfigureAwait(false);
 
@@ -120,8 +140,18 @@ internal sealed class ClaudeCodeIntegrator(RtkHookCoexistence rtk, HomePaths hom
     private static GeneratedArtifact SkillArtifact(string baseDirectory) =>
         SharedInstructionArtifacts.SkillArtifact(Path.Combine(baseDirectory, "skills"));
 
-    private static HookRegistrationSpec Registration(HookInstallation hook) =>
-        new(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command);
+    /// <summary>
+    /// The three registrations of <c>dtk hook claude</c>, the rewrite first: <c>PreToolUse</c> for <c>Bash</c>,
+    /// <c>SessionStart</c> on <see cref="SessionStartMatcher"/>, and <c>SubagentStart</c> for every agent type (the
+    /// hook itself skips the ones without a shell).
+    /// </summary>
+    /// <param name="hook">The installation.</param>
+    private static HookRegistrationSpec[] Registrations(HookInstallation hook) =>
+    [
+        new(hook.RegistrationPath, "PreToolUse", "Bash", hook.Command),
+        new(hook.RegistrationPath, "SessionStart", SessionStartMatcher, hook.Command),
+        new(hook.RegistrationPath, "SubagentStart", "*", hook.Command)
+    ];
 
     /// <summary>
     /// The files Claude Code runs hooks from beside the registration: dtk merges <c>settings.json</c> only, but Claude

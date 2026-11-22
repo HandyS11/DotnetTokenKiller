@@ -104,6 +104,124 @@ public sealed class ClaudeCodeIntegratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Integrate_RegistersTheHookForThreeEvents()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        await _sut.IntegrateGlobalAsync(false, CancellationToken.None);
+
+        foreach (var settings in new[] { ProjectSettings, GlobalSettings })
+        {
+            var hooks = JsonNode.Parse(await File.ReadAllTextAsync(settings))!["hooks"]!.AsObject();
+            hooks.Select(pair => pair.Key).Should().Equal("PreToolUse", "SessionStart", "SubagentStart");
+            Entry(hooks, "PreToolUse")["matcher"]!.GetValue<string>().Should().Be("Bash");
+            Entry(hooks, "SessionStart")["matcher"]!.GetValue<string>().Should().Be("startup|clear|compact");
+            Entry(hooks, "SubagentStart")["matcher"]!.GetValue<string>().Should().Be("*");
+            foreach (var eventName in new[] { "PreToolUse", "SessionStart", "SubagentStart" })
+            {
+                var handler = Entry(hooks, eventName)["hooks"]!.AsArray().Should().ContainSingle().Subject!;
+                handler["type"]!.GetValue<string>().Should().Be("command");
+                handler["command"]!.GetValue<string>().Should().Be("dtk hook claude");
+                handler.AsObject().ContainsKey("timeout").Should().BeFalse();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Integrate_OnAnInstallWithOnlyPreToolUse_AddsTheContextHooks()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ProjectSettings)!);
+        await File.WriteAllTextAsync(ProjectSettings,
+            """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"dtk hook claude"}]}]}}""");
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.UpdatedFiles.Should().ContainSingle(path => path == ProjectSettings);
+        result.UnchangedFiles.Should().NotContain(ProjectSettings);
+        var hooks = JsonNode.Parse(await File.ReadAllTextAsync(ProjectSettings))!["hooks"]!.AsObject();
+        hooks["PreToolUse"]!.AsArray().Should().ContainSingle();
+        hooks.ContainsKey("SessionStart").Should().BeTrue();
+        hooks.ContainsKey("SubagentStart").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Integrate_Twice_LeavesTheFileUnchanged()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+        var before = await File.ReadAllBytesAsync(ProjectSettings);
+
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.UnchangedFiles.Should().ContainSingle(path => path == ProjectSettings);
+        result.UpdatedFiles.Should().BeEmpty();
+        (await File.ReadAllBytesAsync(ProjectSettings)).Should().Equal(before);
+    }
+
+    [Fact]
+    public async Task Integrate_ListsTheSettingsFileOnce()
+    {
+        var result = await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        result.CreatedFiles.Should().ContainSingle(path => path == ProjectSettings);
+        result.UpdatedFiles.Should().BeEmpty();
+        result.UnchangedFiles.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Integrate_KeepsTheUsersOwnContextHooks()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ProjectSettings)!);
+        await File.WriteAllTextAsync(ProjectSettings,
+            """{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"echo hi"}]}]}}""");
+
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var sessionStart = JsonNode.Parse(await File.ReadAllTextAsync(ProjectSettings))!["hooks"]!["SessionStart"]!.AsArray();
+        sessionStart.Should().HaveCount(2);
+        sessionStart[0]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("echo hi");
+        sessionStart[1]!["hooks"]![0]!["command"]!.GetValue<string>().Should().Be("dtk hook claude");
+
+        await _sut.UninstallAsync(_tempDir, HookScope.Project, new Dictionary<string, string>(), CancellationToken.None);
+
+        var left = await File.ReadAllTextAsync(ProjectSettings);
+        left.Should().Contain("echo hi").And.NotContain("dtk hook claude");
+    }
+
+    [Fact]
+    public async Task Uninstall_RemovesAllThreeRegistrations()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(ProjectSettings)!);
+        await File.WriteAllTextAsync(ProjectSettings, """{"theme":"dark"}""");
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var result = await _sut.UninstallAsync(_tempDir, HookScope.Project, new Dictionary<string, string>(), CancellationToken.None);
+
+        var left = await File.ReadAllTextAsync(ProjectSettings);
+        left.Should().NotContain("dtk hook claude").And.NotContain("hooks");
+        JsonNode.Parse(left)!["theme"]!.GetValue<string>().Should().Be("dark");
+        result.UpdatedFiles.Should().ContainSingle(path => path == ProjectSettings);
+    }
+
+    [Fact]
+    public async Task Uninstall_OfAFileHoldingOnlyDtksHooks_ListsItRemovedOnce()
+    {
+        await _sut.IntegrateAsync(_tempDir, false, CancellationToken.None);
+
+        var result = await _sut.UninstallAsync(_tempDir, HookScope.Project, new Dictionary<string, string>(), CancellationToken.None);
+
+        File.Exists(ProjectSettings).Should().BeFalse();
+        result.RemovedFiles.Should().ContainSingle(path => path == ProjectSettings);
+        result.UpdatedFiles.Should().NotContain(ProjectSettings);
+        result.UnchangedFiles.Should().NotContain(ProjectSettings);
+    }
+
+    private string ProjectSettings => Path.Combine(_tempDir, ".claude", "settings.json");
+
+    private string GlobalSettings => Path.Combine(_isolatedHome, ".claude", "settings.json");
+
+    private static JsonObject Entry(JsonObject hooks, string eventName) =>
+        hooks[eventName]!.AsArray().Should().ContainSingle().Subject!.AsObject();
+
+    [Fact]
     public async Task IntegrateAsync_ExistingSettingsJson_PreservesOtherSettings()
     {
         var settingsPath = Path.Combine(_tempDir, ".claude", "settings.json");
