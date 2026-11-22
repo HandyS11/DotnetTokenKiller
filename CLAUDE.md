@@ -95,7 +95,7 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 `env`/`time`/`timeout`/`nice`/`nohup`/`exec` with arguments it knows, never behind another word (`$D`, `echo`, `ssh`,
 `sudo`), which may not run it here or with the same `PATH`, and never when its output goes to a text filter or a file
 (`SendsOutputToATextFilterOrFile`: `| grep`/`rg`/`awk`/`sed`/`cut`, `> x.log`), which expects MSBuild's lines;
-`| tail`, `| head` and `| tee` are still rewritten. Its reply's
+`| tail`, `| head` and `| tee` are still rewritten. The Copilot CLI hook's reply's
 `permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any
 command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
 rather than guess a command is safe. `IsAutoApprovable` (also Cursor's gate, which rewrites only auto-approvable
@@ -107,6 +107,15 @@ continuation (`--te\`, newline, `e`) reaches dtk as `--tee` and turns `build\`, 
 cannot yield `--tee` without control of `HOME`. Such commands stay plain `dotnet` under Cursor and get `"ask"` under
 Copilot CLI. The new subcommands (`tool restore`, `ef`, `stryker`, `jb cleanupcode`)
 are rewritten but never in `AutoApprovableSubcommands`.
+
+`dtk init claude` also registers `dtk hook claude` for `SessionStart` (`startup|clear|compact`) and `SubagentStart`.
+`HookPayloads.ReplyToClaude` answers only those two event names, with `IntegrationInstructions.AgentRules` as
+`additionalContext`, when `DotnetProjectDetector` (bounded: the directory and its parents, then two levels below, 2,000
+entries) finds a .NET project or the project in `CLAUDE_PROJECT_DIR` registers the hook in its own
+`.claude/settings.json`; every other payload keeps the rewrite path, and one carrying `cursor_version` (Cursor running
+Claude Code's hooks) gets Cursor's schema instead. `ClaudeCodeIntegrator` checks the two registrations for doctor
+(`IHookApprovalInspector`), and `HookHealthChecker` probes the reply. The skill is the on-demand reference, triggered by
+the options the rules leave out; the rules also lead every other harness's instructions (`AgentRuleBullets`).
 
 dtk's own options are `--tee <path>`, `--max-lines <n>` (value options: `ArgumentPreprocessor` moves the value with
 its flag ahead of the inserted `--`, and a missing value, or a `--max-lines` whose next token is not an integer, is a

@@ -8,16 +8,30 @@ Each supported agent gets a hook that rewrites `dotnet …` to `dtk dotnet …` 
 
 ## What the agent is told
 
-The skill and instruction files `dtk init` writes carry the same short brief for every agent:
+Every agent gets the same three rules, in its instruction file or, for Claude Code, at the start of every session
+and subagent:
 
-- Use `dtk` for `build`, `test`, `restore`, `clean`, `format`, `list package`, `publish`, `pack`, `tool restore`, `ef migrations`, `ef database`, `stryker` and `jb cleanupcode`; `dtk test`, `dtk build` and the like work without the `dotnet` word.
-- Every run ends with one status line, so read the whole output and do not pipe it into `tail` or `grep`.
-- `dtk log` prints the raw output of the latest run (`dtk log build` or `dtk log test` for one kind, `--list` to see what is kept); prefer it to `--vv`.
-- `dtk pipe <subcommand>` filters output the agent already has; `-q` on dotnet's own subcommands prints only the filtered output (on `ef`, `stryker` and `jb cleanupcode` the short options belong to the tool).
-- `--tee <path>` keeps the raw output as evidence, `--max-lines N` caps the body; `dtk test` also takes `--names` (passed tests), `--show-output` (failing tests' output) and `--fail-on-empty` (exit 8 when no test ran).
-- `DTK_RAW=1` (environment or prefix) gives plain `dotnet` output. Where a hook rewrites plain `dotnet …` commands, it leaves `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …` alone.
+- Run dtk plainly: its output is already short and its last line is the verdict, so don't pipe it into `tail` or
+  `grep`; `--max-lines N` caps it.
+- To see more of a run, or what a cap cut, use `dtk log build` or `dtk log test` (`--full` for all) instead of running
+  it again.
+- `dtk dotnet test --names` lists the tests that passed; `DTK_RAW=1` gives dotnet's own output.
 
-The skill's flag table lists `--show-log` and `-v`, which echoes the resolved command line on dotnet's own subcommands. It also adds that test status lines carry the count and top codes of the build warnings of the projects compiled in that run; an up-to-date build compiles nothing and reports none.
+The instruction files (`AGENTS.md`, `GEMINI.md`, the Copilot instructions, the Cursor, Devin and Aider rule files)
+lead with those rules, then add the examples and the usage notes: use `dtk` for `build`, `test`, `restore`, `clean`,
+`format`, `list package`, `publish`, `pack`, `tool restore`, `ef migrations`, `ef database`, `stryker` and
+`jb cleanupcode` (`dtk test`, `dtk build` and the like work without the `dotnet` word); exit codes are kept; unknown
+subcommands and machine-readable output pass through; `dtk pipe <subcommand>` filters output the agent already has,
+and `-q` prints only the filtered output; `--tee <path>` keeps the raw output as evidence, and `dtk test` also takes
+`--show-output` and `--fail-on-empty`; a hook that rewrites plain `dotnet …` leaves `\dotnet …`, `command dotnet …` and
+`rtk proxy dotnet …` alone.
+
+The `dotnet-token-killer` skill (Claude Code, and the harnesses that read `.agents/skills`) is the reference for what
+the rules leave out, and an agent loads it when it needs one of those options: `--tee`, `--max-lines`, `--names`,
+`--show-output` and `--fail-on-empty` in full; `dtk log` (`--full`, `--list`) and `dtk pipe`; how a build in a git work
+tree lists only the warnings of changed files and how to list them all; the passthrough and raw-output notes; the flag
+table (`-q`, `-v`, `--show-log`; `--vv` is demoted in favour of `dtk log`); that test status lines carry the build
+warnings of the projects compiled in that run, so an up-to-date build reports none; and `dtk gain`.
 
 ## Installing globally
 
@@ -102,11 +116,35 @@ dtk init claude
 
 This creates two files:
 
-- `.claude/skills/dotnet-token-killer/SKILL.md` — instructs Claude Code to prefer `dtk`
-- `.claude/settings.json` — registers `dtk hook claude` under `PreToolUse` (merges with any existing settings)
+- `.claude/skills/dotnet-token-killer/SKILL.md` — the reference for dtk's options beyond plain use
+- `.claude/settings.json` — registers `dtk hook claude` under `PreToolUse` (the rewrite), `SessionStart` (matcher
+  `startup|clear|compact`) and `SubagentStart` (every agent type), merged with any existing settings
+
+At the start of a session, after `/clear` or a compaction, and at the start of every subagent, `dtk hook claude` adds
+four lines to the agent's context, when its working directory is in a .NET project:
+
+```text
+dtk (DotnetTokenKiller) filters this project's dotnet commands; a hook runs `dotnet build|test|…` through it.
+- Run them plainly: dtk's output is already short and its last line is the verdict. Don't pipe it into `tail` or `grep`; `--max-lines N` caps it.
+- To see more of a run, or what a cap cut, use `dtk log build` / `dtk log test` (`--full` for all) instead of running it again.
+- `dtk dotnet test --names` lists the tests that passed; `DTK_RAW=1` gives dotnet's own output.
+```
+
+A directory is in a .NET project when it or a parent holds a solution or project file, `global.json` or
+`Directory.Build.props`, or a folder at most two levels below it (outside hidden folders, `bin`, `obj`,
+`node_modules` and `artifacts`) holds a solution or project file; dtk reads at most 2,000 entries below it before
+answering no. Elsewhere nothing is added, so a `--global` install costs nothing outside .NET work. Every subagent
+gets the rules, Explore and Plan included (they skip CLAUDE.md), except the built-in `web-fetch` and
+`statusline-setup`, which have no shell; a custom agent without a shell gets them too, since the hook cannot see an
+agent's tools. A project where `dtk init claude` was run (its `.claude/settings.json` registers the hook) counts as
+.NET work wherever its projects lie. A resumed session keeps the lines it was given. Each start costs one `dtk hook`
+run, 10–19 ms with the native binary (see
+[Performance](performance.md#dtk-hook)).
 
 Re-running the command refreshes `SKILL.md` if dtk wrote it and leaves an edited copy alone unless you
-pass `--force`. `.claude/settings.json` is always merged: the hook entry is added if missing, and a
+pass `--force`. `.claude/settings.json` is always merged: each hook entry is added if missing (an install made
+before the context hooks existed gains `SessionStart` and `SubagentStart`, and `dtk doctor` warns until it has
+them), and a
 registration from an older dtk that ran `dotnet-to-dtk.py` is replaced in place — never duplicated. The
 old `.claude/hooks/dotnet-to-dtk.py` is deleted when that run replaced its registration, no hook in
 `.claude/settings.json` or `.claude/settings.local.json` still runs it, and dtk can prove it wrote it.
@@ -124,7 +162,7 @@ dtk init claude --dir /path/to/project
 
 ### How It Works
 
-With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, `dotnet list package`, `dotnet publish`, or `dotnet pack`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration.
+With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, `dotnet list package`, `dotnet publish`, or `dotnet pack`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration, and, from the `SessionStart` and `SubagentStart` hooks, the rules for reading it, whichever agent runs the command.
 
 ### Manual Installation
 
@@ -136,6 +174,28 @@ Add the following to `.claude/settings.json`:
     "PreToolUse": [
       {
         "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dtk hook claude"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "dtk hook claude"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -593,8 +653,11 @@ both rewrite it.
 
 Cursor imports hooks from a Claude settings file (`~/.claude/settings.json`, `.claude/settings*.json`) by default.
 When dtk's Claude hook is also registered in a settings file Cursor imports, the install prints a note about it; a
-double rewrite is harmless, because the rewriter skips commands `dtk` already ran. `dtk doctor` probes the Cursor
-hook with one simple command per auto-approvable subcommand.
+double rewrite is harmless, because the rewriter skips commands `dtk` already ran. If Cursor also runs the Claude
+hook's `SessionStart` and `SubagentStart` entries, dtk answers them in Cursor's own schema (`{"permission":"allow"}`
+for a subagent, `{}` for a session), so a subagent is never blocked; Cursor reads dtk's rules from its rule file
+(see [Harness verification](harness-verification.md)). `dtk doctor` probes the Cursor hook with one simple command
+per auto-approvable subcommand.
 
 > [!NOTE]
 > Not verified against a live run — see [Harness verification](harness-verification.md).
@@ -669,7 +732,8 @@ run.
 
 Devin also imports hooks from a Claude settings file (`~/.claude/settings.json`, `.claude/settings*.json`) by
 default; when dtk's Claude hook is registered there too, the install prints a note — a double rewrite is harmless,
-because the rewriter skips commands `dtk` already ran.
+because the rewriter skips commands `dtk` already ran. Devin runs that hook's `SessionStart` entry too, which adds
+dtk's rules to a Devin session in a .NET project; it has no `SubagentStart`.
 
 > [!NOTE]
 > Not verified against a live run — see [Harness verification](harness-verification.md).

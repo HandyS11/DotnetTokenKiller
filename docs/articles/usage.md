@@ -338,7 +338,7 @@ column in `dtk gain --coverage`.
 Install dtk integration artifacts for an AI assistant provider:
 
 ```sh
-dtk init claude      # Claude Code skill + PreToolUse hook
+dtk init claude      # Claude Code skill + PreToolUse, SessionStart and SubagentStart hooks
 dtk init copilot     # GitHub Copilot instructions section
 dtk init copilot-cli # GitHub Copilot CLI hook + instructions section
 dtk init gemini      # Gemini CLI hook + settings merge

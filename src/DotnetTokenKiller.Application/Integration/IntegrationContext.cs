@@ -67,6 +67,24 @@ internal sealed class IntegrationContext
     /// <summary>Gets the list of file paths deleted during this integration run.</summary>
     internal List<string> Removed { get; } = [];
 
+    /// <summary>
+    /// Keeps one outcome for a file that several steps of one run wrote, the strongest: removed, then created, then
+    /// updated, then unchanged. Claude Code's three hook registrations merge into one <c>settings.json</c>, and the
+    /// run reports that file once.
+    /// </summary>
+    /// <param name="path">The file the steps wrote.</param>
+    internal void SettleOutcome(string path)
+    {
+        List<string>[] byStrength = [Removed, Created, Updated, Unchanged];
+        var strongest = Array.Find(byStrength, list => list.Contains(path));
+        foreach (var list in byStrength)
+        {
+            list.RemoveAll(entry => entry == path);
+        }
+
+        strongest?.Add(path);
+    }
+
     /// <summary>Builds an <see cref="IntegrationResult"/> from the accumulated lists.</summary>
     internal IntegrationResult ToResult()
     {

@@ -139,15 +139,66 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
         {V0100MarkdownRule}
         """;
 
+    /// <summary>The Windsurf rule, Devin rule and Aider instructions file dtk 0.11.0 through 0.12.0 wrote, byte for byte.</summary>
+    private const string V0110MarkdownRule =
+        """
+        # DotnetTokenKiller (dtk)
+
+        Use `dtk` instead of raw `dotnet` for build, test, restore, clean, format, list package, publish, pack, tool restore, ef migrations, ef database, stryker, and jb cleanupcode commands.
+
+        ## Usage
+
+        ```sh
+        dtk dotnet build MyProject.slnx
+        dtk dotnet test --filter "Category=Unit"
+        dtk dotnet restore
+        dtk dotnet clean
+        dtk dotnet format
+        dtk dotnet format --verify-no-changes
+        dtk dotnet list package --outdated
+        dtk dotnet publish -c Release
+        dtk dotnet pack
+        dtk dotnet tool restore
+        dtk dotnet ef migrations add <Name>
+        dtk dotnet stryker
+        dtk dotnet jb cleanupcode <solution>
+        ```
+
+        - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
+        - Exit codes are preserved.
+        - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
+        - Don't pipe dtk output into tail or grep: its last line is the status.
+        - `dtk log [build|test]` prints the latest run's raw output instead of re-running: last 100 lines, `--full` for all, `--list`.
+        - `dtk pipe <subcommand>` filters stdin. `-q` (dotnet subcommands) prints only the filtered output.
+        - `--tee <file>` keeps raw output as evidence; `--max-lines N`; for test: `--names`, `--show-output`, `--fail-on-empty`.
+        - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
+        """;
+
+    /// <summary>The Cursor rule dtk 0.11.0 through 0.12.0 wrote, byte for byte.</summary>
+    private const string V0110CursorRule =
+        $"""
+        ---
+        description: Use dtk instead of dotnet for build, test, restore, clean, format, list package, publish, pack, tool restore, ef migrations, ef database, stryker, and jb cleanupcode commands
+        globs:
+          - "**/*.cs"
+          - "**/*.csproj"
+          - "**/*.slnx"
+          - "**/*.sln"
+        alwaysApply: false
+        ---
+
+        {V0110MarkdownRule}
+        """;
+
     /// <summary>
     /// The hashes of the bodies this dtk writes. When a test pinning one fails, the text changed: if the old body has
     /// shipped in a release, append its hash (the pinned value) to the matching list in
     /// <see cref="IntegrationInstructions"/>, then pin the new one here.
     /// </summary>
-    private const string CurrentCursorRuleHash = "babe8c7a7239929c71117d6e714cb13bdfb2dc5ea1c0a6e1d7f416e1532953d8";
+    private const string CurrentCursorRuleHash = "3d14077e678f27920defe9c78972f564dbdda24d430d299b72fe9ff54bb7ad0f";
 
     /// <inheritdoc cref="CurrentCursorRuleHash"/>
-    private const string CurrentMarkdownRuleHash = "2b666a47044daff019ab67108ae63ee19e8f22085f0af8144a94fbd1b6ba6180";
+    private const string CurrentMarkdownRuleHash = "b6a43be3f614927ee2782e216f9a7d3286f6d4a73fc50e4800875d3272e90b4f";
 
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-released-hashes-{Guid.NewGuid()}");
 
@@ -194,6 +245,20 @@ public sealed class ReleasedOwnedFileHashesTests : IDisposable
 
         IntegrationInstructions.ReleasedCursorRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V0100CursorRule));
         IntegrationInstructions.ReleasedMarkdownRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V0100MarkdownRule));
+    }
+
+    [Fact]
+    public void ReleasedHashes_IncludeTheV0110Bodies()
+    {
+        // The hashes of the files the released dtk 0.11.0 and 0.12.0 packages wrote (`dtk init cursor|devin|aider`),
+        // spelled out for the same reason; the two versions wrote the same bodies.
+        UninstallHelpers.HashOwnedFile(V0110CursorRule)
+            .Should().Be("babe8c7a7239929c71117d6e714cb13bdfb2dc5ea1c0a6e1d7f416e1532953d8");
+        UninstallHelpers.HashOwnedFile(V0110MarkdownRule)
+            .Should().Be("2b666a47044daff019ab67108ae63ee19e8f22085f0af8144a94fbd1b6ba6180");
+
+        IntegrationInstructions.ReleasedCursorRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V0110CursorRule));
+        IntegrationInstructions.ReleasedMarkdownRuleHashes.Should().Contain(UninstallHelpers.HashOwnedFile(V0110MarkdownRule));
     }
 
     [Fact]

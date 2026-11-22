@@ -21,54 +21,63 @@ internal static class SharedInstructionArtifacts
     private const string SkillName = "dotnet-token-killer";
 
     /// <summary>
-    /// The skill's frontmatter <c>description:</c> line. This is Claude Code's <em>skill-trigger</em>
-    /// text — the one string that decides whether the skill surfaces for a given user intent — so it
-    /// is derived from <see cref="IntegrationInstructions.SubcommandProse"/> rather than hand-written.
-    /// A hardcoded list here meant a user who ran <c>dtk init claude</c> got a skill that never
-    /// fired for package-listing intent, which is invisible from inside dtk.
+    /// The skill's frontmatter <c>description:</c> line: Claude Code's <em>skill-trigger</em> text, which decides when an
+    /// agent loads the skill. Every agent already gets the agent rules at its start (Claude Code's context hooks) or in
+    /// its instructions file, so the skill is the reference for what they leave out, and its trigger names those options
+    /// rather than every <c>dotnet</c> command: a trigger on every build loaded the whole skill at the start of most
+    /// sessions, only to repeat the rules. A single-quoted YAML value, so it holds no apostrophe.
     /// </summary>
-    private static readonly string SkillDescription =
-        "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage when "
-        + $"running `dotnet` {IntegrationInstructions.SubcommandProse} commands.";
+    private const string SkillDescription =
+        "Reference for DotnetTokenKiller (dtk) options beyond plain use: keeping the raw output of a run (--tee), "
+        + "the console output of a failing test (--show-output), the tests that passed (--names), failing a run that "
+        + "matched no test (--fail-on-empty), capping output (--max-lines), the saved raw output of a run (dtk log), "
+        + "filtering saved output (dtk pipe), every warning of a build, and token savings (dtk gain).";
 
     /// <summary>
-    /// The skill written to <c>dotnet-token-killer/SKILL.md</c> under <c>.claude/skills</c> (Claude Code)
-    /// and <c>.agents/skills</c> (Codex CLI). Internal (rather than private) so
-    /// <c>SubcommandBindingTests</c> can pin <see cref="SkillDescription"/> the same way it pins
-    /// <see cref="CopilotCliIntegrator.CopilotSection"/> — this file is a derived artifact with no
-    /// compile-time link to the canonical subcommand list.
+    /// The skill written to <c>dotnet-token-killer/SKILL.md</c> under <c>.claude/skills</c> (Claude Code) and
+    /// <c>.agents/skills</c> (Codex CLI, OpenCode, …): the reference for dtk's options beyond plain use. It embeds the
+    /// shared passthrough and raw-output notes (<see cref="IntegrationInstructions.PassthroughBullets"/>,
+    /// <see cref="IntegrationInstructions.RawOutputBullet"/>) and leaves the examples and the agent rules to the
+    /// instructions and the context.
     /// </summary>
-    internal static readonly string SkillMarkdown =
+    internal const string SkillMarkdown =
         $"""
         ---
         name: dotnet-token-killer
         description: '{SkillDescription}'
         ---
 
-        # DotnetTokenKiller (dtk)
+        # DotnetTokenKiller (dtk) reference
 
-        `dtk` wraps `dotnet` commands and filters output to actionable signal only, saving 50-97% of tokens by stripping SDK banners, MSBuild noise, progress lines, and duplicate diagnostics.
+        `dtk` wraps `dotnet` commands and keeps what an agent acts on. How to run it is in your instructions; this is the rest.
 
-        ## Installation
+        ## Options
 
-        ```sh
-        dotnet tool install -g DotnetTokenKiller  # requires .NET 10 SDK
-        ```
-
-        ## Usage
-
-        Drop-in replacement for {IntegrationInstructions.SubcommandBacktickProse}:
-
-        {IntegrationInstructions.UsageBody}
-
-        ## Flags
+        - `--tee <file>` keeps the raw output of a run in a file, as evidence, beside the filtered output.
+        - `--max-lines N` caps the filtered body, ending with `… N more lines (dtk log)`; the status line is never cut.
+        - On `dotnet test` and `dtk pipe test`: `--names` lists the tests that passed, grouped by class; `--show-output` shows the console output of each failing test; `--fail-on-empty` makes a run in which no test matched exit 8.
 
         | Flag         | Purpose                                             |
         |--------------|-----------------------------------------------------|
-        | `--show-log` | Print path to full unfiltered log after a run       |
+        | `-q`         | Print only the filtered output (dotnet subcommands) |
         | `-v`         | Echo the resolved command line (dotnet subcommands) |
+        | `--show-log` | Print path to full unfiltered log after a run       |
 
         `--vv` also dumps all the raw output; prefer `dtk log`.
+
+        ## A run's output, again
+
+        - `dtk log [build|test]` prints the latest run's raw output: last 100 lines, `--full` for all, `--list` for the recent runs.
+        - `dtk pipe <subcommand>` filters text on stdin as that subcommand's filter would: `dtk log build --full | dtk pipe build`.
+
+        ## Warnings in changed files
+
+        In a git work tree, a build, test, publish or pack without errors lists only the warnings of the files the work in progress changed, and counts the others on one line (`N warnings in unchanged files not shown`); `dtk log build --full | dtk pipe build` lists them all. Every warning is listed when the work changed a project file, a `.props` or `.targets` file, `.editorconfig` or `global.json`, or the repository has no `origin/HEAD`.
+
+        ## Passthrough and raw output
+
+        {IntegrationInstructions.PassthroughBullets}
+        {IntegrationInstructions.RawOutputBullet}
 
         ## Key Behaviors
 

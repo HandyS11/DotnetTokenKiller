@@ -74,6 +74,13 @@ The hook runs 2.9–3.4 ms *faster* than `--version`, because it returns before 
 Spectre are built, which `--version` still constructs — meeting the spec's 3 ms ceiling on hook overhead, a
 gap a repeat run confirmed as stable (9.5/10.0 ms hook vs 12.9 ms `--version`).
 
+The context hooks, measured 2026-11-22, 55 runs each, local AOT publish (linux-x64), medians, against a 0.4 ms
+`/bin/true` baseline: `dtk hook claude` answering `SessionStart` 10.3 ms in this repository (the rules injected) and
+`SubagentStart` 10.5 ms, against 9.7 ms for a `PreToolUse` with nothing to rewrite; 12.5 ms in a small non-.NET folder
+deep under `/tmp` (every parent read); and 18.8 ms and 19.3 ms with `/usr/share` and `/usr` as the working directory,
+whose first three levels hold 17,491 and 4,940 entries, so the walk gives up at its 2,000-entry budget. A repeat run
+agreed within 0.3 ms. These hooks run once per session start and once per subagent, not on every tool call.
+
 ## OpenCode plugin
 
 OpenCode plugin, measured 2026-09-15, OpenCode 1.18.31 (`opencode-ai` from npm) running `opencode run` against a

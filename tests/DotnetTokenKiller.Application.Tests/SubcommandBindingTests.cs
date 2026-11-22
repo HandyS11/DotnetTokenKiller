@@ -152,36 +152,34 @@ public sealed class SubcommandBindingTests
     }
 
     [Fact]
-    public void ClaudeSkillDescription_NamesEveryCanonicalSubcommand()
+    public void Skill_Description_NamesTheOptionsBeyondPlainUse()
     {
-        // Pinned to the literal, known-good bytes for the same reason as the assertions above:
-        // deriving it from DotnetSubcommands.Ordered would make the expectation move in lockstep
-        // with the source and the test could never fail. Adding a subcommand means editing this by
-        // hand. This one is worth pinning separately from the prose forms because it is Claude
-        // Code's *skill-trigger* text: if it omits a subcommand, the skill silently never surfaces
-        // for that intent, and nothing inside dtk can observe that.
+        // Pinned to the literal bytes: the description is the skill's trigger, and since the agent rules reach every
+        // agent at its start, it triggers on what they leave out rather than on every dotnet command. A single-quoted
+        // YAML value, so it holds no apostrophe.
         const string expectedDescription =
-            "Use `dtk` (DotnetTokenKiller) instead of raw `dotnet` commands to reduce token usage "
-            + "when running `dotnet` build, test, restore, clean, format, list package, publish, pack, tool restore, "
-            + "ef migrations, ef database, stryker, and jb cleanupcode commands.";
+            "Reference for DotnetTokenKiller (dtk) options beyond plain use: keeping the raw output of a run (--tee), "
+            + "the console output of a failing test (--show-output), the tests that passed (--names), failing a run that "
+            + "matched no test (--fail-on-empty), capping output (--max-lines), the saved raw output of a run (dtk log), "
+            + "filtering saved output (dtk pipe), every warning of a build, and token savings (dtk gain).";
 
-        SharedInstructionArtifacts.SkillMarkdown.Should().Contain(
-            $"description: '{expectedDescription}'",
-            "the skill's frontmatter description is what Claude Code matches user intent against, so "
-            + "a subcommand missing from it means the skill never fires for that subcommand");
+        SharedInstructionArtifacts.SkillMarkdown.Should().Contain($"description: '{expectedDescription}'\n");
+        expectedDescription.Should().NotContain("'");
     }
 
     [Fact]
-    public void ClaudeSkill_EmbedsTheSharedUsageBody()
+    public void ClaudeSkill_EmbedsTheSharedPassthroughAndRawOutputNotes()
     {
-        // The skill used to carry its own hardcoded 'sh' example block, which omitted
-        // 'dtk dotnet list package --outdated' — so the skill named 'list package' in one sentence
-        // and then contradicted itself in its own examples. Embedding the shared body is what makes
-        // that impossible; this test is what keeps it embedded.
-        SharedInstructionArtifacts.SkillMarkdown.Should().Contain(
-            IntegrationInstructions.UsageBody,
-            "the skill must embed the shared usage body verbatim rather than restate it, or its "
-            + "examples drift from every other provider's");
+        // The skill restates nothing the shared instructions say: it embeds their passthrough and raw-output notes, so
+        // the two cannot drift, and leaves their examples and the agent rules to the instructions and the context.
+        SharedInstructionArtifacts.SkillMarkdown.Should()
+            .Contain(IntegrationInstructions.PassthroughBullets)
+            .And.Contain(IntegrationInstructions.RawOutputBullet)
+            .And.NotContain("dtk dotnet build MyProject.slnx");
+        IntegrationInstructions.UsageBody.Should()
+            .Contain(IntegrationInstructions.PassthroughBullets)
+            .And.Contain(IntegrationInstructions.OptionBullets)
+            .And.EndWith(IntegrationInstructions.RawOutputBullet);
     }
 
     [Fact]

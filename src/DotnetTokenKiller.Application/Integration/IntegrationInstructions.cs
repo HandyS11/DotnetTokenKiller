@@ -45,12 +45,60 @@ internal static class IntegrationInstructions
         """;
 
     /// <summary>
-    /// Example command block plus the notes common to every provider's dtk usage instructions: forwarding, exit
-    /// codes, passthrough, the status line, <c>dtk log</c>, <c>dtk pipe</c> and the raw-output switch. Every sentence
-    /// costs tokens on each agent session, so a note belongs here only if every harness benefits from it.
+    /// The three rules every agent working in a .NET project needs, whatever loaded it: run dtk plainly, read
+    /// <c>dtk log</c> instead of re-running, and the two switches agents reach past dtk for. They are what
+    /// <see cref="AgentRules"/> tells a Claude Code agent at its start, and they lead the usage notes every other
+    /// harness reads. Every line costs tokens at each session and subagent start.
+    /// </summary>
+    internal const string AgentRuleBullets =
+        """
+        - Run them plainly: dtk's output is already short and its last line is the verdict. Don't pipe it into `tail` or `grep`; `--max-lines N` caps it.
+        - To see more of a run, or what a cap cut, use `dtk log build` / `dtk log test` (`--full` for all) instead of running it again.
+        - `dtk dotnet test --names` lists the tests that passed; `DTK_RAW=1` gives dotnet's own output.
+        """;
+
+    /// <summary>
+    /// What <c>dtk hook claude</c> adds to a Claude Code agent's context at session and subagent start, in a .NET
+    /// project: one lead line naming dtk and its hook, then <see cref="AgentRuleBullets"/>. Four lines, on purpose.
+    /// </summary>
+    internal const string AgentRules =
+        $"""
+        dtk (DotnetTokenKiller) filters this project's dotnet commands; a hook runs `dotnet build|test|…` through it.
+        {AgentRuleBullets}
+        """;
+
+    /// <summary>
+    /// How dtk hands commands and their results through: arguments, exit codes, and what it does not filter. Part of
+    /// <see cref="UsageBody"/>, and embedded as is by the skill, so the two never drift.
+    /// </summary>
+    internal const string PassthroughBullets =
+        """
+        - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
+        - Exit codes are preserved.
+        - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
+        """;
+
+    /// <summary>dtk's own options, in one line each: <c>dtk pipe</c> and <c>-q</c>, then the evidence and test options.</summary>
+    internal const string OptionBullets =
+        """
+        - `dtk pipe <subcommand>` filters stdin. `-q` (dotnet subcommands) prints only the filtered output.
+        - `--tee <file>` keeps raw output as evidence; for test: `--show-output`, `--fail-on-empty`.
+        """;
+
+    /// <summary>How to get dotnet's own output, past dtk or past a hook. Embedded as is by the skill.</summary>
+    internal const string RawOutputBullet =
+        """
+        - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
+        """;
+
+    /// <summary>
+    /// Example command block plus the notes common to every provider's dtk usage instructions: the
+    /// <see cref="AgentRuleBullets"/> first, then forwarding, exit codes, passthrough, <c>dtk pipe</c>, dtk's own options
+    /// and the raw-output switch. Every sentence costs tokens on each agent session, so a note belongs here only if
+    /// every harness benefits from it.
     /// </summary>
     internal const string UsageBody =
-        """
+        $"""
         ```sh
         dtk dotnet build MyProject.slnx
         dtk dotnet test --filter "Category=Unit"
@@ -67,14 +115,10 @@ internal static class IntegrationInstructions
         dtk dotnet jb cleanupcode <solution>
         ```
 
-        - Arguments and flags are forwarded unchanged; `dtk test`, `dtk build` etc. work without `dotnet`.
-        - Exit codes are preserved.
-        - Unknown subcommands (e.g. `run`, `watch`) and `--format json`/`-getProperty:` output pass through unchanged.
-        - Don't pipe dtk output into tail or grep: its last line is the status.
-        - `dtk log [build|test]` prints the latest run's raw output instead of re-running: last 100 lines, `--full` for all, `--list`.
-        - `dtk pipe <subcommand>` filters stdin. `-q` (dotnet subcommands) prints only the filtered output.
-        - `--tee <file>` keeps raw output as evidence; `--max-lines N`; for test: `--names`, `--show-output`, `--fail-on-empty`.
-        - Raw output: `DTK_RAW=1` (environment or prefix); a hook that rewrites plain `dotnet …` skips `\dotnet …`, `command dotnet …` and `rtk proxy dotnet …`.
+        {AgentRuleBullets}
+        {PassthroughBullets}
+        {OptionBullets}
+        {RawOutputBullet}
         """;
 
     /// <summary>
@@ -98,7 +142,7 @@ internal static class IntegrationInstructions
     /// Each hash is the lowercase hex SHA-256 of the file's UTF-8 bytes with <c>\n</c> line endings, as
     /// <see cref="UninstallHelpers.RemoveOwnedFileAsync"/> computes it. They were taken from the files each released
     /// package from NuGet writes (<c>dtk integrate cursor</c>, <c>dtk init cursor</c>); the body changed in 0.4.0, 0.7.0,
-    /// 0.9.0 and 0.10.0, and 0.1.0 and 0.2.0 had no Cursor integration.
+    /// 0.9.0, 0.10.0 and 0.11.0, and 0.1.0 and 0.2.0 had no Cursor integration.
     /// </para>
     /// <para>
     /// <b>Any change to the text a Cursor rule renders</b> — <see cref="Intro"/>, <see cref="UsageBody"/>,
@@ -114,7 +158,8 @@ internal static class IntegrationInstructions
         "3002e61a693f4ab92e7938cb34ea27cb3b9d40387e1e66658ad4b670ea6313b0", // 0.4.0–0.6.0
         "735f10527ecc916333caa23a70a156ecb577b85587fc403d38ad0a18b91ecb69", // 0.7.0–0.8.0
         "90fe9cc216b6d130483a2e6cb1cdd0c2f56e3e903aa9e4db8a7d90fb2ac50c2f", // 0.9.0
-        "7c369fc9f3989aea48fce6aa9e723267b637808f0844628c3c93089f134a0c7c" // 0.10.0
+        "7c369fc9f3989aea48fce6aa9e723267b637808f0844628c3c93089f134a0c7c", // 0.10.0
+        "babe8c7a7239929c71117d6e714cb13bdfb2dc5ea1c0a6e1d7f416e1532953d8" // 0.11.0–0.12.0
     ];
 
     /// <summary>
@@ -131,7 +176,8 @@ internal static class IntegrationInstructions
         "ca57ccc020e44aea0ef2d65ef268c65622ae9d00402124e75bd5e44ef515a28b", // 0.4.0–0.6.0
         "f4324d4ef087a70168f045c27cbba4885da3d9e06c8ea9d9f723210cd7e757b9", // 0.7.0–0.8.0
         "259680360aae93a3a7aecfd6b079e523175ab967886cf995d6f4446c4ae9be0d", // 0.9.0
-        "9a4f734ee4318b9b203a5d87532a4fc6c25ce465a8b62fe842f428f3baca54b8" // 0.10.0
+        "9a4f734ee4318b9b203a5d87532a4fc6c25ce465a8b62fe842f428f3baca54b8", // 0.10.0
+        "2b666a47044daff019ab67108ae63ee19e8f22085f0af8144a94fbd1b6ba6180" // 0.11.0–0.12.0
     ];
 
     /// <summary>Joins names into an Oxford-comma prose list, e.g. <c>build, test, and format</c>.</summary>

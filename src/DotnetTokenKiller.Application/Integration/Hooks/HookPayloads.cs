@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -10,7 +11,7 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// never block the tool call. This also covers a payload with a duplicate JSON object key: <see cref="JsonNode"/>
 /// builds a <see cref="JsonObject"/>'s property dictionary lazily, so parsing such a payload succeeds and the
 /// <see cref="ArgumentException"/> only surfaces the first time something here indexes into the duplicated
-/// object — <see cref="Reply"/> guards the per-provider dispatch, not just the initial parse, so that still
+/// object — <see cref="Reply(HookPayloadKind, ReadOnlySpan{byte}, string)"/> guards the per-provider dispatch, not just the initial parse, so that still
 /// yields the provider's no-rewrite result instead of an unhandled exception.
 /// </remarks>
 internal static class HookPayloads
@@ -48,6 +49,16 @@ internal static class HookPayloads
     /// </summary>
     internal const string CursorNeutralReply = "{}";
 
+    /// <summary>
+    /// The reply to Cursor's <c>subagentStart</c> when it runs dtk's Claude Code hook: a permission hook, which blocks
+    /// the subagent on output outside its schema, and whose schema requires <c>permission</c>. <c>allow</c> only lets
+    /// the subagent start, as it would without the hook.
+    /// </summary>
+    internal const string CursorSubagentStartReply = """{"permission":"allow"}""";
+
+    /// <summary>The payload property Cursor stamps on every hook input, and Claude Code never sends.</summary>
+    private const string CursorVersionProperty = "cursor_version";
+
     /// <summary>Cursor's shell tool.</summary>
     private const string CursorShellTool = "Shell";
 
@@ -68,6 +79,28 @@ internal static class HookPayloads
 
     /// <summary>The tool input property holding the shell command.</summary>
     private const string CommandProperty = "command";
+
+    /// <summary>The reply property holding a Claude-shaped hook's event-specific output.</summary>
+    private const string HookSpecificOutputProperty = "hookSpecificOutput";
+
+    /// <summary>The property of <see cref="HookSpecificOutputProperty"/> naming the event it answers.</summary>
+    private const string HookEventNameOutputProperty = "hookEventName";
+
+    /// <summary>The payload property naming the hook event in Claude Code's payloads.</summary>
+    private const string HookEventNameProperty = "hook_event_name";
+
+    /// <summary>Claude Code's event at the start of a session (startup, clear, compact).</summary>
+    private const string SessionStartEvent = "SessionStart";
+
+    /// <summary>Claude Code's event at the start of each subagent.</summary>
+    private const string SubagentStartEvent = "SubagentStart";
+
+    /// <summary>
+    /// The built-in Claude Code subagents that have no shell tool, which dtk's rules would only cost tokens. A custom
+    /// or plugin agent without one still gets them: the payload names the agent, not its tools.
+    /// </summary>
+    internal static readonly FrozenSet<string> AgentTypesWithoutShell =
+        new[] { "web-fetch", "statusline-setup" }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The decision value a reply uses to accept the rewritten command. Whether it also skips the harness's own
@@ -108,7 +141,18 @@ internal static class HookPayloads
     /// <param name="kind">The harness that sent the payload.</param>
     /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
     /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
-    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload)
+    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload) =>
+        Reply(kind, payload, claudeProjectDirectory: null);
+
+    /// <summary>Builds the reply for one payload, knowing the project Claude Code runs the hook for.</summary>
+    /// <param name="kind">The harness that sent the payload.</param>
+    /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
+    /// <param name="claudeProjectDirectory">
+    /// Claude Code's <c>CLAUDE_PROJECT_DIR</c>, which it sets for every hook command, or <see langword="null"/>: a
+    /// project whose <c>.claude/settings.json</c> registers dtk's hook gets dtk's rules wherever its projects lie.
+    /// </param>
+    /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
+    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory)
     {
         if (payload.StartsWith("\uFEFF"u8))
         {
@@ -129,7 +173,7 @@ internal static class HookPayloads
         {
             return kind switch
             {
-                HookPayloadKind.ClaudeCode => ReplyWithUpdatedInput(root, expectedTool: null),
+                HookPayloadKind.ClaudeCode => ReplyToClaude(root, claudeProjectDirectory),
                 HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool),
                 HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool),
                 HookPayloadKind.Cursor => ReplyToCursor(root),
@@ -158,6 +202,87 @@ internal static class HookPayloads
     }
 
     /// <summary>
+    /// Replies to Claude Code: dtk's rules for <c>SessionStart</c> and <c>SubagentStart</c>
+    /// (<see cref="ReplyWithContext"/>), and today's rewrite for every other payload — <c>PreToolUse</c>, a payload with
+    /// no event name (doctor's probe), or another harness's own event name (Cursor and Devin run Claude Code's hooks).
+    /// Cursor's own session and subagent start events, recognised by <c>cursor_version</c>, get a reply in Cursor's
+    /// schema instead (<see cref="CursorSubagentStartReply"/>, <see cref="CursorNeutralReply"/>): its
+    /// <c>subagentStart</c> blocks the subagent on any other output. Cursor reads its own dtk rule file.
+    /// </summary>
+    /// <param name="root">The parsed payload.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
+    private static string? ReplyToClaude(JsonNode? root, string? claudeProjectDirectory)
+    {
+        if (root is JsonObject payload
+            && payload[HookEventNameProperty] is JsonValue eventValue
+            && eventValue.TryGetValue<string>(out var eventName))
+        {
+            if (payload.ContainsKey(CursorVersionProperty) && IsContextEvent(eventName, StringComparison.OrdinalIgnoreCase))
+            {
+                return string.Equals(eventName, SubagentStartEvent, StringComparison.OrdinalIgnoreCase)
+                    ? CursorSubagentStartReply
+                    : CursorNeutralReply;
+            }
+
+            if (IsContextEvent(eventName, StringComparison.Ordinal))
+            {
+                return ReplyWithContext(payload, eventName, claudeProjectDirectory);
+            }
+        }
+
+        return ReplyWithUpdatedInput(root, expectedTool: null);
+    }
+
+    /// <summary>Whether <paramref name="eventName"/> is <c>SessionStart</c> or <c>SubagentStart</c>.</summary>
+    /// <param name="eventName">The payload's event name.</param>
+    /// <param name="comparison">Ordinal for Claude Code's names; ignoring case for Cursor's camelCase ones.</param>
+    private static bool IsContextEvent(string eventName, StringComparison comparison) =>
+        string.Equals(eventName, SessionStartEvent, comparison) || string.Equals(eventName, SubagentStartEvent, comparison);
+
+    /// <summary>
+    /// <see cref="IntegrationInstructions.AgentRules"/> as the context Claude Code adds before the agent's first prompt,
+    /// when the agent is not one of <see cref="AgentTypesWithoutShell"/> and either the payload's <c>cwd</c> is in a
+    /// .NET project (<see cref="DotnetProjectDetector"/>) or the project Claude Code runs in registers dtk's hook in its
+    /// own <c>.claude/settings.json</c> — a project-scope <c>dtk init claude</c>, which says it is .NET work even where
+    /// its projects lie deeper than the detector reads. Nothing otherwise.
+    /// </summary>
+    /// <param name="payload">The parsed payload.</param>
+    /// <param name="eventName">Either <see cref="SessionStartEvent"/> or <see cref="SubagentStartEvent"/>.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
+    private static string? ReplyWithContext(JsonObject payload, string eventName, string? claudeProjectDirectory)
+    {
+        if (eventName == SubagentStartEvent
+            && payload["agent_type"] is JsonValue agentValue
+            && agentValue.TryGetValue<string>(out var agentType)
+            && AgentTypesWithoutShell.Contains(agentType))
+        {
+            return null;
+        }
+
+        var cwd = payload["cwd"] is JsonValue cwdValue && cwdValue.TryGetValue<string>(out var directory) ? directory : null;
+        if (!DotnetProjectDetector.IsDotnetProject(cwd) && !RegistersDtkForTheProject(claudeProjectDirectory))
+        {
+            return null;
+        }
+
+        return new JsonObject
+        {
+            [HookSpecificOutputProperty] = new JsonObject
+            {
+                [HookEventNameOutputProperty] = eventName,
+                ["additionalContext"] = IntegrationInstructions.AgentRules
+            }
+        }.ToJsonString();
+    }
+
+    /// <summary>Whether a project's own <c>.claude/settings.json</c> runs <c>dtk hook claude</c>.</summary>
+    /// <param name="projectDirectory">Claude Code's project directory, when known.</param>
+    private static bool RegistersDtkForTheProject(string? projectDirectory) =>
+        !string.IsNullOrEmpty(projectDirectory)
+        && Path.IsPathFullyQualified(projectDirectory)
+        && ImportedClaudeHook.IsRegisteredIn([Path.Combine(projectDirectory, ".claude", "settings.json")]);
+
+    /// <summary>
     /// Claude Code's reply, which Devin Local and Devin CLI share: the whole tool input with the command replaced, and
     /// no permission decision, so the harness still applies its own approval to the rewritten command.
     /// </summary>
@@ -180,9 +305,9 @@ internal static class HookPayloads
         updatedInput[CommandProperty] = rewritten;
         return new JsonObject
         {
-            ["hookSpecificOutput"] = new JsonObject
+            [HookSpecificOutputProperty] = new JsonObject
             {
-                ["hookEventName"] = "PreToolUse",
+                [HookEventNameOutputProperty] = "PreToolUse",
                 ["updatedInput"] = updatedInput
             }
         }.ToJsonString();
@@ -241,7 +366,7 @@ internal static class HookPayloads
             && payload[ToolInputProperty] is JsonObject toolInput
             && TryRewrite(toolInput, out _, out var rewritten))
         {
-            reply["hookSpecificOutput"] = new JsonObject
+            reply[HookSpecificOutputProperty] = new JsonObject
             {
                 [ToolInputProperty] = new JsonObject { [CommandProperty] = rewritten }
             };
@@ -294,9 +419,9 @@ internal static class HookPayloads
         updatedInput[CommandProperty] = rewritten;
         return new JsonObject
         {
-            ["hookSpecificOutput"] = new JsonObject
+            [HookSpecificOutputProperty] = new JsonObject
             {
-                ["hookEventName"] = "PreToolUse",
+                [HookEventNameOutputProperty] = "PreToolUse",
                 // Codex rejects updatedInput unless the reply also allows; it still applies its approval policy and
                 // sandbox to the rewritten command.
                 ["permissionDecision"] = AllowDecision,

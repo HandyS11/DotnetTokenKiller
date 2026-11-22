@@ -7,6 +7,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Every Claude Code agent in a .NET project now starts knowing dtk's rules — run it plainly, without `| tail` or
+  `| grep`; use `dtk log build`/`dtk log test` instead of running a build again; `--names`, `DTK_RAW=1` — subagents
+  included, which never loaded the skill. `dtk init claude` registers `dtk hook claude` for `SessionStart`
+  (`startup|clear|compact`) and `SubagentStart` beside `PreToolUse`, and the hook adds those four lines to the agent's
+  context only when its working directory is in a .NET project (a solution or project file, `global.json` or
+  `Directory.Build.props` in it or a parent, or a solution or project file at most two levels below; or a project whose
+  own `.claude/settings.json` registers the hook), in 10–19 ms per start with the native binary. Re-run `dtk init claude` (or `--global`) to add the two hooks to an existing install; `dtk doctor` warns until
+  then and checks that the dtk on `PATH` answers them. When Cursor runs these Claude Code hooks, it gets a reply in its
+  own schema.
+
+### Changed
+
+- The dtk section of `AGENTS.md` and `GEMINI.md`, the Copilot instructions and the Cursor, Devin and Aider rule files
+  lead with the same three rules. `dtk init <provider> --uninstall` still recognises the unedited rule files 0.11.0
+  and 0.12.0 wrote.
+- The `dotnet-token-killer` skill is now the reference for what the rules leave out, and its description triggers on
+  those options (`--tee`, `--show-output`, `--names`, `--fail-on-empty`, `--max-lines`, `dtk log`, `dtk pipe`, every
+  warning of a build, `dtk gain`) instead of on every `dotnet` command, which loaded the whole skill at the start of most
+  sessions only to repeat the rules. It explains the changed-files warning lines and drops the installation section.
+
 ### Fixed
 
 - A build, test, publish or pack run in a git work tree hid warnings the work in progress caused, counting them among
