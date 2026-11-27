@@ -184,7 +184,8 @@ public sealed partial class DotnetJbCleanupCodeFilter(string? rootPath = null) :
     private static bool IsKeptLine(string line) =>
         line.StartsWith("[MsBuild]", StringComparison.Ordinal)
         || line.StartsWith("Warning:", StringComparison.Ordinal)
-        || line.StartsWith("No items were found", StringComparison.Ordinal);
+        || line.StartsWith("No items were found", StringComparison.Ordinal)
+        || line.StartsWith("Unable to find target solution file", StringComparison.Ordinal);
 
     /// <summary>
     /// Whether a line after the header names a processed file: <c>&lt;folder&gt;\&lt;project&gt;\…</c> as jb

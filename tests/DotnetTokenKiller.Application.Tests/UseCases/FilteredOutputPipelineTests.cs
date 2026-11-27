@@ -32,7 +32,7 @@ public class FilteredOutputPipelineTests
         RunSource source = RunSource.Run,
         string command = "dotnet build",
         OutputOptions? options = null) =>
-        new(_filter, raw, exitCode, "build", command, source,
+        new(_filter, raw, exitCode, command["dotnet ".Length..], command, source,
             options ?? new OutputOptions(), Stopwatch.GetTimestamp());
 
     private static ITeeSession SessionWithHint(string hint)
@@ -165,6 +165,36 @@ public class FilteredOutputPipelineTests
         exitCode.Should().Be(expectedExitCode);
         writer.ToString().Should().Be(expectedOutput);
         await session.Received(1).FinalizeAsync(expectedExitCode, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("a\n", 1, false, "a\n✗ dotnet jb cleanupcode failed (exit 1)\n")]
+    [InlineData("a\n", 0, false, "a\n⚠ dotnet jb cleanupcode: output not recognized, raw tail shown above\n")]
+    [InlineData("", 0, false, "✓ dotnet jb cleanupcode (no output)\n")]
+    [InlineData("a\n", 1, true, "a\n✗ dotnet jb cleanupcode failed (exit 1)\n")]
+    public async Task ProcessAsync_Fallback_NamesTheSubcommandWithoutItsArguments(
+        string raw, int exitCode, bool faulted, string expected)
+    {
+        var filter = Substitute.For<IOutputFilter>();
+        if (faulted)
+        {
+            filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Throws(new InvalidOperationException("boom"));
+        }
+        else
+        {
+            filter.Apply(Arg.Any<string>(), Arg.Any<int>()).Returns(string.Empty);
+        }
+
+        await using var writer = new StringWriter();
+        var sut = new FilteredOutputPipeline(_tracker, writer, _configProvider);
+        var request = new FilteredOutputRequest(
+            filter, raw, exitCode, "jb cleanupcode",
+            "dotnet jb cleanupcode App.slnx --profile=P --include=src/a/b.cs --no-build",
+            RunSource.Run, new OutputOptions(), Stopwatch.GetTimestamp());
+
+        await sut.ProcessAsync(request, NullTeeSession.Instance);
+
+        writer.ToString().Should().Be(expected);
     }
 
     [Fact]

@@ -22,6 +22,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `--names` lists one test per line, indented under its class line (`✓ Ns.ParserTests (2):`, then `  Parses_Empty`,
   `  Parses ×4`), so `grep` finds a single test and `--max-lines` caps the list by names instead of by classes.
 
+### Fixed
+
+- A status line written when dtk cannot read a run's output (`✗ dotnet jb cleanupcode failed (exit 1)`) names the
+  subcommand only, no longer the whole command line with its profile, include path and options.
+- `dotnet jb cleanupcode` keeps ReSharper's `Unable to find target solution file in path …` line, so a solution path
+  that is wrong for the working directory is reported instead of falling back to the raw tail.
+
 ## [0.13.0] - 2026-11-22
 
 ### Added

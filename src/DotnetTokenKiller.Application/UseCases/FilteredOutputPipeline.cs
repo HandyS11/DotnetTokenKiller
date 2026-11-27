@@ -127,12 +127,12 @@ public sealed class FilteredOutputPipeline(
         RunOutcome outcome;
         if (filterFaulted)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false, unconfirmed);
+            filtered = BuildFallback($"dotnet {request.CommandSlug}", exitCode, stripped, tailOnly: false, unconfirmed);
             outcome = RunOutcome.FilterFaulted;
         }
         else if (fallback)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true, unconfirmed);
+            filtered = BuildFallback($"dotnet {request.CommandSlug}", exitCode, stripped, tailOnly: true, unconfirmed);
             outcome = RunOutcome.RawTailFallback;
         }
         else

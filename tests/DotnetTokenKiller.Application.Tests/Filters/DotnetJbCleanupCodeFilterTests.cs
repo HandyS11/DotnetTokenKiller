@@ -157,6 +157,17 @@ public sealed class DotnetJbCleanupCodeFilterTests : IDisposable
     }
 
     [Fact]
+    public void Apply_SolutionNotFound_KeepsReSharpersMessage()
+    {
+        var result = _sut.Apply(
+            "Unable to find target solution file in path /repo/sub/App.slnx\n", 1, FilterContext.Unknown).Output;
+
+        result.Should().Be(
+            "Unable to find target solution file in path /repo/sub/App.slnx\n" +
+            "✗ dotnet jb cleanupcode failed (exit 1)\n");
+    }
+
+    [Fact]
     public void Apply_UnknownFailure_LeavesTheRawTailToThePipeline()
     {
         // Nothing the filter recognises: an empty result makes the pipeline show the raw tail above its status line.
