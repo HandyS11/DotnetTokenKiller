@@ -2641,8 +2641,12 @@ public class DotnetTestFilterTests
             "  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]\n" +
             "    Intentional failure\n" +
             "    at SampleApp.Tests/IntentionallyFailingTests.cs:line 8\n" +
-            "✓ SampleApp.Tests.ParserTests (1): Parses ×4\n" +
-            "✓ SampleApp.Tests.SampleTests (3): String_IsNotEmpty, List_ContainsExpectedItems, Addition_ReturnsCorrectResult\n" +
+            "✓ SampleApp.Tests.ParserTests (1):\n" +
+            "  Parses ×4\n" +
+            "✓ SampleApp.Tests.SampleTests (3):\n" +
+            "  String_IsNotEmpty\n" +
+            "  List_ContainsExpectedItems\n" +
+            "  Addition_ReturnsCorrectResult\n" +
             "✗ dotnet test: 1 failed, 7 passed (1 project, 0.50s)\n");
     }
 
@@ -2655,7 +2659,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
 
-        result.Should().Contain("✓ SampleApp.Tests.ParserTests (1): Parses ×4\n")
+        result.Should().Contain("✓ SampleApp.Tests.ParserTests (1):\n  Parses ×4\n")
             .And.NotContain("a.b/c").And.NotContain("1.5");
     }
 
@@ -2667,11 +2671,11 @@ public class DotnetTestFilterTests
         var fail = LoadFixture("dotnet_test_mtp_detailed_fail.txt");
 
         _sut.Apply(pass, exitCode: 0, Names).Output.Should().Be(
-            "✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n" +
+            "✓ Alpha.Tests.dll (5):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n  Joins\n" +
             "✓ dotnet test: 7 passed (1 project, 0.31s)\n");
         _sut.Apply(fail, exitCode: 2, Names).Output.Should().EndWith(
             "    at Alpha.Tests/CalculatorTests.cs:line 22\n" +
-            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Joins\n" +
+            "✓ Alpha.Tests.dll (4):\n  Adds\n  Subtracts\n  Parses ×3\n  Joins\n" +
             "✗ dotnet test: 1 failed, 6 passed (1 project, 0.32s)\n");
     }
 
@@ -2684,8 +2688,8 @@ public class DotnetTestFilterTests
 
         result.Should().EndWith(
             "    at Beta.Tests/Tests.cs:line 15\n" +
-            "✓ Beta.Tests.ParserTests (1): Parses ×4\n" +
-            "✓ Beta.Tests.CalculatorTests (2): Subtracts, Adds\n" +
+            "✓ Beta.Tests.ParserTests (1):\n  Parses ×4\n" +
+            "✓ Beta.Tests.CalculatorTests (2):\n  Subtracts\n  Adds\n" +
             "✗ dotnet test: 1 failed, 6 passed (1 project, 0.47s)\n");
     }
 
@@ -2743,8 +2747,8 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(twoApps, exitCode: 0, Names).Output;
 
         result.Should().StartWith(
-            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Divides\n" +
-            "✓ Beta.Tests.dll (1): Joins\n");
+            "✓ Alpha.Tests.dll (4):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n" +
+            "✓ Beta.Tests.dll (1):\n  Joins\n");
     }
 
     [Fact]
@@ -2757,8 +2761,8 @@ public class DotnetTestFilterTests
         var two = _sut.Apply(noFrom.Replace("Running tests from", "Running tests from /x/Other.dll (net10.0|x64)\nRunning tests from",
             StringComparison.Ordinal), exitCode: 0, Names).Output;
 
-        single.Should().StartWith("✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
-        two.Should().StartWith("✓ (unknown class) (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
+        single.Should().StartWith("✓ Alpha.Tests.dll (5):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n  Joins\n");
+        two.Should().StartWith("✓ (unknown class) (5):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n  Joins\n");
     }
 
     [Fact]
@@ -2771,8 +2775,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
 
         result.Should().EndWith(
-            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
-            "Add_Returns_Sum ×3\n" +
+            "✓ SampleApp.Tests.MSTest.dll (3):\n  Addition_Returns_Correct_Result\n  String_StartsWith_Expected_Prefix\n  Add_Returns_Sum ×3\n" +
             "✗ dotnet test: 3 failed, 5 passed (1 project, 0.42s)\n").And.NotContain("(unknown class)");
     }
 
@@ -2790,8 +2793,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(twoRuns, exitCode: 1, Names).Output;
 
         result.Should().Contain(
-            "✓ (unknown class) (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
-            "Add_Returns_Sum ×3\n");
+            "✓ (unknown class) (3):\n  Addition_Returns_Correct_Result\n  String_StartsWith_Expected_Prefix\n  Add_Returns_Sum ×3\n");
     }
 
     [Fact]
@@ -2810,8 +2812,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(cut, exitCode: 1, Names).Output;
 
         result.Should().Contain(
-            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
-            "Add_Returns_Sum ×3\n");
+            "✓ SampleApp.Tests.MSTest.dll (3):\n  Addition_Returns_Correct_Result\n  String_StartsWith_Expected_Prefix\n  Add_Returns_Sum ×3\n");
     }
 
     [Theory]

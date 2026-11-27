@@ -5,7 +5,8 @@ namespace DotnetTokenKiller.Application.Filters;
 
 /// <summary>
 /// The passed tests a <c>dotnet test</c> run named, grouped by class for <c>--names</c>: one line per class, in order
-/// of first appearance, listing its methods in the same order, <c>✓ Ns.ParserTests (2): Parses_Empty, Parses ×4</c>.
+/// of first appearance, then one line per method under it, indented two spaces and in the same order:
+/// <c>✓ Ns.ParserTests (2):</c>, <c>  Parses_Empty</c>, <c>  Parses ×4</c>.
 /// The count is the number of methods listed; a method that passed more than once (a theory's data rows, a test
 /// run for several target frameworks) shows how many times with <c>×N</c>.
 /// </summary>
@@ -46,8 +47,11 @@ internal sealed class PassedTestNames
         var sb = new StringBuilder();
         foreach (var group in _groups)
         {
-            var methods = string.Join(", ", group.Methods.Select(group.Describe));
-            sb.Append(CultureInfo.InvariantCulture, $"\u2713 {group.Name} ({group.Methods.Count}): {methods}\n");
+            sb.Append(CultureInfo.InvariantCulture, $"\u2713 {group.Name} ({group.Methods.Count}):\n");
+            foreach (var method in group.Methods)
+            {
+                sb.Append("  ").Append(group.Describe(method)).Append('\n');
+            }
         }
 
         return sb.ToString();

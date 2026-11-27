@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   A.T1, A.T2, A.T3 +37 more`, largest group first, so the 15-entry limit goes to failures that differ instead of to
   copies of one exception. Under `--show-output` they must also share their output. `+N more failures` counts the
   tests the entries shown do not cover.
+- `--names` lists one test per line, indented under its class line (`✓ Ns.ParserTests (2):`, then `  Parses_Empty`,
+  `  Parses ×4`), so `grep` finds a single test and `--max-lines` caps the list by names instead of by classes.
 
 ## [0.13.0] - 2026-11-22
 
