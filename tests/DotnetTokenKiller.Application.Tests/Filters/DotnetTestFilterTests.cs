@@ -2941,15 +2941,124 @@ public class DotnetTestFilterTests
         _sut.Apply("some unrelated output\n", exitCode: 1).Should().BeEmpty();
     }
 
+    [Fact]
+    public void Apply_IdenticalFailures_AreGroupedWithTheirCountAndFirstNames()
+    {
+        var input = string.Concat(Enumerable.Range(1, 5).Select(i => VsTestFailure($"MyTests.T{i}", "boom")))
+                    + SummaryLine(5);
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be("FAILURES (5):\n  5 failed the same way: MyTests.T1, MyTests.T2, MyTests.T3 +2 more\n"
+                           + "    boom\n    at ../../../path/Test.cs:line 1\n"
+                           + "✗ dotnet test: 5 failed, 0 passed (1 project, 0.01s)\n");
+    }
+
+    [Fact]
+    public void Apply_LargestGroupComesFirst_ThenSinglesInOrder()
+    {
+        var input = VsTestFailure("MyTests.S1", "a") + VsTestFailure("MyTests.G1", "b")
+                    + VsTestFailure("MyTests.G2", "b") + VsTestFailure("MyTests.G3", "b")
+                    + VsTestFailure("MyTests.S2", "c") + SummaryLine(5);
+
+        var lines = _sut.Apply(input, exitCode: 1).Split('\n');
+
+        lines[1].Should().Be("  3 failed the same way: MyTests.G1, MyTests.G2, MyTests.G3");
+        lines[2].Should().Be("    b");
+        lines.Where(l => l.StartsWith("  MyTests.", StringComparison.Ordinal)).Should()
+            .Equal("  MyTests.S1 [1 ms]", "  MyTests.S2 [1 ms]");
+    }
+
+    [Theory]
+    [InlineData("boom", 1, "bang", 1)]
+    [InlineData("boom", 1, "boom", 2)]
+    public void Apply_FailuresDifferingInMessageOrLocation_StayApart(string messageA, int lineA, string messageB,
+        int lineB)
+    {
+        var input = VsTestFailure("MyTests.A", messageA, lineA) + VsTestFailure("MyTests.B", messageB, lineB)
+                    + SummaryLine(2);
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().NotContain("failed the same way").And.Contain("  MyTests.A [1 ms]")
+            .And.Contain("  MyTests.B [1 ms]");
+    }
+
+    [Fact]
+    public void Apply_ManyGroups_PlusMoreCountsTheTestsNotShown()
+    {
+        var input = string.Concat(Enumerable.Range(1, 16).SelectMany(g => new[]
+            {
+                VsTestFailure($"MyTests.G{g}A", $"message {g}"), VsTestFailure($"MyTests.G{g}B", $"message {g}")
+            }))
+            + SummaryLine(32);
+
+        var lines = _sut.Apply(input, exitCode: 1).Split('\n');
+
+        lines.Count(l => l.Contains("failed the same way", StringComparison.Ordinal)).Should().Be(15);
+        lines.Should().Contain("+2 more failures");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_GroupsOnlyIdenticalOutputs()
+    {
+        var input = VsTestFailure("MyTests.A", "boom", output: "same") + VsTestFailure("MyTests.B", "boom", output: "same")
+                    + VsTestFailure("MyTests.C", "boom", output: "other") + SummaryLine(3);
+
+        var shown = _sut.Apply(input, exitCode: 1, ShowOutput).Output;
+        var plain = _sut.Apply(input, exitCode: 1);
+
+        shown.Should().Contain("  2 failed the same way: MyTests.A, MyTests.B\n    boom\n")
+            .And.Contain("    output:\n      same\n").And.Contain("  MyTests.C [1 ms]");
+        plain.Should().Contain("  3 failed the same way: MyTests.A, MyTests.B, MyTests.C");
+    }
+
+    [Fact]
+    public void Apply_SameTestFailingTwice_IsNamedOnceWithItsCount()
+    {
+        var input = VsTestFailure("MyTests.T1", "boom") + VsTestFailure("MyTests.T1", "boom") + SummaryLine(2);
+
+        _sut.Apply(input, exitCode: 1).Should().Contain("  2 failed the same way: MyTests.T1 ×2\n");
+    }
+
+    [Fact]
+    public void Apply_IdenticalFailuresWithCrlf_AreGrouped()
+    {
+        var input = VsTestFailure("MyTests.T1", "boom") + VsTestFailure("MyTests.T2", "boom") + SummaryLine(2);
+
+        var result = _sut.Apply(input.ReplaceLineEndings("\r\n"), exitCode: 1);
+
+        result.Should().NotContain("\r").And.Be(_sut.Apply(input, exitCode: 1))
+            .And.Contain("  2 failed the same way: MyTests.T1, MyTests.T2\n");
+    }
+
+    [Fact]
+    public Task Apply_IdenticalFailuresFixture_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_identical_failures.txt");
+        var result = _sut.Apply(fixture, exitCode: 1);
+        return Verify(result);
+    }
+
+    private static string VsTestFailure(string name, string message, int line = 1, string? output = null) =>
+        $"  Failed {name} [1 ms]\n  Error Message:\n   {message}\n  Stack Trace:\n"
+        + $"     at {name}() in /path/Test.cs:line {line}\n"
+        + (output is null ? string.Empty : $"  Standard Output Messages:\n {output}\n")
+        + "\n";
+
+    private static string SummaryLine(int failed) =>
+        $"Failed!  - Failed: {failed}, Passed: 0, Skipped: 0, Total: {failed}, Duration: 10 ms - Tests.dll\n";
+
     /// <summary>
     /// A VSTest run of <paramref name="count"/> failures, each <paramref name="block"/> (one failure's lines) with
-    /// its test's name numbered.
+    /// its test's name and source line numbered, so that no two of them share a location and group.
     /// </summary>
     /// <param name="block">One failure's lines.</param>
     /// <param name="count">How many failures.</param>
     private static string ManyFailures(string block, int count) =>
         string.Concat(Enumerable.Range(1, count).Select(i => block.Replace("Failed MyTests.", $"Failed MyTests{i}.",
-            StringComparison.Ordinal).Replace("Failed XN.", $"Failed XN{i}.", StringComparison.Ordinal) + "\n"))
+            StringComparison.Ordinal).Replace("Failed XN.", $"Failed XN{i}.", StringComparison.Ordinal)
+            .Replace(":line ", $":line {i}", StringComparison.Ordinal) + "\n"))
         + $"\nFailed!  - Failed: {count}, Passed: 0, Skipped: 0, Total: {count}, Duration: 1 ms - Tests.dll\n";
 
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>

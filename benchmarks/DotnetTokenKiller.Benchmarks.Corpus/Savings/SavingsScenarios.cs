@@ -73,6 +73,7 @@ public static class SavingsScenarios
         new("test/failure-mentions-diagnostic", "dotnet_test_failure_mentions_diagnostic.txt", FilterKeys.Test, 1),
         new("test/failures", "dotnet_test_failures.txt", FilterKeys.Test, 1),
         new("test/failures-with-warnings", "dotnet_test_failures_with_warnings.txt", FilterKeys.Test, 1),
+        new("test/identical-failures", "dotnet_test_identical_failures.txt", FilterKeys.Test, 1),
         new("test/list-tests", "dotnet_test_list_tests.txt", FilterKeys.Test, 0),
         new("test/list-tests-filtered", "dotnet_test_list_tests_filtered.txt", FilterKeys.Test, 0),
         new("test/list-tests-single", "dotnet_test_list_tests_single.txt", FilterKeys.Test, 0),

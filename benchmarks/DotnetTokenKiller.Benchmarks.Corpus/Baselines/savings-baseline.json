@@ -531,6 +531,17 @@
       "savingsPercent": 77
     },
     {
+      "id": "test/identical-failures",
+      "fixture": "dotnet_test_identical_failures.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 51956,
+      "rawTokens": 10433,
+      "filteredTokens": 312,
+      "savedTokens": 10121,
+      "savingsPercent": 97
+    },
+    {
       "id": "test/list-tests",
       "fixture": "dotnet_test_list_tests.txt",
       "filterKey": "test",
