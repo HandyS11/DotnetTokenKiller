@@ -25,7 +25,38 @@ internal sealed class ProcessRtkRewriter(Func<string?> locateRtk, TimeSpan timeo
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (_rtkPath.Value is not { } rtkPath)
+        try
+        {
+            return Ask(command);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null; // the locator threw, rtk is not executable, crashed: the hook carries on without an answer
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="rtkPath"/> may be started without a shell re-parsing the command. On Windows
+    /// <c>CreateProcess</c> runs a <c>.cmd</c> or <c>.bat</c> through <c>cmd.exe /c</c>, which expands <c>%VAR%</c>
+    /// and lets a quote in the agent's command make <c>&amp;</c> or <c>|</c> live, so only a real executable is started.
+    /// </summary>
+    /// <param name="rtkPath">The path the locator found.</param>
+    /// <param name="isWindows">Whether the platform is Windows.</param>
+    internal static bool CanStartWithoutShell(string rtkPath, bool isWindows)
+    {
+        if (!isWindows)
+        {
+            return true;
+        }
+
+        var extension = Path.GetExtension(rtkPath);
+        return extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".com", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private RtkRewrite? Ask(string command)
+    {
+        if (_rtkPath.Value is not { } rtkPath || !CanStartWithoutShell(rtkPath, OperatingSystem.IsWindows()))
         {
             return null;
         }
@@ -45,37 +76,30 @@ internal sealed class ProcessRtkRewriter(Func<string?> locateRtk, TimeSpan timeo
         startInfo.ArgumentList.Add("rewrite");
         startInfo.ArgumentList.Add(command);
 
-        try
-        {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                return null;
-            }
-
-            process.StandardInput.Close();
-            var output = process.StandardOutput.ReadToEndAsync();
-            var error = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(timeout))
-            {
-                Kill(process);
-                return null;
-            }
-
-            // The hook path is synchronous (no async entry point to await from), and both reads are bounded.
-#pragma warning disable VSTHRD002
-            if (!Task.WhenAll(output, error).Wait(DrainGracePeriod))
-            {
-                return null;
-            }
-
-            return new RtkRewrite(process.ExitCode, TrimOneNewline(output.Result));
-#pragma warning restore VSTHRD002
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or AggregateException)
+        using var process = Process.Start(startInfo);
+        if (process is null)
         {
             return null;
         }
+
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(timeout))
+        {
+            Kill(process);
+            return null;
+        }
+
+        // The hook path is synchronous (no async entry point to await from), and both reads are bounded.
+#pragma warning disable VSTHRD002
+        if (!Task.WhenAll(output, error).Wait(DrainGracePeriod))
+        {
+            return null;
+        }
+
+        return new RtkRewrite(process.ExitCode, TrimOneNewline(output.Result));
+#pragma warning restore VSTHRD002
     }
 
     private static string TrimOneNewline(string text)

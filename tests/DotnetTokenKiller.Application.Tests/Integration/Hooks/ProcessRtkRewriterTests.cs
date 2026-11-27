@@ -91,6 +91,35 @@ public sealed class ProcessRtkRewriterTests : IDisposable
         calls.Should().Be(1);
     }
 
+    [Fact]
+    public void Rewrite_LocatorThrows_ReturnsNull()
+    {
+        var rewriter = new ProcessRtkRewriter(() => throw new InvalidOperationException("boom"),
+            ProcessRtkRewriter.DefaultTimeout);
+
+        rewriter.Rewrite("git status").Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(@"C:\tools\rtk.cmd", false)]
+    [InlineData(@"C:\tools\rtk.BAT", false)]
+    [InlineData(@"C:\tools\rtk", false)]
+    [InlineData(@"C:\tools\rtk.exe", true)]
+    [InlineData(@"C:\tools\RTK.EXE", true)]
+    [InlineData(@"C:\tools\rtk.com", true)]
+    public void CanStartWithoutShell_OnWindows_AllowsOnlyExeAndCom(string path, bool expected)
+    {
+        ProcessRtkRewriter.CanStartWithoutShell(path, isWindows: true).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/rtk")]
+    [InlineData("/opt/rtk.cmd")]
+    public void CanStartWithoutShell_OffWindows_AllowsAnyPath(string path)
+    {
+        ProcessRtkRewriter.CanStartWithoutShell(path, isWindows: false).Should().BeTrue();
+    }
+
     private ProcessRtkRewriter Rewriter(string body)
     {
         var path = Script(body);
