@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Cli.IntegrationTests.Helpers;
 using FluentAssertions;
 using Xunit;
@@ -18,6 +19,59 @@ public class HookIntegrationTests
         stderr.Should().BeEmpty();
         JsonNode.Parse(stdout)!["hookSpecificOutput"]!["updatedInput"]!["command"]!.GetValue<string>()
             .Should().Be("dtk dotnet build # répertoire", "stdin must be decoded as UTF-8 whatever the console code page");
+    }
+
+    [UnixFact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]
+    public async Task Hook_Claude_CommandBothRewrite_IsRefusedAsync()
+    {
+        // rtk's hook registered in the user's settings, and an rtk on PATH that rewrites git as rtk does: a shell
+        // script, hence Unix only. It prefixes git (exit 3, rtk's "ask") and leaves a prefixed command alone (exit 1).
+        var dir = IntegrationTestHelper.NewIsolatedDir();
+        var home = Path.Combine(dir, "home");
+        var bin = Path.Combine(dir, "bin");
+        var project = Path.Combine(dir, "project");
+        Directory.CreateDirectory(Path.Combine(home, ".claude"));
+        Directory.CreateDirectory(bin);
+        Directory.CreateDirectory(project);
+        await File.WriteAllTextAsync(Path.Combine(home, ".claude", "settings.json"),
+            """{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"rtk hook claude"}]}]}}""");
+        var rtk = Path.Combine(bin, "rtk");
+        await File.WriteAllTextAsync(rtk, """
+            #!/bin/sh
+            [ "$1" = rewrite ] || exit 1
+            case "$2" in
+              *"rtk git"*) exit 1 ;;
+              *git*) printf '%s\n' "$2" | sed 's/git/rtk git/'; exit 3 ;;
+            esac
+            exit 1
+
+            """);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(rtk, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var payload = new JsonObject
+        {
+            ["hook_event_name"] = "PreToolUse",
+            ["tool_name"] = "Bash",
+            ["tool_input"] = new JsonObject { ["command"] = "dotnet build; git status" },
+            ["cwd"] = project
+        }.ToJsonString();
+        var environment = new Dictionary<string, string>
+        {
+            ["HOME"] = home,
+            ["USERPROFILE"] = home,
+            ["CLAUDE_PROJECT_DIR"] = project,
+            ["PATH"] = $"{bin}{Path.PathSeparator}{Environment.GetEnvironmentVariable("PATH")}"
+        };
+
+        var (stdout, stderr, exitCode) = await IntegrationTestHelper.RunDtkSeparatingStreamsInDirAsync(
+            dir, environment, payload, "hook", "claude");
+
+        exitCode.Should().Be(0);
+        stderr.Should().BeEmpty();
+        stdout.Should().Be(RtkRewriteRace.DenyReply("dtk dotnet build; rtk git status") + "\n");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

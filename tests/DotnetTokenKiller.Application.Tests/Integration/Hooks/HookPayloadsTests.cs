@@ -8,6 +8,10 @@ namespace DotnetTokenKiller.Application.Tests.Integration.Hooks;
 
 public sealed class HookPayloadsTests
 {
+    /// <summary>A command dtk rewrites (<c>dotnet build</c>) and rtk rewrites (<c>git status</c>).</summary>
+    private const string BothRewritePayload =
+        """{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"dotnet build; git status"},"cwd":"/p"}""";
+
     [Theory]
     [InlineData("claude", HookPayloadKind.ClaudeCode)]
     [InlineData("gemini", HookPayloadKind.GeminiCli)]
@@ -199,6 +203,130 @@ public sealed class HookPayloadsTests
         var root = JsonNode.Parse(HookPayloads.Reply(HookPayloadKind.ClaudeCode, payload, null, null)!)!;
 
         root["hookSpecificOutput"]!["updatedInput"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test --max-lines 20");
+    }
+
+    [Fact]
+    public void Claude_CommandBothRewrite_IsRefusedWithTheMergedCommand()
+    {
+        var rtk = new FakeRtkRewriter(FakeRtkRewriter.PrefixGit);
+
+        Reply(HookPayloadKind.ClaudeCode, BothRewritePayload, RegisteredPeer(rtk))
+            .Should().Be(RtkRewriteRace.DenyReply("dtk dotnet build; rtk git status"));
+    }
+
+    [Fact]
+    public void Claude_RefusalReason_CarriesTheMergedCommandVerbatim()
+    {
+        var payload = BashPreToolUse("dotnet build -p:Note=\"50% of $HOME, é\"\ngit status");
+
+        var reply = Reply(HookPayloadKind.ClaudeCode, payload, RegisteredPeer(new FakeRtkRewriter(FakeRtkRewriter.PrefixGit)));
+
+        var output = JsonNode.Parse(reply!)!["hookSpecificOutput"]!;
+        output["hookEventName"]!.GetValue<string>().Should().Be("PreToolUse");
+        output["permissionDecision"]!.GetValue<string>().Should().Be("deny");
+        output["permissionDecisionReason"]!.GetValue<string>().Should()
+            .Be(RtkRewriteRace.ReasonLead + "dtk dotnet build -p:Note=\"50% of $HOME, é\"\nrtk git status");
+    }
+
+    [Fact]
+    public void Claude_RtkHookNotRegistered_RewritesAsToday()
+    {
+        var rtk = new FakeRtkRewriter(FakeRtkRewriter.PrefixGit);
+
+        var reply = Reply(HookPayloadKind.ClaudeCode, BothRewritePayload, new RtkPeer(_ => false, rtk));
+
+        reply.Should().NotBeNull().And.Be(TodaysReply(HookPayloadKind.ClaudeCode, BothRewritePayload));
+        JsonNode.Parse(reply)!["hookSpecificOutput"]!["updatedInput"]!["command"]!.GetValue<string>()
+            .Should().Be("dtk dotnet build; git status");
+        rtk.Calls.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("/claude-project", "/claude-project")]
+    [InlineData(null, "/p")]
+    public void Claude_RtkPeerSeesTheProjectDirectory(string? claudeProjectDirectory, string expected)
+    {
+        var seen = new List<string>();
+        var peer = new RtkPeer(directory =>
+        {
+            seen.Add(directory);
+            return false;
+        }, new FakeRtkRewriter(FakeRtkRewriter.PrefixGit));
+
+        Reply(HookPayloadKind.ClaudeCode, BothRewritePayload, peer, claudeProjectDirectory);
+
+        seen.Should().Equal(expected);
+    }
+
+    [Fact]
+    public void Claude_RtkPeerWithoutProjectDirectoryOrCwd_SeesTheCurrentDirectory()
+    {
+        var seen = new List<string>();
+        var peer = new RtkPeer(directory =>
+        {
+            seen.Add(directory);
+            return false;
+        }, new FakeRtkRewriter(FakeRtkRewriter.PrefixGit));
+
+        Reply(HookPayloadKind.ClaudeCode,
+            """{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"dotnet build; git status"}}""", peer);
+
+        seen.Should().Equal(Environment.CurrentDirectory);
+    }
+
+    [Theory]
+    [InlineData("""{"tool_name":"Bash","tool_input":{"command":"dotnet build; git status"},"cwd":"/p"}""")]
+    [InlineData("""{"hook_event_name":"PreToolUse","tool_name":"Task","tool_input":{"command":"dotnet build; git status"},"cwd":"/p"}""")]
+    [InlineData("""{"hook_event_name":"PreToolUse","tool_name":"Bash","cursor_version":"1.7.0","tool_input":{"command":"dotnet build; git status"},"cwd":"/p"}""")]
+    public void Claude_NotABashPreToolUse_RewritesAsToday(string payload)
+    {
+        var registrationChecked = false;
+        var rtk = new FakeRtkRewriter(FakeRtkRewriter.PrefixGit);
+        var peer = new RtkPeer(_ =>
+        {
+            registrationChecked = true;
+            return true;
+        }, rtk);
+
+        Reply(HookPayloadKind.ClaudeCode, payload, peer)
+            .Should().NotBeNull().And.Be(TodaysReply(HookPayloadKind.ClaudeCode, payload));
+        registrationChecked.Should().BeFalse();
+        rtk.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Claude_DotnetOnlyInQuotedText_IsNeitherRewrittenNorRefused()
+    {
+        var rtk = new FakeRtkRewriter(FakeRtkRewriter.PrefixGit);
+
+        Reply(HookPayloadKind.ClaudeCode, BashPreToolUse("git commit -m \"run dotnet build\""), RegisteredPeer(rtk))
+            .Should().BeNull();
+        rtk.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Claude_PureDotnetCommand_AsksRtkOnce()
+    {
+        var rtk = new FakeRtkRewriter(_ => new RtkRewrite(1, ""));
+        var payload = BashPreToolUse("dotnet build");
+
+        Reply(HookPayloadKind.ClaudeCode, payload, RegisteredPeer(rtk))
+            .Should().NotBeNull().And.Be(TodaysReply(HookPayloadKind.ClaudeCode, payload));
+        rtk.Calls.Should().Equal("dotnet build");
+    }
+
+    [Theory]
+    [InlineData(typeof(ArgumentException))]
+    [InlineData(typeof(InvalidOperationException))]
+    [InlineData(typeof(IOException))]
+    public void Claude_RtkPeerThrows_RewritesAsToday(Type exceptionType)
+    {
+        // A settings file with a duplicate key throws ArgumentException only once read: dtk's trouble, never a block.
+        var peer = new RtkPeer(_ => throw (Exception)Activator.CreateInstance(exceptionType)!,
+            new FakeRtkRewriter(FakeRtkRewriter.PrefixGit));
+
+        Reply(HookPayloadKind.ClaudeCode, BothRewritePayload, peer)
+            .Should().NotBeNull().And.Be(TodaysReply(HookPayloadKind.ClaudeCode, BothRewritePayload));
     }
 
     [Fact]
@@ -518,4 +646,33 @@ public sealed class HookPayloadsTests
 
     private static string? Reply(HookPayloadKind kind, string payload) =>
         HookPayloads.Reply(kind, Encoding.UTF8.GetBytes(payload));
+
+    /// <summary>The reply with an rtk peer, with the hook's own <c>DTK_RAW</c> unset.</summary>
+    /// <param name="kind">The harness that sent the payload.</param>
+    /// <param name="payload">The payload's JSON.</param>
+    /// <param name="rtk">What the hook asks about rtk.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, or <see langword="null"/>.</param>
+    private static string? Reply(HookPayloadKind kind, string payload, RtkPeer rtk, string? claudeProjectDirectory = null) =>
+        HookPayloads.Reply(kind, Encoding.UTF8.GetBytes(payload), claudeProjectDirectory, dtkRawValue: null, rtk);
+
+    /// <summary>The reply without an rtk peer, with the hook's own <c>DTK_RAW</c> unset.</summary>
+    /// <param name="kind">The harness that sent the payload.</param>
+    /// <param name="payload">The payload's JSON.</param>
+    private static string? TodaysReply(HookPayloadKind kind, string payload) =>
+        HookPayloads.Reply(kind, Encoding.UTF8.GetBytes(payload), claudeProjectDirectory: null, dtkRawValue: null);
+
+    /// <summary>An rtk peer whose Claude Code hook is registered for every project.</summary>
+    /// <param name="rtk">Answers for rtk.</param>
+    private static RtkPeer RegisteredPeer(FakeRtkRewriter rtk) => new(_ => true, rtk);
+
+    /// <summary>Claude Code's <c>PreToolUse</c> payload for a <c>Bash</c> call, in the project <c>/p</c>.</summary>
+    /// <param name="command">The command the agent wrote.</param>
+    private static string BashPreToolUse(string command) =>
+        new JsonObject
+        {
+            ["hook_event_name"] = "PreToolUse",
+            ["tool_name"] = "Bash",
+            ["tool_input"] = new JsonObject { ["command"] = command },
+            ["cwd"] = "/p"
+        }.ToJsonString();
 }
