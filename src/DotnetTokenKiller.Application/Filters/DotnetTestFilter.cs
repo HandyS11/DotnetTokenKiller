@@ -1231,8 +1231,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         {
             var f = group.Members[0];
             var heading = group.Members.Count == 1
-                ? $"  {f.TestName} [{f.Duration}]"
-                : $"  {group.Members.Count} failed the same way: {DescribeGroupNames(group)}";
+                ? string.Create(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration}]")
+                : string.Create(CultureInfo.InvariantCulture,
+                    $"  {group.Members.Count} failed the same way: {DescribeGroupNames(group)}");
             sb.AppendLine(heading)
                 .AppendLine(CultureInfo.InvariantCulture,
                     $"    {f.PresetMessage ?? CompactMessage(f.MessageLines, messageMaxLen)}");
@@ -1267,6 +1268,13 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         List<List<FailureInfo>> ordered = [];
         foreach (var failure in failures)
         {
+            // A failure that shows neither a message nor a location has nothing to be the same as another's.
+            if (ShowsNothingToCompare(failure))
+            {
+                ordered.Add([failure]);
+                continue;
+            }
+
             var key = GroupKey(failure, showOutput);
             if (!byKey.TryGetValue(key, out var members))
             {
@@ -1285,6 +1293,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             .. ordered.Where(m => m.Count == 1).Select(m => new FailureGroup(m))
         ];
     }
+
+    private static bool ShowsNothingToCompare(FailureInfo failure) =>
+        string.IsNullOrEmpty(failure.PresetMessage ?? string.Join('\n', failure.MessageLines))
+        && string.IsNullOrEmpty(failure.SourceRef);
 
     private static string GroupKey(FailureInfo failure, bool showOutput)
     {

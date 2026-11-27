@@ -2957,16 +2957,29 @@ public class DotnetTestFilterTests
     [Fact]
     public void Apply_LargestGroupComesFirst_ThenSinglesInOrder()
     {
-        var input = VsTestFailure("MyTests.S1", "a") + VsTestFailure("MyTests.G1", "b")
+        var input = VsTestFailure("MyTests.S1", "a") + VsTestFailure("MyTests.H1", "d")
+                    + VsTestFailure("MyTests.H2", "d") + VsTestFailure("MyTests.G1", "b")
                     + VsTestFailure("MyTests.G2", "b") + VsTestFailure("MyTests.G3", "b")
-                    + VsTestFailure("MyTests.S2", "c") + SummaryLine(5);
+                    + VsTestFailure("MyTests.S2", "c") + SummaryLine(7);
 
         var lines = _sut.Apply(input, exitCode: 1).Split('\n');
 
-        lines[1].Should().Be("  3 failed the same way: MyTests.G1, MyTests.G2, MyTests.G3");
-        lines[2].Should().Be("    b");
-        lines.Where(l => l.StartsWith("  MyTests.", StringComparison.Ordinal)).Should()
-            .Equal("  MyTests.S1 [1 ms]", "  MyTests.S2 [1 ms]");
+        lines.Where(l => l.StartsWith("  MyTests.", StringComparison.Ordinal)
+                         || l.Contains("failed the same way", StringComparison.Ordinal)).Should()
+            .Equal("  3 failed the same way: MyTests.G1, MyTests.G2, MyTests.G3",
+                "  2 failed the same way: MyTests.H1, MyTests.H2", "  MyTests.S1 [1 ms]", "  MyTests.S2 [1 ms]");
+    }
+
+    [Fact]
+    public void Apply_FailuresShowingNeitherMessageNorLocation_AreNotGrouped()
+    {
+        const string input = "  Failed MyTests.A [1 ms]\n  Failed MyTests.B [1 ms]\n"
+                             + "Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - Tests.dll\n";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().NotContain("failed the same way").And.Contain("  MyTests.A [1 ms]")
+            .And.Contain("  MyTests.B [1 ms]");
     }
 
     [Theory]
@@ -2995,7 +3008,10 @@ public class DotnetTestFilterTests
 
         var lines = _sut.Apply(input, exitCode: 1).Split('\n');
 
-        lines.Count(l => l.Contains("failed the same way", StringComparison.Ordinal)).Should().Be(15);
+        var headings = lines.Where(l => l.Contains("failed the same way", StringComparison.Ordinal)).ToList();
+        headings.Should().HaveCount(15);
+        headings[0].Should().Be("  2 failed the same way: MyTests.G1A, MyTests.G1B");
+        string.Join('\n', lines).Should().NotContain("MyTests.G16A");
         lines.Should().Contain("+2 more failures");
     }
 
