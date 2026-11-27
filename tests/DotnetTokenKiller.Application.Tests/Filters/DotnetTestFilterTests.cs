@@ -284,7 +284,7 @@ public class DotnetTestFilterTests
         // run reads "1 ms"), so "9 ms" was replaced by VSTest's literal "< 1 ms" (ConsoleLogger.GetFormattedDurationString).
         var result = _sut.Apply(LoadFixture("dotnet_test_duration_under_1ms.txt"), exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.00s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.00s) · 0 build warnings\n");
     }
 
     [Theory]
@@ -1199,7 +1199,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().MatchRegex(@"^✓ dotnet test: 0 passed, 2 skipped \(1 project, [^)]+\)\n$")
+        result.Should().MatchRegex(@"^✓ dotnet test: 0 passed, 2 skipped \(1 project, [^)]+\) · 0 build warnings\n$")
             .And.NotContain("0 tests found");
     }
 
@@ -1212,7 +1212,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed, 2 skipped \(2 projects, [^)]+\)\n$");
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed, 2 skipped \(2 projects, [^)]+\) · 0 build warnings\n$");
     }
 
     // The dotnet_test_logger_* and dotnet_test_list_tests* fixtures are real .NET 10.0.403 SDK runs of two
@@ -1233,7 +1233,7 @@ public class DotnetTestFilterTests
         // result is the "Test Run Successful." block, so the counts must come from there, once.
         var result = _sut.Apply(LoadFixture(fixture), exitCode: 0);
 
-        result.Should().MatchRegex(@"^✓ dotnet test: 4 passed, 1 skipped \(1 project, [^)]+\)\n$");
+        result.Should().MatchRegex(@"^✓ dotnet test: 4 passed, 1 skipped \(1 project, [^)]+\) · 0 build warnings\n$");
     }
 
     [Fact]
@@ -1680,7 +1680,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.05s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.05s) · 0 build warnings\n");
     }
 
     [Fact]
@@ -1977,6 +1977,52 @@ public class DotnetTestFilterTests
             @"^✓ dotnet test: 2 passed \(1 project, [^)]+\) · 3 build warnings \(CS0219×2, CS8602\)\n$");
     }
 
+    private const string BuiltLine = "  App.Tests -> /r/bin/App.Tests.dll\n";
+    private const string PassedSummary =
+        "Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 2 ms - App.Tests.dll\n";
+
+    [Fact]
+    public void Apply_PassingRunThatBuiltProjects_StatesZeroBuildWarnings()
+    {
+        var result = _sut.Apply(BuiltLine + PassedSummary, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed \(1 project, [^)]+\) · 0 build warnings\n$");
+    }
+
+    [Fact]
+    public void Apply_PassingRunWithoutProjectOutputLines_AddsNoBuildWarningCount()
+    {
+        var result = _sut.Apply(PassedSummary, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed \(1 project, [^)]+\)\n$");
+    }
+
+    [Fact]
+    public void Apply_FailingRunThatBuiltProjects_AddsNoZeroCount()
+    {
+        const string failed = "Failed!  - Failed: 1, Passed: 2, Skipped: 0, Total: 3, Duration: 2 ms - App.Tests.dll\n";
+
+        var result = _sut.Apply(BuiltLine + failed, exitCode: 1);
+
+        result.Should().NotContain("0 build warnings");
+    }
+
+    [Fact]
+    public void Apply_ListTestsThatBuiltProjects_AddsNoZeroCount()
+    {
+        var result = _sut.Apply(BuiltLine + LoadFixture("dotnet_test_list_tests_single.txt"), exitCode: 0);
+
+        result.Should().NotContain("0 build warnings");
+    }
+
+    [Fact]
+    public void Apply_PassingRunWithBuildWarnings_StillCountsThem()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_pass_with_warnings.txt"), exitCode: 0);
+
+        result.Should().EndWith(" · 3 build warnings (CS0219×2, CS8602)\n").And.NotContain("0 build warnings");
+    }
+
     [Fact]
     public void Apply_FailingRunWithBuildWarnings_AppendsTheSuffixToTheStatusLine()
     {
@@ -2126,7 +2172,7 @@ public class DotnetTestFilterTests
     {
         var result = _sut.Apply(LoadFixture("dotnet_test_all_pass.txt"), exitCode: 0);
 
-        result.Should().NotContain("build warning");
+        result.Should().NotContain("build warnings (");
     }
 
     [Fact]
@@ -2139,8 +2185,8 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().NotContain("build warning");
-        LastLine(result).Should().MatchRegex(@"^✓ dotnet test: 17 passed \(1 project, [^)]+\)$");
+        result.Should().NotContain("build warnings (");
+        LastLine(result).Should().MatchRegex(@"^✓ dotnet test: 17 passed \(1 project, [^)]+\) · 0 build warnings$");
     }
 
     [Fact]

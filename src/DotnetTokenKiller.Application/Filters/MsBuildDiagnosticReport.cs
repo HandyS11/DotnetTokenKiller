@@ -72,6 +72,7 @@ internal sealed partial class MsBuildDiagnosticReport
         _repeatedErrors = parsed.RepeatedErrors;
         _repeatedWarnings = parsed.RepeatedWarnings;
         _context = BuildContext(CountProjects(parsed), parsed.Elapsed);
+        BuiltProjectCount = parsed.OutputProjects.Distinct(StringComparer.Ordinal).Count();
         DeclaresCounts = parsed.DeclaredErrors is not null && parsed.DeclaredWarnings is not null;
         ErrorTotal = Math.Max(parsed.DeclaredErrors ?? 0, _errors.Count);
         WarningTotal = Math.Max(parsed.DeclaredWarnings ?? 0, _warnings.Count);
@@ -105,6 +106,12 @@ internal sealed partial class MsBuildDiagnosticReport
     /// no cause to render.
     /// </summary>
     public int ParsedErrorCount => _errors.Count;
+
+    /// <summary>
+    /// How many distinct project names MSBuild's <c>X -&gt; ….dll|exe</c> output lines named. A project named
+    /// only in a diagnostic does not count.
+    /// </summary>
+    public int BuiltProjectCount { get; }
 
     /// <summary>Whether the output carried both of MSBuild's own tallies, "N Error(s)" and "N Warning(s)".</summary>
     public bool DeclaresCounts { get; }

@@ -947,8 +947,18 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
         return new FilterResult(
-            $"{PassedNamesBlock(state)}{ChangedWarnings()}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){Warnings()}\n");
+            $"{PassedNamesBlock(state)}{ChangedWarnings()}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){WarningsOfAPassingRun(buildReport, Warnings())}\n");
     }
+
+    /// <summary>
+    /// The build-warnings suffix of a passing run's status line: the count when the build raised warnings, else
+    /// <c> · 0 build warnings</c> when the output shows MSBuild built projects. A <c>--no-build</c> run has no
+    /// build to speak for and adds nothing.
+    /// </summary>
+    /// <param name="report">The run's build diagnostics.</param>
+    /// <param name="described">The suffix <see cref="DescribeBuildWarnings"/> gave.</param>
+    private static string WarningsOfAPassingRun(MsBuildDiagnosticReport report, string described) =>
+        described.Length == 0 && report.BuiltProjectCount > 0 ? " \u00b7 0 build warnings" : described;
 
     /// <summary>
     /// What the status line of a run adds for the compiler warnings its build raised:
