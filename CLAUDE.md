@@ -95,7 +95,11 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 `env`/`time`/`timeout`/`nice`/`nohup`/`exec` with arguments it knows, never behind another word (`$D`, `echo`, `ssh`,
 `sudo`), which may not run it here or with the same `PATH`, and never when its output goes to a text filter or a file
 (`SendsOutputToATextFilterOrFile`: `| grep`/`rg`/`awk`/`sed`/`cut`, `> x.log`), which expects MSBuild's lines;
-`| tail`, `| head` and `| tee` are still rewritten. The Copilot CLI hook's reply's
+`| tee` is still rewritten; `| tail -N` and `| head -N` (also `-n N`, `-nN`, `--lines N`, `--lines=N`, a positive N, last
+in the command) become `--max-lines N` with the pipe dropped (`TryTurnTailIntoMaxLines`), so the command then exits with
+dotnet's code, not `tail`'s. The pipe stays for any other `tail`/`head` operand or pipeline, a command that already
+has `--max-lines`, `--vv` or `--interactive`, a substitution in its arguments, or a run dtk passes through unfiltered
+(`PassthroughSubcommands.IsUnfilteredRun`). The Copilot CLI hook's reply's
 `permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any
 command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
 rather than guess a command is safe. `IsAutoApprovable` (also Cursor's gate, which rewrites only auto-approvable

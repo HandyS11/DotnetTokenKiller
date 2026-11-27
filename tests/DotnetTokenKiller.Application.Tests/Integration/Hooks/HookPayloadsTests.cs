@@ -168,6 +168,20 @@ public sealed class HookPayloadsTests
         root["modifiedArgs"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet build && rm -rf x");
     }
 
+    [Fact]
+    public void Copilot_PipeIntoTail_StillAsks()
+    {
+        var root = JsonNode.Parse(Reply(HookPayloadKind.CopilotCli,
+            """{"toolName":"bash","toolArgs":{"command":"dotnet test | tail -5"}}""")!)!;
+
+        root["permissionDecision"]!.GetValue<string>().Should().Be("ask");
+        root["modifiedArgs"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test --max-lines 5");
+    }
+
+    [Fact]
+    public void Cursor_PipeIntoTail_GetsTheNeutralReply() =>
+        Reply(HookPayloadKind.Cursor, """{"tool_input":{"command":"dotnet test | tail -5"}}""").Should().Be("{}");
+
     [Theory]
     [InlineData("dotnet publish -c Release -p:PublishProfile=Production", "dtk dotnet publish -c Release -p:PublishProfile=Production")]
     [InlineData("dotnet pack -o artifacts", "dtk dotnet pack -o artifacts")]

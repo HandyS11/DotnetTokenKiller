@@ -243,6 +243,20 @@ public class PassthroughSubcommandsTests
     }
 
     [Theory]
+    [InlineData((object)new[] { "publish", "--interactive" })]
+    [InlineData((object)new[] { "build", "-getProperty:Version" })]
+    [InlineData((object)new[] { "stryker", "--help" })]
+    [InlineData((object)new[] { "ef", "database", "drop" })]
+    public void IsUnfilteredRun_IsAnyOfTheThreeDetectors(string[] args) =>
+        PassthroughSubcommands.IsUnfilteredRun(args).Should().BeTrue();
+
+    [Theory]
+    [InlineData((object)new[] { "build" })]
+    [InlineData((object)new[] { "test", "--help" })]
+    public void IsUnfilteredRun_IsFalse_ForAnOrdinaryFilteredRun(string[] args) =>
+        PassthroughSubcommands.IsUnfilteredRun(args).Should().BeFalse();
+
+    [Theory]
     [InlineData((object)new[] { "stryker", "--help" })]
     [InlineData((object)new[] { "jb", "cleanupcode", "-h" })]
     [InlineData((object)new[] { "ef", "migrations", "add", "-?" })]

@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The agent hooks turn `dotnet test | tail -20` and `| head -5` (also `-n N`, `--lines N`) into
+  `dtk dotnet test --max-lines 20`, dropping the pipe. The command now exits with dotnet's code, so
+  `dotnet build | tail -5 && git add .` stops on a failure, which it did not before (`tail`'s exit code hid it). `tail`
+  gave the last N lines; `--max-lines` keeps the first N plus the status line, where the verdict is.
+
 ## [0.13.0] - 2026-11-22
 
 ### Added
