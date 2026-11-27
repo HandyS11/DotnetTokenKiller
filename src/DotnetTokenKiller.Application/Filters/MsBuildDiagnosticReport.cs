@@ -72,6 +72,7 @@ internal sealed partial class MsBuildDiagnosticReport
         _repeatedErrors = parsed.RepeatedErrors;
         _repeatedWarnings = parsed.RepeatedWarnings;
         _context = BuildContext(CountProjects(parsed), parsed.Elapsed);
+        DeclaresCounts = parsed.DeclaredErrors is not null && parsed.DeclaredWarnings is not null;
         ErrorTotal = Math.Max(parsed.DeclaredErrors ?? 0, _errors.Count);
         WarningTotal = Math.Max(parsed.DeclaredWarnings ?? 0, _warnings.Count);
         FailedProjectCount = _errors
@@ -104,6 +105,9 @@ internal sealed partial class MsBuildDiagnosticReport
     /// no cause to render.
     /// </summary>
     public int ParsedErrorCount => _errors.Count;
+
+    /// <summary>Whether the output carried both of MSBuild's own tallies, "N Error(s)" and "N Warning(s)".</summary>
+    public bool DeclaresCounts { get; }
 
     /// <summary>The larger of MSBuild's own "N Warning(s)" tally and the warnings parsed.</summary>
     public int WarningTotal { get; }
@@ -244,7 +248,8 @@ internal sealed partial class MsBuildDiagnosticReport
             }
 
             AppendOutputs(sb, shownOutputs);
-            sb.AppendLine(CultureInfo.InvariantCulture, $"✓ {command}{_context}");
+            var counts = DeclaresCounts ? ": 0 errors, 0 warnings" : string.Empty;
+            sb.AppendLine(CultureInfo.InvariantCulture, $"✓ {command}{counts}{_context}");
             return Normalize(sb);
         }
 

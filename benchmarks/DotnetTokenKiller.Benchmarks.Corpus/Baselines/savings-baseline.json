@@ -53,9 +53,9 @@
       "exitCode": 0,
       "rawBytes": 1713,
       "rawTokens": 483,
-      "filteredTokens": 15,
-      "savedTokens": 468,
-      "savingsPercent": 96.9
+      "filteredTokens": 23,
+      "savedTokens": 460,
+      "savingsPercent": 95.2
     },
     {
       "id": "build/warnings",

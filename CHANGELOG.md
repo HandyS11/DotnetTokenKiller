@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- A clean `dotnet build`, `publish` or `pack` now states its counts, `✓ dotnet build: 0 errors, 0 warnings (15
+  projects, 16.26s)`, when MSBuild's own summary declared both, so an agent checking for zero warnings need not read
+  the raw log.
+
 ## [0.13.0] - 2026-11-22
 
 ### Added

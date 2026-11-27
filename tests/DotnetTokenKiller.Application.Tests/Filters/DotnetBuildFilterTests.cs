@@ -160,6 +160,22 @@ public class DotnetBuildFilterTests
     }
 
     [Fact]
+    public void Apply_CleanBuildWithMsBuildsSummary_StatesZeroCounts()
+    {
+        const string input = "  App -> /r/bin/App.dll\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n";
+
+        _sut.Apply(input, exitCode: 0).Should().Be("✓ dotnet build: 0 errors, 0 warnings (1 project)\n");
+    }
+
+    [Fact]
+    public void Apply_CleanBuildWithOnlyOneTallyLine_StatesNoCounts()
+    {
+        const string input = "  App -> /r/bin/App.dll\n\nBuild succeeded.\n    0 Warning(s)\n";
+
+        _sut.Apply(input, exitCode: 0).Should().Be("✓ dotnet build (1 project)\n");
+    }
+
+    [Fact]
     public void Apply_FailedBuildOfOneProject_StatesTheProjectCount()
     {
         const string input = "/path/File.cs(1,1): error CS0001: boom [/path/App.csproj]";

@@ -98,7 +98,7 @@ public class DotnetPublishFilterTests
 
         var result = _sut.Apply(input, exitCode: 0);
 
-        result.Should().Be("  App -> App/bin/Release/net10.0/publish/\n✓ dotnet publish (1 project, 1.50s)\n");
+        result.Should().Be("  App -> App/bin/Release/net10.0/publish/\n✓ dotnet publish: 0 errors, 0 warnings (1 project, 1.50s)\n");
     }
 
     [Fact]
