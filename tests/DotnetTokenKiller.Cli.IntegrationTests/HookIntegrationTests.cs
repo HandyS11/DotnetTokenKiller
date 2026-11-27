@@ -71,7 +71,7 @@ public class HookIntegrationTests
 
         exitCode.Should().Be(0);
         stderr.Should().BeEmpty();
-        stdout.Should().Be(RtkRewriteRace.DenyReply("dtk dotnet build; rtk git status") + "\n");
+        stdout.Should().Be(RtkRewriteRace.DenyReply(new RtkRewriteRace.Merge("dtk dotnet build; rtk git status", RtkRewritesDotnet: false)) + "\n");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

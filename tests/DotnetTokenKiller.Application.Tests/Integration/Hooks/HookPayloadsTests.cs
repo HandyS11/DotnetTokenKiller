@@ -211,7 +211,7 @@ public sealed class HookPayloadsTests
         var rtk = new FakeRtkRewriter(FakeRtkRewriter.PrefixGit);
 
         Reply(HookPayloadKind.ClaudeCode, BothRewritePayload, RegisteredPeer(rtk))
-            .Should().Be(RtkRewriteRace.DenyReply("dtk dotnet build; rtk git status"));
+            .Should().Be(RtkRewriteRace.DenyReply(new RtkRewriteRace.Merge("dtk dotnet build; rtk git status", RtkRewritesDotnet: false)));
     }
 
     [Fact]
@@ -226,6 +226,19 @@ public sealed class HookPayloadsTests
         output["permissionDecision"]!.GetValue<string>().Should().Be("deny");
         output["permissionDecisionReason"]!.GetValue<string>().Should()
             .Be(RtkRewriteRace.ReasonLead + "dtk dotnet build -p:Note=\"50% of $HOME, é\"\nrtk git status");
+    }
+
+    [Fact]
+    public void Claude_RtkRewritesDotnetItself_RefusalExplainsTheMissingExclusion()
+    {
+        var rtk = new FakeRtkRewriter(c => c == "dotnet build"
+            ? new RtkRewrite(0, "rtk dotnet build")
+            : new RtkRewrite(1, ""));
+
+        var reply = Reply(HookPayloadKind.ClaudeCode, BashPreToolUse("dotnet build"), RegisteredPeer(rtk));
+
+        JsonNode.Parse(reply!)!["hookSpecificOutput"]!["permissionDecisionReason"]!.GetValue<string>().Should()
+            .Be(RtkRewriteRace.ReasonLead + "dtk dotnet build" + RtkRewriteRace.DotnetExclusionHint);
     }
 
     [Fact]

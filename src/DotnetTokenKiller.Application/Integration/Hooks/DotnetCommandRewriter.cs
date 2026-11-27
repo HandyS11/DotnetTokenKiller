@@ -410,9 +410,9 @@ internal static class DotnetCommandRewriter
             argumentsEnd--;
         }
 
-        // Quotes come off the words, so `--format "json"` reads as dtk will read it.
+        // Quotes and backslashes come off the words, so `--format "json"` reads as dtk will read it.
         var plain = command[subcommandStart..argumentsEnd].Replace("\"", string.Empty, StringComparison.Ordinal)
-            .Replace("'", string.Empty, StringComparison.Ordinal);
+            .Replace("'", string.Empty, StringComparison.Ordinal).Replace("\\", string.Empty, StringComparison.Ordinal);
         var words = new List<string>(plain.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries));
         if (plain.Contains("--max-lines", StringComparison.Ordinal)
             || plain.Contains("--vv", StringComparison.Ordinal)

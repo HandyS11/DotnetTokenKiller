@@ -1,6 +1,6 @@
 # Field report fixes for 0.14 — design
 
-Date: 2026-11-27. Status: draft, awaiting the user's review. Branches: `fix/hook-race-and-tail` (items 1 and 3) and
+Date: 2026-11-27. Status: approved by the user 2026-11-27. Branches: `fix/hook-race-and-tail` (items 1 and 3) and
 `fix/field-report-output` (items 2, 4, 5 and 6), both off `develop`.
 
 Source: the user's "dtk 0.13.0: field report from three days of agent sessions" (2026-11-23 → 2026-11-26, one

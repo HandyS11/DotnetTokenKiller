@@ -218,7 +218,7 @@ internal sealed class DoctorUseCase(
             return pass;
         }
 
-        return ReadMixedAnswer(result.StdOut) switch
+        return ReadMixedAnswer(result.StdOut, git.StdOut.Trim()) switch
         {
             true => new DiagnosticCheck(
                 name,
@@ -234,8 +234,9 @@ internal sealed class DoctorUseCase(
 
     /// <summary>Reads a Claude Code hook's reply to the mixed command.</summary>
     /// <param name="stdout">What the hook printed.</param>
+    /// <param name="rtkGitRewrite">rtk's rewrite of <c>git status</c>, which the refusal's merged command must carry.</param>
     /// <returns><see langword="true"/> for the refusal, <see langword="false"/> for a lone rewrite, else <see langword="null"/>.</returns>
-    private static bool? ReadMixedAnswer(string stdout)
+    private static bool? ReadMixedAnswer(string stdout, string rtkGitRewrite)
     {
         try
         {
@@ -248,6 +249,8 @@ internal sealed class DoctorUseCase(
             {
                 return output["permissionDecisionReason"]?.GetValue<string>() is { } reason
                     && reason.StartsWith(RtkRewriteRace.ReasonLead, StringComparison.Ordinal)
+                    && reason.Contains("dtk dotnet build", StringComparison.Ordinal)
+                    && reason.Contains(rtkGitRewrite, StringComparison.Ordinal)
                     ? true
                     : null;
             }

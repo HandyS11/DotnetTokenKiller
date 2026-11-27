@@ -12,13 +12,24 @@ internal static class RtkRewriteRace
     /// <summary>The start of the refusal's reason; the merged command follows it.</summary>
     internal const string ReasonLead = "dtk and rtk would each rewrite this command, and Claude Code applies only one hook's rewrite. Run this instead, which carries both:\n";
 
+    /// <summary>The hint appended when rtk's only change to the command is on its dotnet part.</summary>
+    internal const string DotnetExclusionHint = "\n(rtk also rewrites dotnet commands: run 'dtk init claude' again so it leaves them to dtk.)";
+
+    /// <summary>A command that carries both rewrites.</summary>
+    /// <param name="Command">The merged command.</param>
+    /// <param name="RtkRewritesDotnet">
+    /// Whether rtk changed the command only by rewriting its dotnet part (the merged command is dtk's rewrite), which
+    /// means rtk's hook has no <c>exclude_commands = ["dotnet"]</c>.
+    /// </param>
+    internal sealed record Merge(string Command, bool RtkRewritesDotnet);
+
     /// <summary>Works out the command that carries both rewrites, when refusing is warranted.</summary>
     /// <param name="command">The command as the agent wrote it.</param>
     /// <param name="dtkRewrite">What dtk would rewrite it to (equal to <paramref name="command"/> when it would not).</param>
     /// <param name="rewriteWithDtk">dtk's rewrite, to check that the merged command is stable under it.</param>
     /// <param name="rtk">Asks rtk how it would rewrite a command.</param>
-    /// <returns>The merged command when a refusal is warranted, else null. Never throws on rtk's trouble.</returns>
-    internal static string? MergedCommand(
+    /// <returns>The merge when a refusal is warranted, else null. Never throws on rtk's trouble.</returns>
+    internal static Merge? MergedCommand(
         string command,
         string dtkRewrite,
         Func<string, string> rewriteWithDtk,
@@ -58,19 +69,19 @@ internal static class RtkRewriteRace
         var third = rtk.Rewrite(merged);
         var stable = third is not null
             && (third.ExitCode is 1 or 2 || (third.ExitCode is 0 or 3 && third.Output == merged));
-        return stable ? merged : null;
+        return stable ? new Merge(merged, merged == dtkRewrite) : null;
     }
 
     /// <summary>Claude Code's refusal, whose reason carries the merged command.</summary>
-    /// <param name="merged">What <see cref="MergedCommand"/> returned.</param>
-    internal static string DenyReply(string merged) =>
+    /// <param name="merge">What <see cref="MergedCommand"/> returned.</param>
+    internal static string DenyReply(Merge merge) =>
         new JsonObject
         {
             ["hookSpecificOutput"] = new JsonObject
             {
                 ["hookEventName"] = "PreToolUse",
                 ["permissionDecision"] = "deny",
-                ["permissionDecisionReason"] = ReasonLead + merged
+                ["permissionDecisionReason"] = ReasonLead + merge.Command + (merge.RtkRewritesDotnet ? DotnetExclusionHint : string.Empty)
             }
         }.ToJsonString();
 

@@ -183,6 +183,9 @@ only when the merged command is stable under both rewrites, and only to Claude C
 probes it with `git status && dotnet build`. To skip the extra turn, write the prefixed commands yourself
 (`rtk git status && dtk dotnet build`), or run the two in separate calls.
 
+If the reason ends with "rtk also rewrites dotnet commands", rtk's hook has no `exclude_commands = ["dotnet"]` and
+rewrites plain `dotnet` commands itself: run `dtk init claude` again so rtk leaves them to dtk.
+
 When you rely on rtk approving the commands your allow rules cover, the re-sent command no longer matches those
 rules in Claude Code's default permission mode, and without a matching rule the agent's request is denied in print
 mode. Add rules for the prefixed forms, such as `Bash(rtk git status:*)` and `Bash(dtk dotnet:*)`, one per command you

@@ -22,7 +22,7 @@ public sealed class RtkRewriteRaceTests
 
         var merged = RtkRewriteRace.MergedCommand(Command, DtkRewrite, Dtk, rtk);
 
-        merged.Should().Be(Merged);
+        merged.Should().Be(new RtkRewriteRace.Merge(Merged, RtkRewritesDotnet: false));
         rtk.Calls.Should().HaveCount(3);
     }
 
@@ -64,7 +64,8 @@ public sealed class RtkRewriteRaceTests
             _ => new RtkRewrite(1, "")
         });
 
-        RtkRewriteRace.MergedCommand("dotnet build", "dtk dotnet build", Dtk, rtk).Should().Be("dtk dotnet build");
+        RtkRewriteRace.MergedCommand("dotnet build", "dtk dotnet build", Dtk, rtk)
+            .Should().Be(new RtkRewriteRace.Merge("dtk dotnet build", RtkRewritesDotnet: true));
     }
 
     [Fact]
@@ -94,11 +95,21 @@ public sealed class RtkRewriteRaceTests
     [Fact]
     public void DenyReply_IsClaudesDenyWithTheReasonAndTheMergedCommand()
     {
-        var output = JsonNode.Parse(RtkRewriteRace.DenyReply(Merged))!["hookSpecificOutput"]!.AsObject();
+        var output = JsonNode.Parse(RtkRewriteRace.DenyReply(new RtkRewriteRace.Merge(Merged, RtkRewritesDotnet: false)))!["hookSpecificOutput"]!.AsObject();
 
         output["hookEventName"]!.GetValue<string>().Should().Be("PreToolUse");
         output["permissionDecision"]!.GetValue<string>().Should().Be("deny");
         output["permissionDecisionReason"]!.GetValue<string>().Should().Be(RtkRewriteRace.ReasonLead + Merged);
         output.Count.Should().Be(3);
+    }
+
+    [Fact]
+    public void DenyReply_RtkRewritesDotnet_ExplainsTheRemedyAfterTheCommand()
+    {
+        var output = JsonNode.Parse(RtkRewriteRace.DenyReply(new RtkRewriteRace.Merge("dtk dotnet build", RtkRewritesDotnet: true)))!
+            ["hookSpecificOutput"]!.AsObject();
+
+        output["permissionDecisionReason"]!.GetValue<string>().Should().Be(
+            RtkRewriteRace.ReasonLead + "dtk dotnet build\n(rtk also rewrites dotnet commands: run 'dtk init claude' again so it leaves them to dtk.)");
     }
 }

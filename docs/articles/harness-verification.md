@@ -56,3 +56,18 @@ unconfirmed. If you can run one, please report the result in an issue.
 3. Whether a `{ action: "allow" }` reply from dtk's plugin overrides another plugin's `reject-and-continue` for the
    same call, rather than leaving it in force as intended.
 4. Whether the plugin can spawn `dtk hook amp` under Amp's Bun runtime on Windows.
+
+## Copilot CLI
+
+1. If rtk registers its own hook for Copilot CLI, beside dtk's, whether a command both would rewrite loses one rewrite,
+   as it does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.
+
+## Antigravity
+
+1. If rtk registers its own hook for Antigravity, beside dtk's, whether a command both would rewrite loses one
+   rewrite, as it does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.
+
+## Codex
+
+1. If rtk registers its own hook for Codex, beside dtk's, whether a command both would rewrite loses one rewrite, as
+   it does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.

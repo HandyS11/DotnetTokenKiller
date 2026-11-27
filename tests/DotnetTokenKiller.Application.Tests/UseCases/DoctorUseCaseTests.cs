@@ -511,6 +511,26 @@ public sealed class DoctorUseCaseTests : IDisposable
             + "'git status && dotnet build', and one of them is lost. Upgrade dtk to 0.14.0 or later.");
     }
 
+    [Theory]
+    [InlineData("rtk git status && dotnet build")]
+    [InlineData("git status && dtk dotnet build")]
+    public async Task RunAsync_DtkHookRefusalLacksADtkOrRtkRewrite_KeepsTodaysPass(string merged)
+    {
+        await ArrangeMixedProbeAsync();
+        var reason = RtkRewriteRace.ReasonLead.Replace("\n", "\\n", StringComparison.Ordinal) + merged;
+        DtkHookAnswers(new CommandResult(
+            """{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"""
+            + "\"" + reason + "\"}}",
+            string.Empty,
+            0));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        var check = checks.Single(c => c.Name == "rtk coexistence");
+        check.IsWarning.Should().BeFalse();
+        check.Message.Should().Be("rtk leaves dotnet commands to dtk");
+    }
+
     [Fact]
     public async Task RunAsync_RtkRewritesNoGitStatus_SkipsTheMixedProbe()
     {

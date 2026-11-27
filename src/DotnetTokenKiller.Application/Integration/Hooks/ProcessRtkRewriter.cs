@@ -71,7 +71,8 @@ internal sealed class ProcessRtkRewriter(Func<string?> locateRtk, TimeSpan timeo
             StandardOutputEncoding = new UTF8Encoding(false),
             StandardErrorEncoding = new UTF8Encoding(false)
         };
-        // rtk's own hook sets this to tell its rewrite it is being asked by a host; ours must not inherit it.
+        // rtk's own hook script removes this from what it passes to `rtk rewrite`, because the variable relaxes rtk's
+        // approval gate; ours must not inherit it either.
         startInfo.Environment.Remove("RTK_REWRITE_HOST");
         startInfo.ArgumentList.Add("rewrite");
         startInfo.ArgumentList.Add(command);

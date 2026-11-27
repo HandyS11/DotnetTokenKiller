@@ -97,7 +97,8 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 (`SendsOutputToATextFilterOrFile`: `| grep`/`rg`/`awk`/`sed`/`cut`, `> x.log`), which expects MSBuild's lines;
 `| tee` is still rewritten; `| tail -N` and `| head -N` (also `-n N`, `-nN`, `--lines N`, `--lines=N`, a positive N, last
 in its pipeline) become `--max-lines N` with the pipe dropped (`TryTurnTailIntoMaxLines`), so the command then exits with
-dotnet's code, not `tail`'s. The pipe stays for any other `tail`/`head` operand or pipeline, a command that already
+dotnet's code, not `tail`'s; under Claude Code an explicit `dtk dotnet … | tail -N` (or `dtk <sub> … | tail -N`) is
+converted too, never with `DTK_RAW` on. The pipe stays for any other `tail`/`head` operand or pipeline, a command that already
 has `--max-lines`, `--vv` or `--interactive`, a substitution in its arguments, or a run dtk passes through unfiltered
 (`PassthroughSubcommands.IsUnfilteredRun`). The Copilot CLI hook's reply's
 `permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any

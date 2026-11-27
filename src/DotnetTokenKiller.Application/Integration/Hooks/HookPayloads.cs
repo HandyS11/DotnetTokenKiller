@@ -144,14 +144,17 @@ internal static class HookPayloads
         return known;
     }
 
-    /// <summary>Builds the reply for one payload.</summary>
+    /// <summary>Builds the reply for one payload, with raw output off (it does not read the process's <c>DTK_RAW</c>).</summary>
     /// <param name="kind">The harness that sent the payload.</param>
     /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
     /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
     internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload) =>
         Reply(kind, payload, claudeProjectDirectory: null);
 
-    /// <summary>Builds the reply for one payload, knowing the project Claude Code runs the hook for.</summary>
+    /// <summary>
+    /// Builds the reply for one payload, knowing the project Claude Code runs the hook for, with raw output off (it
+    /// does not read the process's <c>DTK_RAW</c>; <c>dtk hook</c> passes it explicitly).
+    /// </summary>
     /// <param name="kind">The harness that sent the payload.</param>
     /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
     /// <param name="claudeProjectDirectory">
@@ -160,8 +163,7 @@ internal static class HookPayloads
     /// </param>
     /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
     internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory) =>
-        Reply(kind, payload, claudeProjectDirectory,
-            Environment.GetEnvironmentVariable(RawOutputSwitch.EnvironmentVariable));
+        Reply(kind, payload, claudeProjectDirectory, dtkRawValue: null);
 
     /// <summary>Builds the reply for one payload, knowing the hook's own <c>DTK_RAW</c>.</summary>
     /// <param name="kind">The harness that sent the payload.</param>

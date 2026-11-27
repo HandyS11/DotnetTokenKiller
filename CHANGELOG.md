@@ -20,15 +20,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- `dtk doctor`'s rtk check probes the installed hook with `git status && dotnet build` and warns when the command does
-  not come back merged.
+- `dtk doctor`'s rtk check probes the installed hook with `git status && dotnet build` and warns when the installed hook
+  rewrites it without refusing (an older dtk).
 
 ### Changed
 
 - The agent hooks turn `dotnet test | tail -20` and `| head -5` (also `-n N`, `--lines N`) into
   `dtk dotnet test --max-lines 20`, dropping the pipe. The command now exits with dotnet's code, so
   `dotnet build | tail -5 && git add .` stops on a failure, which it did not before (`tail`'s exit code hid it). `tail`
-  gave the last N lines; `--max-lines` keeps the first N plus the status line, where the verdict is.
+  gave the last N lines; `--max-lines` keeps the first N plus the status line, where the verdict is. Under Claude Code
+  an explicit `dtk dotnet test | tail -20` (or `dtk <subcommand> … | tail -N`) is converted the same way; with
+  `DTK_RAW` on, nothing is converted.
 
 ## [0.13.0] - 2026-11-22
 
