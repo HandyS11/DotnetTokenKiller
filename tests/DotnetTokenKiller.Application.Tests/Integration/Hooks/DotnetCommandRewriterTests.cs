@@ -60,6 +60,46 @@ public sealed class DotnetCommandRewriterTests
         DotnetCommandRewriter.Rewrite("dotnet test | tail -5", new RewriteOptions(ConvertTailPipes: false, ConvertExplicitDtk: false))
             .Should().Be("dtk dotnet test | tail -5");
 
+    private static readonly RewriteOptions ExplicitDtk = new(ConvertTailPipes: true, ConvertExplicitDtk: true);
+
+    [Theory]
+    [InlineData("dtk dotnet test | tail -20", "dtk dotnet test --max-lines 20")]
+    [InlineData("dtk test --filter X | tail -5 && git add -A", "dtk test --max-lines 5 --filter X && git add -A")]
+    [InlineData("/usr/local/bin/dtk dotnet build | head -3", "/usr/local/bin/dtk dotnet build --max-lines 3")]
+    public void Rewrite_ExplicitDtkPipedIntoALineCount_BecomesMaxLines(string command, string expected) =>
+        DotnetCommandRewriter.Rewrite(command, ExplicitDtk).Should().Be(expected);
+
+    [Theory]
+    [InlineData("DTK_RAW=1 dtk dotnet test | tail -5")]
+    [InlineData("dtk log test | tail -5")]
+    [InlineData("dtk pipe test < x.log | tail -5")]
+    [InlineData("echo dtk dotnet test | tail -5")]
+    [InlineData("dtk dotnet test | tail -f")]
+    [InlineData("dtk dotnet test")]
+    [InlineData("dtk dotnet test --help | tail -5")]
+    [InlineData("dtk dotnet test --max-lines 9 | tail -5")]
+    [InlineData("dtk dotnet test --interactive | tail -5")]
+    [InlineData("dtk dotnet test | tail -99999999999")]
+    public void Rewrite_ExplicitDtkNotConverted_IsReturnedUnchanged(string command) =>
+        DotnetCommandRewriter.Rewrite(command, ExplicitDtk).Should().BeSameAs(command);
+
+    [Fact]
+    public void Rewrite_ExplicitDtkWithoutTheFlag_IsReturnedUnchanged()
+    {
+        const string command = "dtk dotnet test | tail -20";
+
+        DotnetCommandRewriter.Rewrite(command).Should().BeSameAs(command);
+    }
+
+    [Fact]
+    public void Rewrite_ExplicitDtkWithTailPipesOff_IsReturnedUnchanged()
+    {
+        const string command = "dtk dotnet test | tail -20";
+
+        DotnetCommandRewriter.Rewrite(command, new RewriteOptions(ConvertTailPipes: false, ConvertExplicitDtk: true))
+            .Should().BeSameAs(command);
+    }
+
     [Theory]
     [InlineData("dotnet build", "dtk dotnet build")]
     [InlineData("dotnet test", "dtk dotnet test")]

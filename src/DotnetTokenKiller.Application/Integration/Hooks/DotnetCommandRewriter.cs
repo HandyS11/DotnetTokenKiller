@@ -47,6 +47,7 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 internal static class DotnetCommandRewriter
 {
     private const string Dotnet = "dotnet";
+    private const string Dtk = "dtk";
     private const string Prefix = "dtk dotnet ";
 
     /// <summary>dtk's option that writes a file, which <see cref="IsAutoApprovable"/> never approves.</summary>
@@ -144,7 +145,9 @@ internal static class DotnetCommandRewriter
         ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(options);
 
-        if (!command.Contains(Dotnet, StringComparison.Ordinal))
+        var convertsExplicitDtk = options is { ConvertExplicitDtk: true, ConvertTailPipes: true };
+        if (!command.Contains(Dotnet, StringComparison.Ordinal)
+            && !(convertsExplicitDtk && command.Contains(Dtk, StringComparison.Ordinal)))
         {
             return command;
         }
@@ -155,7 +158,18 @@ internal static class DotnetCommandRewriter
 
         while (scanner.MoveNext(out var start, out var token))
         {
-            if (token == ShellToken.Code
+            if (convertsExplicitDtk
+                && token == ShellToken.Code
+                && start >= copied
+                && command[start] == 'd'
+                && TryTurnExplicitDtkTailIntoMaxLines(command, start, out var dtkEnd, out var dtkArgumentsEnd, out var dtkDropEnd, out var dtkLines))
+            {
+                rewritten ??= new StringBuilder(command.Length + 4);
+                rewritten.Append(command, copied, dtkEnd - copied)
+                    .Append(MaxLinesOption).Append(dtkLines).Append(command, dtkEnd, dtkArgumentsEnd - dtkEnd);
+                copied = dtkDropEnd;
+            }
+            else if (token == ShellToken.Code
                 && start >= copied
                 && command[start] == 'd'
                 && command.AsSpan(start).StartsWith(Dotnet, StringComparison.Ordinal)
@@ -410,6 +424,55 @@ internal static class DotnetCommandRewriter
 
         dropEnd = countEnd;
         return !PassthroughSubcommands.IsUnfilteredRun(words) && !PassthroughSubcommands.PromptsForConfirmation(words);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="start"/>, the index of a <c>d</c> in code, begins the program name of an explicit
+    /// <c>dtk</c> (or <c>dtk.exe</c>, reached by any path) at a command position, followed by <c>dotnet &lt;sub&gt;</c>
+    /// or <c>&lt;sub&gt;</c> for a subcommand dtk filters, whose pipe into <c>tail</c> or <c>head</c> converts as
+    /// <see cref="TryTurnTailIntoMaxLines"/> decides. Nothing is prefixed, and a <c>DTK_RAW=</c> assignment earlier in
+    /// the text rules the conversion out.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="start">The index of the <c>d</c>.</param>
+    /// <param name="end">Set to where the subcommand ends, where <c>--max-lines N</c> goes.</param>
+    /// <param name="argumentsEnd">Set to where the arguments end.</param>
+    /// <param name="dropEnd">Set to the index after the count, where the command goes on.</param>
+    /// <param name="lines">Set to the count, as digits.</param>
+    private static bool TryTurnExplicitDtkTailIntoMaxLines(
+        string command, int start, out int end, out int argumentsEnd, out int dropEnd, out string lines)
+    {
+        end = argumentsEnd = dropEnd = start;
+        lines = string.Empty;
+        var wordStart = command.AsSpan(0, start).LastIndexOfAny(Boundaries) + 1;
+        var wordEnd = start;
+        while (wordEnd < command.Length && !Boundaries.Contains(command[wordEnd]))
+        {
+            wordEnd++;
+        }
+
+        if ((start > wordStart && command[start - 1] is not ('/' or '\\'))
+            || command.AsSpan(start, wordEnd - start) is not ("dtk" or "dtk.exe")
+            || !IsCommandPosition(command, wordStart)
+            || command.AsSpan(0, start).Contains(RawOutputSwitch.EnvironmentVariable + "=", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var position = SkipSpaces(command, wordEnd);
+        if (command.AsSpan(position).StartsWith(Dotnet, StringComparison.Ordinal)
+            && position + Dotnet.Length < command.Length
+            && IsBlank(command[position + Dotnet.Length]))
+        {
+            position += Dotnet.Length;
+        }
+        else
+        {
+            position = wordEnd;
+        }
+
+        return TryMatchSubcommand(command, position, out var subcommandStart, out end)
+               && TryTurnTailIntoMaxLines(command, subcommandStart, end, out argumentsEnd, out dropEnd, out lines);
     }
 
     /// <summary>

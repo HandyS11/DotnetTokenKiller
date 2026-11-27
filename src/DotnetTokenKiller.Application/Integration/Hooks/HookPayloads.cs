@@ -251,7 +251,8 @@ internal static class HookPayloads
             }
         }
 
-        return ReplyWithUpdatedInput(root, expectedTool: null, options);
+        // Claude Code's reply carries no permission decision, so converting a command that already names dtk grants nothing.
+        return ReplyWithUpdatedInput(root, expectedTool: null, options with { ConvertExplicitDtk = true });
     }
 
     /// <summary>Whether <paramref name="eventName"/> is <c>SessionStart</c> or <c>SubagentStart</c>.</summary>

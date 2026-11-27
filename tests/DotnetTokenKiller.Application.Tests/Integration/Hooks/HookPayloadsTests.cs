@@ -192,6 +192,21 @@ public sealed class HookPayloadsTests
     }
 
     [Fact]
+    public void Claude_ExplicitDtkPipedIntoTail_IsConverted()
+    {
+        var payload = """{"tool_input":{"command":"dtk dotnet test | tail -20"}}"""u8;
+
+        var root = JsonNode.Parse(HookPayloads.Reply(HookPayloadKind.ClaudeCode, payload, null, null)!)!;
+
+        root["hookSpecificOutput"]!["updatedInput"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test --max-lines 20");
+    }
+
+    [Fact]
+    public void Copilot_ExplicitDtkPipedIntoTail_PrintsNothing() =>
+        Reply(HookPayloadKind.CopilotCli, """{"toolName":"bash","toolArgs":{"command":"dtk dotnet test | tail -20"}}""")
+            .Should().BeNull();
+
+    [Fact]
     public void Cursor_PipeIntoTail_GetsTheNeutralReply() =>
         Reply(HookPayloadKind.Cursor, """{"tool_input":{"command":"dotnet test | tail -5"}}""").Should().Be("{}");
 
