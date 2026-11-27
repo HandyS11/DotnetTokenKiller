@@ -170,7 +170,7 @@ internal static class HookPayloads
     internal static string? Reply(
         HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory, string? dtkRawValue)
     {
-        _options = RewriteOptions.Default with
+        var options = RewriteOptions.Default with
         {
             ConvertTailPipes = !RawOutputSwitch.IsOnFor(dtkRawValue)
         };
@@ -193,16 +193,16 @@ internal static class HookPayloads
         {
             return kind switch
             {
-                HookPayloadKind.ClaudeCode => ReplyToClaude(root, claudeProjectDirectory),
-                HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool),
-                HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool),
-                HookPayloadKind.Cursor => ReplyToCursor(root),
-                HookPayloadKind.GeminiCli => ReplyToGemini(root),
-                HookPayloadKind.CopilotCli => ReplyToCopilot(root),
-                HookPayloadKind.CodexCli => ReplyToCodex(root),
-                HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi or HookPayloadKind.Kilo or HookPayloadKind.Amp => ReplyToOpenCode(root),
-                HookPayloadKind.AntigravityCli => ReplyToAntigravity(root),
-                HookPayloadKind.Crush => ReplyToCrush(root),
+                HookPayloadKind.ClaudeCode => ReplyToClaude(root, options, claudeProjectDirectory),
+                HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool, options),
+                HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool, options),
+                HookPayloadKind.Cursor => ReplyToCursor(root, options),
+                HookPayloadKind.GeminiCli => ReplyToGemini(root, options),
+                HookPayloadKind.CopilotCli => ReplyToCopilot(root, options),
+                HookPayloadKind.CodexCli => ReplyToCodex(root, options),
+                HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi or HookPayloadKind.Kilo or HookPayloadKind.Amp => ReplyToOpenCode(root, options),
+                HookPayloadKind.AntigravityCli => ReplyToAntigravity(root, options),
+                HookPayloadKind.Crush => ReplyToCrush(root, options),
                 _ => null
             };
         }
@@ -230,8 +230,9 @@ internal static class HookPayloads
     /// <c>subagentStart</c> blocks the subagent on any other output. Cursor reads its own dtk rule file.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
+    /// <param name="options">What the rewrite may do.</param>
     /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
-    private static string? ReplyToClaude(JsonNode? root, string? claudeProjectDirectory)
+    private static string? ReplyToClaude(JsonNode? root, RewriteOptions options, string? claudeProjectDirectory)
     {
         if (root is JsonObject payload
             && payload[HookEventNameProperty] is JsonValue eventValue
@@ -250,7 +251,7 @@ internal static class HookPayloads
             }
         }
 
-        return ReplyWithUpdatedInput(root, expectedTool: null);
+        return ReplyWithUpdatedInput(root, expectedTool: null, options);
     }
 
     /// <summary>Whether <paramref name="eventName"/> is <c>SessionStart</c> or <c>SubagentStart</c>.</summary>
@@ -311,12 +312,13 @@ internal static class HookPayloads
     /// The harness's shell tool, or <see langword="null"/> to skip the check (Claude Code's matcher already selects
     /// <c>Bash</c>). A payload without <c>tool_name</c> — doctor's probe — always passes.
     /// </param>
-    private static string? ReplyWithUpdatedInput(JsonNode? root, string? expectedTool)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyWithUpdatedInput(JsonNode? root, string? expectedTool, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || (expectedTool is not null && NamesAnotherTool(payload, ToolNameProperty, expectedTool))
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out _, out var rewritten))
+            || !TryRewrite(toolInput, options, out _, out var rewritten))
         {
             return null;
         }
@@ -340,12 +342,13 @@ internal static class HookPayloads
     /// the agent, answering <see cref="CursorNeutralReply"/>.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string ReplyToCursor(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string ReplyToCursor(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || NamesAnotherTool(payload, ToolNameProperty, CursorShellTool)
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out var command, out var rewritten)
+            || !TryRewrite(toolInput, options, out var command, out var rewritten)
             || !DotnetCommandRewriter.IsAutoApprovable(command))
         {
             return CursorNeutralReply;
@@ -362,12 +365,13 @@ internal static class HookPayloads
     /// prompt entirely and dtk leaves that decision to the user.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string? ReplyToCrush(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyToCrush(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || NamesAnotherTool(payload, ToolNameProperty, CrushShellTool)
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out _, out var rewritten))
+            || !TryRewrite(toolInput, options, out _, out var rewritten))
         {
             return null;
         }
@@ -379,12 +383,12 @@ internal static class HookPayloads
         }.ToJsonString();
     }
 
-    private static string ReplyToGemini(JsonNode? root)
+    private static string ReplyToGemini(JsonNode? root, RewriteOptions options)
     {
         var reply = new JsonObject { ["decision"] = AllowDecision };
         if (root is JsonObject payload
             && payload[ToolInputProperty] is JsonObject toolInput
-            && TryRewrite(toolInput, out _, out var rewritten))
+            && TryRewrite(toolInput, options, out _, out var rewritten))
         {
             reply[HookSpecificOutputProperty] = new JsonObject
             {
@@ -395,7 +399,7 @@ internal static class HookPayloads
         return reply.ToJsonString();
     }
 
-    private static string? ReplyToCopilot(JsonNode? root)
+    private static string? ReplyToCopilot(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || payload["toolName"] is not JsonValue toolName
@@ -412,7 +416,7 @@ internal static class HookPayloads
             _ => null
         };
 
-        if (toolArgs is null || !TryRewrite(toolArgs, out var command, out var rewritten))
+        if (toolArgs is null || !TryRewrite(toolArgs, options, out var command, out var rewritten))
         {
             return null;
         }
@@ -425,12 +429,12 @@ internal static class HookPayloads
         }.ToJsonString();
     }
 
-    private static string? ReplyToCodex(JsonNode? root)
+    private static string? ReplyToCodex(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || NamesAnotherTool(payload, ToolNameProperty, "Bash")
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out _, out var rewritten))
+            || !TryRewrite(toolInput, options, out _, out var rewritten))
         {
             return null;
         }
@@ -455,9 +459,10 @@ internal static class HookPayloads
     /// is dtk's own, because dtk writes both ends: only the command crosses the process boundary.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string? ReplyToOpenCode(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyToOpenCode(JsonNode? root, RewriteOptions options)
     {
-        if (root is not JsonObject payload || !TryRewrite(payload, out _, out var rewritten))
+        if (root is not JsonObject payload || !TryRewrite(payload, options, out _, out var rewritten))
         {
             return null;
         }
@@ -472,13 +477,14 @@ internal static class HookPayloads
     /// closest verb that still lets the rewrite through without auto-approving a command the user's rules may not.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string? ReplyToAntigravity(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyToAntigravity(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || payload["toolCall"] is not JsonObject toolCall
             || toolCall["name"] is not JsonValue name || !name.TryGetValue<string>(out var toolName) || toolName != "run_command"
             || toolCall["args"] is not JsonObject arguments
-            || !TryRewrite(arguments, "CommandLine", out _, out var rewritten))
+            || !TryRewrite(arguments, "CommandLine", options, out _, out var rewritten))
         {
             return AntigravityNeutralReply;
         }
@@ -502,14 +508,10 @@ internal static class HookPayloads
         payload[key] is not null
         && (payload[key] is not JsonValue value || !value.TryGetValue<string>(out var name) || name != expected);
 
-    /// <summary>The rewrite options of the <see cref="Reply(HookPayloadKind, ReadOnlySpan{byte}, string?, string?)"/> running on this thread.</summary>
-    [ThreadStatic]
-    private static RewriteOptions? _options;
+    private static bool TryRewrite(JsonObject arguments, RewriteOptions options, out string command, out string rewritten) =>
+        TryRewrite(arguments, CommandProperty, options, out command, out rewritten);
 
-    private static bool TryRewrite(JsonObject arguments, out string command, out string rewritten) =>
-        TryRewrite(arguments, CommandProperty, out command, out rewritten);
-
-    private static bool TryRewrite(JsonObject arguments, string key, out string command, out string rewritten)
+    private static bool TryRewrite(JsonObject arguments, string key, RewriteOptions options, out string command, out string rewritten)
     {
         command = string.Empty;
         rewritten = string.Empty;
@@ -519,7 +521,7 @@ internal static class HookPayloads
         }
 
         command = text;
-        rewritten = DotnetCommandRewriter.Rewrite(text, _options ?? RewriteOptions.Default);
+        rewritten = DotnetCommandRewriter.Rewrite(text, options);
         return !ReferenceEquals(rewritten, text);
     }
 
