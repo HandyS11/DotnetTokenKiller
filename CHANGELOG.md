@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Under Claude Code with rtk's hook registered beside dtk's, a command both would rewrite (`git status && dotnet build`
-  without rtk's `dotnet` exclusion) ran with only one rewrite, because Claude Code runs the hooks in parallel and applies
+  even with rtk's `dotnet` exclusion) ran with only one rewrite, because Claude Code runs the hooks in parallel and applies
   one `updatedInput`. `dtk hook claude` now refuses such a command with the merged command in the reason, and the agent
   re-sends it, one extra turn. It fails open when rtk is missing, slow (2 s) or answers unexpectedly, and is sent only
   when the merged command is stable under both rewrites. In default permission mode the re-sent command needs allow

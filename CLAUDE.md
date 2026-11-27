@@ -122,7 +122,7 @@ Claude Code's hooks) gets Cursor's schema instead. `ClaudeCodeIntegrator` checks
 the options the rules leave out; the rules also lead every other harness's instructions (`AgentRuleBullets`).
 
 Claude Code runs every matching `PreToolUse` hook in parallel and applies only one `updatedInput`, so a command both
-rtk's and dtk's hooks rewrite (`git status && dotnet build` without rtk's `dotnet` exclusion) loses one rewrite.
+rtk's and dtk's hooks rewrite (`git status && dotnet build`, even with rtk's `dotnet` exclusion) loses one rewrite.
 `RtkRewriteRace` makes `dtk hook claude` answer `permissionDecision: "deny"` instead, the merged command in the
 reason, so the agent re-sends it. Only a `PreToolUse`/`Bash` payload without `cursor_version` gets it, and only when
 dtk rewrote the command, rtk's `hook claude` is registered in the user's or the project's Claude settings (`RtkPeer`)

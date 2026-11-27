@@ -46,8 +46,8 @@ unconfirmed. If you can run one, please report the result in an issue.
 1. `dotnet build` becomes `dtk dotnet build` in `droid` on the current release.
 2. Which shell runs the hook command on Windows.
 3. With the user's own `settings.json` `PreToolUse` hooks already registered, both theirs and dtk's run.
-4. With rtk's Droid hook (`rtk hook droid`) registered beside dtk's, whether a command both would rewrite loses one
-   rewrite, as it does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.
+4. If rtk registers its own hook for Droid, beside dtk's, whether a command both would rewrite loses one rewrite, as it
+   does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.
 
 ## Amp
 
