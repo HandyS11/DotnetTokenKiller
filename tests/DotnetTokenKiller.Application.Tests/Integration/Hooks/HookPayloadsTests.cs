@@ -178,6 +178,19 @@ public sealed class HookPayloadsTests
         root["modifiedArgs"]!["command"]!.GetValue<string>().Should().Be("dtk dotnet test --max-lines 5");
     }
 
+    [Theory]
+    [InlineData("1", "dtk dotnet test | tail -5")]
+    [InlineData("0", "dtk dotnet test --max-lines 5")]
+    [InlineData(null, "dtk dotnet test --max-lines 5")]
+    public void Claude_PipeIntoTail_IsConvertedUnlessTheHooksOwnDtkRawIsOn(string? dtkRaw, string expected)
+    {
+        var payload = """{"tool_input":{"command":"dotnet test | tail -5"}}"""u8;
+
+        var root = JsonNode.Parse(HookPayloads.Reply(HookPayloadKind.ClaudeCode, payload, null, dtkRaw)!)!;
+
+        root["hookSpecificOutput"]!["updatedInput"]!["command"]!.GetValue<string>().Should().Be(expected);
+    }
+
     [Fact]
     public void Cursor_PipeIntoTail_GetsTheNeutralReply() =>
         Reply(HookPayloadKind.Cursor, """{"tool_input":{"command":"dotnet test | tail -5"}}""").Should().Be("{}");

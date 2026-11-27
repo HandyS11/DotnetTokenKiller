@@ -39,8 +39,26 @@ public sealed class DotnetCommandRewriterTests
     [InlineData("dotnet ef migrations --help | head -5", "dtk dotnet ef migrations --help | head -5")]
     [InlineData("dotnet test $(cat args) | tail -5", "dtk dotnet test $(cat args) | tail -5")]
     [InlineData("dotnet ef database drop | tail -5", "dtk dotnet ef database drop | tail -5")]
+    [InlineData("dotnet test --help | head -5", "dtk dotnet test --help | head -5")]
+    [InlineData("dotnet build -h | head -5", "dtk dotnet build -h | head -5")]
+    [InlineData("dotnet build -? | head -5", "dtk dotnet build -? | head -5")]
+    [InlineData("dotnet list package --format \"json\" | head -20", "dtk dotnet list package --format \"json\" | head -20")]
+    [InlineData("dotnet build '-getProperty:Version' | tail -1", "dtk dotnet build '-getProperty:Version' | tail -1")]
+    [InlineData("dotnet test | tail -99999999999", "dtk dotnet test | tail -99999999999")]
+    [InlineData("export DTK_RAW=1 && dotnet test | tail -5", "export DTK_RAW=1 && dtk dotnet test | tail -5")]
+    [InlineData("DTK_RAW=1; dotnet test | tail -5", "DTK_RAW=1; dtk dotnet test | tail -5")]
     public void Rewrite_PipeIntoTailOrHeadNotJustALineCount_KeepsThePipe(string command, string expected) =>
         DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
+
+    [Fact]
+    public void Rewrite_AMatchInsideTheArgumentsOfAConvertedCommand_DoesNotThrow() =>
+        DotnetCommandRewriter.Rewrite("dotnet test { dotnet build | tail -5")
+            .Should().Be("dtk dotnet test --max-lines 5 { dotnet build");
+
+    [Fact]
+    public void Rewrite_WithTailPipesOff_KeepsThePipe() =>
+        DotnetCommandRewriter.Rewrite("dotnet test | tail -5", new RewriteOptions(ConvertTailPipes: false, ConvertExplicitDtk: false))
+            .Should().Be("dtk dotnet test | tail -5");
 
     [Theory]
     [InlineData("dotnet build", "dtk dotnet build")]

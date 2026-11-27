@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Application.Integration.Hooks;
 
@@ -152,8 +153,27 @@ internal static class HookPayloads
     /// project whose <c>.claude/settings.json</c> registers dtk's hook gets dtk's rules wherever its projects lie.
     /// </param>
     /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
-    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory)
+    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory) =>
+        Reply(kind, payload, claudeProjectDirectory,
+            Environment.GetEnvironmentVariable(RawOutputSwitch.EnvironmentVariable));
+
+    /// <summary>Builds the reply for one payload, knowing the hook's own <c>DTK_RAW</c>.</summary>
+    /// <param name="kind">The harness that sent the payload.</param>
+    /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, or <see langword="null"/>.</param>
+    /// <param name="dtkRawValue">
+    /// The value of <see cref="RawOutputSwitch.EnvironmentVariable"/> in the hook's environment, or
+    /// <see langword="null"/>. When it turns raw output on, dtk passes every run through and drops <c>--max-lines</c>,
+    /// so no <c>| tail -N</c> becomes one.
+    /// </param>
+    /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
+    internal static string? Reply(
+        HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory, string? dtkRawValue)
     {
+        _options = RewriteOptions.Default with
+        {
+            ConvertTailPipes = !RawOutputSwitch.IsOnFor(dtkRawValue)
+        };
         if (payload.StartsWith("\uFEFF"u8))
         {
             payload = payload[3..];
@@ -482,6 +502,10 @@ internal static class HookPayloads
         payload[key] is not null
         && (payload[key] is not JsonValue value || !value.TryGetValue<string>(out var name) || name != expected);
 
+    /// <summary>The rewrite options of the <see cref="Reply(HookPayloadKind, ReadOnlySpan{byte}, string?, string?)"/> running on this thread.</summary>
+    [ThreadStatic]
+    private static RewriteOptions? _options;
+
     private static bool TryRewrite(JsonObject arguments, out string command, out string rewritten) =>
         TryRewrite(arguments, CommandProperty, out command, out rewritten);
 
@@ -495,7 +519,7 @@ internal static class HookPayloads
         }
 
         command = text;
-        rewritten = DotnetCommandRewriter.Rewrite(text);
+        rewritten = DotnetCommandRewriter.Rewrite(text, _options ?? RewriteOptions.Default);
         return !ReferenceEquals(rewritten, text);
     }
 

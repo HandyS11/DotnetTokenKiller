@@ -133,9 +133,16 @@ internal static class DotnetCommandRewriter
     /// <summary>Prefixes every qualifying <c>dotnet &lt;subcommand&gt;</c> in <paramref name="command"/> with <c>dtk</c>.</summary>
     /// <param name="command">The shell command a harness is about to run.</param>
     /// <returns>The rewritten command, or <paramref name="command"/> itself when nothing qualified.</returns>
-    internal static string Rewrite(string command)
+    internal static string Rewrite(string command) => Rewrite(command, RewriteOptions.Default);
+
+    /// <summary>Prefixes every qualifying <c>dotnet &lt;subcommand&gt;</c> in <paramref name="command"/> with <c>dtk</c>.</summary>
+    /// <param name="command">The shell command a harness is about to run.</param>
+    /// <param name="options">What else the rewrite may do.</param>
+    /// <returns>The rewritten command, or <paramref name="command"/> itself when nothing qualified.</returns>
+    internal static string Rewrite(string command, RewriteOptions options)
     {
         ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(options);
 
         if (!command.Contains(Dotnet, StringComparison.Ordinal))
         {
@@ -149,6 +156,7 @@ internal static class DotnetCommandRewriter
         while (scanner.MoveNext(out var start, out var token))
         {
             if (token == ShellToken.Code
+                && start >= copied
                 && command[start] == 'd'
                 && command.AsSpan(start).StartsWith(Dotnet, StringComparison.Ordinal)
                 && !IsWordBefore(command, start)
@@ -161,7 +169,9 @@ internal static class DotnetCommandRewriter
                     .Append(Prefix)
                     .Append(command, subcommandStart, end - subcommandStart);
                 copied = end;
-                if (TryTurnTailIntoMaxLines(command, subcommandStart, end, out var argumentsEnd, out var dropEnd, out var lines))
+                if (options.ConvertTailPipes
+                    && !command.AsSpan(0, start).Contains(RawOutputSwitch.EnvironmentVariable + "=", StringComparison.Ordinal)
+                    && TryTurnTailIntoMaxLines(command, subcommandStart, end, out var argumentsEnd, out var dropEnd, out var lines))
                 {
                     rewritten.Append(MaxLinesOption).Append(lines).Append(command, end, argumentsEnd - end);
                     copied = dropEnd;
@@ -386,15 +396,18 @@ internal static class DotnetCommandRewriter
             argumentsEnd--;
         }
 
-        var arguments = command.AsSpan(end, argumentsEnd - end);
-        if (arguments.Contains("--max-lines", StringComparison.Ordinal)
-            || arguments.Contains("--vv", StringComparison.Ordinal)
-            || arguments.Contains("--interactive", StringComparison.OrdinalIgnoreCase))
+        // Quotes come off the words, so `--format "json"` reads as dtk will read it.
+        var plain = command[subcommandStart..argumentsEnd].Replace("\"", string.Empty, StringComparison.Ordinal)
+            .Replace("'", string.Empty, StringComparison.Ordinal);
+        var words = new List<string>(plain.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries));
+        if (plain.Contains("--max-lines", StringComparison.Ordinal)
+            || plain.Contains("--vv", StringComparison.Ordinal)
+            || plain.Contains("--interactive", StringComparison.OrdinalIgnoreCase)
+            || words.TakeWhile(word => word != "--").Any(word => word is "--help" or "-h" or "-?"))
         {
             return false;
         }
 
-        List<string> words = [.. command[subcommandStart..argumentsEnd].Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries)];
         dropEnd = countEnd;
         return !PassthroughSubcommands.IsUnfilteredRun(words) && !PassthroughSubcommands.PromptsForConfirmation(words);
     }
@@ -469,7 +482,8 @@ internal static class DotnetCommandRewriter
             _ => null
         };
 
-        if (count is not { Length: > 0 } || count[0] == '0' || !count.All(char.IsAsciiDigit))
+        if (count is not { Length: > 0 } || count[0] == '0' || !count.All(char.IsAsciiDigit)
+            || !int.TryParse(count, NumberStyles.None, CultureInfo.InvariantCulture, out _))
         {
             return -1;
         }
