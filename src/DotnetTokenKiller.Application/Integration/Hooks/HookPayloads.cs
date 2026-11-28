@@ -1,6 +1,7 @@
 using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Application.Integration.Hooks;
 
@@ -11,7 +12,7 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 /// never block the tool call. This also covers a payload with a duplicate JSON object key: <see cref="JsonNode"/>
 /// builds a <see cref="JsonObject"/>'s property dictionary lazily, so parsing such a payload succeeds and the
 /// <see cref="ArgumentException"/> only surfaces the first time something here indexes into the duplicated
-/// object — <see cref="Reply(HookPayloadKind, ReadOnlySpan{byte}, string)"/> guards the per-provider dispatch, not just the initial parse, so that still
+/// object — <see cref="Reply(HookPayloadKind, ReadOnlySpan{byte}, string, string, RtkPeer)"/> guards the per-provider dispatch, not just the initial parse, so that still
 /// yields the provider's no-rewrite result instead of an unhandled exception.
 /// </remarks>
 internal static class HookPayloads
@@ -70,6 +71,12 @@ internal static class HookPayloads
 
     /// <summary>Crush's shell tool.</summary>
     private const string CrushShellTool = "bash";
+
+    /// <summary>Claude Code's shell tool.</summary>
+    private const string ClaudeShellTool = "Bash";
+
+    /// <summary>Claude Code's event before each tool call, which its rewrite and refusal answer.</summary>
+    private const string PreToolUseEvent = "PreToolUse";
 
     /// <summary>The payload property naming the tool in Claude-shaped payloads (Claude Code, Codex CLI, Cursor, Devin).</summary>
     private const string ToolNameProperty = "tool_name";
@@ -137,14 +144,17 @@ internal static class HookPayloads
         return known;
     }
 
-    /// <summary>Builds the reply for one payload.</summary>
+    /// <summary>Builds the reply for one payload, with raw output off (it does not read the process's <c>DTK_RAW</c>).</summary>
     /// <param name="kind">The harness that sent the payload.</param>
     /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
     /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
     internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload) =>
         Reply(kind, payload, claudeProjectDirectory: null);
 
-    /// <summary>Builds the reply for one payload, knowing the project Claude Code runs the hook for.</summary>
+    /// <summary>
+    /// Builds the reply for one payload, knowing the project Claude Code runs the hook for, with raw output off (it
+    /// does not read the process's <c>DTK_RAW</c>; <c>dtk hook</c> passes it explicitly).
+    /// </summary>
     /// <param name="kind">The harness that sent the payload.</param>
     /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
     /// <param name="claudeProjectDirectory">
@@ -152,8 +162,43 @@ internal static class HookPayloads
     /// project whose <c>.claude/settings.json</c> registers dtk's hook gets dtk's rules wherever its projects lie.
     /// </param>
     /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
-    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory)
+    internal static string? Reply(HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory) =>
+        Reply(kind, payload, claudeProjectDirectory, dtkRawValue: null);
+
+    /// <summary>Builds the reply for one payload, knowing the hook's own <c>DTK_RAW</c>.</summary>
+    /// <param name="kind">The harness that sent the payload.</param>
+    /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, or <see langword="null"/>.</param>
+    /// <param name="dtkRawValue">
+    /// The value of <see cref="RawOutputSwitch.EnvironmentVariable"/> in the hook's environment, or
+    /// <see langword="null"/>. When it turns raw output on, dtk passes every run through and drops <c>--max-lines</c>,
+    /// so no <c>| tail -N</c> becomes one.
+    /// </param>
+    /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
+    internal static string? Reply(
+        HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory, string? dtkRawValue) =>
+        Reply(kind, payload, claudeProjectDirectory, dtkRawValue, rtk: null);
+
+    /// <summary>Builds the reply for one payload, knowing the hook's own <c>DTK_RAW</c> and what to ask rtk.</summary>
+    /// <param name="kind">The harness that sent the payload.</param>
+    /// <param name="payload">The UTF-8 payload, with or without a byte order mark.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, or <see langword="null"/>.</param>
+    /// <param name="dtkRawValue">
+    /// The value of <see cref="RawOutputSwitch.EnvironmentVariable"/> in the hook's environment, or
+    /// <see langword="null"/>.
+    /// </param>
+    /// <param name="rtk">
+    /// What a Claude Code <c>PreToolUse</c> reply asks about rtk's own hook, to refuse a command both hooks would
+    /// rewrite (<see cref="RtkRewriteRace"/>), or <see langword="null"/> never to ask. Other harnesses ignore it.
+    /// </param>
+    /// <returns>The JSON to print, or <see langword="null"/> when the hook should print nothing.</returns>
+    internal static string? Reply(
+        HookPayloadKind kind, ReadOnlySpan<byte> payload, string? claudeProjectDirectory, string? dtkRawValue, RtkPeer? rtk)
     {
+        var options = RewriteOptions.Default with
+        {
+            ConvertTailPipes = !RawOutputSwitch.IsOnFor(dtkRawValue)
+        };
         if (payload.StartsWith("\uFEFF"u8))
         {
             payload = payload[3..];
@@ -173,16 +218,16 @@ internal static class HookPayloads
         {
             return kind switch
             {
-                HookPayloadKind.ClaudeCode => ReplyToClaude(root, claudeProjectDirectory),
-                HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool),
-                HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool),
-                HookPayloadKind.Cursor => ReplyToCursor(root),
-                HookPayloadKind.GeminiCli => ReplyToGemini(root),
-                HookPayloadKind.CopilotCli => ReplyToCopilot(root),
-                HookPayloadKind.CodexCli => ReplyToCodex(root),
-                HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi or HookPayloadKind.Kilo or HookPayloadKind.Amp => ReplyToOpenCode(root),
-                HookPayloadKind.AntigravityCli => ReplyToAntigravity(root),
-                HookPayloadKind.Crush => ReplyToCrush(root),
+                HookPayloadKind.ClaudeCode => ReplyToClaude(root, options, claudeProjectDirectory, rtk),
+                HookPayloadKind.Devin => ReplyWithUpdatedInput(root, DevinShellTool, options),
+                HookPayloadKind.FactoryDroid => ReplyWithUpdatedInput(root, DroidShellTool, options),
+                HookPayloadKind.Cursor => ReplyToCursor(root, options),
+                HookPayloadKind.GeminiCli => ReplyToGemini(root, options),
+                HookPayloadKind.CopilotCli => ReplyToCopilot(root, options),
+                HookPayloadKind.CodexCli => ReplyToCodex(root, options),
+                HookPayloadKind.OpenCode or HookPayloadKind.Pi or HookPayloadKind.OhMyPi or HookPayloadKind.Kilo or HookPayloadKind.Amp => ReplyToOpenCode(root, options),
+                HookPayloadKind.AntigravityCli => ReplyToAntigravity(root, options),
+                HookPayloadKind.Crush => ReplyToCrush(root, options),
                 _ => null
             };
         }
@@ -207,11 +252,16 @@ internal static class HookPayloads
     /// no event name (doctor's probe), or another harness's own event name (Cursor and Devin run Claude Code's hooks).
     /// Cursor's own session and subagent start events, recognised by <c>cursor_version</c>, get a reply in Cursor's
     /// schema instead (<see cref="CursorSubagentStartReply"/>, <see cref="CursorNeutralReply"/>): its
-    /// <c>subagentStart</c> blocks the subagent on any other output. Cursor reads its own dtk rule file.
+    /// <c>subagentStart</c> blocks the subagent on any other output. Cursor reads its own dtk rule file. A Claude Code
+    /// <c>PreToolUse</c> for <c>Bash</c> that rtk's hook would rewrite too is refused instead
+    /// (<see cref="RefusalForRtkRace"/>).
     /// </summary>
     /// <param name="root">The parsed payload.</param>
+    /// <param name="options">What the rewrite may do.</param>
     /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
-    private static string? ReplyToClaude(JsonNode? root, string? claudeProjectDirectory)
+    /// <param name="rtk">What to ask about rtk's hook, or <see langword="null"/> never to ask.</param>
+    private static string? ReplyToClaude(
+        JsonNode? root, RewriteOptions options, string? claudeProjectDirectory, RtkPeer? rtk)
     {
         if (root is JsonObject payload
             && payload[HookEventNameProperty] is JsonValue eventValue
@@ -230,7 +280,77 @@ internal static class HookPayloads
             }
         }
 
-        return ReplyWithUpdatedInput(root, expectedTool: null);
+        // Claude Code's reply carries no permission decision, so converting a command that already names dtk grants nothing.
+        var claudeOptions = options with { ConvertExplicitDtk = true };
+        if (rtk is null || root is not JsonObject toolCall || !IsClaudeBashPreToolUse(toolCall))
+        {
+            return ReplyWithUpdatedInput(root, expectedTool: null, claudeOptions);
+        }
+
+        if (toolCall[ToolInputProperty] is not JsonObject toolInput
+            || !TryRewrite(toolInput, claudeOptions, out var command, out var rewritten))
+        {
+            return null;
+        }
+
+        return RefusalForRtkRace(toolCall, command, rewritten, claudeOptions, claudeProjectDirectory, rtk)
+               ?? UpdatedInputReply(toolInput, rewritten);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="payload"/> is Claude Code's own <c>PreToolUse</c> for its <c>Bash</c> tool: not doctor's
+    /// probe (no event name), not another tool, and not Cursor running Claude Code's hooks (<c>cursor_version</c>).
+    /// </summary>
+    /// <param name="payload">The parsed payload.</param>
+    private static bool IsClaudeBashPreToolUse(JsonObject payload) =>
+        payload[HookEventNameProperty] is JsonValue eventValue
+        && eventValue.TryGetValue<string>(out var eventName)
+        && eventName == PreToolUseEvent
+        && payload[ToolNameProperty] is JsonValue toolValue
+        && toolValue.TryGetValue<string>(out var toolName)
+        && toolName == ClaudeShellTool
+        && !payload.ContainsKey(CursorVersionProperty);
+
+    /// <summary>
+    /// Claude Code's refusal of a command that rtk's hook would rewrite as well as dtk's, carrying the command with both
+    /// rewrites (<see cref="RtkRewriteRace"/>): Claude Code runs both hooks in parallel and applies only one rewrite.
+    /// <see langword="null"/>, for today's rewrite, when rtk's hook is not registered for the project, rtk does not
+    /// rewrite the command, or anything about asking fails: dtk's own trouble never blocks a command.
+    /// </summary>
+    /// <param name="payload">The parsed payload.</param>
+    /// <param name="command">The command the agent wrote.</param>
+    /// <param name="rewritten">dtk's rewrite of <paramref name="command"/>, which differs from it.</param>
+    /// <param name="options">What dtk's rewrite may do.</param>
+    /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
+    /// <param name="rtk">What to ask about rtk's hook.</param>
+    private static string? RefusalForRtkRace(
+        JsonObject payload,
+        string command,
+        string rewritten,
+        RewriteOptions options,
+        string? claudeProjectDirectory,
+        RtkPeer rtk)
+    {
+        try
+        {
+            // Inside the try: the current directory throws when it has been deleted.
+            var cwd = payload["cwd"] is JsonValue cwdValue && cwdValue.TryGetValue<string>(out var directory) ? directory : null;
+            var projectDirectory = claudeProjectDirectory ?? cwd ?? Environment.CurrentDirectory;
+            if (!rtk.IsHookRegistered(projectDirectory))
+            {
+                return null;
+            }
+
+            var merged = RtkRewriteRace.MergedCommand(
+                command, rewritten, candidate => DotnetCommandRewriter.Rewrite(candidate, options), rtk.Rewriter);
+            return merged is null ? null : RtkRewriteRace.DenyReply(merged);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // An unreadable or malformed settings file (a duplicate key throws only once read), or a failing rtk peer:
+            // dtk's own trouble, so the command gets today's rewrite rather than a refusal.
+            return null;
+        }
     }
 
     /// <summary>Whether <paramref name="eventName"/> is <c>SessionStart</c> or <c>SubagentStart</c>.</summary>
@@ -291,23 +411,32 @@ internal static class HookPayloads
     /// The harness's shell tool, or <see langword="null"/> to skip the check (Claude Code's matcher already selects
     /// <c>Bash</c>). A payload without <c>tool_name</c> — doctor's probe — always passes.
     /// </param>
-    private static string? ReplyWithUpdatedInput(JsonNode? root, string? expectedTool)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyWithUpdatedInput(JsonNode? root, string? expectedTool, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || (expectedTool is not null && NamesAnotherTool(payload, ToolNameProperty, expectedTool))
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out _, out var rewritten))
+            || !TryRewrite(toolInput, options, out _, out var rewritten))
         {
             return null;
         }
 
+        return UpdatedInputReply(toolInput, rewritten);
+    }
+
+    /// <summary>Claude Code's reply that runs <paramref name="rewritten"/> instead, with the rest of the tool input.</summary>
+    /// <param name="toolInput">The payload's tool input.</param>
+    /// <param name="rewritten">The rewritten command.</param>
+    private static string UpdatedInputReply(JsonObject toolInput, string rewritten)
+    {
         var updatedInput = (JsonObject)toolInput.DeepClone();
         updatedInput[CommandProperty] = rewritten;
         return new JsonObject
         {
             [HookSpecificOutputProperty] = new JsonObject
             {
-                [HookEventNameOutputProperty] = "PreToolUse",
+                [HookEventNameOutputProperty] = PreToolUseEvent,
                 ["updatedInput"] = updatedInput
             }
         }.ToJsonString();
@@ -320,12 +449,13 @@ internal static class HookPayloads
     /// the agent, answering <see cref="CursorNeutralReply"/>.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string ReplyToCursor(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string ReplyToCursor(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || NamesAnotherTool(payload, ToolNameProperty, CursorShellTool)
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out var command, out var rewritten)
+            || !TryRewrite(toolInput, options, out var command, out var rewritten)
             || !DotnetCommandRewriter.IsAutoApprovable(command))
         {
             return CursorNeutralReply;
@@ -342,12 +472,13 @@ internal static class HookPayloads
     /// prompt entirely and dtk leaves that decision to the user.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string? ReplyToCrush(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyToCrush(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || NamesAnotherTool(payload, ToolNameProperty, CrushShellTool)
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out _, out var rewritten))
+            || !TryRewrite(toolInput, options, out _, out var rewritten))
         {
             return null;
         }
@@ -359,12 +490,12 @@ internal static class HookPayloads
         }.ToJsonString();
     }
 
-    private static string ReplyToGemini(JsonNode? root)
+    private static string ReplyToGemini(JsonNode? root, RewriteOptions options)
     {
         var reply = new JsonObject { ["decision"] = AllowDecision };
         if (root is JsonObject payload
             && payload[ToolInputProperty] is JsonObject toolInput
-            && TryRewrite(toolInput, out _, out var rewritten))
+            && TryRewrite(toolInput, options, out _, out var rewritten))
         {
             reply[HookSpecificOutputProperty] = new JsonObject
             {
@@ -375,7 +506,7 @@ internal static class HookPayloads
         return reply.ToJsonString();
     }
 
-    private static string? ReplyToCopilot(JsonNode? root)
+    private static string? ReplyToCopilot(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || payload["toolName"] is not JsonValue toolName
@@ -392,7 +523,7 @@ internal static class HookPayloads
             _ => null
         };
 
-        if (toolArgs is null || !TryRewrite(toolArgs, out var command, out var rewritten))
+        if (toolArgs is null || !TryRewrite(toolArgs, options, out var command, out var rewritten))
         {
             return null;
         }
@@ -405,12 +536,12 @@ internal static class HookPayloads
         }.ToJsonString();
     }
 
-    private static string? ReplyToCodex(JsonNode? root)
+    private static string? ReplyToCodex(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || NamesAnotherTool(payload, ToolNameProperty, "Bash")
             || payload[ToolInputProperty] is not JsonObject toolInput
-            || !TryRewrite(toolInput, out _, out var rewritten))
+            || !TryRewrite(toolInput, options, out _, out var rewritten))
         {
             return null;
         }
@@ -435,9 +566,10 @@ internal static class HookPayloads
     /// is dtk's own, because dtk writes both ends: only the command crosses the process boundary.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string? ReplyToOpenCode(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyToOpenCode(JsonNode? root, RewriteOptions options)
     {
-        if (root is not JsonObject payload || !TryRewrite(payload, out _, out var rewritten))
+        if (root is not JsonObject payload || !TryRewrite(payload, options, out _, out var rewritten))
         {
             return null;
         }
@@ -452,13 +584,14 @@ internal static class HookPayloads
     /// closest verb that still lets the rewrite through without auto-approving a command the user's rules may not.
     /// </summary>
     /// <param name="root">The parsed payload.</param>
-    private static string? ReplyToAntigravity(JsonNode? root)
+    /// <param name="options">What the rewrite may do.</param>
+    private static string? ReplyToAntigravity(JsonNode? root, RewriteOptions options)
     {
         if (root is not JsonObject payload
             || payload["toolCall"] is not JsonObject toolCall
             || toolCall["name"] is not JsonValue name || !name.TryGetValue<string>(out var toolName) || toolName != "run_command"
             || toolCall["args"] is not JsonObject arguments
-            || !TryRewrite(arguments, "CommandLine", out _, out var rewritten))
+            || !TryRewrite(arguments, "CommandLine", options, out _, out var rewritten))
         {
             return AntigravityNeutralReply;
         }
@@ -482,10 +615,10 @@ internal static class HookPayloads
         payload[key] is not null
         && (payload[key] is not JsonValue value || !value.TryGetValue<string>(out var name) || name != expected);
 
-    private static bool TryRewrite(JsonObject arguments, out string command, out string rewritten) =>
-        TryRewrite(arguments, CommandProperty, out command, out rewritten);
+    private static bool TryRewrite(JsonObject arguments, RewriteOptions options, out string command, out string rewritten) =>
+        TryRewrite(arguments, CommandProperty, options, out command, out rewritten);
 
-    private static bool TryRewrite(JsonObject arguments, string key, out string command, out string rewritten)
+    private static bool TryRewrite(JsonObject arguments, string key, RewriteOptions options, out string command, out string rewritten)
     {
         command = string.Empty;
         rewritten = string.Empty;
@@ -495,7 +628,7 @@ internal static class HookPayloads
         }
 
         command = text;
-        rewritten = DotnetCommandRewriter.Rewrite(text);
+        rewritten = DotnetCommandRewriter.Rewrite(text, options);
         return !ReferenceEquals(rewritten, text);
     }
 

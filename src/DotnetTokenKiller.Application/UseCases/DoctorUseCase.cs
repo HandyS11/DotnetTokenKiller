@@ -1,5 +1,8 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
 using DotnetTokenKiller.Domain.Integration;
@@ -35,14 +38,21 @@ public sealed record DiagnosticCheck(string Name, bool Passed, string Message, b
 /// <param name="locateRtk">
 /// Returns the absolute path of the <c>rtk</c> a harness would run, or <see langword="null"/> when <c>PATH</c> has none.
 /// </param>
+/// <param name="locateDtk">
+/// Returns the absolute path of the <c>dtk</c> a harness would run, or <see langword="null"/> when <c>PATH</c> has none.
+/// </param>
 internal sealed class DoctorUseCase(
     ICommandRunner runner,
     IConfigProvider configProvider,
     HookHealthChecker hookHealth,
     IEnumerable<IProviderIntegrator> integrators,
     RtkHookCoexistence rtk,
-    Func<string?> locateRtk)
+    Func<string?> locateRtk,
+    Func<string?> locateDtk)
 {
+    /// <summary>A command rtk's and dtk's Claude Code hooks would both rewrite, if neither left the other's part alone.</summary>
+    private const string MixedCommand = "git status && dotnet build";
+
     /// <summary>Creates a use case that resolves <c>rtk</c> from this process's <c>PATH</c>.</summary>
     /// <param name="runner">The command runner used to probe the dotnet SDK and rtk.</param>
     /// <param name="configProvider">The configuration provider.</param>
@@ -61,7 +71,8 @@ internal sealed class DoctorUseCase(
             hookHealth,
             integrators,
             rtk,
-            static () => ExecutableSearch.FindOnProcessPath(RtkConfigLocator.RtkCommand))
+            static () => ExecutableSearch.FindOnProcessPath(RtkConfigLocator.RtkCommand),
+            static () => ExecutableSearch.FindOnProcessPath(HookHealthChecker.DtkCommand))
     {
     }
 
@@ -142,7 +153,7 @@ internal sealed class DoctorUseCase(
         if (string.IsNullOrWhiteSpace(rewrite.StdOut))
         {
             return rewrite.ExitCode == 1
-                ? new DiagnosticCheck(name, true, "rtk leaves dotnet commands to dtk")
+                ? await CheckMixedCommandAsync(name, projectDirectory, rtkPath, cancellationToken).ConfigureAwait(false)
                 : null;
         }
 
@@ -151,6 +162,105 @@ internal sealed class DoctorUseCase(
             name,
             $"rtk also rewrites dotnet commands. Add \"dotnet\" to [hooks].exclude_commands in {configPath}, "
             + "or run 'dtk init claude' again.");
+    }
+
+    /// <summary>
+    /// Once rtk leaves <c>dotnet</c> to dtk, probes the installed <c>dtk hook claude</c> with a command both tools would
+    /// rewrite: Claude Code applies only one hook's rewrite, so a dtk that rewrites it alone loses rtk's, or its own.
+    /// Fails toward today's pass: no rtk rewrite of the git half, no dtk on <c>PATH</c>, a timeout or an unreadable
+    /// answer all report the plain pass.
+    /// </summary>
+    /// <param name="name">The check's name.</param>
+    /// <param name="projectDirectory">The project directory, sent as the payload's <c>cwd</c>.</param>
+    /// <param name="rtkPath">The absolute path of rtk.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    private async Task<DiagnosticCheck> CheckMixedCommandAsync(
+        string name, string projectDirectory, string rtkPath, CancellationToken cancellationToken)
+    {
+        var pass = new DiagnosticCheck(name, true, "rtk leaves dotnet commands to dtk");
+
+        var git = await RtkConfigLocator
+            .TryRunAsync(runner, rtkPath, ["rewrite", "git status"], RtkConfigLocator.ProbeTimeout, cancellationToken)
+            .ConfigureAwait(false);
+        if (git is null
+            || git.ExitCode is not (0 or 3)
+            || string.IsNullOrWhiteSpace(git.StdOut)
+            || git.StdOut.Trim() == "git status"
+            || locateDtk() is not { } dtkPath)
+        {
+            return pass;
+        }
+
+        var payload = new JsonObject
+        {
+            ["hook_event_name"] = "PreToolUse",
+            ["tool_name"] = "Bash",
+            ["tool_input"] = new JsonObject { ["command"] = MixedCommand },
+            ["cwd"] = projectDirectory
+        }.ToJsonString();
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(RtkConfigLocator.ProbeTimeout);
+
+        CommandResult result;
+        try
+        {
+            result = await runner
+                .RunCapturedWithInputAsync(dtkPath, [HookCommands.Verb, "claude"], payload, timeout.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return pass; // the timeout, not the caller
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return pass;
+        }
+
+        return ReadMixedAnswer(result.StdOut, git.StdOut.Trim()) switch
+        {
+            true => new DiagnosticCheck(
+                name,
+                true,
+                "rtk leaves dotnet commands to dtk; a command both rewrite comes back refused with the merged command"),
+            false => DiagnosticCheck.Warning(
+                name,
+                "the dtk hook on PATH lets rtk's and dtk's rewrites race on a command both rewrite, such as "
+                + $"'{MixedCommand}', and one of them is lost. Upgrade dtk to 0.14.0 or later."),
+            null => pass
+        };
+    }
+
+    /// <summary>Reads a Claude Code hook's reply to the mixed command.</summary>
+    /// <param name="stdout">What the hook printed.</param>
+    /// <param name="rtkGitRewrite">rtk's rewrite of <c>git status</c>, which the refusal's merged command must carry.</param>
+    /// <returns><see langword="true"/> for the refusal, <see langword="false"/> for a lone rewrite, else <see langword="null"/>.</returns>
+    private static bool? ReadMixedAnswer(string stdout, string rtkGitRewrite)
+    {
+        try
+        {
+            if (JsonNode.Parse(stdout) is not JsonObject { } root || root["hookSpecificOutput"] is not JsonObject output)
+            {
+                return null;
+            }
+
+            if (output["permissionDecision"]?.GetValue<string>() == "deny")
+            {
+                return output["permissionDecisionReason"]?.GetValue<string>() is { } reason
+                    && reason.StartsWith(RtkRewriteRace.ReasonLead, StringComparison.Ordinal)
+                    && reason.Contains("dtk dotnet build", StringComparison.Ordinal)
+                    && reason.Contains(rtkGitRewrite, StringComparison.Ordinal)
+                    ? true
+                    : null;
+            }
+
+            return output["updatedInput"] is not null ? false : null;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     private async Task<DiagnosticCheck> CheckDotnetSdkAsync(CancellationToken cancellationToken)

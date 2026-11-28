@@ -198,9 +198,7 @@ internal static class ArgumentPreprocessor
 
         var dotnetArgs = args[1..];
         return !DotnetSubcommands.TryMatch(dotnetArgs, out _) ||
-               PassthroughSubcommands.IsInteractiveFilteredRun(dotnetArgs) ||
-               PassthroughSubcommands.IsMachineReadableRun(dotnetArgs) ||
-               PassthroughSubcommands.IsToolHelpRun(dotnetArgs);
+               PassthroughSubcommands.IsUnfilteredRun(dotnetArgs);
     }
 
     /// <summary>

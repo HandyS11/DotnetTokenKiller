@@ -1,6 +1,8 @@
 using System.Text;
+using DotnetTokenKiller.Application.Helpers;
 using DotnetTokenKiller.Application.Integration;
 using DotnetTokenKiller.Application.Integration.Hooks;
+using DotnetTokenKiller.Domain.Execution;
 
 namespace DotnetTokenKiller.Cli;
 
@@ -29,8 +31,7 @@ internal static class HookEntryPoint
     /// <returns>Always 0.</returns>
     internal static int Run(IReadOnlyList<string> args) =>
         Run(args, Console.IsInputRedirected, Console.OpenStandardInput, Console.OpenStandardOutput, Console.Error,
-            Environment.GetEnvironmentVariable(ClaudeProjectDirectoryVariable));
-
+            Environment.GetEnvironmentVariable(ClaudeProjectDirectoryVariable), RtkPeerFor(args));
 
     /// <summary>Handles <c>dtk hook</c> with the given streams.</summary>
     /// <param name="args">The arguments after <c>hook</c>.</param>
@@ -39,6 +40,10 @@ internal static class HookEntryPoint
     /// <param name="openOutput">Opens stdout; only called when there is a reply to print.</param>
     /// <param name="error">Receives the usage line.</param>
     /// <param name="claudeProjectDirectory">Claude Code's <c>CLAUDE_PROJECT_DIR</c>, when set.</param>
+    /// <param name="rtk">
+    /// What Claude Code's reply asks about rtk's own hook, or <see langword="null"/> never to ask
+    /// (<see cref="HookPayloads.Reply(HookPayloadKind, ReadOnlySpan{byte}, string, string, RtkPeer)"/>).
+    /// </param>
     /// <returns>Always 0.</returns>
     internal static int Run(
         IReadOnlyList<string> args,
@@ -46,7 +51,8 @@ internal static class HookEntryPoint
         Func<Stream> openInput,
         Func<Stream> openOutput,
         TextWriter error,
-        string? claudeProjectDirectory = null)
+        string? claudeProjectDirectory = null,
+        RtkPeer? rtk = null)
     {
         HookPayloadKind? kind = null;
         try
@@ -65,7 +71,8 @@ internal static class HookEntryPoint
                 input.CopyTo(buffer);
             }
 
-            var reply = HookPayloads.Reply(resolvedKind, buffer.GetBuffer().AsSpan(0, (int)buffer.Length), claudeProjectDirectory);
+            var reply = HookPayloads.Reply(resolvedKind, buffer.GetBuffer().AsSpan(0, (int)buffer.Length),
+                claudeProjectDirectory, Environment.GetEnvironmentVariable(RawOutputSwitch.EnvironmentVariable), rtk);
             if (reply is null)
             {
                 return 0;
@@ -89,6 +96,22 @@ internal static class HookEntryPoint
 
         return 0;
     }
+
+    /// <summary>
+    /// The real rtk peer for <c>dtk hook claude</c>, and none for any other provider: the user's and the project's
+    /// Claude Code settings, and the <c>rtk</c> on <c>PATH</c>. Both are cheap to build and do nothing until asked,
+    /// which happens only once dtk has rewritten a command.
+    /// </summary>
+    /// <param name="args">The arguments after <c>hook</c>.</param>
+    private static RtkPeer? RtkPeerFor(IReadOnlyList<string> args) =>
+        args.Count == 1 && HookPayloads.TryGetKind(args[0], out var kind) && kind == HookPayloadKind.ClaudeCode
+            ? new RtkPeer(
+                static projectDirectory =>
+                    new RtkHookCoexistence(new HomePaths().ClaudeDir, string.Empty).IsRtkHookPresent(projectDirectory),
+                new ProcessRtkRewriter(
+                    static () => ExecutableSearch.FindOnProcessPath(RtkConfigLocator.RtkCommand),
+                    ProcessRtkRewriter.DefaultTimeout))
+            : null;
 
     /// <summary>Writes Cursor's neutral reply, swallowing any failure: this already runs from a catch-all.</summary>
     /// <param name="openOutput">Opens stdout.</param>

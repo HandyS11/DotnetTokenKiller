@@ -95,7 +95,12 @@ Distinct from `dtk init copilot` (instruction-only, Copilot IDE). Every hook is 
 `env`/`time`/`timeout`/`nice`/`nohup`/`exec` with arguments it knows, never behind another word (`$D`, `echo`, `ssh`,
 `sudo`), which may not run it here or with the same `PATH`, and never when its output goes to a text filter or a file
 (`SendsOutputToATextFilterOrFile`: `| grep`/`rg`/`awk`/`sed`/`cut`, `> x.log`), which expects MSBuild's lines;
-`| tail`, `| head` and `| tee` are still rewritten. The Copilot CLI hook's reply's
+`| tee` is still rewritten; `| tail -N` and `| head -N` (also `-n N`, `-nN`, `--lines N`, `--lines=N`, a positive N, last
+in its pipeline) become `--max-lines N` with the pipe dropped (`TryTurnTailIntoMaxLines`), so the command then exits with
+dotnet's code, not `tail`'s; under Claude Code an explicit `dtk dotnet … | tail -N` (or `dtk <sub> … | tail -N`) is
+converted too, never with `DTK_RAW` on. The pipe stays for any other `tail`/`head` operand or pipeline, a command that already
+has `--max-lines`, `--vv` or `--interactive`, a substitution in its arguments, or a run dtk passes through unfiltered
+(`PassthroughSubcommands.IsUnfilteredRun`). The Copilot CLI hook's reply's
 `permissionDecision: "allow"` is gated by `DotnetCommandRewriter.IsSimpleCommand`, which must stay fail-closed: any
 command substitution (`$(`, backticks), heredoc, or unquoted chaining character makes it return `false` (`"ask"`)
 rather than guess a command is safe. `IsAutoApprovable` (also Cursor's gate, which rewrites only auto-approvable
@@ -116,6 +121,18 @@ entries) finds a .NET project or the project in `CLAUDE_PROJECT_DIR` registers t
 Claude Code's hooks) gets Cursor's schema instead. `ClaudeCodeIntegrator` checks the two registrations for doctor
 (`IHookApprovalInspector`), and `HookHealthChecker` probes the reply. The skill is the on-demand reference, triggered by
 the options the rules leave out; the rules also lead every other harness's instructions (`AgentRuleBullets`).
+
+Claude Code runs every matching `PreToolUse` hook in parallel and applies only one `updatedInput`, so a command both
+rtk's and dtk's hooks rewrite (`git status && dotnet build`, even with rtk's `dotnet` exclusion) loses one rewrite.
+`RtkRewriteRace` makes `dtk hook claude` answer `permissionDecision: "deny"` instead, the merged command in the
+reason, so the agent re-sends it. Only a `PreToolUse`/`Bash` payload without `cursor_version` gets it, and only when
+dtk rewrote the command, rtk's `hook claude` is registered in the user's or the project's Claude settings (`RtkPeer`)
+and rtk would rewrite it too. rtk is asked through `ProcessRtkRewriter` (`rtk rewrite`, no shell, 2 s, refused when
+a `.cmd`/`.bat` on Windows), and every failure fails open to the plain rewrite; the refusal is sent only when the merged
+command is stable under both rewrites. `dtk doctor`'s rtk check probes the installed hook with
+`git status && dotnet build`. A live gate (Claude Code 2.1.332, rtk 0.43) confirmed the deny wins and the agent re-sends;
+in default permission mode the re-sent `rtk …`/`dtk dotnet …` commands need allow rules for the prefixed forms, never
+`Bash(rtk:*)` (it allows `rtk run <anything>`).
 
 dtk's own options are `--tee <path>`, `--max-lines <n>` (value options: `ArgumentPreprocessor` moves the value with
 its flag ahead of the inserted `--`, and a missing value, or a `--max-lines` whose next token is not an integer, is a

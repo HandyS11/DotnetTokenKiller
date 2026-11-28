@@ -23,6 +23,9 @@ unconfirmed. If you can run one, please report the result in an issue.
    subagent on output outside its schema (`permission` appears required). So a payload carrying `cursor_version`
    gets a reply in Cursor's schema: `{"permission":"allow"}` for subagent start, `{}` for session start; Cursor reads
    dtk's rules from its own rule file instead.
+7. With rtk's Cursor hook (`rtk hook cursor`) registered beside dtk's, whether a command both would rewrite loses one
+   rewrite as it does under Claude Code. dtk's refusal is Claude Code's only (a payload carrying `cursor_version` never
+   gets it), so the race with rtk is unverified here.
 
 ## Devin (Devin Local and Devin CLI)
 
@@ -34,12 +37,17 @@ unconfirmed. If you can run one, please report the result in an issue.
    honours `hookSpecificOutput.additionalContext` (docs.devin.ai, CLI › Hooks); it has no `SubagentStart`, and output
    it cannot read is logged, never blocking. So dtk's Claude Code context hook should give Devin sessions the rules in
    a .NET project: whether it does.
+6. Because it runs Claude Code's hooks, it may get dtk's `permissionDecision: "deny"` refusal of a command rtk's and
+   dtk's hooks would both rewrite (with rtk's Claude hook registered); how it handles a `deny` and its reason is
+   unverified.
 
 ## Factory Droid
 
 1. `dotnet build` becomes `dtk dotnet build` in `droid` on the current release.
 2. Which shell runs the hook command on Windows.
 3. With the user's own `settings.json` `PreToolUse` hooks already registered, both theirs and dtk's run.
+4. If rtk registers its own hook for Droid, beside dtk's, whether a command both would rewrite loses one rewrite, as it
+   does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.
 
 ## Amp
 
@@ -48,3 +56,18 @@ unconfirmed. If you can run one, please report the result in an issue.
 3. Whether a `{ action: "allow" }` reply from dtk's plugin overrides another plugin's `reject-and-continue` for the
    same call, rather than leaving it in force as intended.
 4. Whether the plugin can spawn `dtk hook amp` under Amp's Bun runtime on Windows.
+
+## Copilot CLI
+
+1. If rtk registers its own hook for Copilot CLI, beside dtk's, whether a command both would rewrite loses one rewrite,
+   as it does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.
+
+## Antigravity
+
+1. If rtk registers its own hook for Antigravity, beside dtk's, whether a command both would rewrite loses one
+   rewrite, as it does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.
+
+## Codex
+
+1. If rtk registers its own hook for Codex, beside dtk's, whether a command both would rewrite loses one rewrite, as
+   it does under Claude Code. dtk's refusal is Claude Code's only, so the race with rtk is unverified here.

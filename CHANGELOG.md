@@ -7,6 +7,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Under Claude Code with rtk's hook registered beside dtk's, a command both would rewrite (`git status && dotnet build`
+  even with rtk's `dotnet` exclusion) ran with only one rewrite, because Claude Code runs the hooks in parallel and applies
+  one `updatedInput`. `dtk hook claude` now refuses such a command with the merged command in the reason, and the agent
+  re-sends it, one extra turn. It fails open when rtk is missing, slow (2 s) or answers unexpectedly, and is sent only
+  when the merged command is stable under both rewrites. In default permission mode the re-sent command needs allow
+  rules for the prefixed forms (`Bash(rtk git status:*)`, `Bash(dtk dotnet:*)`; never `Bash(rtk:*)`, which allows
+  `rtk run <anything>`); auto and bypass modes are unaffected. Writing `rtk …` and `dtk dotnet …` yourself avoids the
+  turn. See [Running beside rtk](docs/articles/ai-agent-setup.md#running-beside-rtk).
+
+### Added
+
+- `dtk doctor`'s rtk check probes the installed hook with `git status && dotnet build` and warns when the installed hook
+  rewrites it without refusing (an older dtk).
+
+### Changed
+
+- The agent hooks turn `dotnet test | tail -20` and `| head -5` (also `-n N`, `--lines N`) into
+  `dtk dotnet test --max-lines 20`, dropping the pipe. The command now exits with dotnet's code, so
+  `dotnet build | tail -5 && git add .` stops on a failure, which it did not before (`tail`'s exit code hid it). `tail`
+  gave the last N lines; `--max-lines` keeps the first N plus the status line, where the verdict is. Under Claude Code
+  an explicit `dtk dotnet test | tail -20` (or `dtk <subcommand> … | tail -N`) is converted the same way; with
+  `DTK_RAW` on, nothing is converted.
+
 ## [0.13.0] - 2026-11-22
 
 ### Added

@@ -45,7 +45,7 @@ internal sealed class HookHealthChecker(
     }
 
     /// <summary>The command name every registration runs.</summary>
-    private const string DtkCommand = "dtk";
+    internal const string DtkCommand = "dtk";
 
     /// <summary>How long the probe waits before declaring the hook wedged.</summary>
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);

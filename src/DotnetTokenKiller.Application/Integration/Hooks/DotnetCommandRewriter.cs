@@ -47,6 +47,7 @@ namespace DotnetTokenKiller.Application.Integration.Hooks;
 internal static class DotnetCommandRewriter
 {
     private const string Dotnet = "dotnet";
+    private const string Dtk = "dtk";
     private const string Prefix = "dtk dotnet ";
 
     /// <summary>dtk's option that writes a file, which <see cref="IsAutoApprovable"/> never approves.</summary>
@@ -133,11 +134,20 @@ internal static class DotnetCommandRewriter
     /// <summary>Prefixes every qualifying <c>dotnet &lt;subcommand&gt;</c> in <paramref name="command"/> with <c>dtk</c>.</summary>
     /// <param name="command">The shell command a harness is about to run.</param>
     /// <returns>The rewritten command, or <paramref name="command"/> itself when nothing qualified.</returns>
-    internal static string Rewrite(string command)
+    internal static string Rewrite(string command) => Rewrite(command, RewriteOptions.Default);
+
+    /// <summary>Prefixes every qualifying <c>dotnet &lt;subcommand&gt;</c> in <paramref name="command"/> with <c>dtk</c>.</summary>
+    /// <param name="command">The shell command a harness is about to run.</param>
+    /// <param name="options">What else the rewrite may do.</param>
+    /// <returns>The rewritten command, or <paramref name="command"/> itself when nothing qualified.</returns>
+    internal static string Rewrite(string command, RewriteOptions options)
     {
         ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(options);
 
-        if (!command.Contains(Dotnet, StringComparison.Ordinal))
+        var convertsExplicitDtk = options is { ConvertExplicitDtk: true, ConvertTailPipes: true };
+        if (!command.Contains(Dotnet, StringComparison.Ordinal)
+            && !(convertsExplicitDtk && command.Contains(Dtk, StringComparison.Ordinal)))
         {
             return command;
         }
@@ -148,7 +158,19 @@ internal static class DotnetCommandRewriter
 
         while (scanner.MoveNext(out var start, out var token))
         {
-            if (token == ShellToken.Code
+            if (convertsExplicitDtk
+                && token == ShellToken.Code
+                && start >= copied
+                && command[start] == 'd'
+                && TryTurnExplicitDtkTailIntoMaxLines(command, start, out var dtkEnd, out var dtkArgumentsEnd, out var dtkDropEnd, out var dtkLines))
+            {
+                rewritten ??= new StringBuilder(command.Length + 4);
+                rewritten.Append(command, copied, dtkEnd - copied)
+                    .Append(MaxLinesOption).Append(dtkLines).Append(command, dtkEnd, dtkArgumentsEnd - dtkEnd);
+                copied = dtkDropEnd;
+            }
+            else if (token == ShellToken.Code
+                && start >= copied
                 && command[start] == 'd'
                 && command.AsSpan(start).StartsWith(Dotnet, StringComparison.Ordinal)
                 && !IsWordBefore(command, start)
@@ -161,6 +183,13 @@ internal static class DotnetCommandRewriter
                     .Append(Prefix)
                     .Append(command, subcommandStart, end - subcommandStart);
                 copied = end;
+                if (options.ConvertTailPipes
+                    && !command.AsSpan(0, start).Contains(RawOutputSwitch.EnvironmentVariable + "=", StringComparison.Ordinal)
+                    && TryTurnTailIntoMaxLines(command, subcommandStart, end, out var argumentsEnd, out var dropEnd, out var lines))
+                {
+                    rewritten.Append(MaxLinesOption).Append(lines).Append(command, end, argumentsEnd - end);
+                    copied = dropEnd;
+                }
             }
         }
 
@@ -338,6 +367,229 @@ internal static class DotnetCommandRewriter
         }
 
         return false;
+    }
+
+    /// <summary>The option that replaces a <c>| tail -N</c> or <c>| head -N</c>, with its leading blank.</summary>
+    private const string MaxLinesOption = " --max-lines ";
+
+    /// <summary>
+    /// Whether the dotnet command whose subcommand starts at <paramref name="subcommandStart"/> and ends at
+    /// <paramref name="end"/> pipes into <c>tail</c> or <c>head</c> with nothing but a line count, as the last thing
+    /// before the end of the command, <c>;</c>, <c>&amp;&amp;</c>, <c>||</c>, <c>&amp;</c>, a line break or a closing
+    /// <c>)</c>, so that <c>--max-lines N</c> can stand in for the pipe. The pipe is not converted when the arguments
+    /// hold a command substitution, <c>--max-lines</c>, <c>--vv</c> or <c>--interactive</c>, or when the run is passed through unfiltered
+    /// (<see cref="PassthroughSubcommands.IsUnfilteredRun"/>, <see cref="PassthroughSubcommands.PromptsForConfirmation"/>),
+    /// where dtk would not read the option.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="subcommandStart">Where the matched subcommand starts.</param>
+    /// <param name="end">Where the matched subcommand ends.</param>
+    /// <param name="argumentsEnd">Set to where the arguments end: the index of the blanks before the pipe.</param>
+    /// <param name="dropEnd">Set to the index after the count, where the command goes on.</param>
+    /// <param name="lines">Set to the count, as digits.</param>
+    private static bool TryTurnTailIntoMaxLines(
+        string command, int subcommandStart, int end, out int argumentsEnd, out int dropEnd, out string lines)
+    {
+        argumentsEnd = dropEnd = end;
+        lines = string.Empty;
+        var pipeEnd = FindPipe(command, end, out var pipeStart);
+        if (pipeEnd < 0)
+        {
+            return false;
+        }
+
+        var countEnd = ReadLineCount(command, pipeEnd, out lines);
+        if (countEnd < 0)
+        {
+            return false;
+        }
+
+        argumentsEnd = pipeStart;
+        while (argumentsEnd > end && IsBlank(command[argumentsEnd - 1]))
+        {
+            argumentsEnd--;
+        }
+
+        // Quotes and backslashes come off the words, so `--format "json"` reads as dtk will read it.
+        var plain = command[subcommandStart..argumentsEnd].Replace("\"", string.Empty, StringComparison.Ordinal)
+            .Replace("'", string.Empty, StringComparison.Ordinal).Replace("\\", string.Empty, StringComparison.Ordinal);
+        var words = new List<string>(plain.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries));
+        if (plain.Contains("--max-lines", StringComparison.Ordinal)
+            || plain.Contains("--vv", StringComparison.Ordinal)
+            || plain.Contains("--interactive", StringComparison.OrdinalIgnoreCase)
+            || words.TakeWhile(word => word != "--").Any(word => word is "--help" or "-h" or "-?"))
+        {
+            return false;
+        }
+
+        dropEnd = countEnd;
+        return !PassthroughSubcommands.IsUnfilteredRun(words) && !PassthroughSubcommands.PromptsForConfirmation(words);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="start"/>, the index of a <c>d</c> in code, begins the program name of an explicit
+    /// <c>dtk</c> (or <c>dtk.exe</c>, reached by any path) at a command position, followed by <c>dotnet &lt;sub&gt;</c>
+    /// or <c>&lt;sub&gt;</c> for a subcommand dtk filters, whose pipe into <c>tail</c> or <c>head</c> converts as
+    /// <see cref="TryTurnTailIntoMaxLines"/> decides. Nothing is prefixed, and a <c>DTK_RAW=</c> assignment earlier in
+    /// the text rules the conversion out.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="start">The index of the <c>d</c>.</param>
+    /// <param name="end">Set to where the subcommand ends, where <c>--max-lines N</c> goes.</param>
+    /// <param name="argumentsEnd">Set to where the arguments end.</param>
+    /// <param name="dropEnd">Set to the index after the count, where the command goes on.</param>
+    /// <param name="lines">Set to the count, as digits.</param>
+    private static bool TryTurnExplicitDtkTailIntoMaxLines(
+        string command, int start, out int end, out int argumentsEnd, out int dropEnd, out string lines)
+    {
+        end = argumentsEnd = dropEnd = start;
+        lines = string.Empty;
+        var wordStart = command.AsSpan(0, start).LastIndexOfAny(Boundaries) + 1;
+        var wordEnd = start;
+        while (wordEnd < command.Length && !Boundaries.Contains(command[wordEnd]))
+        {
+            wordEnd++;
+        }
+
+        if ((start > wordStart && command[start - 1] is not ('/' or '\\'))
+            || command.AsSpan(start, wordEnd - start) is not ("dtk" or "dtk.exe")
+            || !IsCommandPosition(command, wordStart)
+            || command.AsSpan(0, start).Contains(RawOutputSwitch.EnvironmentVariable + "=", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var position = SkipSpaces(command, wordEnd);
+        if (command.AsSpan(position).StartsWith(Dotnet, StringComparison.Ordinal)
+            && position + Dotnet.Length < command.Length
+            && IsBlank(command[position + Dotnet.Length]))
+        {
+            position += Dotnet.Length;
+        }
+        else
+        {
+            position = wordEnd;
+        }
+
+        return TryMatchSubcommand(command, position, out var subcommandStart, out end)
+               && TryTurnTailIntoMaxLines(command, subcommandStart, end, out argumentsEnd, out dropEnd, out lines);
+    }
+
+    /// <summary>
+    /// The index after the first unquoted pipe (<c>|</c> or <c>|&amp;</c>) that ends the arguments of the command
+    /// whose subcommand ends at <paramref name="end"/>, or <c>-1</c> when another operator, a substitution or the end
+    /// comes first.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="end">Where the matched subcommand ends.</param>
+    /// <param name="pipeStart">Set to the index of the pipe.</param>
+    private static int FindPipe(string command, int end, out int pipeStart)
+    {
+        pipeStart = -1;
+        var rest = command[end..];
+        var scanner = new ShellScanner(rest);
+        var skipThrough = -1;
+        while (scanner.MoveNext(out var index, out var token))
+        {
+            if (token != ShellToken.Code)
+            {
+                return -1;
+            }
+
+            if (index <= skipThrough)
+            {
+                continue;
+            }
+
+            var next = index + 1 < rest.Length ? rest[index + 1] : '\0';
+            switch (rest[index])
+            {
+                case '|' when next != '|':
+                    pipeStart = end + index;
+                    return end + index + (next == '&' ? 2 : 1);
+                case '|' or '&' or ';' or '\n' or ')' or '<':
+                    return -1;
+                case '>' when RedirectsStandardOutputToAFile(rest, index, out skipThrough):
+                    return -1;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// The index after a line count that follows the pipe, when the word after the pipe is <c>tail</c> or
+    /// <c>head</c>, its only operand is <c>-N</c>, <c>-n N</c>, <c>-nN</c>, <c>--lines=N</c> or <c>--lines N</c> with
+    /// a positive N, and the command ends right after it; otherwise <c>-1</c>.
+    /// </summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="pipeEnd">The index after the pipe.</param>
+    /// <param name="lines">Set to N.</param>
+    private static int ReadLineCount(string command, int pipeEnd, out string lines)
+    {
+        lines = string.Empty;
+        var position = pipeEnd;
+        if (ReadWord(command, ref position) is not { } program
+            || ProgramName(program) is not ("tail" or "head" or "tail.exe" or "head.exe")
+            || ReadWord(command, ref position) is not { } option)
+        {
+            return -1;
+        }
+
+        var count = option switch
+        {
+            "-n" or "--lines" => ReadWord(command, ref position),
+            _ when option.StartsWith("--lines=", StringComparison.Ordinal) => option["--lines=".Length..],
+            _ when option.StartsWith("-n", StringComparison.Ordinal) => option[2..],
+            _ when option.StartsWith('-') => option[1..],
+            _ => null
+        };
+
+        if (count is not { Length: > 0 } || count[0] == '0' || !count.All(char.IsAsciiDigit)
+            || !int.TryParse(count, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+        {
+            return -1;
+        }
+
+        lines = count;
+        return EndsTheCommand(command, position) ? position : -1;
+    }
+
+    /// <summary>The blank-delimited word at <paramref name="position"/>, which moves past it; <see langword="null"/> when there is none.</summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="position">Where to start reading.</param>
+    private static string? ReadWord(string command, ref int position)
+    {
+        var start = SkipSpaces(command, position);
+        var wordEnd = start;
+        while (wordEnd < command.Length && !IsBlank(command[wordEnd]) && !NotSimple.Contains(command[wordEnd]))
+        {
+            wordEnd++;
+        }
+
+        position = wordEnd;
+        return wordEnd > start ? command[start..wordEnd] : null;
+    }
+
+    /// <summary>Whether, after blanks, <paramref name="position"/> is the end, <c>;</c>, <c>&amp;&amp;</c>, <c>||</c>, <c>&amp;</c>, a line break or <c>)</c>.</summary>
+    /// <param name="command">The full command being scanned.</param>
+    /// <param name="position">Where to start looking.</param>
+    private static bool EndsTheCommand(string command, int position)
+    {
+        position = SkipSpaces(command, position);
+        if (position >= command.Length)
+        {
+            return true;
+        }
+
+        var next = position + 1 < command.Length ? command[position + 1] : '\0';
+        return command[position] switch
+        {
+            ';' or '\n' or ')' => true,
+            '&' => next != '>',
+            '|' => next == '|',
+            _ => false
+        };
     }
 
     private static bool TryMatchSubcommand(string command, int position, out int subcommandStart, out int end)
