@@ -82,7 +82,7 @@ jb cleanupcode DotnetTokenKiller.slnx --profile="Built-in: Reformat & Apply Synt
 `dotnet publish` and `dotnet pack` share `MsBuildDiagnosticReport` — the same error/warning summary `dotnet build`
 uses — via `DotnetPublishFilter`/`DotnetPackFilter`, which each add their own success line (`project -> publish dir`,
 `Successfully created package '…'`); a clean run says `0 errors, 0 warnings` only when MSBuild's summary declared both
-counts (`MsBuildDiagnosticReport.DeclaresCounts`), and a passing `test` that built projects adds ` · 0 build warnings`
+counts (`MsBuildDiagnosticReport.DeclaresCounts`; `dotnet build` prints it, publish and pack only with `-clp:Summary`), and a passing `test` that built projects adds ` · 0 build warnings`
 (`BuiltProjectCount`). Either run with `--interactive` (used to prompt for private-feed credentials) is
 passed through unfiltered with the terminal attached, never captured, via `PassthroughSubcommands.IsInteractiveFilteredRun`.
 `PassthroughSubcommands.IsMachineReadableRun` (`list package --format json`; MSBuild's `-getProperty`, `-getItem` and
@@ -135,8 +135,8 @@ localized output, which `DotnetTestFilter` reports as no test matched) also exit
 `--logger "console;verbosity=normal"` (VSTest) or `--output Detailed` (MTP) only when `GlobalJsonTestRunnerDetector`
 knows the runner, and lists one test per line, indented under its class. `--show-output` is not named `--output`,
 which dotnet owns. `DotnetTestFilter` lists failures sharing a message and location (and output, under
-`--show-output`) once as `N failed the same way: A, B +d more`, largest group first; a failure with neither is never
-grouped, and `MaxFailures` counts entries. A fallback status line names `dotnet <subcommand>` only, and the jb filter
+`--show-output`) once as `N failed the same way: A, B +d more`, largest group first; a failure without a `SourceRef` is never
+grouped, a group names every test when the run has at most `MaxFailures` failures (else the first three and `+d more`), and `MaxFailures` counts entries. A fallback status line names `dotnet <subcommand>` only, and the jb filter
 keeps ReSharper's `Unable to find target solution file …` line.
 
 On `ef migrations`, `ef database`, `stryker` and `jb cleanupcode`, short options and `--verbose`/`--quiet`/`--help`

@@ -10,12 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - A clean `dotnet build`, `publish` or `pack` now states its counts, `✓ dotnet build: 0 errors, 0 warnings (15
-  projects, 16.26s)`, when MSBuild's own summary declared both, so an agent checking for zero warnings need not read
-  the raw log.
+  projects, 16.26s)`, when MSBuild's own summary declared both (`dotnet build` prints it; `publish` and `pack` only with `-clp:Summary`), so
+  an agent checking for zero warnings need not read the raw log.
 - A passing `dotnet test` run that built its projects and raised no warning now ends its status line with `· 0 build
   warnings`, as a run with warnings ends with their count. A `--no-build` run, which has no build to speak for, adds
   nothing.
-- A failing `dotnet test` run lists the failures that share a message and a location once, `40 failed the same way:
+- A failing `dotnet test` run lists the failures that share a message and a location (a failure without a location is
+  never grouped) once, `40 failed the same way:
   A.T1, A.T2, A.T3 +37 more`, largest group first, so the 15-entry limit goes to failures that differ instead of to
   copies of one exception. Under `--show-output` they must also share their output. `+N more failures` counts the
   tests the entries shown do not cover.

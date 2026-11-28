@@ -1990,6 +1990,14 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
+    public void Apply_PassingRunDeclaringWarningsWithNoParsedLine_NeverClaimsZero()
+    {
+        var result = _sut.Apply(BuiltLine + "    2 Warning(s)\n" + PassedSummary, exitCode: 0);
+
+        result.Should().EndWith(" · 2 build warnings\n").And.NotContain("0 build warnings");
+    }
+
+    [Fact]
     public void Apply_PassingRunWithoutProjectOutputLines_AddsNoBuildWarningCount()
     {
         var result = _sut.Apply(PassedSummary, exitCode: 0);
@@ -2943,16 +2951,39 @@ public class DotnetTestFilterTests
     }
 
     [Fact]
-    public void Apply_IdenticalFailures_AreGroupedWithTheirCountAndFirstNames()
+    public void Apply_IdenticalFailures_AreGroupedWithTheirCountAndEveryName()
     {
         var input = string.Concat(Enumerable.Range(1, 5).Select(i => VsTestFailure($"MyTests.T{i}", "boom")))
                     + SummaryLine(5);
 
         var result = _sut.Apply(input, exitCode: 1);
 
-        result.Should().Be("FAILURES (5):\n  5 failed the same way: MyTests.T1, MyTests.T2, MyTests.T3 +2 more\n"
+        result.Should().Be("FAILURES (5):\n  5 failed the same way: MyTests.T1, MyTests.T2, MyTests.T3, MyTests.T4, MyTests.T5\n"
                            + "    boom\n    at ../../../path/Test.cs:line 1\n"
                            + "✗ dotnet test: 5 failed, 0 passed (1 project, 0.01s)\n");
+    }
+
+    [Fact]
+    public void Apply_GroupAboveTheFailureLimit_NamesTheFirstThreeAndCountsTheRest()
+    {
+        var input = string.Concat(Enumerable.Range(1, 16).Select(i => VsTestFailure($"MyTests.T{i}", "boom")))
+                    + SummaryLine(16);
+
+        _sut.Apply(input, exitCode: 1).Should()
+            .Contain("  16 failed the same way: MyTests.T1, MyTests.T2, MyTests.T3 +13 more\n");
+    }
+
+    [Fact]
+    public void Apply_FailuresWithTheSameMessageAndNoLocation_AreNotGrouped()
+    {
+        var input = string.Concat(Enumerable.Range(1, 3).Select(i =>
+            $"  Failed MyTests.T{i} [1 ms]\n  Error Message:\n   Assert.True() Failure\n\n"))
+            + SummaryLine(3);
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().NotContain("failed the same way").And.Contain("  MyTests.T1 [1 ms]")
+            .And.Contain("  MyTests.T2 [1 ms]").And.Contain("  MyTests.T3 [1 ms]");
     }
 
     [Fact]

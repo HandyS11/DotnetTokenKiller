@@ -9,7 +9,7 @@ namespace DotnetTokenKiller.Application.UseCases;
 /// <param name="RawOutput">The raw, un-stripped output to condense.</param>
 /// <param name="ExitCode">The producing command's exit code; the sole source of the success verdict.</param>
 /// <param name="CommandSlug">The canonical name this run is tracked and tee'd under.</param>
-/// <param name="DisplayCommandLine">The command line quoted in the raw-tail fallback header.</param>
+/// <param name="DisplayCommandLine">The command line as the caller spelled it. No filter or pipeline step reads it now (the fallback status line names only the subcommand); it stays for the request's shape.</param>
 /// <param name="Source">Where the raw output came from.</param>
 /// <param name="Options">
 /// Display flags. The pipeline calls <see cref="OutputOptions.Normalized"/> on this defensively, so

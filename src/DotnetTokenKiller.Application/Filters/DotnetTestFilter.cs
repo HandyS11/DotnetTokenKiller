@@ -1226,6 +1226,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({failedCount}):");
 
         var shown = GroupFailures(state.Failures, state.ShowOutput).Take(MaxFailures).ToList();
+        var allNames = state.Failures.Count <= MaxFailures;
         var messageMaxLen = Math.Clamp(MessageBudget / Math.Max(shown.Count, 1), MessageMaxLen, SoleMessageMaxLen);
         foreach (var group in shown)
         {
@@ -1233,7 +1234,7 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             var heading = group.Members.Count == 1
                 ? string.Create(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration}]")
                 : string.Create(CultureInfo.InvariantCulture,
-                    $"  {group.Members.Count} failed the same way: {DescribeGroupNames(group)}");
+                    $"  {group.Members.Count} failed the same way: {DescribeGroupNames(group, allNames)}");
             sb.AppendLine(heading)
                 .AppendLine(CultureInfo.InvariantCulture,
                     $"    {f.PresetMessage ?? CompactMessage(f.MessageLines, messageMaxLen)}");
@@ -1264,12 +1265,12 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     /// <param name="showOutput">Whether the output of each test is shown, which then tells failures apart.</param>
     private static List<FailureGroup> GroupFailures(IReadOnlyList<FailureInfo> failures, bool showOutput)
     {
-        var byKey = new Dictionary<string, List<FailureInfo>>(StringComparer.Ordinal);
+        var byKey = new Dictionary<(string Message, string SourceRef, string Output), List<FailureInfo>>();
         List<List<FailureInfo>> ordered = [];
         foreach (var failure in failures)
         {
-            // A failure that shows neither a message nor a location has nothing to be the same as another's.
-            if (ShowsNothingToCompare(failure))
+            // Without a location, the same message may come from different places (an assembly without PDBs).
+            if (ShowsNoLocation(failure))
             {
                 ordered.Add([failure]);
                 continue;
@@ -1294,28 +1295,27 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         ];
     }
 
-    private static bool ShowsNothingToCompare(FailureInfo failure) =>
-        string.IsNullOrEmpty(failure.PresetMessage ?? string.Join('\n', failure.MessageLines))
-        && string.IsNullOrEmpty(failure.SourceRef);
+    private static bool ShowsNoLocation(FailureInfo failure) => string.IsNullOrEmpty(failure.SourceRef);
 
-    private static string GroupKey(FailureInfo failure, bool showOutput)
-    {
-        var message = failure.PresetMessage ?? string.Join('\n', failure.MessageLines);
-        var output = showOutput ? string.Join('\n', failure.Output) : string.Empty;
+    private static (string Message, string SourceRef, string Output) GroupKey(FailureInfo failure, bool showOutput) =>
+        (failure.PresetMessage ?? string.Join('\n', failure.MessageLines),
+            failure.SourceRef,
+            showOutput ? string.Join('\n', failure.Output) : string.Empty);
 
-        // The unit separator cannot end a line of text, so no two parts can run into each other.
-        return $"{message}\u001f{failure.SourceRef}\u001f{output}";
-    }
-
-    /// <summary>The first three distinct test names of a group, each with its count when it failed more than once.</summary>
+    /// <summary>
+    /// The distinct test names of a group, each with its count when it failed more than once: all of them, or the
+    /// first three and the number left out.
+    /// </summary>
     /// <param name="group">A group of two or more failures.</param>
-    private static string DescribeGroupNames(FailureGroup group)
+    /// <param name="allNames">Whether every name is listed (the run has no more failures than the entry limit).</param>
+    private static string DescribeGroupNames(FailureGroup group, bool allNames)
     {
         // GroupBy keeps the order of first appearance.
         var counts = group.Members.GroupBy(m => m.TestName, StringComparer.Ordinal).ToList();
-        var shown = counts.Take(MaxGroupNames)
+        var limit = allNames ? counts.Count : MaxGroupNames;
+        var shown = counts.Take(limit)
             .Select(c => c.Count() > 1 ? $"{c.Key} \u00d7{c.Count().ToString(CultureInfo.InvariantCulture)}" : c.Key);
-        var more = counts.Count - MaxGroupNames;
+        var more = counts.Count - limit;
         return more > 0
             ? $"{string.Join(", ", shown)} +{more.ToString(CultureInfo.InvariantCulture)} more"
             : string.Join(", ", shown);

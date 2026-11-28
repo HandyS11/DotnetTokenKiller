@@ -73,7 +73,7 @@ dtk dotnet test src/MyProject.Tests/MyProject.Tests.csproj
 dtk dotnet test -q                   # quiet mode
 ```
 
-Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none, so the count covers only the projects this run compiled and moves from one run to the next. When the output shows MSBuild built projects (its `X -> ….dll` lines) and the build raised no warning, the status line says so: `· 0 build warnings`. A `--no-build` run prints no such lines and adds nothing, nor does a failing run, a `--list-tests` listing or a run in which no test matched. In a git work tree the warnings of the files the work in progress changed (as for `dtk dotnet build`) are listed above the report, and the status line says how many there are (`· 3 build warnings (CS0219×2, CS8602), 1 in changed files`, or `, none in changed files`): that, not the count, says whether a change added one. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths. Failures that share a message and a location are listed once, as `5 failed the same way: A.T1, A.T2, A.T3 +2 more` (a test that failed twice is named once, `A.T1 ×2`), with that message and location; under `--show-output` they must also share their output. The groups of two or more come first, the largest first, then the other failures in order. The 15-entry limit counts these entries, a group being one, and `+N more failures` counts the tests none of the entries shown covers. A failure that shows neither a message nor a location is never grouped. The status line of a failing run opens with `✗` (`✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`). The messages of the entries shown (at most 15; a group is one entry) share 4,500 characters: a single entry keeps up to 3,000, enough for an aggregated assertion or a container's validation errors, and none gets fewer than 300; a nested exception's innermost cause keeps two thirds of its message's share. xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
+Passing tests are summarized with counts. When the run compiled with warnings, the status line ends with their count and up to three top codes (`· 3 build warnings (CS0219×2, CS8602)`); a build that is already up to date prints none, so the count covers only the projects this run compiled and moves from one run to the next (MSBuild prints `->` lines for up-to-date projects too, but repeats none of their warnings, so the zero says the same). When the output shows MSBuild built projects (its `X -> ….dll` lines) and the build raised no warning, the status line says so: `· 0 build warnings`. A `--no-build` run prints no such lines and adds nothing, nor does a failing run, a `--list-tests` listing or a run in which no test matched. In a git work tree the warnings of the files the work in progress changed (as for `dtk dotnet build`) are listed above the report, and the status line says how many there are (`· 3 build warnings (CS0219×2, CS8602), 1 in changed files`, or `, none in changed files`): that, not the count, says whether a change added one. Failing tests show the test name, duration, error message, and a clean stack trace with relative paths. Failures that share a message and a location are listed once, as `5 failed the same way: A.T1, A.T2, A.T3, A.T4, A.T5` (a test that failed twice is named once, `A.T1 ×2`), with that message and location; the group names every test while the run has at most 15 failures, and above that the first three and `+N more`; under `--show-output` they must also share their output. The groups of two or more come first, the largest first, then the other failures in order. The 15-entry limit counts these entries, a group being one, and `+N more failures` counts the tests none of the entries shown covers. A failure without a location (an assembly built without PDBs) is never grouped, whatever its message. The status line of a failing run opens with `✗` (`✗ dotnet test: 1 failed, 3 passed (1 project, 0.07s)`). The messages of the entries shown (at most 15; a group is one entry) share 4,500 characters: a single entry keeps up to 3,000, enough for an aggregated assertion or a container's validation errors, and none gets fewer than 300; a nested exception's innermost cause keeps two thirds of its message's share. xUnit/NUnit/MSTest adapter banners, license warnings, and framework internals are stripped.
 
 Three options belong to `dtk dotnet test` (and `dtk pipe test`) alone; see [Test options](#test-options) for `--names`, `--show-output` and `--fail-on-empty`. `--list-tests` prints the test names as before.
 
@@ -187,11 +187,11 @@ dtk dotnet publish -r linux-x64 --self-contained
 ```
 
 Diagnostics are summarised exactly as for `dtk dotnet build`. On success each project's publish directory, with a
-workspace-relative path, sits directly above the summary line, which stays last:
+workspace-relative path, sits directly above the summary line, which stays last. The `0 errors, 0 warnings` counts appear only when the output carries MSBuild's summary, which `dotnet build` prints and publish and pack print only with `-clp:Summary`:
 
 ```text
   MyApp -> src/MyApp/bin/Release/net10.0/publish/
-✓ dotnet publish: 0 errors, 0 warnings (2 projects)
+✓ dotnet publish (2 projects)
 ```
 
 On failure the output is the build's error layout ending in the `✗` summary line, and no publish directory is listed.
@@ -213,7 +213,7 @@ summary line, which stays last:
 ```text
   artifacts/MyLib.1.2.3.nupkg
   artifacts/MyLib.1.2.3.snupkg
-✓ dotnet pack: 0 errors, 0 warnings (1 project)
+✓ dotnet pack (1 project)
 ```
 
 On failure the output is the build's error layout ending in the `✗` summary line, and no package is listed.
@@ -301,7 +301,7 @@ src/DotnetTokenKiller.Infrastructure/Tracking/TrackerFactory.cs
 ✓ dotnet jb cleanupcode: 2 files changed (356 processed, 314 skipped)
 ```
 
-At most 30 files are listed, then `… N more (git status)`; no change reads `✓ dotnet jb cleanupcode: no changes (356 processed, 314 skipped)`. More than 20,000 such files or 256 MiB of them are not snapshotted, and the status line says `changed files not computed (tree too large)`. Under `dtk pipe` there is no before-state: only the counts are printed, with `changed files unknown (piped)`. The counts come from the file list jb prints at its default verbosity; with `--verbosity=ERROR` it prints none, and the status line leaves them out (`✓ dotnet jb cleanupcode: 1 file changed`). A failure (exit 3 or 4) keeps the `Warning:` and `[MsBuild]` lines, jb's `Unable to find target solution file` line, and any line after the `Cleaning up using profile` header that is not a processed file, and ends `✗ dotnet jb cleanupcode failed (exit 4): 1 project load error`. A failure with none of those (jb not restored, say) shows the raw tail of the output above the `✗ … failed (exit 1)` status line.
+At most 30 files are listed, then `… N more (git status)`; no change reads `✓ dotnet jb cleanupcode: no changes (356 processed, 314 skipped)`. More than 20,000 such files or 256 MiB of them are not snapshotted, and the status line says `changed files not computed (tree too large)`. Under `dtk pipe` there is no before-state: only the counts are printed, with `changed files unknown (piped)`. The counts come from the file list jb prints at its default verbosity; with `--verbosity=ERROR` it prints none, and the status line leaves them out (`✓ dotnet jb cleanupcode: 1 file changed`). A failure (exit 1, 3 or 4) keeps the `Warning:` and `[MsBuild]` lines, jb's `Unable to find target solution file` line, and any line after the `Cleaning up using profile` header that is not a processed file, and ends `✗ dotnet jb cleanupcode failed (exit 4): 1 project load error`. A failure with none of those (jb not restored, say) shows the raw tail of the output above the `✗ … failed (exit 1)` status line.
 
 ### Options the tool owns
 
