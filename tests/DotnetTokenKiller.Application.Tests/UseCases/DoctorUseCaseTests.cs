@@ -1,4 +1,6 @@
+using System.Text.Json.Nodes;
 using DotnetTokenKiller.Application.Integration;
+using DotnetTokenKiller.Application.Integration.Hooks;
 using DotnetTokenKiller.Application.UseCases;
 using DotnetTokenKiller.Domain.Configuration;
 using DotnetTokenKiller.Domain.Execution;
@@ -13,12 +15,20 @@ public sealed class DoctorUseCaseTests : IDisposable
     private readonly ICommandRunner _runner = Substitute.For<ICommandRunner>();
     private readonly DoctorUseCase _sut;
     private string? _rtkOnPath = RtkPath;
+    private string? _dtkOnPath;
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"dtk-doctor-test-{Guid.NewGuid()}");
 
     /// <summary>Where the fake PATH finds rtk; a probe must start this absolute path, never the bare name.</summary>
     private const string RtkPath = "/opt/rtk/bin/rtk";
 
+    /// <summary>Where the fake PATH finds dtk; the mixed-command probe must start this absolute path.</summary>
+    private const string DtkPath = "/opt/dtk/bin/dtk";
+
+    private const string MixedCommand = "git status && dotnet build";
+
     private static readonly string[] RewriteDotnetBuild = ["rewrite", "dotnet build"];
+    private static readonly string[] RewriteGitStatus = ["rewrite", "git status"];
+    private static readonly string[] HookClaude = ["hook", "claude"];
 
     private const string RtkHookSettings = """
         { "hooks": { "PreToolUse": [ { "matcher": "Bash",
@@ -33,7 +43,8 @@ public sealed class DoctorUseCaseTests : IDisposable
             new HookHealthChecker(_runner),
             [new GeminiCliIntegrator(new HomePaths(_tempDir))],
             new RtkHookCoexistence(Path.Combine(_tempDir, "home", ".claude"), RtkConfigPath),
-            () => _rtkOnPath);
+            () => _rtkOnPath,
+            () => _dtkOnPath);
         _configProvider.LoadAsync().ReturnsForAnyArgs(DtkConfig.Default);
         _runner.RunCapturedAsync(null!, null!)
             .ReturnsForAnyArgs(new CommandResult("10.0.0", string.Empty, 0));
@@ -456,6 +467,141 @@ public sealed class DoctorUseCaseTests : IDisposable
 
         checks.Select(c => c.Name).Should().NotContain("rtk coexistence");
     }
+
+    [Fact]
+    public async Task RunAsync_DtkHookRefusesAMixedCommand_PassesSayingSo()
+    {
+        await ArrangeMixedProbeAsync();
+        DtkHookAnswers(new CommandResult(
+            """{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"""
+            + "\"" + RtkRewriteRace.ReasonLead.Replace("\n", "\\n", StringComparison.Ordinal) + "rtk git status && dtk dotnet build\"}}",
+            string.Empty,
+            0));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        var check = checks.Single(c => c.Name == "rtk coexistence");
+        check.Passed.Should().BeTrue();
+        check.IsWarning.Should().BeFalse();
+        check.Message.Should().Be(
+            "rtk leaves dotnet commands to dtk; a command both rewrite comes back refused with the merged command");
+        var payload = JsonNode.Parse(SentPayload())!;
+        payload["hook_event_name"]!.GetValue<string>().Should().Be("PreToolUse");
+        payload["tool_name"]!.GetValue<string>().Should().Be("Bash");
+        payload["tool_input"]!["command"]!.GetValue<string>().Should().Be(MixedCommand);
+        payload["cwd"]!.GetValue<string>().Should().Be(_tempDir);
+    }
+
+    [Fact]
+    public async Task RunAsync_DtkHookOnlyRewritesAMixedCommand_WarnsThatTheRewritesRace()
+    {
+        await ArrangeMixedProbeAsync();
+        DtkHookAnswers(new CommandResult(
+            """{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":"git status && dtk dotnet build"}}}""",
+            string.Empty,
+            0));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        var check = checks.Single(c => c.Name == "rtk coexistence");
+        check.Passed.Should().BeTrue("a warning never fails doctor");
+        check.IsWarning.Should().BeTrue();
+        check.Message.Should().Be(
+            "the dtk hook on PATH lets rtk's and dtk's rewrites race on a command both rewrite, such as "
+            + "'git status && dotnet build', and one of them is lost. Upgrade dtk to 0.14.0 or later.");
+    }
+
+    [Theory]
+    [InlineData("rtk git status && dotnet build")]
+    [InlineData("git status && dtk dotnet build")]
+    public async Task RunAsync_DtkHookRefusalLacksADtkOrRtkRewrite_KeepsTodaysPass(string merged)
+    {
+        await ArrangeMixedProbeAsync();
+        var reason = RtkRewriteRace.ReasonLead.Replace("\n", "\\n", StringComparison.Ordinal) + merged;
+        DtkHookAnswers(new CommandResult(
+            """{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"""
+            + "\"" + reason + "\"}}",
+            string.Empty,
+            0));
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        var check = checks.Single(c => c.Name == "rtk coexistence");
+        check.IsWarning.Should().BeFalse();
+        check.Message.Should().Be("rtk leaves dotnet commands to dtk");
+    }
+
+    [Fact]
+    public async Task RunAsync_RtkRewritesNoGitStatus_SkipsTheMixedProbe()
+    {
+        await ArrangeMixedProbeAsync();
+        RtkAnswersRewriteFor(RewriteGitStatus, string.Empty, 1);
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        checks.Single(c => c.Name == "rtk coexistence").Message.Should().Be("rtk leaves dotnet commands to dtk");
+        _runner.ReceivedCalls().Select(call => call.GetArguments()[0] as string).Should().NotContain(DtkPath);
+    }
+
+    [Fact]
+    public async Task RunAsync_NoDtkOnPath_KeepsTodaysPass()
+    {
+        await ArrangeMixedProbeAsync();
+        _dtkOnPath = null;
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        checks.Single(c => c.Name == "rtk coexistence").Message.Should().Be("rtk leaves dotnet commands to dtk");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not json at all")]
+    [InlineData("{}")]
+    public async Task RunAsync_DtkHookProbeTimesOutOrPrintsGarbage_KeepsTodaysPass(string? stdout)
+    {
+        await ArrangeMixedProbeAsync();
+        if (stdout is null)
+        {
+            _runner.RunCapturedWithInputAsync(DtkPath, Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromException<CommandResult>(new OperationCanceledException()));
+        }
+        else
+        {
+            DtkHookAnswers(new CommandResult(stdout, string.Empty, 0));
+        }
+
+        var checks = await _sut.RunAsync("/tmp/test.db", _tempDir, _tempDir);
+
+        var check = checks.Single(c => c.Name == "rtk coexistence");
+        check.IsWarning.Should().BeFalse();
+        check.Message.Should().Be("rtk leaves dotnet commands to dtk");
+    }
+
+    private async Task ArrangeMixedProbeAsync()
+    {
+        await RegisterRtkHookAsync();
+        _dtkOnPath = DtkPath;
+        RtkAnswersRewriteFor(RewriteDotnetBuild, string.Empty, 1);
+        RtkAnswersRewriteFor(RewriteGitStatus, "rtk git status", 3);
+    }
+
+    private void RtkAnswersRewriteFor(string[] args, string stdout, int exitCode) =>
+        _runner.RunCapturedAsync(RtkPath, Arg.Is<IReadOnlyList<string>>(a => a.SequenceEqual(args)), Arg.Any<CancellationToken>())
+            .Returns(new CommandResult(stdout, string.Empty, exitCode));
+
+    private void DtkHookAnswers(CommandResult result) =>
+        _runner.RunCapturedWithInputAsync(
+                DtkPath,
+                Arg.Is<IReadOnlyList<string>>(a => a.SequenceEqual(HookClaude)),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(result);
+
+    private string SentPayload() =>
+        _runner.ReceivedCalls()
+            .Single(call => call.GetMethodInfo().Name == nameof(ICommandRunner.RunCapturedWithInputAsync))
+            .GetArguments()[2]!.ToString()!;
 
     private Task RegisterRtkHookAsync()
     {

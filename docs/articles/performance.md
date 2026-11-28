@@ -81,6 +81,15 @@ deep under `/tmp` (every parent read); and 18.8 ms and 19.3 ms with `/usr/share`
 whose first three levels hold 17,491 and 4,940 entries, so the walk gives up at its 2,000-entry budget. A repeat run
 agreed within 0.3 ms. These hooks run once per session start and once per subagent, not on every tool call.
 
+The rtk check in the `PreToolUse` hook, measured 2026-11-27, 55 runs each, local AOT publish (linux-x64), rtk 0.43.0,
+scratch `HOME`s, payloads fed on stdin as Claude Code sends them, medians, against a 0.5 ms `/bin/true` baseline (0.5 ms
+again after the runs): `dtk hook claude` rewriting `dotnet build` with no rtk registered 10.1 ms; the same with `rtk
+hook claude` registered and `dotnet` in rtk's `exclude_commands` (rtk is still asked) 46.4 ms; `dotnet build; git
+status`, which rtk would rewrite too, so the hook answers the refusal 86.2 ms; and plain `dotnet build` with rtk
+registered but without the exclusion, also refused, 66.6 ms. The extra time is the `rtk rewrite` processes the hook
+starts. The cost applies only to a command dtk rewrites and only while rtk's hook is registered; every other command,
+and every machine without it, keeps the 10 ms path.
+
 ## OpenCode plugin
 
 OpenCode plugin, measured 2026-09-15, OpenCode 1.18.31 (`opencode-ai` from npm) running `opencode run` against a

@@ -274,6 +274,15 @@ public static class PassthroughSubcommands
     }
 
     /// <summary>
+    /// Returns <see langword="true"/> when this invocation is passed through unfiltered: an interactive filtered run
+    /// (<see cref="IsInteractiveFilteredRun"/>), a machine-readable run (<see cref="IsMachineReadableRun"/>) or a
+    /// tool's help (<see cref="IsToolHelpRun"/>). dtk's own options are not read on such a run.
+    /// </summary>
+    /// <param name="dotnetArgs">The arguments passed to <c>dotnet</c>, starting at the subcommand.</param>
+    public static bool IsUnfilteredRun(IReadOnlyList<string> dotnetArgs) =>
+        IsInteractiveFilteredRun(dotnetArgs) || IsMachineReadableRun(dotnetArgs) || IsToolHelpRun(dotnetArgs);
+
+    /// <summary>
     /// Returns <see langword="true"/> when this invocation of a subcommand in
     /// <see cref="DotnetSubcommands.ToolBacked"/> asks the tool for its help (<c>-h</c>, <c>--help</c> or <c>-?</c>
     /// before any <c>--</c>), which a filter would replace with a status line: it is passed through, unfiltered.

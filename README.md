@@ -301,7 +301,10 @@ replaces its Python hook registration and deletes the `dotnet-to-dtk.py` script 
 
 All commands are idempotent — re-running is safe. Pass `--force` to refresh existing files.
 
-On machines that also run the rtk hook, `dtk init claude` automatically excludes `dotnet` from rtk so the two proxies don't both rewrite `dotnet` commands.
+On machines that also run the rtk hook, `dtk init claude` automatically excludes `dotnet` from rtk so the two proxies don't both rewrite `dotnet` commands. Under Claude Code, a command rtk's hook and dtk's hook would
+both rewrite (`git status && dotnet build`) is refused with the merged command, which the agent re-sends; see
+[Running beside rtk](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html#running-beside-rtk),
+which also covers the permission rules that needs.
 
 See [AI Agent Setup](https://handys11.github.io/DotnetTokenKiller/articles/ai-agent-setup.html) for per-provider details
 and manual installation steps.

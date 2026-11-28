@@ -164,6 +164,34 @@ dtk init claude --dir /path/to/project
 
 With the hook in place, any time Claude Code runs `dotnet build`, `dotnet test`, `dotnet restore`, `dotnet clean`, `dotnet format`, `dotnet list package`, `dotnet publish`, or `dotnet pack`, the command is silently rewritten to `dtk dotnet ...` before execution. The agent receives the filtered output without any extra configuration, and, from the `SessionStart` and `SubagentStart` hooks, the rules for reading it, whichever agent runs the command.
 
+### Running beside rtk
+
+Claude Code runs every `PreToolUse` hook that matches in parallel and applies only one hook's rewrite. `dtk init claude`
+excludes `dotnet` from rtk, so a plain `dotnet build` is dtk's alone. A command carrying both kinds of work, such as
+`git status && dotnet build`, is one both hooks would rewrite, and one rewrite would be lost. When rtk's `hook claude`
+is registered in your user or project Claude settings, dtk's hook refuses such a command and puts the command that
+carries both rewrites in the refusal's reason:
+
+```text
+dtk and rtk would each rewrite this command, and Claude Code applies only one hook's rewrite. Run this instead, which carries both:
+rtk git status && dtk dotnet build
+```
+
+The agent re-sends that command, which costs one extra turn. dtk asks rtk (`rtk rewrite`, no shell, 2 seconds) and
+fails open: if rtk is missing, slow or answers unexpectedly, the command is rewritten as usual. The refusal is sent
+only when the merged command is stable under both rewrites, and only to Claude Code's `Bash` tool. `dtk doctor`
+probes it with `git status && dotnet build`. To skip the extra turn, write the prefixed commands yourself
+(`rtk git status && dtk dotnet build`), or run the two in separate calls.
+
+If the reason ends with "rtk also rewrites dotnet commands", rtk's hook has no `exclude_commands = ["dotnet"]` and
+rewrites plain `dotnet` commands itself: run `dtk init claude` again so rtk leaves them to dtk.
+
+When you rely on rtk approving the commands your allow rules cover, the re-sent command no longer matches those
+rules in Claude Code's default permission mode, and without a matching rule the agent's request is denied in print
+mode. Add rules for the prefixed forms, such as `Bash(rtk git status:*)` and `Bash(dtk dotnet:*)`, one per command you
+allow. Do not add `Bash(rtk:*)`: it also allows `rtk run <anything>`. Auto and bypass permission modes are unaffected.
+Claude Code also ignores a project's `permissions.allow` until its workspace is trusted.
+
 ### Manual Installation
 
 Add the following to `.claude/settings.json`:

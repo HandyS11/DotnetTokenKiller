@@ -6,6 +6,104 @@ namespace DotnetTokenKiller.Application.Tests.Integration.Hooks;
 public sealed class DotnetCommandRewriterTests
 {
     [Theory]
+    [InlineData("dotnet test | tail -20", "dtk dotnet test --max-lines 20")]
+    [InlineData("dotnet test --filter X 2>&1 | tail -n 30", "dtk dotnet test --max-lines 30 --filter X 2>&1")]
+    [InlineData("dotnet build | head -5 && git add .", "dtk dotnet build --max-lines 5 && git add .")]
+    [InlineData("dotnet build | tail -n5; echo done", "dtk dotnet build --max-lines 5; echo done")]
+    [InlineData("dotnet test |& tail --lines=40", "dtk dotnet test --max-lines 40")]
+    [InlineData("dotnet test | tail --lines 40 || true", "dtk dotnet test --max-lines 40 || true")]
+    [InlineData("cd src && dotnet build | tail -3", "cd src && dtk dotnet build --max-lines 3")]
+    [InlineData("dotnet test --filter \"A|B\" | tail -5", "dtk dotnet test --max-lines 5 --filter \"A|B\"")]
+    [InlineData("dotnet jb cleanupcode App.slnx --no-build | tail -5", "dtk dotnet jb cleanupcode --max-lines 5 App.slnx --no-build")]
+    [InlineData("(dotnet test | tail -5)", "(dtk dotnet test --max-lines 5)")]
+    [InlineData("dotnet build | tail -5 && dotnet test | head -3", "dtk dotnet build --max-lines 5 && dtk dotnet test --max-lines 3")]
+    [InlineData("x=$(dotnet test | tail -5)", "x=$(dtk dotnet test --max-lines 5)")]
+    public void Rewrite_PipeIntoALineCountTailOrHead_BecomesMaxLines(string command, string expected) =>
+        DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
+
+    [Theory]
+    [InlineData("dotnet test | tail -f", "dtk dotnet test | tail -f")]
+    [InlineData("dotnet test | tail -F", "dtk dotnet test | tail -F")]
+    [InlineData("dotnet test | tail -n +5", "dtk dotnet test | tail -n +5")]
+    [InlineData("dotnet test | head -n -5", "dtk dotnet test | head -n -5")]
+    [InlineData("dotnet test | tail -c 100", "dtk dotnet test | tail -c 100")]
+    [InlineData("dotnet test | tail -5 log.txt", "dtk dotnet test | tail -5 log.txt")]
+    [InlineData("dotnet test | tail -q -5", "dtk dotnet test | tail -q -5")]
+    [InlineData("dotnet test | tail -0", "dtk dotnet test | tail -0")]
+    [InlineData("dotnet test | tail -5 | wc -l", "dtk dotnet test | tail -5 | wc -l")]
+    [InlineData("dotnet test | tail -5 > out.txt", "dtk dotnet test | tail -5 > out.txt")]
+    [InlineData("dotnet test | tail -5 2>&1", "dtk dotnet test | tail -5 2>&1")]
+    [InlineData("dotnet test --max-lines 9 | tail -5", "dtk dotnet test --max-lines 9 | tail -5")]
+    [InlineData("dotnet test --vv | tail -5", "dtk dotnet test --vv | tail -5")]
+    [InlineData("dotnet build --interactive | tail -5", "dtk dotnet build --interactive | tail -5")]
+    [InlineData("dotnet build -getProperty:Version | tail -1", "dtk dotnet build -getProperty:Version | tail -1")]
+    [InlineData("dotnet list package --format json | head -20", "dtk dotnet list package --format json | head -20")]
+    [InlineData("dotnet ef migrations --help | head -5", "dtk dotnet ef migrations --help | head -5")]
+    [InlineData("dotnet test $(cat args) | tail -5", "dtk dotnet test $(cat args) | tail -5")]
+    [InlineData("dotnet ef database drop | tail -5", "dtk dotnet ef database drop | tail -5")]
+    [InlineData("dotnet test --help | head -5", "dtk dotnet test --help | head -5")]
+    [InlineData("dotnet build -h | head -5", "dtk dotnet build -h | head -5")]
+    [InlineData("dotnet build -? | head -5", "dtk dotnet build -? | head -5")]
+    [InlineData("dotnet list package --format \"json\" | head -20", "dtk dotnet list package --format \"json\" | head -20")]
+    [InlineData("dotnet build '-getProperty:Version' | tail -1", "dtk dotnet build '-getProperty:Version' | tail -1")]
+    [InlineData("dotnet test | tail -99999999999", "dtk dotnet test | tail -99999999999")]
+    [InlineData("dotnet publish \\-\\-interactive | tail -5", "dtk dotnet publish \\-\\-interactive | tail -5")]
+    [InlineData("export DTK_RAW=1 && dotnet test | tail -5", "export DTK_RAW=1 && dtk dotnet test | tail -5")]
+    [InlineData("DTK_RAW=1; dotnet test | tail -5", "DTK_RAW=1; dtk dotnet test | tail -5")]
+    public void Rewrite_PipeIntoTailOrHeadNotJustALineCount_KeepsThePipe(string command, string expected) =>
+        DotnetCommandRewriter.Rewrite(command).Should().Be(expected);
+
+    [Fact]
+    public void Rewrite_AMatchInsideTheArgumentsOfAConvertedCommand_DoesNotThrow() =>
+        DotnetCommandRewriter.Rewrite("dotnet test { dotnet build | tail -5")
+            .Should().Be("dtk dotnet test --max-lines 5 { dotnet build");
+
+    [Fact]
+    public void Rewrite_WithTailPipesOff_KeepsThePipe() =>
+        DotnetCommandRewriter.Rewrite("dotnet test | tail -5", new RewriteOptions(ConvertTailPipes: false, ConvertExplicitDtk: false))
+            .Should().Be("dtk dotnet test | tail -5");
+
+    private static readonly RewriteOptions ExplicitDtk = new(ConvertTailPipes: true, ConvertExplicitDtk: true);
+
+    [Theory]
+    [InlineData("dtk dotnet test | tail -20", "dtk dotnet test --max-lines 20")]
+    [InlineData("dtk test --filter X | tail -5 && git add -A", "dtk test --max-lines 5 --filter X && git add -A")]
+    [InlineData("/usr/local/bin/dtk dotnet build | head -3", "/usr/local/bin/dtk dotnet build --max-lines 3")]
+    public void Rewrite_ExplicitDtkPipedIntoALineCount_BecomesMaxLines(string command, string expected) =>
+        DotnetCommandRewriter.Rewrite(command, ExplicitDtk).Should().Be(expected);
+
+    [Theory]
+    [InlineData("DTK_RAW=1 dtk dotnet test | tail -5")]
+    [InlineData("dtk log test | tail -5")]
+    [InlineData("dtk pipe test < x.log | tail -5")]
+    [InlineData("echo dtk dotnet test | tail -5")]
+    [InlineData("dtk dotnet test | tail -f")]
+    [InlineData("dtk dotnet test")]
+    [InlineData("dtk dotnet test --help | tail -5")]
+    [InlineData("dtk dotnet test --max-lines 9 | tail -5")]
+    [InlineData("dtk dotnet test --interactive | tail -5")]
+    [InlineData("dtk dotnet test | tail -99999999999")]
+    public void Rewrite_ExplicitDtkNotConverted_IsReturnedUnchanged(string command) =>
+        DotnetCommandRewriter.Rewrite(command, ExplicitDtk).Should().BeSameAs(command);
+
+    [Fact]
+    public void Rewrite_ExplicitDtkWithoutTheFlag_IsReturnedUnchanged()
+    {
+        const string command = "dtk dotnet test | tail -20";
+
+        DotnetCommandRewriter.Rewrite(command).Should().BeSameAs(command);
+    }
+
+    [Fact]
+    public void Rewrite_ExplicitDtkWithTailPipesOff_IsReturnedUnchanged()
+    {
+        const string command = "dtk dotnet test | tail -20";
+
+        DotnetCommandRewriter.Rewrite(command, new RewriteOptions(ConvertTailPipes: false, ConvertExplicitDtk: true))
+            .Should().BeSameAs(command);
+    }
+
+    [Theory]
     [InlineData("dotnet build", "dtk dotnet build")]
     [InlineData("dotnet test", "dtk dotnet test")]
     [InlineData("dotnet restore", "dtk dotnet restore")]
@@ -266,10 +364,7 @@ public sealed class DotnetCommandRewriterTests
     }
 
     [Theory]
-    // The verdict is dtk's last line, so its tail and head keep it.
-    [InlineData("dotnet build | tail -5", "dtk dotnet build | tail -5")]
-    [InlineData("dotnet build 2>&1 | tail -30", "dtk dotnet build 2>&1 | tail -30")]
-    [InlineData("dotnet test 2>&1 | head -50", "dtk dotnet test 2>&1 | head -50")]
+    // A later filter or a tee still reads dtk's output, so the pipe stays.
     [InlineData("dotnet build | tail -5 | grep error", "dtk dotnet build | tail -5 | grep error")]
     [InlineData("dotnet build 2>&1 | tee build.log | tail", "dtk dotnet build 2>&1 | tee build.log | tail")]
     // Only standard error goes elsewhere, or standard output joins it.

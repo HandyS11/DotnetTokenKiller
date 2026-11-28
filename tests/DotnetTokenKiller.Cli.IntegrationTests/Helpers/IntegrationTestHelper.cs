@@ -205,9 +205,21 @@ internal static class IntegrationTestHelper
     /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>; dtk's tracking, tee and config paths point inside it.</param>
     /// <param name="stdin">The text to write to the process's standard input, as UTF-8.</param>
     /// <param name="args">The arguments to pass to dtk.</param>
+    internal static Task<(string StdOut, string StdErr, int ExitCode)> RunDtkSeparatingStreamsInDirAsync(
+        string isolatedDir, string stdin, params string[] args) =>
+        RunDtkSeparatingStreamsInDirAsync(isolatedDir, new Dictionary<string, string>(), stdin, args);
+
+    /// <summary>
+    /// As <see cref="RunDtkSeparatingStreamsAsync"/>, against an explicit isolated directory and with extra environment
+    /// variables set for dtk (such as <c>HOME</c>, or a <c>PATH</c> with a fake tool first).
+    /// </summary>
+    /// <param name="isolatedDir">A directory from <see cref="NewIsolatedDir"/>; dtk's tracking, tee and config paths point inside it.</param>
+    /// <param name="environment">The variables to set, on top of the isolation ones.</param>
+    /// <param name="stdin">The text to write to the process's standard input, as UTF-8.</param>
+    /// <param name="args">The arguments to pass to dtk.</param>
     /// <exception cref="InvalidOperationException">The process could not be started.</exception>
     internal static async Task<(string StdOut, string StdErr, int ExitCode)> RunDtkSeparatingStreamsInDirAsync(
-        string isolatedDir, string stdin, params string[] args)
+        string isolatedDir, IReadOnlyDictionary<string, string> environment, string stdin, params string[] args)
     {
         var psi = new ProcessStartInfo(Launcher.Executable)
         {
@@ -225,6 +237,11 @@ internal static class IntegrationTestHelper
                 ["DTK_CONFIG_PATH"] = Path.Combine(isolatedDir, "config.json")
             }
         };
+        foreach (var (name, value) in environment)
+        {
+            psi.Environment[name] = value;
+        }
+
         foreach (var arg in Launcher.PrefixArguments.Concat(args))
         {
             psi.ArgumentList.Add(arg);
