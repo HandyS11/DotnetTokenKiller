@@ -7,10 +7,15 @@ namespace DotnetTokenKiller.Cli.IntegrationTests;
 
 /// <summary>
 /// Proves the durability guarantee out of process: a dtk process that is actually killed — not
-/// merely a session that is never finalized — still leaves a readable tee log behind.
+/// merely a session that is never finalized — still leaves a readable tee log behind. It builds a shared sample, so it
+/// runs in the sample builds' collection, never beside another build of the same project.
 /// </summary>
+[Collection("Integration.SampleApp")]
 public sealed class TeeDurabilityTests
 {
+    /// <summary>How long the killed run must still be running after its log's header appeared.</summary>
+    private static readonly TimeSpan SettleBeforeKill = TimeSpan.FromMilliseconds(300);
+
     /// <summary>A dtk process killed mid-run leaves a log with a running status and no exit code.</summary>
     [Fact]
     public async Task KilledRun_LeavesAReadableLog()
@@ -24,7 +29,7 @@ public sealed class TeeDurabilityTests
 
         var isolatedDir = Path.Combine(Path.GetTempPath(), $"dtk-durability-{Guid.NewGuid():N}");
         var (process, teeDir) = IntegrationTestHelper.StartDetached(
-            ["dotnet", "build", "samples/SampleApp.Warnings/SampleApp.Warnings.csproj"], isolatedDir);
+            ["dotnet", "build", IntegrationTestHelper.SamplePath("SampleApp.Warnings")], isolatedDir);
 
         try
         {
@@ -33,6 +38,10 @@ public sealed class TeeDurabilityTests
             var logPath = await WaitForLogAsync(teeDir, TimeSpan.FromSeconds(30));
             logPath.Should().NotBeNull("dtk must write the tee log's header before running the command");
 
+            // The build takes seconds, so it is still running a moment after its header appeared; a command that
+            // fails at once (a project path that does not exist ends in about 150 ms) would be complete by then, and
+            // fails this test every time instead of only when the kill happens to lose the race.
+            await Task.Delay(SettleBeforeKill);
             process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync();
 
