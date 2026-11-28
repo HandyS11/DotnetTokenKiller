@@ -35,7 +35,8 @@ public class DotnetBuildIntegrationTests
         lines[0].Trim().Should().StartWith("✓ dotnet build");
 
         var savings = IntegrationTestHelper.CalculateSavings(rawOutput, output);
-        savings.Should().BeGreaterThanOrEqualTo(80.0, "build success should achieve ≥80% token savings");
+        savings.Should().BeGreaterThanOrEqualTo(75.0,
+            "build success should achieve ≥75% token savings; the clean line states MSBuild's counts");
     }
 
     [Fact(Timeout = IntegrationTestHelper.DefaultTimeoutMs)]

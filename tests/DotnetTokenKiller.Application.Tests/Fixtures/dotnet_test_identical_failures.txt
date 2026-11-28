@@ -1,0 +1,478 @@
+MSBuild version 17.11.9+a69bbaaf5 for .NET
+  Determining projects to restore...
+  Restored /test/project/root/src/DotnetTokenKiller.Domain/DotnetTokenKiller.Domain.csproj (in 42 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Application/DotnetTokenKiller.Application.csproj (in 38 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Infrastructure/DotnetTokenKiller.Infrastructure.csproj (in 35 ms).
+  Restored /test/project/root/src/DotnetTokenKiller.Cli/DotnetTokenKiller.Cli.csproj (in 40 ms).
+  Restored /test/project/root/tests/DotnetTokenKiller.Domain.Tests/DotnetTokenKiller.Domain.Tests.csproj (in 31 ms).
+  Restored /test/project/root/tests/Orders.IntegrationTests/Orders.IntegrationTests.csproj (in 36 ms).
+  DotnetTokenKiller.Domain -> /test/project/root/src/DotnetTokenKiller.Domain/bin/Debug/net10.0/DotnetTokenKiller.Domain.dll
+  DotnetTokenKiller.Application -> /test/project/root/src/DotnetTokenKiller.Application/bin/Debug/net10.0/DotnetTokenKiller.Application.dll
+  DotnetTokenKiller.Infrastructure -> /test/project/root/src/DotnetTokenKiller.Infrastructure/bin/Debug/net10.0/DotnetTokenKiller.Infrastructure.dll
+  DotnetTokenKiller.Cli -> /test/project/root/src/DotnetTokenKiller.Cli/bin/Debug/net10.0/dtk.dll
+  Orders.IntegrationTests -> /test/project/root/tests/Orders.IntegrationTests/bin/Debug/net10.0/Orders.IntegrationTests.dll
+
+Test run for /test/project/root/tests/Orders.IntegrationTests/bin/Debug/net10.0/Orders.IntegrationTests.dll (.NETCoreApp,Version=v10.0)
+Microsoft (R) Test Execution Command Line Tool Version 17.11.9 (x64)
+Copyright (c) Microsoft Corporation.  All rights reserved.
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_01 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_02 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_03 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_04 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_05 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_06 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_07 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_08 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_09 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_10 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_11 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_12 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_13 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_14 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_15 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_16 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_17 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_18 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_19 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_20 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Api.OrdersEndpointTests.Rejects_negative_quantity [14 ms]
+  Error Message:
+   Assert.Equal() Failure: Values differ
+Expected: 400
+Actual:   500
+  Stack Trace:
+     at Orders.IntegrationTests.Api.OrdersEndpointTests.Rejects_negative_quantity() in /test/project/root/tests/Orders.IntegrationTests/Api/OrdersEndpointTests.cs:line 57
+--- End of stack trace from previous location ---
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_21 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_22 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_23 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_24 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_25 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_26 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_27 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_28 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_29 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_30 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_31 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_32 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_33 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_34 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Api.OrdersEndpointTests.Returns_created_order_location [9 ms]
+  Error Message:
+   Assert.NotNull() Failure: Value is null
+  Stack Trace:
+     at Orders.IntegrationTests.Api.OrdersEndpointTests.Returns_created_order_location() in /test/project/root/tests/Orders.IntegrationTests/Api/OrdersEndpointTests.cs:line 82
+--- End of stack trace from previous location ---
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_35 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_36 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_37 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_38 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_39 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+  Failed Orders.IntegrationTests.Data.StockRepositoryTests.Loads_entity_40 [2 ms]
+  Error Message:
+   System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"})
+---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+  Stack Trace:
+     at Orders.IntegrationTests.Fixtures.SqlServerFixture.InitializeAsync() in /test/project/root/tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+   at Xunit.Sdk.ExceptionAggregator.RunAsync(Func`1 code)
+----- Inner Stack Trace -----
+   at Docker.DotNet.DockerClient.HandleIfErrorResponse(HttpStatusCode statusCode, HttpResponseMessage response, IEnumerable`1 handlers)
+   at Docker.DotNet.DockerClient.MakeRequestAsync(IEnumerable`1 errorHandlers, HttpMethod method, String path, IQueryString queryString, IRequestContent data, IDictionary`2 headers, TimeSpan timeout, CancellationToken token)
+
+Failed!  - Failed:    42, Passed:    11, Skipped:     0, Total:    53, Duration: 1 s - Orders.IntegrationTests.dll (net10.0)

@@ -56,7 +56,7 @@ dtk dotnet test
 DTK runs the underlying `dotnet` command, filters the output, and prints a compact summary. For example, a successful build that normally prints restore progress, project paths, and timing becomes:
 
 ```sh
-✓ dotnet build (1 project, 1.86s)
+✓ dotnet build: 0 errors, 0 warnings (1 project, 1.86s)
 ```
 
 A test run with one failure strips adapter banners, license warnings, and framework internals down to:

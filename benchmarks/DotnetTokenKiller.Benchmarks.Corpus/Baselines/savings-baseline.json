@@ -53,9 +53,9 @@
       "exitCode": 0,
       "rawBytes": 1713,
       "rawTokens": 483,
-      "filteredTokens": 15,
-      "savedTokens": 468,
-      "savingsPercent": 96.9
+      "filteredTokens": 23,
+      "savedTokens": 460,
+      "savingsPercent": 95.2
     },
     {
       "id": "build/warnings",
@@ -438,9 +438,9 @@
       "exitCode": 0,
       "rawBytes": 778,
       "rawTokens": 218,
-      "filteredTokens": 19,
-      "savedTokens": 199,
-      "savingsPercent": 91.3
+      "filteredTokens": 25,
+      "savedTokens": 193,
+      "savingsPercent": 88.5
     },
     {
       "id": "test/assert-diffs",
@@ -493,9 +493,9 @@
       "exitCode": 0,
       "rawBytes": 430,
       "rawTokens": 131,
-      "filteredTokens": 19,
-      "savedTokens": 112,
-      "savingsPercent": 85.5
+      "filteredTokens": 25,
+      "savedTokens": 106,
+      "savingsPercent": 80.9
     },
     {
       "id": "test/failure-mentions-diagnostic",
@@ -529,6 +529,17 @@
       "filteredTokens": 91,
       "savedTokens": 305,
       "savingsPercent": 77
+    },
+    {
+      "id": "test/identical-failures",
+      "fixture": "dotnet_test_identical_failures.txt",
+      "filterKey": "test",
+      "exitCode": 1,
+      "rawBytes": 51956,
+      "rawTokens": 10433,
+      "filteredTokens": 312,
+      "savedTokens": 10121,
+      "savingsPercent": 97
     },
     {
       "id": "test/list-tests",
@@ -647,9 +658,9 @@
       "exitCode": 0,
       "rawBytes": 1173,
       "rawTokens": 370,
-      "filteredTokens": 23,
-      "savedTokens": 347,
-      "savingsPercent": 93.8
+      "filteredTokens": 29,
+      "savedTokens": 341,
+      "savingsPercent": 92.2
     },
     {
       "id": "test/logger-minimal-terminal-logger",
@@ -669,9 +680,9 @@
       "exitCode": 0,
       "rawBytes": 1070,
       "rawTokens": 343,
-      "filteredTokens": 23,
-      "savedTokens": 320,
-      "savingsPercent": 93.3
+      "filteredTokens": 29,
+      "savedTokens": 314,
+      "savingsPercent": 91.5
     },
     {
       "id": "test/logger-normal-terminal-logger",
@@ -856,9 +867,9 @@
       "exitCode": 0,
       "rawBytes": 2913,
       "rawTokens": 763,
-      "filteredTokens": 19,
-      "savedTokens": 744,
-      "savingsPercent": 97.5
+      "filteredTokens": 25,
+      "savedTokens": 738,
+      "savingsPercent": 96.7
     },
     {
       "id": "test/multiproject-skipped",
@@ -867,9 +878,9 @@
       "exitCode": 0,
       "rawBytes": 1220,
       "rawTokens": 375,
-      "filteredTokens": 23,
-      "savedTokens": 352,
-      "savingsPercent": 93.9
+      "filteredTokens": 29,
+      "savedTokens": 346,
+      "savingsPercent": 92.3
     },
     {
       "id": "test/multiproject-zero",
@@ -966,9 +977,9 @@
       "exitCode": 0,
       "rawBytes": 771,
       "rawTokens": 237,
-      "filteredTokens": 23,
-      "savedTokens": 214,
-      "savingsPercent": 90.3
+      "filteredTokens": 29,
+      "savedTokens": 208,
+      "savingsPercent": 87.8
     },
     {
       "id": "test/unknown-switch",

@@ -628,7 +628,17 @@ public class MsBuildDiagnosticReportTests
         var report = Parse("dotnet_build_success.txt");
 
         report.Render("dotnet publish", 0, ["App -> bin/publish/"])
-            .Should().Be("  App -> bin/publish/\n✓ dotnet publish (6 projects, 2.34s)\n");
+            .Should().Be("  App -> bin/publish/\n✓ dotnet publish: 0 errors, 0 warnings (6 projects, 2.34s)\n");
+    }
+
+    [Fact]
+    public void Render_CleanRunWithDeclaredCounts_StatesThemBeforeTheContext()
+    {
+        var report = MsBuildDiagnosticReport.Parse(
+            "  App -> bin/App.dll\n  App -> bin/publish/\n\nBuild succeeded.\n    0 Warning(s)\n    0 Error(s)\n", Root);
+
+        report.Render("dotnet publish", 0, ["  App -> bin/publish/"])
+            .Should().EndWith("✓ dotnet publish: 0 errors, 0 warnings (1 project)\n");
     }
 
     [Fact]

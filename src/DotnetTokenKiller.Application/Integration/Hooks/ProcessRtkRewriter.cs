@@ -84,24 +84,30 @@ internal sealed class ProcessRtkRewriter(Func<string?> locateRtk, TimeSpan timeo
         }
 
         process.StandardInput.Close();
-        var output = process.StandardOutput.ReadToEndAsync();
-        var error = process.StandardError.ReadToEndAsync();
+        var elapsed = Stopwatch.StartNew();
+
+        // Each stream is read on a thread of its own, not on the thread pool: a pool read waits for a free pool thread,
+        // which a busy machine may not have in time, and the hook would then drop an answer rtk had already given.
+        var output = StreamDrain.Start(process.StandardOutput, "rtk stdout");
+        var error = StreamDrain.Start(process.StandardError, "rtk stderr");
         if (!process.WaitForExit(timeout))
         {
             Kill(process);
             return null;
         }
 
-        // The hook path is synchronous (no async entry point to await from), and both reads are bounded.
-#pragma warning disable VSTHRD002
-        if (!Task.WhenAll(output, error).Wait(DrainGracePeriod))
+        // The streams end when rtk has exited, unless a grandchild kept them open: wait for them within what is left
+        // of the timeout, and at least the grace period.
+        var drainUntil = elapsed.Elapsed + Max(timeout - elapsed.Elapsed, DrainGracePeriod);
+        if (!output.TryJoin(drainUntil - elapsed.Elapsed) || !error.TryJoin(drainUntil - elapsed.Elapsed))
         {
             return null;
         }
 
-        return new RtkRewrite(process.ExitCode, TrimOneNewline(output.Result));
-#pragma warning restore VSTHRD002
+        return new RtkRewrite(process.ExitCode, TrimOneNewline(output.Text));
     }
+
+    private static TimeSpan Max(TimeSpan first, TimeSpan second) => first > second ? first : second;
 
     private static string TrimOneNewline(string text)
     {
@@ -123,6 +129,46 @@ internal sealed class ProcessRtkRewriter(Func<string?> locateRtk, TimeSpan timeo
         catch (Exception ex) when (ex is InvalidOperationException or Win32Exception or NotSupportedException)
         {
             // Already gone.
+        }
+    }
+
+    /// <summary>Reads one of rtk's streams to its end on a background thread of its own.</summary>
+    private sealed class StreamDrain
+    {
+        private readonly StreamReader _reader;
+        private readonly Thread _thread;
+
+        private StreamDrain(StreamReader reader, string name)
+        {
+            _reader = reader;
+            _thread = new Thread(Read) { IsBackground = true, Name = name };
+        }
+
+        /// <summary>What the stream held; read it only after <see cref="TryJoin"/> returned true.</summary>
+        public string Text { get; private set; } = string.Empty;
+
+        public static StreamDrain Start(StreamReader reader, string name)
+        {
+            var drain = new StreamDrain(reader, name);
+            drain._thread.Start();
+            return drain;
+        }
+
+        /// <summary>Waits for the stream's end, for at most <paramref name="timeout"/>.</summary>
+        /// <param name="timeout">How long to wait; zero or less checks without waiting.</param>
+        public bool TryJoin(TimeSpan timeout) => _thread.Join(timeout > TimeSpan.Zero ? timeout : TimeSpan.Zero);
+
+        private void Read()
+        {
+            try
+            {
+                Text = _reader.ReadToEnd();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // A thread's unhandled exception would end the hook's process; a stream that cannot be read is no answer.
+                Text = string.Empty;
+            }
         }
     }
 }

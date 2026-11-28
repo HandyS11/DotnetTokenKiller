@@ -38,7 +38,7 @@ Time Elapsed 00:00:01.19
 **dtk** (`dtk dotnet build samples/SampleApp/SampleApp.csproj`)
 
 ```sh
-✓ dotnet build (1 project, 1.19s)
+✓ dotnet build: 0 errors, 0 warnings (1 project, 1.19s)
 ```
 
 Token reduction: **7 lines -> 1 line**
@@ -66,7 +66,7 @@ Time Elapsed 00:00:01.34
 **dtk** (`dtk dotnet build samples/SampleApp.MultiProject/SampleApp.MultiProject.csproj`)
 
 ```sh
-✓ dotnet build (2 projects, 1.34s)
+✓ dotnet build: 0 errors, 0 warnings (2 projects, 1.34s)
 ```
 
 Token reduction: **9 lines -> 1 line**

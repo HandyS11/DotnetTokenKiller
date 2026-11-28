@@ -284,7 +284,7 @@ public class DotnetTestFilterTests
         // run reads "1 ms"), so "9 ms" was replaced by VSTest's literal "< 1 ms" (ConsoleLogger.GetFormattedDurationString).
         var result = _sut.Apply(LoadFixture("dotnet_test_duration_under_1ms.txt"), exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.00s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.00s) · 0 build warnings\n");
     }
 
     [Theory]
@@ -1199,7 +1199,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().MatchRegex(@"^✓ dotnet test: 0 passed, 2 skipped \(1 project, [^)]+\)\n$")
+        result.Should().MatchRegex(@"^✓ dotnet test: 0 passed, 2 skipped \(1 project, [^)]+\) · 0 build warnings\n$")
             .And.NotContain("0 tests found");
     }
 
@@ -1212,7 +1212,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed, 2 skipped \(2 projects, [^)]+\)\n$");
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed, 2 skipped \(2 projects, [^)]+\) · 0 build warnings\n$");
     }
 
     // The dotnet_test_logger_* and dotnet_test_list_tests* fixtures are real .NET 10.0.403 SDK runs of two
@@ -1233,7 +1233,7 @@ public class DotnetTestFilterTests
         // result is the "Test Run Successful." block, so the counts must come from there, once.
         var result = _sut.Apply(LoadFixture(fixture), exitCode: 0);
 
-        result.Should().MatchRegex(@"^✓ dotnet test: 4 passed, 1 skipped \(1 project, [^)]+\)\n$");
+        result.Should().MatchRegex(@"^✓ dotnet test: 4 passed, 1 skipped \(1 project, [^)]+\) · 0 build warnings\n$");
     }
 
     [Fact]
@@ -1680,7 +1680,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.05s)\n");
+        result.Should().Be("✓ dotnet test: 1 passed (1 project, 0.05s) · 0 build warnings\n");
     }
 
     [Fact]
@@ -1977,6 +1977,60 @@ public class DotnetTestFilterTests
             @"^✓ dotnet test: 2 passed \(1 project, [^)]+\) · 3 build warnings \(CS0219×2, CS8602\)\n$");
     }
 
+    private const string BuiltLine = "  App.Tests -> /r/bin/App.Tests.dll\n";
+    private const string PassedSummary =
+        "Passed!  - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 2 ms - App.Tests.dll\n";
+
+    [Fact]
+    public void Apply_PassingRunThatBuiltProjects_StatesZeroBuildWarnings()
+    {
+        var result = _sut.Apply(BuiltLine + PassedSummary, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed \(1 project, [^)]+\) · 0 build warnings\n$");
+    }
+
+    [Fact]
+    public void Apply_PassingRunDeclaringWarningsWithNoParsedLine_NeverClaimsZero()
+    {
+        var result = _sut.Apply(BuiltLine + "    2 Warning(s)\n" + PassedSummary, exitCode: 0);
+
+        result.Should().EndWith(" · 2 build warnings\n").And.NotContain("0 build warnings");
+    }
+
+    [Fact]
+    public void Apply_PassingRunWithoutProjectOutputLines_AddsNoBuildWarningCount()
+    {
+        var result = _sut.Apply(PassedSummary, exitCode: 0);
+
+        result.Should().MatchRegex(@"^✓ dotnet test: 3 passed \(1 project, [^)]+\)\n$");
+    }
+
+    [Fact]
+    public void Apply_FailingRunThatBuiltProjects_AddsNoZeroCount()
+    {
+        const string failed = "Failed!  - Failed: 1, Passed: 2, Skipped: 0, Total: 3, Duration: 2 ms - App.Tests.dll\n";
+
+        var result = _sut.Apply(BuiltLine + failed, exitCode: 1);
+
+        result.Should().NotContain("0 build warnings");
+    }
+
+    [Fact]
+    public void Apply_ListTestsThatBuiltProjects_AddsNoZeroCount()
+    {
+        var result = _sut.Apply(BuiltLine + LoadFixture("dotnet_test_list_tests_single.txt"), exitCode: 0);
+
+        result.Should().NotContain("0 build warnings");
+    }
+
+    [Fact]
+    public void Apply_PassingRunWithBuildWarnings_StillCountsThem()
+    {
+        var result = _sut.Apply(LoadFixture("dotnet_test_pass_with_warnings.txt"), exitCode: 0);
+
+        result.Should().EndWith(" · 3 build warnings (CS0219×2, CS8602)\n").And.NotContain("0 build warnings");
+    }
+
     [Fact]
     public void Apply_FailingRunWithBuildWarnings_AppendsTheSuffixToTheStatusLine()
     {
@@ -2126,7 +2180,7 @@ public class DotnetTestFilterTests
     {
         var result = _sut.Apply(LoadFixture("dotnet_test_all_pass.txt"), exitCode: 0);
 
-        result.Should().NotContain("build warning");
+        result.Should().NotContain("build warnings (");
     }
 
     [Fact]
@@ -2139,8 +2193,8 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 0);
 
-        result.Should().NotContain("build warning");
-        LastLine(result).Should().MatchRegex(@"^✓ dotnet test: 17 passed \(1 project, [^)]+\)$");
+        result.Should().NotContain("build warnings (");
+        LastLine(result).Should().MatchRegex(@"^✓ dotnet test: 17 passed \(1 project, [^)]+\) · 0 build warnings$");
     }
 
     [Fact]
@@ -2595,8 +2649,12 @@ public class DotnetTestFilterTests
             "  SampleApp.Tests.IntentionallyFailingTests.AlwaysFails [2 ms]\n" +
             "    Intentional failure\n" +
             "    at SampleApp.Tests/IntentionallyFailingTests.cs:line 8\n" +
-            "✓ SampleApp.Tests.ParserTests (1): Parses ×4\n" +
-            "✓ SampleApp.Tests.SampleTests (3): String_IsNotEmpty, List_ContainsExpectedItems, Addition_ReturnsCorrectResult\n" +
+            "✓ SampleApp.Tests.ParserTests (1):\n" +
+            "  Parses ×4\n" +
+            "✓ SampleApp.Tests.SampleTests (3):\n" +
+            "  String_IsNotEmpty\n" +
+            "  List_ContainsExpectedItems\n" +
+            "  Addition_ReturnsCorrectResult\n" +
             "✗ dotnet test: 1 failed, 7 passed (1 project, 0.50s)\n");
     }
 
@@ -2609,7 +2667,7 @@ public class DotnetTestFilterTests
 
         var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
 
-        result.Should().Contain("✓ SampleApp.Tests.ParserTests (1): Parses ×4\n")
+        result.Should().Contain("✓ SampleApp.Tests.ParserTests (1):\n  Parses ×4\n")
             .And.NotContain("a.b/c").And.NotContain("1.5");
     }
 
@@ -2621,11 +2679,11 @@ public class DotnetTestFilterTests
         var fail = LoadFixture("dotnet_test_mtp_detailed_fail.txt");
 
         _sut.Apply(pass, exitCode: 0, Names).Output.Should().Be(
-            "✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n" +
+            "✓ Alpha.Tests.dll (5):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n  Joins\n" +
             "✓ dotnet test: 7 passed (1 project, 0.31s)\n");
         _sut.Apply(fail, exitCode: 2, Names).Output.Should().EndWith(
             "    at Alpha.Tests/CalculatorTests.cs:line 22\n" +
-            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Joins\n" +
+            "✓ Alpha.Tests.dll (4):\n  Adds\n  Subtracts\n  Parses ×3\n  Joins\n" +
             "✗ dotnet test: 1 failed, 6 passed (1 project, 0.32s)\n");
     }
 
@@ -2638,8 +2696,8 @@ public class DotnetTestFilterTests
 
         result.Should().EndWith(
             "    at Beta.Tests/Tests.cs:line 15\n" +
-            "✓ Beta.Tests.ParserTests (1): Parses ×4\n" +
-            "✓ Beta.Tests.CalculatorTests (2): Subtracts, Adds\n" +
+            "✓ Beta.Tests.ParserTests (1):\n  Parses ×4\n" +
+            "✓ Beta.Tests.CalculatorTests (2):\n  Subtracts\n  Adds\n" +
             "✗ dotnet test: 1 failed, 6 passed (1 project, 0.47s)\n");
     }
 
@@ -2697,8 +2755,8 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(twoApps, exitCode: 0, Names).Output;
 
         result.Should().StartWith(
-            "✓ Alpha.Tests.dll (4): Adds, Subtracts, Parses ×3, Divides\n" +
-            "✓ Beta.Tests.dll (1): Joins\n");
+            "✓ Alpha.Tests.dll (4):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n" +
+            "✓ Beta.Tests.dll (1):\n  Joins\n");
     }
 
     [Fact]
@@ -2711,8 +2769,8 @@ public class DotnetTestFilterTests
         var two = _sut.Apply(noFrom.Replace("Running tests from", "Running tests from /x/Other.dll (net10.0|x64)\nRunning tests from",
             StringComparison.Ordinal), exitCode: 0, Names).Output;
 
-        single.Should().StartWith("✓ Alpha.Tests.dll (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
-        two.Should().StartWith("✓ (unknown class) (5): Adds, Subtracts, Parses ×3, Divides, Joins\n");
+        single.Should().StartWith("✓ Alpha.Tests.dll (5):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n  Joins\n");
+        two.Should().StartWith("✓ (unknown class) (5):\n  Adds\n  Subtracts\n  Parses ×3\n  Divides\n  Joins\n");
     }
 
     [Fact]
@@ -2725,8 +2783,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(fixture, exitCode: 1, Names).Output;
 
         result.Should().EndWith(
-            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
-            "Add_Returns_Sum ×3\n" +
+            "✓ SampleApp.Tests.MSTest.dll (3):\n  Addition_Returns_Correct_Result\n  String_StartsWith_Expected_Prefix\n  Add_Returns_Sum ×3\n" +
             "✗ dotnet test: 3 failed, 5 passed (1 project, 0.42s)\n").And.NotContain("(unknown class)");
     }
 
@@ -2744,8 +2801,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(twoRuns, exitCode: 1, Names).Output;
 
         result.Should().Contain(
-            "✓ (unknown class) (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
-            "Add_Returns_Sum ×3\n");
+            "✓ (unknown class) (3):\n  Addition_Returns_Correct_Result\n  String_StartsWith_Expected_Prefix\n  Add_Returns_Sum ×3\n");
     }
 
     [Fact]
@@ -2764,8 +2820,7 @@ public class DotnetTestFilterTests
         var result = _sut.Apply(cut, exitCode: 1, Names).Output;
 
         result.Should().Contain(
-            "✓ SampleApp.Tests.MSTest.dll (3): Addition_Returns_Correct_Result, String_StartsWith_Expected_Prefix, " +
-            "Add_Returns_Sum ×3\n");
+            "✓ SampleApp.Tests.MSTest.dll (3):\n  Addition_Returns_Correct_Result\n  String_StartsWith_Expected_Prefix\n  Add_Returns_Sum ×3\n");
     }
 
     [Theory]
@@ -2895,15 +2950,163 @@ public class DotnetTestFilterTests
         _sut.Apply("some unrelated output\n", exitCode: 1).Should().BeEmpty();
     }
 
+    [Fact]
+    public void Apply_IdenticalFailures_AreGroupedWithTheirCountAndEveryName()
+    {
+        var input = string.Concat(Enumerable.Range(1, 5).Select(i => VsTestFailure($"MyTests.T{i}", "boom")))
+                    + SummaryLine(5);
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().Be("FAILURES (5):\n  5 failed the same way: MyTests.T1, MyTests.T2, MyTests.T3, MyTests.T4, MyTests.T5\n"
+                           + "    boom\n    at ../../../path/Test.cs:line 1\n"
+                           + "✗ dotnet test: 5 failed, 0 passed (1 project, 0.01s)\n");
+    }
+
+    [Fact]
+    public void Apply_GroupAboveTheFailureLimit_NamesTheFirstThreeAndCountsTheRest()
+    {
+        var input = string.Concat(Enumerable.Range(1, 16).Select(i => VsTestFailure($"MyTests.T{i}", "boom")))
+                    + SummaryLine(16);
+
+        _sut.Apply(input, exitCode: 1).Should()
+            .Contain("  16 failed the same way: MyTests.T1, MyTests.T2, MyTests.T3 +13 more\n");
+    }
+
+    [Fact]
+    public void Apply_FailuresWithTheSameMessageAndNoLocation_AreNotGrouped()
+    {
+        var input = string.Concat(Enumerable.Range(1, 3).Select(i =>
+            $"  Failed MyTests.T{i} [1 ms]\n  Error Message:\n   Assert.True() Failure\n\n"))
+            + SummaryLine(3);
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().NotContain("failed the same way").And.Contain("  MyTests.T1 [1 ms]")
+            .And.Contain("  MyTests.T2 [1 ms]").And.Contain("  MyTests.T3 [1 ms]");
+    }
+
+    [Fact]
+    public void Apply_LargestGroupComesFirst_ThenSinglesInOrder()
+    {
+        var input = VsTestFailure("MyTests.S1", "a") + VsTestFailure("MyTests.H1", "d")
+                    + VsTestFailure("MyTests.H2", "d") + VsTestFailure("MyTests.G1", "b")
+                    + VsTestFailure("MyTests.G2", "b") + VsTestFailure("MyTests.G3", "b")
+                    + VsTestFailure("MyTests.S2", "c") + SummaryLine(7);
+
+        var lines = _sut.Apply(input, exitCode: 1).Split('\n');
+
+        lines.Where(l => l.StartsWith("  MyTests.", StringComparison.Ordinal)
+                         || l.Contains("failed the same way", StringComparison.Ordinal)).Should()
+            .Equal("  3 failed the same way: MyTests.G1, MyTests.G2, MyTests.G3",
+                "  2 failed the same way: MyTests.H1, MyTests.H2", "  MyTests.S1 [1 ms]", "  MyTests.S2 [1 ms]");
+    }
+
+    [Fact]
+    public void Apply_FailuresShowingNeitherMessageNorLocation_AreNotGrouped()
+    {
+        const string input = "  Failed MyTests.A [1 ms]\n  Failed MyTests.B [1 ms]\n"
+                             + "Failed!  - Failed: 2, Passed: 0, Skipped: 0, Total: 2, Duration: 10 ms - Tests.dll\n";
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().NotContain("failed the same way").And.Contain("  MyTests.A [1 ms]")
+            .And.Contain("  MyTests.B [1 ms]");
+    }
+
+    [Theory]
+    [InlineData("boom", 1, "bang", 1)]
+    [InlineData("boom", 1, "boom", 2)]
+    public void Apply_FailuresDifferingInMessageOrLocation_StayApart(string messageA, int lineA, string messageB,
+        int lineB)
+    {
+        var input = VsTestFailure("MyTests.A", messageA, lineA) + VsTestFailure("MyTests.B", messageB, lineB)
+                    + SummaryLine(2);
+
+        var result = _sut.Apply(input, exitCode: 1);
+
+        result.Should().NotContain("failed the same way").And.Contain("  MyTests.A [1 ms]")
+            .And.Contain("  MyTests.B [1 ms]");
+    }
+
+    [Fact]
+    public void Apply_ManyGroups_PlusMoreCountsTheTestsNotShown()
+    {
+        var input = string.Concat(Enumerable.Range(1, 16).SelectMany(g => new[]
+            {
+                VsTestFailure($"MyTests.G{g}A", $"message {g}"), VsTestFailure($"MyTests.G{g}B", $"message {g}")
+            }))
+            + SummaryLine(32);
+
+        var lines = _sut.Apply(input, exitCode: 1).Split('\n');
+
+        var headings = lines.Where(l => l.Contains("failed the same way", StringComparison.Ordinal)).ToList();
+        headings.Should().HaveCount(15);
+        headings[0].Should().Be("  2 failed the same way: MyTests.G1A, MyTests.G1B");
+        string.Join('\n', lines).Should().NotContain("MyTests.G16A");
+        lines.Should().Contain("+2 more failures");
+    }
+
+    [Fact]
+    public void Apply_ShowOutput_GroupsOnlyIdenticalOutputs()
+    {
+        var input = VsTestFailure("MyTests.A", "boom", output: "same") + VsTestFailure("MyTests.B", "boom", output: "same")
+                    + VsTestFailure("MyTests.C", "boom", output: "other") + SummaryLine(3);
+
+        var shown = _sut.Apply(input, exitCode: 1, ShowOutput).Output;
+        var plain = _sut.Apply(input, exitCode: 1);
+
+        shown.Should().Contain("  2 failed the same way: MyTests.A, MyTests.B\n    boom\n")
+            .And.Contain("    output:\n      same\n").And.Contain("  MyTests.C [1 ms]");
+        plain.Should().Contain("  3 failed the same way: MyTests.A, MyTests.B, MyTests.C");
+    }
+
+    [Fact]
+    public void Apply_SameTestFailingTwice_IsNamedOnceWithItsCount()
+    {
+        var input = VsTestFailure("MyTests.T1", "boom") + VsTestFailure("MyTests.T1", "boom") + SummaryLine(2);
+
+        _sut.Apply(input, exitCode: 1).Should().Contain("  2 failed the same way: MyTests.T1 ×2\n");
+    }
+
+    [Fact]
+    public void Apply_IdenticalFailuresWithCrlf_AreGrouped()
+    {
+        var input = VsTestFailure("MyTests.T1", "boom") + VsTestFailure("MyTests.T2", "boom") + SummaryLine(2);
+
+        var result = _sut.Apply(input.ReplaceLineEndings("\r\n"), exitCode: 1);
+
+        result.Should().NotContain("\r").And.Be(_sut.Apply(input, exitCode: 1))
+            .And.Contain("  2 failed the same way: MyTests.T1, MyTests.T2\n");
+    }
+
+    [Fact]
+    public Task Apply_IdenticalFailuresFixture_MatchesSnapshot()
+    {
+        var fixture = LoadFixture("dotnet_test_identical_failures.txt");
+        var result = _sut.Apply(fixture, exitCode: 1);
+        return Verify(result);
+    }
+
+    private static string VsTestFailure(string name, string message, int line = 1, string? output = null) =>
+        $"  Failed {name} [1 ms]\n  Error Message:\n   {message}\n  Stack Trace:\n"
+        + $"     at {name}() in /path/Test.cs:line {line}\n"
+        + (output is null ? string.Empty : $"  Standard Output Messages:\n {output}\n")
+        + "\n";
+
+    private static string SummaryLine(int failed) =>
+        $"Failed!  - Failed: {failed}, Passed: 0, Skipped: 0, Total: {failed}, Duration: 10 ms - Tests.dll\n";
+
     /// <summary>
     /// A VSTest run of <paramref name="count"/> failures, each <paramref name="block"/> (one failure's lines) with
-    /// its test's name numbered.
+    /// its test's name and source line numbered, so that no two of them share a location and group.
     /// </summary>
     /// <param name="block">One failure's lines.</param>
     /// <param name="count">How many failures.</param>
     private static string ManyFailures(string block, int count) =>
         string.Concat(Enumerable.Range(1, count).Select(i => block.Replace("Failed MyTests.", $"Failed MyTests{i}.",
-            StringComparison.Ordinal).Replace("Failed XN.", $"Failed XN{i}.", StringComparison.Ordinal) + "\n"))
+            StringComparison.Ordinal).Replace("Failed XN.", $"Failed XN{i}.", StringComparison.Ordinal)
+            .Replace(":line ", $":line {i}", StringComparison.Ordinal) + "\n"))
         + $"\nFailed!  - Failed: {count}, Passed: 0, Skipped: 0, Total: {count}, Duration: 1 ms - Tests.dll\n";
 
     /// <summary>The first failure's message line of the filtered output, without its indent.</summary>

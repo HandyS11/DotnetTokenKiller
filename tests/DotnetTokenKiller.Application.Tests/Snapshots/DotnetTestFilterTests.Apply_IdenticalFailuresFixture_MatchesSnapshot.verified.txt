@@ -1,0 +1,11 @@
+FAILURES (42):
+  40 failed the same way: Orders.IntegrationTests.Data.OrderRepositoryTests.Loads_entity_01, Orders.IntegrationTests.Data.CustomerRepositoryTests.Loads_entity_02, Orders.IntegrationTests.Data.InvoiceRepositoryTests.Loads_entity_03 +37 more
+    System.AggregateException : One or more errors occurred. (Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}) ---- Docker.DotNet.DockerApiException : Docker API responded with status code=InternalServerError, response={"message":"failed to create task for container: OCI runtime create failed: runc create failed: unable to start container process"}
+    at tests/Orders.IntegrationTests/Fixtures/SqlServerFixture.cs:line 31
+  Orders.IntegrationTests.Api.OrdersEndpointTests.Rejects_negative_quantity [14 ms]
+    Assert.Equal() Failure: Values differ — Expected: 400, Actual: 500
+    at tests/Orders.IntegrationTests/Api/OrdersEndpointTests.cs:line 57
+  Orders.IntegrationTests.Api.OrdersEndpointTests.Returns_created_order_location [9 ms]
+    Assert.NotNull() Failure: Value is null
+    at tests/Orders.IntegrationTests/Api/OrdersEndpointTests.cs:line 82
+✗ dotnet test: 42 failed, 11 passed (1 project, 1s)

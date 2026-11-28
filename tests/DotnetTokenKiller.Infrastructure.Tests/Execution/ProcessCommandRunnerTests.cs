@@ -52,26 +52,42 @@ public sealed class ProcessCommandRunnerTests
     public async Task RunCapturedAsync_Cancellation_KillsRunningProcess()
     {
         // Covers KillProcess when process has not exited (lines 90-93)
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
+        var cancel = CancelFromItsOwnThreadAfterAsync(cts.Cancel, TimeSpan.FromMilliseconds(200));
         var (cmd, args) = LongRunningCommand();
         var token = cts.Token;
 
         var act = async () => await _sut.RunCapturedAsync(cmd, args, token);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        try
+        {
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            await cancel;
+        }
     }
 
     [Fact]
     public async Task RunPassthroughAsync_Cancellation_KillsRunningProcess()
     {
         // Covers KillProcess for RunPassthroughAsync path
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
+        var cancel = CancelFromItsOwnThreadAfterAsync(cts.Cancel, TimeSpan.FromMilliseconds(200));
         var (cmd, args) = LongRunningCommand();
         var token = cts.Token;
 
         var act = async () => await _sut.RunPassthroughAsync(cmd, args, token);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        try
+        {
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            await cancel;
+        }
     }
 
     [Fact]
@@ -135,13 +151,21 @@ public sealed class ProcessCommandRunnerTests
     [Fact]
     public async Task RunStreamedAsync_Cancellation_KillsRunningProcess()
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        using var cts = new CancellationTokenSource();
+        var cancel = CancelFromItsOwnThreadAfterAsync(cts.Cancel, TimeSpan.FromMilliseconds(200));
         var (cmd, args) = LongRunningCommand();
 
         var act = async () => await _sut.RunStreamedAsync(
             cmd, args, TextWriter.Null, TextWriter.Null, cts.Token);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        try
+        {
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+        finally
+        {
+            await cancel;
+        }
     }
 
     [Fact]
@@ -433,18 +457,61 @@ public sealed class ProcessCommandRunnerTests
             : ("sh", ["-c", $"touch '{startedPath}'; sleep {sleepSeconds}; touch '{donePath}'"]);
     }
 
-    private static async Task WaitForFileAsync(string path, TimeSpan timeout)
+    /// <summary>
+    /// Runs <paramref name="cancel"/>, a <see cref="CancellationTokenSource.Cancel()"/>, on a thread of its own once
+    /// <paramref name="condition"/> holds. A cancel sent through the thread pool (a timer, a <c>Task.Delay</c> loop)
+    /// can reach a busy pool late: on a loaded Windows runner it arrived only after the child had exited on its own, so
+    /// there was nothing left to cancel and no <see cref="OperationCanceledException"/>. Cancelling runs the token's
+    /// callbacks, the runner's kill among them, on this thread, on time.
+    /// </summary>
+    /// <param name="cancel">The cancellation to run.</param>
+    /// <param name="condition">What must hold before cancelling, polled every 20 ms.</param>
+    /// <param name="timeout">How long to wait for <paramref name="condition"/> before failing.</param>
+    /// <returns>A task that completes once cancelled, or faults when <paramref name="condition"/> never held.</returns>
+    private static Task CancelFromItsOwnThreadWhenAsync(Action cancel, Func<bool> condition, TimeSpan timeout)
     {
-        using var cts = new CancellationTokenSource(timeout);
-        while (!File.Exists(path))
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
         {
-            if (cts.IsCancellationRequested)
+            using var tick = new ManualResetEventSlim();
+            var elapsed = Stopwatch.StartNew();
+            while (!condition())
             {
-                throw new TimeoutException($"File '{path}' was not created within {timeout}.");
+                if (elapsed.Elapsed > timeout)
+                {
+                    cancelled.SetException(new TimeoutException($"The condition to cancel on did not hold within {timeout}."));
+                    return;
+                }
+
+                tick.Wait(TimeSpan.FromMilliseconds(20), CancellationToken.None);
             }
 
-            await Task.Delay(TimeSpan.FromMilliseconds(50)).ConfigureAwait(false);
-        }
+            try
+            {
+                cancel();
+                cancelled.SetResult();
+            }
+            catch (Exception ex)
+            {
+                cancelled.SetException(ex);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "test canceller"
+        };
+        thread.Start();
+        return cancelled.Task;
+    }
+
+    /// <summary>As <see cref="CancelFromItsOwnThreadWhenAsync"/>, once <paramref name="delay"/> has passed.</summary>
+    /// <param name="cancel">The cancellation to run.</param>
+    /// <param name="delay">How long to wait before cancelling.</param>
+    /// <returns>A task that completes once cancelled.</returns>
+    private static Task CancelFromItsOwnThreadAfterAsync(Action cancel, TimeSpan delay)
+    {
+        var elapsed = Stopwatch.StartNew();
+        return CancelFromItsOwnThreadWhenAsync(cancel, () => elapsed.Elapsed >= delay, delay + TimeSpan.FromMinutes(1));
     }
 
     [Fact]
@@ -481,11 +548,7 @@ public sealed class ProcessCommandRunnerTests
             // cancel timer can fire after a short child has already exited, so nothing gets cancelled
             // and no OperationCanceledException is thrown. Gating the cancel on the "started" marker
             // makes the test deterministic regardless of scheduling latency.
-            var cancelWhenStarted = Task.Run(async () =>
-            {
-                await WaitForFileAsync(started, ChildStartTimeout);
-                await cts.CancelAsync();
-            });
+            var cancelWhenStarted = CancelFromItsOwnThreadWhenAsync(cts.Cancel, () => File.Exists(started), ChildStartTimeout);
 
             var act = async () => await _sut.RunCapturedAsync(cmd, args, cts.Token);
             await act.Should().ThrowAsync<OperationCanceledException>();
@@ -530,11 +593,7 @@ public sealed class ProcessCommandRunnerTests
         {
             var (cmd, args) = StartedThenDelayedMarkerCommand(started, Path.Combine(dir, "done"), 30);
             using var cts = new CancellationTokenSource();
-            var cancelWhenStarted = Task.Run(async () =>
-            {
-                await WaitForFileAsync(started, ChildStartTimeout);
-                await cts.CancelAsync();
-            });
+            var cancelWhenStarted = CancelFromItsOwnThreadWhenAsync(cts.Cancel, () => File.Exists(started), ChildStartTimeout);
 
             // The drained streams and the exited child are both the kill's doing, not the child's.
             var act = async () => await RunWithTokenIgnoringReadersAsync(
@@ -601,11 +660,7 @@ public sealed class ProcessCommandRunnerTests
             };
             using var cts = new CancellationTokenSource();
 
-            var cancelWhenStarted = Task.Run(async () =>
-            {
-                await WaitForFileAsync(markerPath, TimeSpan.FromSeconds(30));
-                await cts.CancelAsync();
-            });
+            var cancelWhenStarted = CancelFromItsOwnThreadWhenAsync(cts.Cancel, () => File.Exists(markerPath), TimeSpan.FromSeconds(30));
 
             var act = async () => await _sut.RunPassthroughAsync("cmd", args, cts.Token);
             await act.Should().ThrowAsync<OperationCanceledException>();

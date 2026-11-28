@@ -127,12 +127,12 @@ public sealed class FilteredOutputPipeline(
         RunOutcome outcome;
         if (filterFaulted)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: false, unconfirmed);
+            filtered = BuildFallback($"dotnet {request.CommandSlug}", exitCode, stripped, tailOnly: false, unconfirmed);
             outcome = RunOutcome.FilterFaulted;
         }
         else if (fallback)
         {
-            filtered = BuildFallback(request.DisplayCommandLine, exitCode, stripped, tailOnly: true, unconfirmed);
+            filtered = BuildFallback($"dotnet {request.CommandSlug}", exitCode, stripped, tailOnly: true, unconfirmed);
             outcome = RunOutcome.RawTailFallback;
         }
         else
@@ -247,7 +247,7 @@ public sealed class FilteredOutputPipeline(
     /// Builds the fallback shown when the filter left nothing to show or threw: the raw output (whole, or its
     /// <see cref="RawTail"/>), then the run's single status line.
     /// </summary>
-    /// <param name="command">The command line that was run, for display purposes.</param>
+    /// <param name="command">The command name the fallback status line shows (<c>dotnet</c> and the subcommand).</param>
     /// <param name="exitCode">The process exit code; non-zero selects the failure status line.</param>
     /// <param name="rawOutput">The raw (ANSI-stripped) command output.</param>
     /// <param name="tailOnly">Whether to show only the <see cref="RawTail"/> of <paramref name="rawOutput"/>.</param>

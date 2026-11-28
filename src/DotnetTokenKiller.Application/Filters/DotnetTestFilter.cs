@@ -18,6 +18,9 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
 {
     private const int MaxFailures = 15;
 
+    /// <summary>How many of a group's test names its entry lists.</summary>
+    private const int MaxGroupNames = 3;
+
     /// <summary>The fewest characters a failure's message is shown with, however many tests failed.</summary>
     private const int MessageMaxLen = 300;
 
@@ -947,8 +950,18 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             ? $", {state.TotalSkipped} skipped"
             : string.Empty;
         return new FilterResult(
-            $"{PassedNamesBlock(state)}{ChangedWarnings()}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){Warnings()}\n");
+            $"{PassedNamesBlock(state)}{ChangedWarnings()}\u2713 dotnet test: {state.TotalPassed} passed{skippedSuffix} ({state.ProjectCount} project{(state.ProjectCount == 1 ? "" : "s")}, {elapsed}){WarningsOfAPassingRun(buildReport, Warnings())}\n");
     }
+
+    /// <summary>
+    /// The build-warnings suffix of a passing run's status line: the count when the build raised warnings, else
+    /// <c> · 0 build warnings</c> when the output shows MSBuild built projects. A <c>--no-build</c> run has no
+    /// build to speak for and adds nothing.
+    /// </summary>
+    /// <param name="report">The run's build diagnostics.</param>
+    /// <param name="described">The suffix <see cref="DescribeBuildWarnings"/> gave.</param>
+    private static string WarningsOfAPassingRun(MsBuildDiagnosticReport report, string described) =>
+        described.Length == 0 && report.BuiltProjectCount > 0 ? " \u00b7 0 build warnings" : described;
 
     /// <summary>
     /// What the status line of a run adds for the compiler warnings its build raised:
@@ -1212,11 +1225,17 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
     {
         sb.AppendLine(CultureInfo.InvariantCulture, $"FAILURES ({failedCount}):");
 
-        var shown = state.Failures.Take(MaxFailures).ToList();
+        var shown = GroupFailures(state.Failures, state.ShowOutput).Take(MaxFailures).ToList();
+        var allNames = state.Failures.Count <= MaxFailures;
         var messageMaxLen = Math.Clamp(MessageBudget / Math.Max(shown.Count, 1), MessageMaxLen, SoleMessageMaxLen);
-        foreach (var f in shown)
+        foreach (var group in shown)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration}]")
+            var f = group.Members[0];
+            var heading = group.Members.Count == 1
+                ? string.Create(CultureInfo.InvariantCulture, $"  {f.TestName} [{f.Duration}]")
+                : string.Create(CultureInfo.InvariantCulture,
+                    $"  {group.Members.Count} failed the same way: {DescribeGroupNames(group, allNames)}");
+            sb.AppendLine(heading)
                 .AppendLine(CultureInfo.InvariantCulture,
                     $"    {f.PresetMessage ?? CompactMessage(f.MessageLines, messageMaxLen)}");
             if (!string.IsNullOrEmpty(f.SourceRef))
@@ -1230,10 +1249,76 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
             }
         }
 
-        if (state.Failures.Count > MaxFailures)
+        var notShown = state.Failures.Count - shown.Sum(g => g.Members.Count);
+        if (notShown > 0)
         {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"+{state.Failures.Count - MaxFailures} more failures");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"+{notShown} more failures");
         }
+    }
+
+    /// <summary>
+    /// The failures that share a message and a location (and, under <c>--show-output</c>, an output) as one entry
+    /// each: the groups of two or more first, the largest first and ties by first appearance, then the single
+    /// failures in order of appearance.
+    /// </summary>
+    /// <param name="failures">The failures, in order of appearance.</param>
+    /// <param name="showOutput">Whether the output of each test is shown, which then tells failures apart.</param>
+    private static List<FailureGroup> GroupFailures(IReadOnlyList<FailureInfo> failures, bool showOutput)
+    {
+        var byKey = new Dictionary<(string Message, string SourceRef, string Output), List<FailureInfo>>();
+        List<List<FailureInfo>> ordered = [];
+        foreach (var failure in failures)
+        {
+            // Without a location, the same message may come from different places (an assembly without PDBs).
+            if (ShowsNoLocation(failure))
+            {
+                ordered.Add([failure]);
+                continue;
+            }
+
+            var key = GroupKey(failure, showOutput);
+            if (!byKey.TryGetValue(key, out var members))
+            {
+                members = [];
+                byKey[key] = members;
+                ordered.Add(members);
+            }
+
+            members.Add(failure);
+        }
+
+        // OrderBy is stable, so ties keep their order of appearance.
+        return
+        [
+            .. ordered.Where(m => m.Count > 1).OrderByDescending(m => m.Count).Select(m => new FailureGroup(m)),
+            .. ordered.Where(m => m.Count == 1).Select(m => new FailureGroup(m))
+        ];
+    }
+
+    private static bool ShowsNoLocation(FailureInfo failure) => string.IsNullOrEmpty(failure.SourceRef);
+
+    private static (string Message, string SourceRef, string Output) GroupKey(FailureInfo failure, bool showOutput) =>
+        (failure.PresetMessage ?? string.Join('\n', failure.MessageLines),
+            failure.SourceRef,
+            showOutput ? string.Join('\n', failure.Output) : string.Empty);
+
+    /// <summary>
+    /// The distinct test names of a group, each with its count when it failed more than once: all of them, or the
+    /// first three and the number left out.
+    /// </summary>
+    /// <param name="group">A group of two or more failures.</param>
+    /// <param name="allNames">Whether every name is listed (the run has no more failures than the entry limit).</param>
+    private static string DescribeGroupNames(FailureGroup group, bool allNames)
+    {
+        // GroupBy keeps the order of first appearance.
+        var counts = group.Members.GroupBy(m => m.TestName, StringComparer.Ordinal).ToList();
+        var limit = allNames ? counts.Count : MaxGroupNames;
+        var shown = counts.Take(limit)
+            .Select(c => c.Count() > 1 ? $"{c.Key} \u00d7{c.Count().ToString(CultureInfo.InvariantCulture)}" : c.Key);
+        var more = counts.Count - limit;
+        return more > 0
+            ? $"{string.Join(", ", shown)} +{more.ToString(CultureInfo.InvariantCulture)} more"
+            : string.Join(", ", shown);
     }
 
     private static void AppendOutput(StringBuilder sb, IReadOnlyList<string> output)
@@ -1649,6 +1734,10 @@ public sealed partial class DotnetTestFilter(string? rootPath = null) : IContext
         /// <summary>Whether <see cref="DurationMs"/> is known below the second; see <see cref="ParseState.DurationExact"/>.</summary>
         public bool DurationExact { get; set; } = true;
     }
+
+    /// <summary>Failures that share a message and a location, in order of appearance; one entry of the block.</summary>
+    /// <param name="Members">The failures, at least one.</param>
+    private sealed record FailureGroup(IReadOnlyList<FailureInfo> Members);
 
     /// <summary>A failed test as the report shows it.</summary>
     /// <param name="TestName">The test's name.</param>
